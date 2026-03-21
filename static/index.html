@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:      #0c0c0e;
+    --surface: rgba(19, 19, 23, 0.75);
+    --raised:  rgba(26, 26, 32, 0.8);
+    --border:  #222228;
+    --muted:   #3a3a44;
+    --text:    #e8e8f0;
+    --dim:     #6b6b7a;
+    --accent:  #c084fc;
+    --green:   #4ade80;
+    --amber:   #fbbf24;
+    --red:     #f87171;
+    --blue:    #60a5fa;
+    --mono:    'DM Mono', monospace;
+    --sans:    'Syne', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg) url('/static/background.jpg') center center / cover fixed;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(12, 12, 14, 0.72);
+    z-index: 0;
+  }
+  .app { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 24px 48px; }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 28px 0 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 28px;
+  }
+  .logo { display: flex; align-items: baseline; gap: 12px; }
+  .logo-title { font-family: var(--sans); font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+  .logo-sub { font-size: 11px; color: var(--dim); letter-spacing: 0.05em; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .status-pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border);
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--dim); background: var(--surface); transition: all 0.3s;
+  }
+  .status-pill.running { border-color: var(--accent); color: var(--accent); }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
+  .status-pill.running .status-dot { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── Stats ── */
+  .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 28px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+  .stat-value { font-family: var(--sans); font-size: 28px; font-weight: 700; line-height: 1; display: block; }
+  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); display: block; margin-top: 4px; }
+  .stat-filed .stat-value     { color: var(--green); }
+  .stat-unmatched .stat-value { color: var(--amber); }
+  .stat-no_dir .stat-value    { color: var(--blue); }
+  .stat-errors .stat-value    { color: var(--red); }
+
+  /* ── Main grid ── */
+  .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+
+  /* ── Panels ── */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .panel-title { font-family: var(--sans); font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+  .panel-body { max-height: 420px; overflow-y: auto; }
+  .panel-body::-webkit-scrollbar { width: 4px; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+
+  /* ── Queue ── */
+  .queue-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 18px; border-bottom: 1px solid var(--border); gap: 12px; transition: background 0.15s; }
+  .queue-item:last-child { border-bottom: none; }
+  .queue-item:hover { background: rgba(255,255,255,0.02); }
+  .queue-item.active { background: rgba(192,132,252,0.06); border-left: 2px solid var(--accent); }
+  .queue-filename { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .queue-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .badge-cached { background: rgba(96,165,250,0.15); color: var(--blue); }
+  .badge-size   { background: rgba(255,255,255,0.05); color: var(--dim); }
+  .empty { padding: 32px 18px; text-align: center; color: var(--dim); font-size: 12px; }
+
+  /* ── Log ── */
+  .log-body { padding: 14px 18px; max-height: 420px; overflow-y: auto; font-size: 12px; line-height: 1.8; }
+  .log-body::-webkit-scrollbar { width: 4px; }
+  .log-body::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+  .log-line { display: block; }
+  .log-line.file     { color: var(--accent); font-weight: 500; margin-top: 6px; }
+  .log-line.done     { color: var(--green); }
+  .log-line.warning  { color: var(--amber); }
+  .log-line.error    { color: var(--red); }
+  .log-line.sep      { color: var(--muted); }
+  .log-line.pipeline { color: var(--blue); font-family: var(--sans); font-weight: 600; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .log-line.default  { color: var(--dim); }
+
+  /* ── History ── */
+  .history-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-top: 20px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+  .history-body { max-height: 380px; overflow-y: auto; }
+  .history-body::-webkit-scrollbar { width: 4px; }
+  .history-body::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  col.col-filename   { width: 22%; }
+  col.col-status     { width: 9%; }
+  col.col-title      { width: 16%; }
+  col.col-studio     { width: 12%; }
+  col.col-performers { width: 14%; }
+  col.col-date       { width: 8%; }
+  col.col-source     { width: 8%; }
+  col.col-processed  { width: 11%; }
+  th { padding: 10px 12px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td { padding: 9px 12px; border-bottom: 1px solid rgba(255,255,255,0.03); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.015); }
+  .td-filename { color: var(--text); }
+  .td-title, .td-performers, .td-date { color: var(--dim); }
+  .status-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .status-filed      { background: rgba(74,222,128,0.12);  color: var(--green); }
+  .status-unmatched  { background: rgba(251,191,36,0.12);  color: var(--amber); }
+  .status-no_dir     { background: rgba(96,165,250,0.12);  color: var(--blue); }
+  .status-error      { background: rgba(248,113,113,0.12); color: var(--red); }
+  .status-processing { background: rgba(192,132,252,0.12); color: var(--accent); }
+  .source-tag { font-size: 10px; color: var(--dim); padding: 2px 6px; border-radius: 3px; background: rgba(255,255,255,0.04); }
+
+  /* ── Buttons ── */
+  .btn-primary { background: var(--accent); color: #0c0c0e; border: none; padding: 8px 20px; border-radius: 6px; font-family: var(--sans); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
+  .btn-secondary { background: none; border: 1px solid var(--border); color: var(--dim); padding: 8px 16px; border-radius: 6px; font-family: var(--mono); font-size: 11px; cursor: pointer; transition: all 0.15s; letter-spacing: 0.05em; }
+  .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+  .btn-icon { background: none; border: none; color: var(--dim); cursor: pointer; padding: 4px 6px; border-radius: 4px; font-size: 14px; transition: color 0.15s; line-height: 1; }
+  .btn-icon:hover { color: var(--text); }
+  .btn-icon.danger:hover { color: var(--red); }
+  .btn-run-file { background: none; border: 1px solid var(--muted); color: var(--dim); padding: 3px 10px; border-radius: 4px; font-family: var(--mono); font-size: 10px; cursor: pointer; letter-spacing: 0.05em; transition: all 0.15s; text-transform: uppercase; }
+  .btn-run-file:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-run-file:disabled { opacity: 0.3; cursor: not-allowed; }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+
+  /* ── Settings modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: rgba(19, 19, 23, 0.97);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 760px;
+    max-width: 96vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+  }
+  .modal::-webkit-scrollbar { width: 4px; }
+  .modal::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 24px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--surface); z-index: 1;
+  }
+  .modal-title { font-family: var(--sans); font-size: 16px; font-weight: 700; }
+  .modal-body { padding: 24px; display: flex; flex-direction: column; gap: 28px; }
+  .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+  /* Settings sections */
+  .settings-section { display: flex; flex-direction: column; gap: 12px; }
+  .settings-section-title { font-family: var(--sans); font-size: 11px; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; color: var(--dim); padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .field-row { display: flex; flex-direction: column; gap: 6px; }
+  .field-label { font-size: 11px; color: var(--dim); letter-spacing: 0.05em; }
+  .field-input {
+    background: var(--raised); border: 1px solid var(--border); color: var(--text);
+    padding: 9px 12px; border-radius: 6px; font-family: var(--mono); font-size: 12px;
+    width: 100%; transition: border-color 0.15s; outline: none;
+  }
+  .field-input:focus { border-color: var(--accent); }
+  .field-hint { font-size: 10px; color: var(--muted); line-height: 1.5; }
+
+  /* Pattern tokens */
+  .token-guide { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .token { font-size: 10px; padding: 2px 8px; border-radius: 4px; background: rgba(192,132,252,0.1); color: var(--accent); border: 1px solid rgba(192,132,252,0.2); cursor: default; }
+  .token span { color: var(--dim); }
+
+  /* Directory list */
+  .dir-list { display: flex; flex-direction: column; gap: 8px; }
+  .dir-row {
+    display: grid;
+    grid-template-columns: 36px 110px 1fr 36px;
+    gap: 8px;
+    align-items: center;
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .dir-rank { font-size: 11px; color: var(--dim); text-align: center; }
+  .dir-type-tag { font-size: 10px; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.06em; text-align: center; }
+  .dir-type-series   { background: rgba(74,222,128,0.1);  color: var(--green); }
+  .dir-type-performer { background: rgba(192,132,252,0.1); color: var(--accent); }
+  .dir-path { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dir-reorder { display: flex; flex-direction: column; gap: 1px; }
+  .dir-controls { display: flex; gap: 4px; align-items: center; }
+
+  /* Add directory row */
+  .add-dir-row { display: grid; grid-template-columns: 120px 1fr 120px 80px; gap: 8px; align-items: end; }
+  .select-input {
+    background: var(--raised); border: 1px solid var(--border); color: var(--text);
+    padding: 9px 12px; border-radius: 6px; font-family: var(--mono); font-size: 12px;
+    outline: none; cursor: pointer;
+  }
+  .select-input:focus { border-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">
+      <img src="/static/logo.png" alt="Top-Shelf" style="height:36px; object-fit:contain;">
+    </div>
+    <div class="header-right">
+      <div id="retryPill" style="display:none;font-size:11px;color:var(--dim);padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);letter-spacing:0.06em"></div>
+      <button class="btn-secondary" id="btnRetryNow" onclick="retryNow()">Retry Failed</button>
+      <div id="statusPill" class="status-pill">
+        <span class="status-dot"></span>
+        <span id="statusText">Idle</span>
+      </div>
+      <button class="btn-secondary" onclick="openSettings()">⚙ Settings</button>
+    </div>
+  </header>
+
+  <div class="stats-bar">
+    <a class="stat-card stat-filed" href="/history?status=filed" style="text-decoration:none;cursor:pointer">
+      <span class="stat-value" id="statFiled">0</span>
+      <span class="stat-label">Filed ↗</span>
+    </a>
+    <a class="stat-card stat-unmatched" href="/history?status=unmatched" style="text-decoration:none;cursor:pointer">
+      <span class="stat-value" id="statUnmatched">0</span>
+      <span class="stat-label">Unmatched ↗</span>
+    </a>
+    <a class="stat-card stat-no_dir" href="/history?status=no_dir" style="text-decoration:none;cursor:pointer">
+      <span class="stat-value" id="statNoDir">0</span>
+      <span class="stat-label">No Directory ↗</span>
+    </a>
+    <a class="stat-card stat-errors" href="/history?status=error" style="text-decoration:none;cursor:pointer">
+      <span class="stat-value" id="statErrors">0</span>
+      <span class="stat-label">Errors ↗</span>
+    </a>
+  </div>
+
+  <div class="main-grid">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Queue <span id="queueCount" style="color:var(--muted)"></span></span>
+        <div class="header-actions">
+          <button class="btn-secondary" onclick="loadQueue()">Refresh</button>
+          <button id="btnRunAll" class="btn-primary" onclick="runAll()">Run All</button>
+        </div>
+      </div>
+      <div class="panel-body" id="queueList"><div class="empty">Loading...</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Live Log</span>
+        <button class="btn-secondary" onclick="clearLog()">Clear</button>
+      </div>
+      <div class="log-body" id="logBody">
+        <span class="log-line default">Waiting for pipeline...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <div class="history-panel" id="searchPanel" style="margin-top:20px;display:none">
+    <div class="panel-header">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="panel-title">Scene Search</span>
+        <span id="searchFileLabel" style="display:none;font-size:11px;color:var(--accent);padding:3px 10px;background:rgba(192,132,252,0.1);border-radius:4px;border:1px solid rgba(192,132,252,0.25)"></span>
+        <button id="searchClearFile" style="display:none" class="btn-icon danger" onclick="clearSelectedFile()" title="Deselect file">✕</button>
+      </div>
+      <div class="header-actions">
+        <button class="btn-secondary" onclick="clearSearch()">Clear</button>
+        <button class="btn-primary" onclick="runSearch()">Search</button>
+      </div>
+    </div>
+    <div style="padding:16px 18px; border-bottom:1px solid var(--border)">
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr 140px 140px; gap:10px; align-items:end">
+        <div class="field-row">
+          <label class="field-label">Free text</label>
+          <input class="field-input" id="srchTerm" type="text" placeholder="Any term..." onkeydown="if(event.key==='Enter')runSearch()">
+        </div>
+        <div class="field-row">
+          <label class="field-label">Title</label>
+          <input class="field-input" id="srchTitle" type="text" placeholder="Scene title" onkeydown="if(event.key==='Enter')runSearch()">
+        </div>
+        <div class="field-row">
+          <label class="field-label">Performer</label>
+          <input class="field-input" id="srchPerformer" type="text" placeholder="Performer name" onkeydown="if(event.key==='Enter')runSearch()">
+        </div>
+        <div class="field-row">
+          <label class="field-label">Studio</label>
+          <input class="field-input" id="srchStudio" type="text" placeholder="Studio name" onkeydown="if(event.key==='Enter')runSearch()">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div class="field-row">
+            <label class="field-label">Date from</label>
+            <input class="field-input" id="srchDateFrom" type="text" placeholder="YYYY-MM-DD" onkeydown="if(event.key==='Enter')runSearch()">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Date to</label>
+            <input class="field-input" id="srchDateTo" type="text" placeholder="YYYY-MM-DD" onkeydown="if(event.key==='Enter')runSearch()">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="history-body" id="searchResults">
+      <div class="empty">Enter search terms above and press Search</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Image overlay -->
+<div id="imageOverlay" onclick="closeImageOverlay()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:200;align-items:center;justify-content:center;cursor:zoom-out;backdrop-filter:blur(8px)">
+  <img id="overlayImg" src="" style="max-width:90vw;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 24px 80px rgba(0,0,0,0.8)">
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Settings</span>
+      <button class="btn-icon" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Directories -->
+      <div class="settings-section">
+        <div class="settings-section-title">Source Directory</div>
+        <div class="field-row">
+          <label class="field-label">Input folder (files to process)</label>
+          <input class="field-input" id="cfgSourceDir" type="text" placeholder="/path/to/folder">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Series Directory</div>
+        <div class="field-row">
+          <label class="field-label">Root folder containing studio subdirectories</label>
+          <input class="field-input" id="cfgSeriesDir" type="text" placeholder="/path/to/Series">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Performer Directories</div>
+        <div class="field-hint" style="margin-bottom:8px">Matched in rank order. Files route to the first directory that contains a matching performer folder.</div>
+        <div class="dir-list" id="dirList"></div>
+        <div style="margin-top:12px">
+          <div class="settings-section-title" style="margin-bottom:10px;font-size:10px">Add Directory</div>
+          <div class="add-dir-row">
+            <div class="field-row">
+              <label class="field-label">Label</label>
+              <input class="field-input" id="newDirLabel" type="text" placeholder="Stars">
+            </div>
+            <div class="field-row">
+              <label class="field-label">Path</label>
+              <input class="field-input" id="newDirPath" type="text" placeholder="/path/to/folder">
+            </div>
+            <div class="field-row">
+              <label class="field-label">Type</label>
+              <select class="select-input" id="newDirType">
+                <option value="performer">Performer</option>
+                <option value="series">Series</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <label class="field-label">&nbsp;</label>
+              <button class="btn-secondary" onclick="addDir()" style="width:100%">Add</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Naming patterns -->
+      <div class="settings-section">
+        <div class="settings-section-title">Naming Patterns</div>
+
+        <div class="field-hint" style="margin-bottom:12px">Available tokens:</div>
+        <div class="token-guide">
+          <span class="token">{title} <span>scene title</span></span>
+          <span class="token">{studio} <span>studio name</span></span>
+          <span class="token">{performer} <span>first matched performer</span></span>
+          <span class="token">{performers} <span>all performers</span></span>
+          <span class="token">{year} <span>YYYY</span></span>
+          <span class="token">{month} <span>MM</span></span>
+          <span class="token">{day} <span>DD</span></span>
+          <span class="token">{date} <span>YYYY-MM-DD</span></span>
+          <span class="token">{source} <span>database source</span></span>
+        </div>
+
+        <div class="field-row" style="margin-top:16px">
+          <label class="field-label">Series pattern <span style="color:var(--muted)">(studio match)</span></label>
+          <input class="field-input" id="cfgPatternSeries" type="text">
+          <div class="field-hint">Season folder is added automatically. Example output: <em>Season 2024 / ATK Girlfriends - S2024E0228 - Paradise Cove 2.mkv</em></div>
+        </div>
+
+        <div class="field-row">
+          <label class="field-label">Performer pattern <span style="color:var(--muted)">(performer match)</span></label>
+          <input class="field-input" id="cfgPatternPerformer" type="text">
+          <div class="field-hint">Season folder is added automatically. Example output: <em>Season 2024 / Juniper Ren - S2024E0228 - ATK Girlfriends - Paradise Cove 2.mkv</em></div>
+        </div>
+      </div>
+
+      <!-- Retry -->
+      <div class="settings-section">
+        <div class="settings-section-title">Automatic Retry</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+          <div class="field-row">
+            <label class="field-label">Enabled</label>
+            <select class="select-input" id="cfgRetryEnabled" style="width:100%">
+              <option value="true">On</option>
+              <option value="false">Off</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label class="field-label">Run at hour (0–23)</label>
+            <input class="field-input" id="cfgRetryHour" type="number" min="0" max="23" placeholder="1">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Frequency (hours)</label>
+            <select class="select-input" id="cfgRetryFreq" style="width:100%">
+              <option value="1">Every hour</option>
+              <option value="2">Every 2 hours</option>
+              <option value="4">Every 4 hours</option>
+              <option value="6">Every 6 hours</option>
+              <option value="12">Every 12 hours</option>
+              <option value="24">Every 24 hours</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-hint" id="retryNextRun" style="margin-top:8px"></div>
+      </div>
+
+      <!-- API Keys -->
+      <div class="settings-section">
+        <div class="settings-section-title">API Keys</div>
+        <div class="field-row">
+          <label class="field-label">StashDB</label>
+          <input class="field-input" id="cfgKeyStashdb" type="password" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <label class="field-label">ThePornDB</label>
+          <input class="field-input" id="cfgKeyTpdb" type="password" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <label class="field-label">FansDB</label>
+          <input class="field-input" id="cfgKeyFansdb" type="password" autocomplete="off">
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeSettings()">Cancel</button>
+      <button class="btn-primary" onclick="saveSettings()">Save Settings</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let isRunning = false;
+  let eventSource = null;
+  let dirs = [];
+  let selectedFile = null;
+
+  // ── Log ──────────────────────────────────────────────────────────────
+
+  function classifyLine(line) {
+    if (line.startsWith('FILE '))                          return 'file';
+    if (line.includes('DONE'))                             return 'done';
+    if (line.includes('PIPELINE'))                        return 'pipeline';
+    if (line.startsWith('---'))                           return 'sep';
+    if (line.includes('WARNING'))                         return 'warning';
+    if (line.includes('ERROR') || line.includes('FAILED')) return 'error';
+    return 'default';
+  }
+
+  function appendLog(text) {
+    const body = document.getElementById('logBody');
+    const span = document.createElement('span');
+    span.className = `log-line ${classifyLine(text)}`;
+    span.textContent = text;
+    body.appendChild(span);
+    body.appendChild(document.createTextNode('\n'));
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function clearLog() { document.getElementById('logBody').innerHTML = ''; }
+
+  function startSSE() {
+    if (eventSource) eventSource.close();
+    eventSource = new EventSource('/api/log/stream');
+    eventSource.onmessage = e => {
+      try {
+        const d = JSON.parse(e.data);
+        if (d.ping) return;
+        appendLog(d);
+      } catch {}
+    };
+  }
+
+  // ── Status ───────────────────────────────────────────────────────────
+
+  async function pollStatus() {
+    try {
+      const r = await fetch('/api/status');
+      const d = await r.json();
+      const pill = document.getElementById('statusPill');
+      const btn  = document.getElementById('btnRunAll');
+      if (d.running) {
+        pill.classList.add('running');
+        document.getElementById('statusText').textContent = 'Running';
+        btn.disabled = true;
+        document.querySelectorAll('.btn-run-file').forEach(b => b.disabled = true);
+        isRunning = true;
+      } else {
+        if (isRunning) { loadQueue(); loadStats(); loadRetryStatus(); }
+        pill.classList.remove('running');
+        document.getElementById('statusText').textContent = 'Idle';
+        btn.disabled = false;
+        document.getElementById('btnRetryNow').disabled = false;
+        document.querySelectorAll('.btn-run-file').forEach(b => b.disabled = false);
+        isRunning = false;
+      }
+    } catch {}
+  }
+
+  // ── Queue ─────────────────────────────────────────────────────────────
+
+  async function loadQueue() {
+    try {
+      const r = await fetch('/api/queue');
+      const d = await r.json();
+      const list = document.getElementById('queueList');
+      document.getElementById('queueCount').textContent = d.files ? `(${d.files.length})` : '';
+      if (d.error) { list.innerHTML = `<div class="empty">${d.error}</div>`; return; }
+      if (!d.files.length) { list.innerHTML = '<div class="empty">No files in queue</div>'; return; }
+      // Store files array for index-based access from onclick handlers
+      window._queueFiles = d.files;
+      list.innerHTML = d.files.map((f, i) => `
+        <div class="queue-item" id="qi-${i}">
+          <span class="queue-filename" title="${f.filename.replace(/"/g,'&quot;')}">${f.filename}</span>
+          <div class="queue-meta">
+            <span class="badge badge-size">${f.size_mb} MB</span>
+            ${f.has_phash ? '<span class="badge badge-cached">phash</span>' : ''}
+            <button class="btn-icon" onclick="openManualSearch(window._queueFiles[${i}].filename)" title="Search manually" style="font-size:15px">🔍</button>
+            <button class="btn-run-file" onclick="runFile(window._queueFiles[${i}].filename)">Run</button>
+          </div>
+        </div>`).join('');
+    } catch { document.getElementById('queueList').innerHTML = '<div class="empty">Error loading queue</div>'; }
+  }
+
+  // ── Run ───────────────────────────────────────────────────────────────
+
+  async function runAll() {
+    clearLog();
+    const r = await fetch('/api/run/all', {method:'POST'});
+    if (r.ok) { isRunning = true; document.getElementById('btnRunAll').disabled = true; }
+  }
+
+  async function runFile(filename) {
+    clearLog();
+    const r = await fetch(`/api/run/file/${encodeURIComponent(filename)}`, {method:'POST'});
+    if (r.ok) { isRunning = true; document.getElementById('btnRunAll').disabled = true; }
+  }
+
+
+  // ── Stats ─────────────────────────────────────────────────────────────
+
+  async function loadStats() {
+    try {
+      const r = await fetch('/api/stats');
+      const d = await r.json();
+      document.getElementById('statFiled').textContent     = d.filed     || 0;
+      document.getElementById('statUnmatched').textContent = d.unmatched || 0;
+      document.getElementById('statNoDir').textContent     = d.no_dir    || 0;
+      document.getElementById('statErrors').textContent    = d.errors    || 0;
+    } catch {}
+  }
+
+  // ── Settings ──────────────────────────────────────────────────────────
+
+  async function openSettings() {
+    const r = await fetch('/api/settings');
+    const d = await r.json();
+    const s = d.settings;
+    dirs = d.directories.filter(x => x.type === 'performer');
+
+    document.getElementById('cfgSourceDir').value        = s.source_dir        || '';
+    document.getElementById('cfgSeriesDir').value        = s.series_dir        || '';
+    document.getElementById('cfgPatternSeries').value    = s.pattern_series    || '';
+    document.getElementById('cfgPatternPerformer').value = s.pattern_performer || '';
+    document.getElementById('cfgRetryEnabled').value = s.retry_enabled     || 'true';
+    document.getElementById('cfgRetryHour').value    = s.retry_hour         || '1';
+    document.getElementById('cfgRetryFreq').value    = s.retry_frequency_h  || '24';
+    // Show next run time
+    fetch('/api/retry/status').then(r=>r.json()).then(d=>{
+      const el = document.getElementById('retryNextRun');
+      if (d.next_run) el.textContent = `Next run: ${d.next_run.slice(0,16)} — ${d.pending} file(s) queued for retry`;
+      else el.textContent = d.enabled ? 'Scheduler active, no job scheduled yet' : 'Retries disabled';
+    });
+    document.getElementById('cfgKeyStashdb').value       = s.api_key_stashdb   || '';
+    document.getElementById('cfgKeyTpdb').value          = s.api_key_tpdb      || '';
+    document.getElementById('cfgKeyFansdb').value        = s.api_key_fansdb    || '';
+
+    renderDirList();
+    document.getElementById('settingsModal').classList.add('open');
+  }
+
+  function closeSettings() {
+    document.getElementById('settingsModal').classList.remove('open');
+  }
+
+  function renderDirList() {
+    const sorted = [...dirs].sort((a,b) => a.rank - b.rank);
+    document.getElementById('dirList').innerHTML = sorted.length === 0
+      ? '<div class="empty" style="padding:16px">No performer directories configured</div>'
+      : sorted.map((d, i) => `
+        <div class="dir-row" data-id="${d.id||''}" data-idx="${i}">
+          <div class="dir-rank">${d.rank}</div>
+          <div class="dir-type-tag dir-type-${d.type}">${d.label}</div>
+          <div class="dir-path" title="${d.path}">${d.path}</div>
+          <div class="dir-controls">
+            <button class="btn-icon" onclick="moveDirUp(${i})" title="Move up">↑</button>
+            <button class="btn-icon" onclick="moveDirDown(${i})" title="Move down">↓</button>
+            <button class="btn-icon danger" onclick="removeDir(${i})" title="Remove">✕</button>
+          </div>
+        </div>`).join('');
+  }
+
+  function moveDirUp(idx) {
+    if (idx === 0) return;
+    [dirs[idx-1], dirs[idx]] = [dirs[idx], dirs[idx-1]];
+    rerank();
+    renderDirList();
+  }
+
+  function moveDirDown(idx) {
+    if (idx >= dirs.length - 1) return;
+    [dirs[idx], dirs[idx+1]] = [dirs[idx+1], dirs[idx]];
+    rerank();
+    renderDirList();
+  }
+
+  function removeDir(idx) {
+    dirs.splice(idx, 1);
+    rerank();
+    renderDirList();
+  }
+
+  function rerank() {
+    dirs.forEach((d, i) => d.rank = i + 1);
+  }
+
+  function addDir() {
+    const label = document.getElementById('newDirLabel').value.trim();
+    const path  = document.getElementById('newDirPath').value.trim();
+    const type  = document.getElementById('newDirType').value;
+    if (!label || !path) return;
+    dirs.push({ type, path, label, rank: dirs.length + 1 });
+    document.getElementById('newDirLabel').value = '';
+    document.getElementById('newDirPath').value  = '';
+    renderDirList();
+  }
+
+  async function saveSettings() {
+    const payload = {
+      settings: {
+        source_dir:        document.getElementById('cfgSourceDir').value.trim(),
+        series_dir:        document.getElementById('cfgSeriesDir').value.trim(),
+        pattern_series:    document.getElementById('cfgPatternSeries').value.trim(),
+        pattern_performer: document.getElementById('cfgPatternPerformer').value.trim(),
+        retry_enabled:     document.getElementById('cfgRetryEnabled').value,
+        retry_hour:        document.getElementById('cfgRetryHour').value.trim(),
+        retry_frequency_h: document.getElementById('cfgRetryFreq').value,
+        api_key_stashdb:   document.getElementById('cfgKeyStashdb').value.trim(),
+        api_key_tpdb:      document.getElementById('cfgKeyTpdb').value.trim(),
+        api_key_fansdb:    document.getElementById('cfgKeyFansdb').value.trim(),
+      },
+      directories: dirs,
+    };
+    const r = await fetch('/api/settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (r.ok) {
+      closeSettings();
+      loadQueue();
+    }
+  }
+
+  // Close modal on overlay click
+  document.getElementById('settingsModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeSettings();
+  });
+
+  // ── Image overlay ─────────────────────────────────────────────────────
+
+  function openImageOverlay(src) {
+    document.getElementById('overlayImg').src = src;
+    const el = document.getElementById('imageOverlay');
+    el.style.display = 'flex';
+  }
+
+  function closeImageOverlay() {
+    document.getElementById('imageOverlay').style.display = 'none';
+    document.getElementById('overlayImg').src = '';
+  }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeImageOverlay(); });
+
+  // ── Manual search & filing ────────────────────────────────────────────
+
+  function openManualSearch(filename) {
+    selectedFile = filename;
+
+    // Show file label in search panel
+    document.getElementById('searchFileLabel').textContent = `Filing: ${filename}`;
+    document.getElementById('searchFileLabel').style.display = 'inline-block';
+    document.getElementById('searchClearFile').style.display = 'inline-block';
+
+    // Highlight queue item
+    document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('active'));
+    if (window._queueFiles) {
+      const idx = window._queueFiles.findIndex(f => f.filename === filename);
+      if (idx !== -1) document.getElementById(`qi-${idx}`)?.classList.add('active');
+    }
+
+    // Pre-populate search from filename: strip extension and dots
+    const stem = filename.replace(/\.[^.]+$/, '').replace(/\./g, ' ');
+    // Try to extract a date pattern YYYY-MM-DD or YY.MM.DD
+    const dateMatch = stem.match(/\b(\d{2})[\.\-](\d{2})[\.\-](\d{2})\b/);
+    document.getElementById('srchTerm').value = '';
+    document.getElementById('srchTitle').value = '';
+    document.getElementById('srchPerformer').value = '';
+    document.getElementById('srchStudio').value = '';
+    document.getElementById('srchDateFrom').value = dateMatch ? `20${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}` : '';
+    document.getElementById('srchDateTo').value = '';
+    // Put the whole stem as the free text term
+    document.getElementById('srchTerm').value = stem;
+
+    // Show and scroll to search panel
+    document.getElementById('searchPanel').style.display = 'block';
+    document.getElementById('searchPanel')
+      .scrollIntoView({behavior: 'smooth', block: 'start'});
+
+    // Auto-run search
+    runSearch();
+  }
+
+  function clearSelectedFile() {
+    selectedFile = null;
+    document.getElementById('searchFileLabel').style.display = 'none';
+    document.getElementById('searchClearFile').style.display = 'none';
+    document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('searchPanel').style.display = 'none';
+    window._searchResults = null;
+  }
+
+  async function useThisScene(idx) {
+    if (!selectedFile) { alert('No file selected'); return; }
+    const scene = window._searchResults[idx]?._raw;
+    if (!scene) return;
+
+    const r = await fetch('/api/file/manual', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ filename: selectedFile, scene }),
+    });
+    const d = await r.json();
+    if (d.error) { alert(`Error: ${d.error}`); return; }
+
+    clearSelectedFile();
+    clearSearch();
+    isRunning = true;
+    document.getElementById('btnRunAll').disabled = true;
+  }
+
+  // ── Search ────────────────────────────────────────────────────────────
+
+  async function runSearch() {
+    const payload = {
+      term:      document.getElementById('srchTerm').value.trim(),
+      title:     document.getElementById('srchTitle').value.trim(),
+      performer: document.getElementById('srchPerformer').value.trim(),
+      studio:    document.getElementById('srchStudio').value.trim(),
+      date_from: document.getElementById('srchDateFrom').value.trim(),
+      date_to:   document.getElementById('srchDateTo').value.trim(),
+    };
+    const resultsEl = document.getElementById('searchResults');
+    resultsEl.innerHTML = '<div class="empty">Searching...</div>';
+    try {
+      const r = await fetch('/api/search', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json();
+      if (d.error) { resultsEl.innerHTML = `<div class="empty">${d.error}</div>`; return; }
+      if (!d.results.length) { resultsEl.innerHTML = '<div class="empty">No results found</div>'; return; }
+      window._searchResults = d.results;
+      resultsEl.innerHTML = `
+        <table style="table-layout:fixed">
+          <colgroup>
+            <col style="width:76px">
+            <col style="width:22%"><col style="width:7%"><col style="width:14%">
+            <col style="width:14%"><col style="width:8%"><col style="width:8%"><col style="width:11%">
+          </colgroup>
+          <thead><tr>
+            <th></th>
+            <th>Title</th><th>Source</th><th>Studio</th>
+            <th>Performers</th><th>Date</th><th>Link</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${d.results.map((row, idx) => `
+              <tr>
+                <td style="padding:6px 8px;vertical-align:middle">
+                  ${row.image
+                    ? `<img src="${row.image}" onclick="openImageOverlay(this.src)"
+                           style="height:64px;width:64px;object-fit:cover;border-radius:4px;cursor:zoom-in;display:block"
+                           onerror="this.style.display='none'">`
+                    : `<div style="width:64px;height:64px;background:rgba(255,255,255,0.04);border-radius:4px;border:1px solid var(--border)"></div>`}
+                </td>
+                <td class="td-filename" title="${row.title}" style="vertical-align:middle">${row.title}</td>
+                <td style="vertical-align:middle"><span class="source-tag">${row.source}</span></td>
+                <td class="td-title" title="${row.studio}" style="vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${row.studio}</td>
+                <td class="td-performers" title="${row.performers}" style="vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${row.performers||'-'}</td>
+                <td class="td-date" style="vertical-align:middle">${row.date||'-'}</td>
+                <td style="vertical-align:middle"><a href="https://stashdb.org/scenes/${row.id}" target="_blank" style="color:var(--accent);font-size:10px">View ↗</a></td>
+                <td style="vertical-align:middle">
+                  ${selectedFile
+                    ? `<button class="btn-run-file" style="border-color:var(--green);color:var(--green);white-space:nowrap" onclick="useThisScene(${idx})">Use this</button>`
+                    : `<span style="font-size:10px;color:var(--muted)">No file selected</span>`}
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+    } catch(e) {
+      resultsEl.innerHTML = `<div class="empty">Search failed: ${e.message}</div>`;
+    }
+  }
+
+  function clearSearch() {
+    ['srchTerm','srchTitle','srchPerformer','srchStudio','srchDateFrom','srchDateTo']
+      .forEach(id => document.getElementById(id).value = '');
+    document.getElementById('searchResults').innerHTML = '<div class="empty">Enter search terms above and press Search</div>';
+    selectedFile = null;
+    document.getElementById('searchFileLabel').style.display = 'none';
+    document.getElementById('searchClearFile').style.display = 'none';
+    document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('searchPanel').style.display = 'none';
+  }
+
+  // ── Retry ─────────────────────────────────────────────────────────────
+
+  async function loadRetryStatus() {
+    try {
+      const r = await fetch('/api/retry/status');
+      const d = await r.json();
+      const pill = document.getElementById('retryPill');
+      if (d.pending > 0) {
+        pill.style.display = 'inline-block';
+        pill.textContent = d.enabled
+          ? `⟳ ${d.pending} queued — next ${d.next_run ? d.next_run.slice(11,16) : '?'}`
+          : `⟳ ${d.pending} waiting (retries off)`;
+      } else {
+        pill.style.display = 'none';
+      }
+    } catch {}
+  }
+
+  async function retryNow() {
+    const btn = document.getElementById('btnRetryNow');
+    btn.disabled = true;
+    clearLog();
+    const r = await fetch('/api/retry/now', {method:'POST'});
+    const d = await r.json();
+    if (d.error) { alert(d.error); btn.disabled = false; return; }
+    isRunning = true;
+    document.getElementById('btnRunAll').disabled = true;
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────
+
+  startSSE();
+  loadQueue();
+  loadStats();
+  loadRetryStatus();
+  setInterval(pollStatus, 2000);
+  setInterval(loadRetryStatus, 30000);
+</script>
+</body>
+</html>
