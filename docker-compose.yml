@@ -1,14 +1,16 @@
 services:
   top-shelf:
-    image: thefilthycount/top-shelf:latest
+    build: .
     container_name: top-shelf
     restart: unless-stopped
     ports:
       - "8891:8891"
     volumes:
+      # App config and database
       - /volume4/docker/top-shelf:/app/data
-      - /volume4/docker/top-shelf/static:/app/static
+      # Media library (Series, Stars, Erotica, E-Girls live here)
       - /volume3/Top-Shelf:/library
+      # Source/processing folder
       - /volume4/Downloads:/downloads
     environment:
       - TZ=Europe/London
