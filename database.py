@@ -11,7 +11,7 @@ import os
 DB_PATH = Path(os.environ.get("DB_PATH", str(Path(__file__).parent / "phash_filer.db")))
 
 # Container paths are used when running in Docker; dev paths used otherwise
-_in_docker = Path("/app/data").exists()
+_in_docker = Path("/app/database").exists()
 
 DEFAULTS = {
     "source_dir":        "/downloads/Top-Shelf/Namer/Series-Process-Manual" if _in_docker else "/home/mjm/NAS Downloads/Top-Shelf/Namer/Series-Process-Manual",

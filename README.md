@@ -46,17 +46,16 @@ Top-Shelf sits at the end of a processing pipeline (e.g. FileFlows → download 
 ```yaml
 services:
   top-shelf:
-    image: yourdockerhubusername/top-shelf:latest
+    image: thefilthycount/top-shelf:latest
     container_name: top-shelf
     restart: unless-stopped
     ports:
       - "8891:8891"
     volumes:
-      # App config and database — persistent storage
-      - /your/config/path:/app/data
-      # Media library root — Series, Stars, Erotica, E-Girls etc. live here
+      - /your/path/conf:/app/conf
+      - /your/path/database:/app/database
+      - /your/path/static:/app/static
       - /your/library/path:/library
-      # Source folder — files to be processed
       - /your/downloads/path:/downloads
     environment:
       - TZ=Europe/London
