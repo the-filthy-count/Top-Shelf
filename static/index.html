@@ -8,6 +8,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
+  @font-face {
+    font-family: 'Acidoze';
+    src: url('/static/vtks-acidoze.regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+  }
   :root {
     --bg:      #0c0c0e;
     --surface: rgba(19, 19, 23, 0.75);
@@ -23,6 +29,7 @@
     --blue:    #60a5fa;
     --mono:    'DM Mono', monospace;
     --sans:    'Syne', sans-serif;
+    --acid:    'Acidoze', 'Syne', sans-serif;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -68,9 +75,9 @@
 
   /* ── Stats ── */
   .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 28px; }
-  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-  .stat-value { font-family: var(--sans); font-size: 28px; font-weight: 700; line-height: 1; display: block; }
-  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); display: block; margin-top: 4px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px 20px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .stat-value { font-family: var(--acid); font-size: 56px; font-weight: 400; line-height: 1; display: block; letter-spacing: 0.02em; text-align: center; }
+  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); display: block; margin-top: 4px; text-align: center; }
   .stat-filed .stat-value     { color: var(--green); }
   .stat-unmatched .stat-value { color: var(--amber); }
   .stat-no_dir .stat-value    { color: var(--blue); }
@@ -82,7 +89,7 @@
   /* ── Panels ── */
   .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
   .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
-  .panel-title { font-family: var(--sans); font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+  .panel-title { font-family: var(--acid); font-size: 21px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; color: #ffffff; }
   .panel-body { max-height: 420px; overflow-y: auto; }
   .panel-body::-webkit-scrollbar { width: 4px; }
   .panel-body::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
@@ -141,15 +148,15 @@
   .source-tag { font-size: 10px; color: var(--dim); padding: 2px 6px; border-radius: 3px; background: rgba(255,255,255,0.04); }
 
   /* ── Buttons ── */
-  .btn-primary { background: var(--accent); color: #0c0c0e; border: none; padding: 8px 20px; border-radius: 6px; font-family: var(--sans); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
+  .btn-primary { background: var(--accent); color: #0c0c0e; border: none; padding: 8px 14px; border-radius: 6px; font-size: 18px; line-height: 1; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; }
   .btn-primary:hover { filter: brightness(1.1); }
   .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
-  .btn-secondary { background: none; border: 1px solid var(--border); color: var(--dim); padding: 8px 16px; border-radius: 6px; font-family: var(--mono); font-size: 11px; cursor: pointer; transition: all 0.15s; letter-spacing: 0.05em; }
+  .btn-secondary { background: none; border: 1px solid var(--border); color: var(--dim); padding: 8px 12px; border-radius: 6px; font-size: 16px; line-height: 1; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; }
   .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
   .btn-icon { background: none; border: none; color: var(--dim); cursor: pointer; padding: 4px 6px; border-radius: 4px; font-size: 14px; transition: color 0.15s; line-height: 1; }
   .btn-icon:hover { color: var(--text); }
   .btn-icon.danger:hover { color: var(--red); }
-  .btn-run-file { background: none; border: 1px solid var(--muted); color: var(--dim); padding: 3px 10px; border-radius: 4px; font-family: var(--mono); font-size: 10px; cursor: pointer; letter-spacing: 0.05em; transition: all 0.15s; text-transform: uppercase; }
+  .btn-run-file { background: none; border: 1px solid var(--muted); color: #ffffff; padding: 3px 10px; border-radius: 4px; font-family: Acidoze, var(--sans); font-size: 17px; cursor: pointer; letter-spacing: 0.05em; transition: all 0.15s; text-transform: uppercase; }
   .btn-run-file:hover { border-color: var(--accent); color: var(--accent); }
   .btn-run-file:disabled { opacity: 0.3; cursor: not-allowed; }
   .header-actions { display: flex; gap: 8px; align-items: center; }
@@ -243,12 +250,12 @@
     </div>
     <div class="header-right">
       <div id="retryPill" style="display:none;font-size:11px;color:var(--dim);padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);letter-spacing:0.06em"></div>
-      <button class="btn-secondary" id="btnRetryNow" onclick="retryNow()">Retry Failed</button>
+      <button class="btn-secondary" id="btnRetryNow" onclick="retryNow()" title="Retry failed files" style="font-family:Acidoze,var(--sans);font-size:18px;color:#ffffff;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px">Retry Failed</button>
       <div id="statusPill" class="status-pill">
         <span class="status-dot"></span>
         <span id="statusText">Idle</span>
       </div>
-      <button class="btn-secondary" onclick="openSettings()">⚙ Settings</button>
+      <button class="btn-secondary" onclick="openSettings()" style="font-family:Acidoze,var(--sans);font-size:18px;color:#ffffff;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px">⚙ Settings</button>
     </div>
   </header>
 
@@ -276,8 +283,8 @@
       <div class="panel-header">
         <span class="panel-title">Queue <span id="queueCount" style="color:var(--muted)"></span></span>
         <div class="header-actions">
-          <button class="btn-secondary" onclick="loadQueue()">Refresh</button>
-          <button id="btnRunAll" class="btn-primary" onclick="runAll()">Run All</button>
+          <button class="btn-secondary" onclick="loadQueue()" title="Refresh queue">↺</button>
+          <button id="btnRunAll" class="btn-primary" onclick="runAll()" title="Run All">▶</button>
         </div>
       </div>
       <div class="panel-body" id="queueList"><div class="empty">Loading...</div></div>
@@ -286,7 +293,7 @@
     <div class="panel">
       <div class="panel-header">
         <span class="panel-title">Live Log</span>
-        <button class="btn-secondary" onclick="clearLog()">Clear</button>
+        <button class="btn-secondary" onclick="clearLog()" title="Clear log">✕</button>
       </div>
       <div class="log-body" id="logBody">
         <span class="log-line default">Waiting for pipeline...</span>
@@ -303,7 +310,7 @@
         <button id="searchClearFile" style="display:none" class="btn-icon danger" onclick="clearSelectedFile()" title="Deselect file">✕</button>
       </div>
       <div class="header-actions">
-        <button class="btn-secondary" onclick="clearSearch()">Clear</button>
+        <button class="btn-secondary" onclick="clearSearch()" title="Clear search">✕</button>
         <button class="btn-primary" onclick="runSearch()">Search</button>
       </div>
     </div>

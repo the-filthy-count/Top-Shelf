@@ -8,6 +8,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
+  @font-face {
+    font-family: 'Acidoze';
+    src: url('/static/vtks-acidoze.regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+  }
   :root {
     --bg:      #0c0c0e;
     --surface: rgba(19,19,23,0.75);
@@ -23,6 +29,7 @@
     --blue:    #60a5fa;
     --mono:    'DM Mono', monospace;
     --sans:    'Syne', sans-serif;
+    --acid:    'Acidoze', 'Syne', sans-serif;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -69,7 +76,7 @@
   .filter-tab.active-unmatched { border-color: var(--amber); }
   .filter-tab.active-no_dir    { border-color: var(--blue); }
   .filter-tab.active-error     { border-color: var(--red); }
-  .tab-count { font-family: var(--sans); font-size: 14px; font-weight: 700; line-height: 1; }
+  .tab-count { font-family: var(--acid); font-size: 16px; font-weight: 400; line-height: 1; letter-spacing: 0.02em; }
   .tab-count.filed     { color: var(--green); }
   .tab-count.unmatched { color: var(--amber); }
   .tab-count.no_dir    { color: var(--blue); }
@@ -88,8 +95,8 @@
   .filter-input::placeholder { color: var(--muted); }
   .btn-clear {
     background: none; border: 1px solid var(--border); color: var(--dim);
-    padding: 9px 16px; border-radius: 8px; font-family: var(--mono);
-    font-size: 11px; cursor: pointer; transition: all 0.15s;
+    padding: 9px 16px; border-radius: 8px; font-family: var(--acid);
+    font-size: 12px; cursor: pointer; transition: all 0.15s; letter-spacing: 0.05em;
   }
   .btn-clear:hover { border-color: var(--muted); color: var(--text); }
 
@@ -101,7 +108,7 @@
     display: flex; align-items: center; justify-content: space-between;
     padding: 14px 18px; border-bottom: 1px solid var(--border);
   }
-  .table-title { font-family: var(--sans); font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+  .table-title { font-family: var(--acid); font-size: 14px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
   .table-meta  { font-size: 11px; color: var(--dim); }
 
   .table-scroll { overflow-x: auto; }
@@ -162,8 +169,8 @@
   }
   .page-btn {
     background: none; border: 1px solid var(--border); color: var(--dim);
-    padding: 6px 12px; border-radius: 6px; font-family: var(--mono); font-size: 11px;
-    cursor: pointer; transition: all 0.15s; min-width: 36px; text-align: center;
+    padding: 6px 12px; border-radius: 6px; font-family: var(--acid); font-size: 12px;
+    cursor: pointer; transition: all 0.15s; min-width: 36px; text-align: center; letter-spacing: 0.04em;
   }
   .page-btn:hover:not(:disabled) { border-color: var(--muted); color: var(--text); }
   .page-btn.active { border-color: var(--accent); color: var(--accent); }
