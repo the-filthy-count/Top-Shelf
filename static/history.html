@@ -7,6 +7,7 @@
 <title>Top-Shelf — History</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
   @font-face {
     font-family: 'Acidoze';
@@ -214,7 +215,7 @@
            placeholder="Filter by filename, title, studio, or performers..."
            oninput="scheduleFilter()"
            onkeydown="if(event.key==='Escape')clearFilter()">
-    <button class="btn-clear" onclick="clearFilter()">Clear</button>
+    <button class="btn-clear" onclick="clearFilter()" title="Clear filter"><i class="fa-solid fa-x"></i></button>
   </div>
 
   <div class="table-panel">

@@ -7,6 +7,7 @@
 <title>Top-Shelf</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
   @font-face {
     font-family: 'Acidoze';
@@ -255,7 +256,7 @@
         <span class="status-dot"></span>
         <span id="statusText">Idle</span>
       </div>
-      <button class="btn-secondary" onclick="openSettings()" style="font-family:Acidoze,var(--sans);font-size:18px;color:#ffffff;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px">⚙ Settings</button>
+      <button class="btn-secondary" onclick="openSettings()" title="Settings" style="font-family:Acidoze,var(--sans);font-size:18px;color:#ffffff;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px"><i class="fa-solid fa-gear"></i> Settings</button>
     </div>
   </header>
 
@@ -283,8 +284,8 @@
       <div class="panel-header">
         <span class="panel-title">Queue <span id="queueCount" style="color:var(--muted)"></span></span>
         <div class="header-actions">
-          <button class="btn-secondary" onclick="loadQueue()" title="Refresh queue">↺</button>
-          <button id="btnRunAll" class="btn-primary" onclick="runAll()" title="Run All">▶</button>
+          <button class="btn-secondary" onclick="loadQueue()" title="Refresh queue"><i class="fa-solid fa-arrows-rotate"></i></button>
+          <button id="btnRunAll" class="btn-primary" onclick="runAll()" title="Run All"><i class="fa-solid fa-play"></i></button>
         </div>
       </div>
       <div class="panel-body" id="queueList"><div class="empty">Loading...</div></div>
@@ -293,7 +294,7 @@
     <div class="panel">
       <div class="panel-header">
         <span class="panel-title">Live Log</span>
-        <button class="btn-secondary" onclick="clearLog()" title="Clear log">✕</button>
+        <button class="btn-secondary" onclick="clearLog()" title="Clear log"><i class="fa-solid fa-x"></i></button>
       </div>
       <div class="log-body" id="logBody">
         <span class="log-line default">Waiting for pipeline...</span>
@@ -307,10 +308,10 @@
       <div style="display:flex;align-items:center;gap:12px">
         <span class="panel-title">Scene Search</span>
         <span id="searchFileLabel" style="display:none;font-size:11px;color:var(--accent);padding:3px 10px;background:rgba(192,132,252,0.1);border-radius:4px;border:1px solid rgba(192,132,252,0.25)"></span>
-        <button id="searchClearFile" style="display:none" class="btn-icon danger" onclick="clearSelectedFile()" title="Deselect file">✕</button>
+        <button id="searchClearFile" style="display:none" class="btn-icon danger" onclick="clearSelectedFile()" title="Deselect file"><i class="fa-solid fa-x"></i></button>
       </div>
       <div class="header-actions">
-        <button class="btn-secondary" onclick="clearSearch()" title="Clear search">✕</button>
+        <button class="btn-secondary" onclick="clearSearch()" title="Clear search"><i class="fa-solid fa-x"></i></button>
         <button class="btn-primary" onclick="runSearch()">Search</button>
       </div>
     </div>
@@ -361,7 +362,7 @@
   <div class="modal">
     <div class="modal-header">
       <span class="modal-title">Settings</span>
-      <button class="btn-icon" onclick="closeSettings()">✕</button>
+      <button class="btn-icon" onclick="closeSettings()"><i class="fa-solid fa-x"></i></button>
     </div>
     <div class="modal-body">
 
@@ -583,8 +584,8 @@
           <div class="queue-meta">
             <span class="badge badge-size">${f.size_mb} MB</span>
             ${f.has_phash ? '<span class="badge badge-cached">phash</span>' : ''}
-            <button class="btn-icon" onclick="openManualSearch(window._queueFiles[${i}].filename)" title="Search manually" style="font-size:15px">🔍</button>
-            <button class="btn-run-file" onclick="runFile(window._queueFiles[${i}].filename)">Run</button>
+            <button class="btn-icon" onclick="openManualSearch(window._queueFiles[${i}].filename)" title="Search manually"><i class="fa-solid fa-magnifying-glass"></i></button>
+            <button class="btn-run-file" onclick="runFile(window._queueFiles[${i}].filename)" title="Run"><i class="fa-solid fa-play"></i></button>
           </div>
         </div>`).join('');
     } catch { document.getElementById('queueList').innerHTML = '<div class="empty">Error loading queue</div>'; }
@@ -663,7 +664,7 @@
           <div class="dir-controls">
             <button class="btn-icon" onclick="moveDirUp(${i})" title="Move up">↑</button>
             <button class="btn-icon" onclick="moveDirDown(${i})" title="Move down">↓</button>
-            <button class="btn-icon danger" onclick="removeDir(${i})" title="Remove">✕</button>
+            <button class="btn-icon danger" onclick="removeDir(${i})" title="Remove"><i class="fa-solid fa-x"></i></button>
           </div>
         </div>`).join('');
   }
