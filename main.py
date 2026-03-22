@@ -598,27 +598,54 @@ def push_to_stash(scene: dict, destination: str, source: str, phash: str = None)
         perf_names  = [p["performer"]["name"] for p in performers if p.get("performer")]
         details     = scene.get("details") or scene.get("_plot") or ""
 
+        headers = {"ApiKey": stash_key, "Content-Type": "application/json"}
+
+        # Step 1: find the file ID for our destination path
+        file_id = None
+        try:
+            find_query = """
+            query { findFiles(filter: {q: "%s", per_page: 5}) {
+                files { ... on VideoFile { id path } }
+            } }
+            """ % Path(destination).name.replace('"', '')
+            fr = requests.post(f"{stash_url}/graphql",
+                json={"query": find_query},
+                headers=headers, timeout=10)
+            fr.raise_for_status()
+            files = (fr.json().get("data") or {}).get("findFiles", {}).get("files", [])
+            for f in files:
+                if f.get("path") == destination:
+                    file_id = f["id"]
+                    break
+        except Exception:
+            pass
+
+        # Step 2: create the scene
         mutation = """
         mutation SceneCreate($input: SceneCreateInput!) {
             sceneCreate(input: $input) { id title }
         }
         """
-        # Local Stash sceneCreate - paths is an array
         input_data = {
             "title":     title,
             "organized": True,
-            "paths":     [destination],
         }
         if date:
             input_data["date"] = date
         if details:
             input_data["details"] = details
+        if file_id:
+            input_data["file_ids"] = [file_id]
+        # Link back to StashDB scene if match came from there
+        stash_scene_id = scene.get("id")
+        if stash_scene_id:
+            input_data["stash_ids"] = [{"stash_id": stash_scene_id, "endpoint": "https://stashdb.org"}]
         variables = {"input": input_data}
 
         resp = requests.post(
             f"{stash_url}/graphql",
             json={"query": mutation, "variables": variables},
-            headers={"ApiKey": stash_key, "Content-Type": "application/json"},
+            headers=headers,
             timeout=15,
         )
         resp.raise_for_status()
@@ -626,8 +653,8 @@ def push_to_stash(scene: dict, destination: str, source: str, phash: str = None)
         if "errors" in data:
             emit(f"  Stash: push failed ({data['errors'][0].get('message', '')})")
             return False
-        scene_id = (data.get("data") or {}).get("sceneCreate", {}).get("id")
-        emit(f"  Stash: scene created (id {scene_id})")
+        new_id = (data.get("data") or {}).get("sceneCreate", {}).get("id")
+        emit(f"  Stash: scene created (id {new_id}){' with file link' if file_id else ' - run scan to link file'}")
         return True
     except Exception as e:
         emit(f"  Stash: push error ({e})")
