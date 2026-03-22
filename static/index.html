@@ -440,7 +440,7 @@
       </div>
       <!-- Thumbnail -->
       <div class="field-row">
-        <label class="field-label">Thumbnail <span style="color:var(--muted);font-size:10px">(URL uploads to StashDB · generated frame saves locally only)</span></label>
+        <label class="field-label">Thumbnail <span style="color:var(--muted);font-size:10px">(saved locally only — StashDB does not permit image uploads via API)</span></label>
         <div style="display:flex;gap:8px;align-items:flex-start">
           <div style="flex:1">
             <input class="field-input" id="mImageUrl" type="text" placeholder="Paste image URL..." oninput="mThumbMode='url';mThumbPreview(this.value)">
@@ -1418,6 +1418,10 @@
           console.log('StashDB scene submitted:', sd.id);
         } else {
           console.warn('StashDB submit failed:', sd.error);
+          // Show in log if auth error
+          if (sd.error?.includes('authorised') || sd.error?.includes('authorized')) {
+            appendLog('  StashDB: ' + sd.error);
+          }
         }
       }, 500);
     }

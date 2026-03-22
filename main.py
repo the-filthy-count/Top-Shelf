@@ -652,7 +652,11 @@ def push_to_stash(scene: dict, destination: str, source: str, phash: str = None)
         resp.raise_for_status()
         data = resp.json()
         if "errors" in data:
-            emit(f"  Stash: push failed ({data['errors'][0].get('message', '')})")
+            msgs = [e.get("message", str(e)) for e in data["errors"]]
+            if any("not authorized" in m.lower() for m in msgs):
+                emit("  Stash: push failed (not authorised — check your Stash API key)")
+            else:
+                emit(f"  Stash: push failed ({'; '.join(msgs)})")
             return False
         new_id = (data.get("data") or {}).get("sceneCreate", {}).get("id")
         emit(f"  Stash: scene created (id {new_id}){' with file link' if file_id else ' - run scan to link file'}")
@@ -691,15 +695,18 @@ mutation ImageCreate($input: ImageCreateInput!) {
 """
 
 def stashdb_upload_image(image_url: str, api_key: str) -> str | None:
-    """Upload an image to StashDB by URL and return the image ID."""
+    """Upload an image to StashDB by URL and return the image ID.
+    Note: requires elevated StashDB permissions - silently skipped if not authorised."""
     if not image_url:
         return None
     try:
         data = _stashbox_post(STASHDB_ENDPOINT, api_key, STASHDB_IMAGE_CREATE,
                               {"input": {"url": image_url}})
+        errors = data.get("errors") or []
+        if any("not authorized" in str(e) for e in errors):
+            return None  # silently skip - standard API keys can't upload images
         return (data.get("imageCreate") or {}).get("id")
-    except Exception as e:
-        emit(f"  StashDB image upload failed: {e}")
+    except Exception:
         return None
 
 
@@ -753,6 +760,12 @@ def stashdb_submit_scene(title: str, date: str, studio_id: str,
 
     try:
         data = _stashbox_post(STASHDB_ENDPOINT, api_key, STASHDB_SCENE_CREATE, {"input": inp})
+        errors = data.get("errors") or []
+        if errors:
+            msgs = [e.get("message", str(e)) for e in errors]
+            if any("not authorized" in m.lower() for m in msgs):
+                return {"success": False, "error": "Not authorised — your StashDB account needs EDIT permissions to submit scenes"}
+            return {"success": False, "error": "; ".join(msgs)}
         scene = data.get("sceneCreate") or {}
         return {"success": True, "id": scene.get("id"), "title": scene.get("title")}
     except Exception as e:
@@ -827,7 +840,11 @@ def submit_phash_to_stashdb(scene_id: str, phash: str, duration: float = None) -
         resp.raise_for_status()
         data = resp.json()
         if "errors" in data:
-            emit(f"  Phash submit: failed ({data['errors']})")
+            msgs = [e.get("message", str(e)) for e in data["errors"]]
+            if any("not authorized" in m.lower() for m in msgs):
+                emit("  Phash submit: not authorised (READ-only StashDB account)")
+            else:
+                emit(f"  Phash submit: failed ({'; '.join(msgs)})")
             return False
         emit("  Phash submit: sent to StashDB")
         return True
