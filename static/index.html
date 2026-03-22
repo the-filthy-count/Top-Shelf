@@ -80,7 +80,7 @@
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
   /* ── Stats ── */
-  .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 28px; }
+  .stats-bar { display: contents; }
   .stat-card { background: var(--surface); border: none; border-radius: 10px; padding: 32px 20px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; flex-direction: column; align-items: center; justify-content: center; height: 160px; }
   .stat-value { font-family: var(--acid); font-size: 72px; font-weight: 400; line-height: 1; display: block; letter-spacing: 0.02em; text-align: center; }
   .stat-label { font-family: var(--secs); font-size: 26px; text-transform: uppercase; letter-spacing: -0.02em; color: var(--dim); display: block; margin-top: 10px; text-align: center; }
@@ -89,8 +89,20 @@
   .stat-no_dir .stat-value    { color: var(--blue); }
   .stat-errors .stat-value    { color: var(--red); }
 
+  /* ── Unified layout grid ── */
+  .layout-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: 160px auto;
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .layout-grid .stat-card { height: 160px; }
+  .layout-grid .panel-queue { grid-column: 1 / 4; }
+  .layout-grid .panel-log   { grid-column: 4 / 5; }
+
   /* ── Main grid ── */
-  .main-grid { display: grid; grid-template-columns: 3fr 1fr; gap: 16px; margin-bottom: 20px; align-items: start; grid-auto-rows: min-content; }
+  .main-grid { display: contents; }
 
   /* ── Panels ── */
   .panel { background: var(--surface); border: none; border-radius: 10px; overflow: hidden; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
@@ -298,7 +310,7 @@
     </div>
   </header>
 
-  <div class="stats-bar">
+  <div class="layout-grid">
     <a class="stat-card stat-filed" href="/history?status=filed" style="text-decoration:none;cursor:pointer">
       <span class="stat-value" id="statFiled">0</span>
       <span class="stat-label">Filed</span>
@@ -315,10 +327,8 @@
       <span class="stat-value" id="statErrors">0</span>
       <span class="stat-label">Errors</span>
     </a>
-  </div>
 
-  <div class="main-grid">
-    <div class="panel">
+    <div class="panel panel-queue">
       <div class="panel-header">
         <span class="panel-title">Queue <span id="queueCount" style="font-family:var(--secs);letter-spacing:-0.02em;color:var(--dim)"></span></span>
         <div class="header-actions">
@@ -329,7 +339,7 @@
       <div class="panel-body" id="queueList"><div class="empty">Loading...</div></div>
     </div>
 
-    <div class="panel">
+    <div class="panel panel-log">
       <div class="panel-header">
         <span class="panel-title">Log</span>
         <button class="btn-secondary" onclick="clearLog()" title="Clear log"><i class="fa-solid fa-x"></i></button>
