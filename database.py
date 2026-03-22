@@ -40,6 +40,9 @@ DEFAULTS = {
     "media_scan_debounce_mins": "5",
     "folder_watch_enabled":    "true",
     "folder_watch_hold_secs":  "60",
+    "site_abbreviations":      '{"brcc": "Backroom Casting Couch", "excogi": "Exploited College Girls", "nvg": "Net Video Girls", "brf": "Backroom Facials", "hmf": "Hot MILFs Fuck", "bex": "BrazzersExxtra", "ps": "PropertySex", "rk": "Reality Kings", "atk": "ATK", "ftv": "FTV Girls"}',
+    "filename_patterns":       "pipe|dot_date|dot_date_short|bracket_site|dash_date",
+    "min_file_size_mb":        "10",
 }
 
 DEFAULT_PERFORMER_DIRS = [

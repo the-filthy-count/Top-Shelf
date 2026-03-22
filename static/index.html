@@ -80,10 +80,10 @@
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
   /* ── Stats ── */
-  .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 28px; }
-  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px 20px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .stat-value { font-family: var(--acid); font-size: 56px; font-weight: 400; line-height: 1; display: block; letter-spacing: 0.02em; text-align: center; }
-  .stat-label { font-family: var(--secs); font-size: 22px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); display: block; margin-top: 6px; text-align: center; }
+  .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 32px 20px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 160px; }
+  .stat-value { font-family: var(--acid); font-size: 72px; font-weight: 400; line-height: 1; display: block; letter-spacing: 0.02em; text-align: center; }
+  .stat-label { font-family: var(--secs); font-size: 26px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); display: block; margin-top: 10px; text-align: center; }
   .stat-filed .stat-value     { color: var(--green); }
   .stat-unmatched .stat-value { color: var(--amber); }
   .stat-no_dir .stat-value    { color: var(--blue); }
@@ -96,7 +96,7 @@
   .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
   .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
   .panel-title { font-family: var(--acid); font-size: 32px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; color: #ffffff; }
-  .panel-body { max-height: 420px; overflow-y: auto; }
+  .panel-body { max-height: 520px; overflow-y: auto; }
   .panel-body::-webkit-scrollbar { width: 4px; }
   .panel-body::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
 
@@ -109,11 +109,11 @@
   .queue-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .badge { font-family: var(--secs); font-size: 11px; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
   .badge-cached { background: none; border: none; color: var(--blue); font-family: var(--secs); font-size: 16px; padding: 0 4px; }
-  .badge-size   { background: none; border: none; color: var(--green); font-family: var(--secs); font-size: 16px; padding: 0 4px; }
+  .badge-size   { background: none; border: none; color: var(--green); font-family: var(--mono); font-size: 12px; padding: 0 4px; }
   .empty { padding: 32px 18px; text-align: center; color: var(--dim); font-size: 12px; }
 
   /* ── Log ── */
-  .log-body { padding: 14px 18px; max-height: 420px; overflow-y: auto; font-size: 12px; line-height: 1.8; }
+  .log-body { padding: 14px 18px; max-height: 520px; overflow-y: auto; font-size: 12px; line-height: 1.8; }
   .log-body::-webkit-scrollbar { width: 4px; }
   .log-body::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
   .log-line { display: block; }
@@ -166,6 +166,33 @@
   .btn-run-file:hover { border-color: var(--accent); color: var(--accent); }
   .btn-run-file:disabled { opacity: 0.3; cursor: not-allowed; }
   .header-actions { display: flex; gap: 8px; align-items: center; }
+
+  /* ── Collapsible sections ── */
+  .collapsible-header {
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer; user-select: none;
+  }
+  .collapsible-header:hover .settings-section-title { color: var(--text); }
+  .collapsible-arrow { font-size: 11px; color: var(--dim); transition: transform 0.2s; }
+  .collapsible-arrow.open { transform: rotate(90deg); }
+  .collapsible-body { display: none; margin-top: 12px; }
+  .collapsible-body.open { display: block; }
+
+  /* ── Toggle switch ── */
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; }
+  .toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; inset: 0; background: var(--muted);
+    border-radius: 22px; cursor: pointer; transition: 0.2s;
+  }
+  .toggle-slider:before {
+    content: ''; position: absolute;
+    width: 16px; height: 16px; left: 3px; bottom: 3px;
+    background: white; border-radius: 50%; transition: 0.2s;
+  }
+  .toggle input:checked + .toggle-slider { background: var(--accent); }
+  .toggle input:checked + .toggle-slider:before { transform: translateX(18px); }
 
   /* ── Settings modal ── */
   .modal-overlay {
@@ -512,54 +539,96 @@
         </div>
       </div>
 
-      <!-- Retry -->
+      <!-- Automatic Retry -->
       <div class="settings-section">
-        <div class="settings-section-title">Automatic Retry</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-          <div class="field-row">
-            <label class="field-label">Enabled</label>
-            <select class="select-input" id="cfgRetryEnabled" style="width:100%">
-              <option value="true">On</option>
-              <option value="false">Off</option>
-            </select>
-          </div>
-          <div class="field-row">
-            <label class="field-label">Run at hour (0–23)</label>
-            <input class="field-input" id="cfgRetryHour" type="number" min="0" max="23" placeholder="1">
-          </div>
-          <div class="field-row">
-            <label class="field-label">Frequency (hours)</label>
-            <select class="select-input" id="cfgRetryFreq" style="width:100%">
-              <option value="1">Every hour</option>
-              <option value="2">Every 2 hours</option>
-              <option value="4">Every 4 hours</option>
-              <option value="6">Every 6 hours</option>
-              <option value="12">Every 12 hours</option>
-              <option value="24">Every 24 hours</option>
-            </select>
-          </div>
+        <div class="toggle-row">
+          <div class="settings-section-title">Automatic Retry</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgRetryEnabled" onchange="toggleSection('retryBody', this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
         </div>
-        <div class="field-hint" id="retryNextRun" style="margin-top:8px"></div>
+        <div class="collapsible-body" id="retryBody" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="field-row">
+              <label class="field-label">Run at hour (0–23)</label>
+              <input class="field-input" id="cfgRetryHour" type="number" min="0" max="23" placeholder="1">
+            </div>
+            <div class="field-row">
+              <label class="field-label">Frequency (hours)</label>
+              <select class="select-input" id="cfgRetryFreq" style="width:100%">
+                <option value="1">Every hour</option>
+                <option value="2">Every 2 hours</option>
+                <option value="4">Every 4 hours</option>
+                <option value="6">Every 6 hours</option>
+                <option value="12">Every 12 hours</option>
+                <option value="24">Every 24 hours</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-hint" id="retryNextRun" style="margin-top:8px"></div>
+        </div>
       </div>
 
       <!-- Folder Watch -->
       <div class="settings-section">
-        <div class="settings-section-title">Folder Watch</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-          <div class="field-row">
-            <label class="field-label">Enabled</label>
-            <select class="select-input" id="cfgWatchEnabled" style="width:100%">
-              <option value="true">On</option>
-              <option value="false">Off</option>
-            </select>
+        <div class="toggle-row">
+          <div class="settings-section-title">Folder Watch</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgWatchEnabled" onchange="toggleSection('watchBody', this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="collapsible-body" id="watchBody" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="field-row">
+              <label class="field-label">Hold time (seconds)</label>
+              <input class="field-input" id="cfgWatchHold" type="number" min="10" max="600" placeholder="60">
+            </div>
+            <div class="field-row">
+              <label class="field-label">Status</label>
+              <div id="watcherStatus" style="font-size:11px;color:var(--dim);padding:9px 0">Checking...</div>
+            </div>
           </div>
-          <div class="field-row">
-            <label class="field-label">Hold time (seconds)</label>
-            <input class="field-input" id="cfgWatchHold" type="number" min="10" max="600" placeholder="60">
+        </div>
+      </div>
+
+      <!-- Filename Parsing -->
+      <div class="settings-section">
+        <div class="collapsible-header" onclick="toggleCollapsible('filenameBody', 'filenameArrow')">
+          <div class="settings-section-title">Filename Parsing</div>
+          <span class="collapsible-arrow" id="filenameArrow">▶</span>
+        </div>
+        <div class="collapsible-body" id="filenameBody">
+          <div class="field-row" style="margin-top:12px">
+            <label class="field-label">Pattern order <span style="color:var(--muted)">(pipe-separated, tried in order)</span></label>
+            <input class="field-input" id="cfgFilenamePatterns" type="text" placeholder="pipe|dot_date|dot_date_short|bracket_site|dash_date">
+            <div class="field-hint" style="margin-top:4px">
+              Available: <code>pipe</code> (site|date|performers|title),
+              <code>dot_date</code> (site.YYYY.MM.DD.title),
+              <code>dot_date_short</code> (site.YY.MM.DD.title),
+              <code>bracket_site</code> ([Site] Title),
+              <code>dash_date</code> (site - YYYY-MM-DD - title)
+            </div>
           </div>
-          <div class="field-row">
-            <label class="field-label">Status</label>
-            <div id="watcherStatus" style="font-size:11px;color:var(--dim);padding:9px 0">Checking...</div>
+          <div class="field-row" style="margin-top:10px">
+            <label class="field-label">Min file size (MB) — smaller files are skipped</label>
+            <input class="field-input" id="cfgMinFileSize" type="number" min="0" placeholder="10" style="width:120px">
+          </div>
+        </div>
+      </div>
+
+      <!-- Site Abbreviations -->
+      <div class="settings-section">
+        <div class="collapsible-header" onclick="toggleCollapsible('abbrevBody', 'abbrevArrow')">
+          <div class="settings-section-title">Site Abbreviations</div>
+          <span class="collapsible-arrow" id="abbrevArrow">▶</span>
+        </div>
+        <div class="collapsible-body" id="abbrevBody">
+          <div class="field-row" style="margin-top:12px">
+            <label class="field-label">JSON map of abbreviation → full name</label>
+            <textarea class="field-input" id="cfgSiteAbbrevs" rows="5" style="font-size:11px;resize:vertical" placeholder='{"brcc": "Backroom Casting Couch", "nvg": "Net Video Girls"}'></textarea>
+            <div class="field-hint" style="margin-top:4px">Used to expand short site names found in filenames during parsing and search pre-population</div>
           </div>
         </div>
       </div>
@@ -768,14 +837,21 @@
     document.getElementById('cfgFeaturesDir').value      = s.features_dir      || '';
     document.getElementById('cfgPatternSeries').value    = s.pattern_series    || '';
     document.getElementById('cfgPatternPerformer').value = s.pattern_performer || '';
-    document.getElementById('cfgWatchEnabled').value  = s.folder_watch_enabled   || 'true';
-    document.getElementById('cfgWatchHold').value      = s.folder_watch_hold_secs  || '60';
+    const watchOn = (s.folder_watch_enabled || 'true') === 'true';
+    document.getElementById('cfgWatchEnabled').checked = watchOn;
+    toggleSection('watchBody', watchOn);
+    document.getElementById('cfgWatchHold').value = s.folder_watch_hold_secs || '60';
     fetch('/api/watcher/status').then(r=>r.json()).then(d=>{
       const el = document.getElementById('watcherStatus');
       el.textContent = d.watching ? `Watching${d.pending.length ? ` · ${d.pending.length} pending` : ''}` : 'Not watching';
       el.style.color = d.watching ? 'var(--green)' : 'var(--red)';
     });
-    document.getElementById('cfgRetryEnabled').value = s.retry_enabled     || 'true';
+    const retryOn = (s.retry_enabled || 'true') === 'true';
+    document.getElementById('cfgRetryEnabled').checked = retryOn;
+    toggleSection('retryBody', retryOn);
+    document.getElementById('cfgFilenamePatterns').value = s.filename_patterns || 'pipe|dot_date|dot_date_short|bracket_site|dash_date';
+    document.getElementById('cfgMinFileSize').value      = s.min_file_size_mb  || '10';
+    try { document.getElementById('cfgSiteAbbrevs').value = JSON.stringify(JSON.parse(s.site_abbreviations || '{}'), null, 2); } catch { document.getElementById('cfgSiteAbbrevs').value = s.site_abbreviations || ''; }
     document.getElementById('cfgRetryHour').value    = s.retry_hour         || '1';
     document.getElementById('cfgRetryFreq').value    = s.retry_frequency_h  || '24';
     // Show next run time
@@ -866,9 +942,12 @@
         features_dir:      document.getElementById('cfgFeaturesDir').value.trim(),
         pattern_series:    document.getElementById('cfgPatternSeries').value.trim(),
         pattern_performer: document.getElementById('cfgPatternPerformer').value.trim(),
-        folder_watch_enabled:   document.getElementById('cfgWatchEnabled').value,
+        folder_watch_enabled:   document.getElementById('cfgWatchEnabled').checked ? 'true' : 'false',
         folder_watch_hold_secs: document.getElementById('cfgWatchHold').value.trim(),
-        retry_enabled:     document.getElementById('cfgRetryEnabled').value,
+        retry_enabled:     document.getElementById('cfgRetryEnabled').checked ? 'true' : 'false',
+        filename_patterns: document.getElementById('cfgFilenamePatterns').value.trim(),
+        min_file_size_mb:  document.getElementById('cfgMinFileSize').value.trim(),
+        site_abbreviations: (() => { try { return JSON.stringify(JSON.parse(document.getElementById('cfgSiteAbbrevs').value)); } catch { return document.getElementById('cfgSiteAbbrevs').value; } })(),
         retry_hour:        document.getElementById('cfgRetryHour').value.trim(),
         retry_frequency_h: document.getElementById('cfgRetryFreq').value,
         api_key_tmdb:      document.getElementById('cfgKeyTmdb').value.trim(),
@@ -934,18 +1013,26 @@
       if (idx !== -1) document.getElementById(`qi-${idx}`)?.classList.add('active');
     }
 
-    // Pre-populate search from filename: strip extension and dots
-    const stem = filename.replace(/\.[^.]+$/, '').replace(/\./g, ' ');
-    // Try to extract a date pattern YYYY-MM-DD or YY.MM.DD
-    const dateMatch = stem.match(/\b(\d{2})[\.\-](\d{2})[\.\-](\d{2})\b/);
+    // Pre-populate search from filename using parser API
     document.getElementById('srchTerm').value = '';
     document.getElementById('srchTitle').value = '';
     document.getElementById('srchPerformer').value = '';
     document.getElementById('srchStudio').value = '';
-    document.getElementById('srchDateFrom').value = dateMatch ? `20${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}` : '';
+    document.getElementById('srchDateFrom').value = '';
     document.getElementById('srchDateTo').value = '';
-    // Put the whole stem as the free text term
-    document.getElementById('srchTerm').value = stem;
+    try {
+      const r = await fetch(`/api/parse/filename?filename=${encodeURIComponent(filename)}`);
+      const d = await r.json();
+      if (d.title)      document.getElementById('srchTitle').value     = d.title;
+      if (d.site)       document.getElementById('srchStudio').value    = d.site;
+      if (d.performers) document.getElementById('srchPerformer').value = d.performers;
+      if (d.date)       document.getElementById('srchDateFrom').value  = d.date;
+      if (!d.title && !d.site) {
+        document.getElementById('srchTerm').value = filename.replace(/\.[^.]+$/, '').replace(/[._]/g, ' ');
+      }
+    } catch {
+      document.getElementById('srchTerm').value = filename.replace(/\.[^.]+$/, '').replace(/[._]/g, ' ');
+    }
 
     // Show and scroll to search panel
     document.getElementById('searchPanel').style.display = 'block';
@@ -1092,27 +1179,25 @@
 
   let _manualFile = null;
 
-  function openManual(filename) {
+  async function openManual(filename) {
     _manualFile = filename;
     document.getElementById('manualFilename').textContent = filename;
-    // Pre-populate from filename if namer-style pipe format
-    const parts = filename.replace(/\.[^.]+$/, '').split('|');
-    if (parts.length >= 4) {
-      document.getElementById('mStudio').value     = parts[0]?.trim() || '';
-      document.getElementById('mDate').value       = parts[1]?.trim() || '';
-      document.getElementById('mPerformers').value = parts[2]?.trim() || '';
-      document.getElementById('mTitle').value      = parts[3]?.trim() || '';
-    } else {
-      // Try dot-separated: site.YY.MM.DD.performer.title
-      const stem = filename.replace(/\.[^.]+$/, '').replace(/\./g, ' ');
-      document.getElementById('mTitle').value = stem;
-      document.getElementById('mStudio').value = '';
-      document.getElementById('mDate').value = '';
-      document.getElementById('mPerformers').value = '';
-    }
+    document.getElementById('mTitle').value = '';
+    document.getElementById('mStudio').value = '';
+    document.getElementById('mDate').value = '';
+    document.getElementById('mPerformers').value = '';
     document.getElementById('mPlot').value = '';
     document.getElementById('mImageUrl').value = '';
     document.getElementById('manualModal').classList.add('open');
+    // Parse filename via API
+    try {
+      const r = await fetch(`/api/parse/filename?filename=${encodeURIComponent(filename)}`);
+      const d = await r.json();
+      if (d.title)      document.getElementById('mTitle').value      = d.title;
+      if (d.site)       document.getElementById('mStudio').value     = d.site;
+      if (d.date)       document.getElementById('mDate').value       = d.date;
+      if (d.performers) document.getElementById('mPerformers').value = d.performers;
+    } catch {}
   }
 
   function closeManual() {
@@ -1151,6 +1236,20 @@
   document.getElementById('manualModal').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeManual();
   });
+
+  // ── Collapsible & toggle helpers ─────────────────────────────────────
+
+  function toggleSection(bodyId, show) {
+    const el = document.getElementById(bodyId);
+    if (el) el.style.display = show ? 'block' : 'none';
+  }
+
+  function toggleCollapsible(bodyId, arrowId) {
+    const body  = document.getElementById(bodyId);
+    const arrow = document.getElementById(arrowId);
+    const open  = body.classList.toggle('open');
+    if (arrow) arrow.classList.toggle('open', open);
+  }
 
   // ── Watcher status ────────────────────────────────────────────────────
 

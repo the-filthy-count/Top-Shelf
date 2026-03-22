@@ -1,1 +1,10 @@
-*.zip
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+phash_filer.db
+*.phash
+.env
+static/logo.png
+static/background.jpg
+static/favicon.ico

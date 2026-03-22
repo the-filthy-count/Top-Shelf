@@ -480,6 +480,95 @@ def normalise(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+# ---------------------------------------------------------------------------
+# Filename parser
+# ---------------------------------------------------------------------------
+
+def parse_filename(filename: str, settings: dict) -> dict:
+    """
+    Attempt to extract site, date, performers, and title from a filename.
+    Returns a dict with keys: site, date, performers, title (all may be empty).
+    Tries patterns in order based on settings["filename_patterns"].
+    """
+    import json as _json
+
+    stem = Path(filename).stem
+
+    # Load site abbreviations and expand them
+    try:
+        abbrevs = _json.loads(settings.get("site_abbreviations", "{}"))
+    except Exception:
+        abbrevs = {}
+
+    def expand_abbrev(text: str) -> str:
+        low = text.lower()
+        for abbr, full in abbrevs.items():
+            if low == abbr.lower():
+                return full
+        return text
+
+    def clean(text: str) -> str:
+        return re.sub(r"\s+", " ", text.replace(".", " ").replace("_", " ")).strip()
+
+    result = {"site": "", "date": "", "performers": "", "title": ""}
+
+    patterns = settings.get("filename_patterns", "pipe|dot_date").split("|")
+
+    for pattern in patterns:
+        pattern = pattern.strip()
+
+        # Pipe-separated namer format: site|date|performers|title|network|parent
+        if pattern == "pipe":
+            parts = stem.split("|")
+            if len(parts) >= 4:
+                result["site"]       = expand_abbrev(parts[0].strip())
+                result["date"]       = parts[1].strip()
+                result["performers"] = parts[2].strip()
+                result["title"]      = parts[3].strip()
+                return result
+
+        # site.YYYY.MM.DD.title (dot separated, full year)
+        elif pattern == "dot_date":
+            m = re.match(r'^(.+?)\.(20\d{2}|19\d{2})\.(\d{2})\.(\d{2})\.(.+)$', stem)
+            if m:
+                result["site"]  = expand_abbrev(clean(m.group(1)))
+                result["date"]  = f"{m.group(2)}-{m.group(3)}-{m.group(4)}"
+                result["title"] = clean(m.group(5))
+                return result
+
+        # site.YY.MM.DD.title (dot separated, short year)
+        elif pattern == "dot_date_short":
+            m = re.match(r'^(.+?)\.(\d{2})\.(\d{2})\.(\d{2})\.(.+)$', stem)
+            if m:
+                result["site"]  = expand_abbrev(clean(m.group(1)))
+                result["date"]  = f"20{m.group(2)}-{m.group(3)}-{m.group(4)}"
+                result["title"] = clean(m.group(5))
+                return result
+
+        # [Site] Title - Performer (YYYY)
+        elif pattern == "bracket_site":
+            m = re.match(r'^\[(.+?)\]\s*(.+?)(?:\s*-\s*(.+?))?\s*(?:\((\d{4})\))?$', stem)
+            if m:
+                result["site"]       = expand_abbrev(m.group(1).strip())
+                result["title"]      = (m.group(2) or "").strip()
+                result["performers"] = (m.group(3) or "").strip()
+                result["date"]       = m.group(4) or ""
+                return result
+
+        # site - YYYY-MM-DD - title
+        elif pattern == "dash_date":
+            m = re.match(r'^(.+?)\s*[-–]\s*(20\d{2}|19\d{2}-\d{2}-\d{2})\s*[-–]\s*(.+)$', stem)
+            if m:
+                result["site"]  = expand_abbrev(m.group(1).strip())
+                result["date"]  = m.group(2).strip()
+                result["title"] = m.group(3).strip()
+                return result
+
+    # Fallback: return cleaned stem as title
+    result["title"] = clean(stem)
+    return result
+
+
 def find_studio_dir(studio_name: str, settings: dict) -> Path | None:
     series_dir = Path(settings.get("series_dir", ""))
     if not series_dir.exists():
@@ -1248,6 +1337,14 @@ async def file_manual_metadata(payload: dict, background_tasks: BackgroundTasks)
 
     background_tasks.add_task(run)
     return {"started": True, "filename": filename}
+
+
+@app.get("/api/parse/filename")
+async def parse_filename_endpoint(filename: str):
+    """Parse a filename and return extracted metadata fields."""
+    settings = db.get_settings()
+    result = parse_filename(filename, settings)
+    return result
 
 
 @app.get("/api/watcher/status")
