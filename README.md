@@ -1,5 +1,7 @@
 # Top-Shelf
 
+![Top-Shelf Dashboard](docs/dashboard.png)
+
 A self-hosted media filing tool that uses perceptual hashing to automatically identify and organise adult content scenes by matching against StashDB, ThePornDB, and FansDB.
 
 ---
