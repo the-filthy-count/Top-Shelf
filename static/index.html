@@ -802,6 +802,10 @@
 </div>
 
 <script>
+  function esc(str) {
+    return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
   let isRunning = false;
   let eventSource = null;
   let dirs = [];
@@ -1248,7 +1252,11 @@
                 <td class="td-title" title="${row.studio}" style="vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${row.studio}</td>
                 <td class="td-performers" title="${row.performers}" style="vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${row.performers||'-'}</td>
                 <td class="td-date" style="vertical-align:middle">${row.date||'-'}</td>
-                <td style="vertical-align:middle"><a href="https://stashdb.org/scenes/${row.id}" target="_blank" style="color:var(--accent);font-size:10px">View ↗</a></td>
+                <td style="vertical-align:middle">${row.id && row.source ? `<a href="${
+  row.source === 'ThePornDB' ? 'https://theporndb.net/scenes/' + row.id :
+  row.source === 'FansDB'    ? 'https://fansdb.cc/scenes/'    + row.id :
+                               'https://stashdb.org/scenes/'  + row.id
+}" target="_blank" style="color:var(--accent);font-size:10px">View ↗</a>` : '-'}</td>
                 <td style="vertical-align:middle">
                   ${selectedFile
                     ? `<button class="btn-run-file" style="border-color:var(--green);color:var(--green);white-space:nowrap" onclick="useThisScene(${idx})">Use this</button>`
