@@ -684,6 +684,25 @@ mutation SceneCreate($input: SceneCreateInput!) {
 }
 """
 
+STASHDB_IMAGE_CREATE = """
+mutation ImageCreate($input: ImageCreateInput!) {
+  imageCreate(input: $input) { id url }
+}
+"""
+
+def stashdb_upload_image(image_url: str, api_key: str) -> str | None:
+    """Upload an image to StashDB by URL and return the image ID."""
+    if not image_url:
+        return None
+    try:
+        data = _stashbox_post(STASHDB_ENDPOINT, api_key, STASHDB_IMAGE_CREATE,
+                              {"input": {"url": image_url}})
+        return (data.get("imageCreate") or {}).get("id")
+    except Exception as e:
+        emit(f"  StashDB image upload failed: {e}")
+        return None
+
+
 def stashdb_search_studio(name: str, api_key: str) -> list[dict]:
     """Search StashDB for a studio by name. Returns list of {id, name}."""
     try:
@@ -704,24 +723,33 @@ def stashdb_search_performer(name: str, api_key: str) -> list[dict]:
 
 def stashdb_submit_scene(title: str, date: str, studio_id: str,
                           performer_ids: list, phash: str,
-                          details: str, image_url: str, api_key: str) -> dict:
+                          details: str, image_url: str, api_key: str,
+                          duration: int = 0) -> dict:
     """Submit a new scene to StashDB."""
     fingerprints = []
     if phash:
-        fingerprints.append({"algorithm": "PHASH", "hash": phash, "duration": 0})
+        fingerprints.append({"algorithm": "PHASH", "hash": phash, "duration": duration})
+
+    # Upload image first to get image_id if URL provided
+    image_ids = []
+    if image_url:
+        img_id = stashdb_upload_image(image_url, api_key)
+        if img_id:
+            image_ids = [img_id]
 
     inp = {
-        "title":     title,
-        "date":      date,
-        "details":   details or "",
-        "fingerprints": fingerprints,
+        "title":        title,
+        "date":         date,
+        "details":      details or "",
+        "fingerprints": fingerprints,  # NON_NULL - always required
     }
     if studio_id:
         inp["studio_id"] = studio_id
     if performer_ids:
-        inp["performer_ids"] = performer_ids
-    if image_url:
-        inp["image"] = image_url
+        # StashDB expects [{performer_id, as}] not a flat list of IDs
+        inp["performers"] = [{"performer_id": pid} for pid in performer_ids]
+    if image_ids:
+        inp["image_ids"] = image_ids
 
     try:
         data = _stashbox_post(STASHDB_ENDPOINT, api_key, STASHDB_SCENE_CREATE, {"input": inp})
@@ -1893,15 +1921,34 @@ async def stashdb_submit_manual(payload: dict):
     filename = payload.get("filename", "")
     phash    = db.get_phash(filename) if filename else None
 
+    # Get video duration for fingerprint accuracy
+    duration = 0
+    if filename:
+        s = db.get_settings()
+        source_dir = Path(s.get("source_dir", ""))
+        video_path = source_dir / filename
+        if not video_path.exists():
+            # Try destination path from history
+            hist = [r for r in db.get_history(limit=1000) if r["filename"] == filename]
+            if hist and hist[0].get("destination"):
+                video_path = Path(hist[0]["destination"])
+        try:
+            dur = get_video_duration(video_path)
+            if dur:
+                duration = int(dur)
+        except Exception:
+            pass
+
     result = stashdb_submit_scene(
-        title        = payload.get("title", ""),
-        date         = payload.get("date", ""),
-        studio_id    = payload.get("studio_id"),
+        title         = payload.get("title", ""),
+        date          = payload.get("date", ""),
+        studio_id     = payload.get("studio_id"),
         performer_ids = payload.get("performer_ids", []),
-        phash        = phash,
-        details      = payload.get("plot", ""),
-        image_url    = payload.get("image_url", ""),
-        api_key      = api_key,
+        phash         = phash,
+        details       = payload.get("plot", ""),
+        image_url     = payload.get("image_url", ""),
+        api_key       = api_key,
+        duration      = duration,
     )
     return result
 
