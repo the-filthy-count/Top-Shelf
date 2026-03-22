@@ -281,7 +281,7 @@ def get_movie_stats() -> dict:
 
 
 def get_retry_files() -> list[str]:
-    """Return filenames of all non-filed, non-pending records that still exist in the source dir."""
+    """Return filenames of all non-filed, non-pending, non-removed records."""
     with get_conn() as conn:
         cur = conn.execute(
             """SELECT filename FROM processed_files

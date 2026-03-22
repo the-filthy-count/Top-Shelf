@@ -1006,6 +1006,13 @@ async def get_queue():
     source_dir = Path(settings.get("source_dir", ""))
     if not source_dir.exists():
         return JSONResponse({"files": [], "error": f"Source dir not found: {source_dir}"})
+
+    # Mark any tracked files that no longer exist on disk as removed
+    retryable = db.get_retry_files()
+    for fname in retryable:
+        if not (source_dir / fname).exists():
+            db.update_file(fname, status="removed")
+
     filed = {r["filename"] for r in db.get_history(limit=10000) if r["status"] == "filed"}
     files = []
     for f in sorted(source_dir.iterdir()):
