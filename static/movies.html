@@ -14,6 +14,11 @@
     src: url('/static/vtks-acidoze.regular.ttf') format('truetype');
     font-weight: normal; font-style: normal;
   }
+  @font-face {
+    font-family: 'Seconds';
+    src: url('/static/23-seconds-to-midnight.regular.ttf') format('truetype');
+    font-weight: normal; font-style: normal;
+  }
   :root {
     --bg:      #0c0c0e;
     --surface: rgba(19,19,23,0.75);
@@ -30,6 +35,7 @@
     --mono:    'DM Mono', monospace;
     --sans:    'Syne', sans-serif;
     --acid:    'Acidoze', 'Syne', sans-serif;
+    --secs:    'Seconds', 'DM Mono', monospace;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -66,7 +72,7 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center;
   }
   .stat-value { font-family: var(--acid); font-size: 48px; font-weight: 400; line-height: 1; display: block; }
-  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); margin-top: 4px; }
+  .stat-label { font-family: var(--secs); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin-top: 6px; }
   .stat-filed  .stat-value { color: var(--green); }
   .stat-errors .stat-value { color: var(--red); }
   .stat-total  .stat-value { color: var(--accent); }
@@ -111,6 +117,7 @@
   .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
   .btn-secondary { background: none; border: 1px solid var(--border); color: var(--dim); padding: 8px 12px; border-radius: 6px; font-size: 16px; line-height: 1; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; }
   .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+  .active-nav { border-color: var(--accent) !important; color: var(--accent) !important; }
   .btn-run-file { background: none; border: 1px solid var(--muted); color: #ffffff; padding: 3px 10px; border-radius: 4px; font-family: Acidoze, var(--sans); font-size: 17px; cursor: pointer; letter-spacing: 0.05em; transition: all 0.15s; }
   .btn-run-file:hover { border-color: var(--accent); color: var(--accent); }
   .btn-small { background: none; border: 1px solid var(--muted); color: var(--dim); padding: 4px 10px; border-radius: 4px; font-family: var(--mono); font-size: 11px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
@@ -163,7 +170,7 @@
   tr:hover td { background: rgba(255,255,255,0.015); }
   .td-text { color: var(--text); }
   .td-dim  { color: var(--dim); }
-  .status-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .status-tag { font-family: var(--secs); display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
   .status-filed   { background: rgba(74,222,128,0.12);  color: var(--green); }
   .status-error   { background: rgba(248,113,113,0.12); color: var(--red); }
   .status-skipped { background: rgba(255,255,255,0.06); color: var(--dim); }
@@ -183,9 +190,10 @@
   <header>
     <div class="logo"><img src="/static/logo.png" alt="Top-Shelf"></div>
     <div class="nav-links">
-      <a class="nav-link" href="/">← Dashboard</a>
-      <a class="nav-link active" href="/movies">Movies</a>
-      <a class="nav-link" href="/history">History</a>
+      <a href="/" style="text-decoration:none"><button class="btn-secondary" title="TV Series"><i class="fa-solid fa-tv"></i></button></a>
+      <a href="/movies" style="text-decoration:none"><button class="btn-secondary active-nav" title="Movies"><i class="fa-solid fa-film"></i></button></a>
+      <a href="/history" style="text-decoration:none"><button class="btn-secondary" title="History"><i class="fa-solid fa-clock-rotate-left"></i></button></a>
+      <button class="btn-secondary" onclick="openSettings ? openSettings() : null" title="Settings"><i class="fa-solid fa-gear"></i></button>
     </div>
   </header>
 
@@ -232,7 +240,10 @@
           <input class="field-input" id="srchTitle" type="text" placeholder="Movie title..." onkeydown="if(event.key==='Enter')runSearch()">
           <input class="field-input" id="srchYear" type="text" placeholder="Year" onkeydown="if(event.key==='Enter')runSearch()">
         </div>
-        <button class="btn-primary" onclick="runSearch()" style="width:100%"><i class="fa-solid fa-magnifying-glass"></i></button>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:8px">
+          <input class="field-input" id="srchTmdbId" type="text" placeholder="TMDB ID (optional — skips search, files directly)" onkeydown="if(event.key==='Enter')runSearch()">
+          <button class="btn-primary" onclick="runSearch()"><i class="fa-solid fa-magnifying-glass"></i></button>
+        </div>
       </div>
       <div class="panel-body results-grid" id="searchResults">
         <div class="empty">Select a file from the queue, then search for the movie</div>
@@ -376,8 +387,15 @@
 
   // ── Search ────────────────────────────────────────────────────────────
   async function runSearch() {
-    const title = document.getElementById('srchTitle').value.trim();
-    const year  = document.getElementById('srchYear').value.trim();
+    const tmdbId = document.getElementById('srchTmdbId').value.trim();
+    const title  = document.getElementById('srchTitle').value.trim();
+    const year   = document.getElementById('srchYear').value.trim();
+
+    // If TMDB ID provided and file selected, file directly without searching
+    if (tmdbId && selectedFile) {
+      fileMovie(tmdbId, `TMDB ID ${tmdbId}`);
+      return;
+    }
     if (!title) return;
     const resultsEl = document.getElementById('searchResults');
     resultsEl.innerHTML = '<div class="empty">Searching...</div>';
@@ -415,6 +433,7 @@
   function clearSearch() {
     document.getElementById('srchTitle').value = '';
     document.getElementById('srchYear').value = '';
+    document.getElementById('srchTmdbId').value = '';
     document.getElementById('searchResults').innerHTML = '<div class="empty">Select a file from the queue, then search for the movie</div>';
   }
 

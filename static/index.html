@@ -12,8 +12,12 @@
   @font-face {
     font-family: 'Acidoze';
     src: url('/static/vtks-acidoze.regular.ttf') format('truetype');
-    font-weight: normal;
-    font-style: normal;
+    font-weight: normal; font-style: normal;
+  }
+  @font-face {
+    font-family: 'Seconds';
+    src: url('/static/23-seconds-to-midnight.regular.ttf') format('truetype');
+    font-weight: normal; font-style: normal;
   }
   :root {
     --bg:      #0c0c0e;
@@ -31,6 +35,7 @@
     --mono:    'DM Mono', monospace;
     --sans:    'Syne', sans-serif;
     --acid:    'Acidoze', 'Syne', sans-serif;
+    --secs:    'Seconds', 'DM Mono', monospace;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -78,7 +83,7 @@
   .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 28px; }
   .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px 20px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; flex-direction: column; align-items: center; justify-content: center; }
   .stat-value { font-family: var(--acid); font-size: 56px; font-weight: 400; line-height: 1; display: block; letter-spacing: 0.02em; text-align: center; }
-  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); display: block; margin-top: 4px; text-align: center; }
+  .stat-label { font-family: var(--secs); font-size: 22px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); display: block; margin-top: 6px; text-align: center; }
   .stat-filed .stat-value     { color: var(--green); }
   .stat-unmatched .stat-value { color: var(--amber); }
   .stat-no_dir .stat-value    { color: var(--blue); }
@@ -102,7 +107,7 @@
   .queue-item.active { background: rgba(192,132,252,0.06); border-left: 2px solid var(--accent); }
   .queue-filename { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .queue-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-  .badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .badge { font-family: var(--secs); font-size: 11px; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
   .badge-cached { background: rgba(96,165,250,0.15); color: var(--blue); }
   .badge-size   { background: rgba(255,255,255,0.05); color: var(--dim); }
   .empty { padding: 32px 18px; text-align: center; color: var(--dim); font-size: 12px; }
@@ -140,13 +145,13 @@
   tr:hover td { background: rgba(255,255,255,0.015); }
   .td-filename { color: var(--text); }
   .td-title, .td-performers, .td-date { color: var(--dim); }
-  .status-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .status-tag { font-family: var(--secs); display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
   .status-filed      { background: rgba(74,222,128,0.12);  color: var(--green); }
   .status-unmatched  { background: rgba(251,191,36,0.12);  color: var(--amber); }
   .status-no_dir     { background: rgba(96,165,250,0.12);  color: var(--blue); }
   .status-error      { background: rgba(248,113,113,0.12); color: var(--red); }
   .status-processing { background: rgba(192,132,252,0.12); color: var(--accent); }
-  .source-tag { font-size: 10px; color: var(--dim); padding: 2px 6px; border-radius: 3px; background: rgba(255,255,255,0.04); }
+  .source-tag { font-family: var(--secs); font-size: 11px; color: var(--dim); padding: 2px 6px; border-radius: 3px; background: rgba(255,255,255,0.04); }
 
   /* ── Buttons ── */
   .btn-primary { background: var(--accent); color: #0c0c0e; border: none; padding: 8px 14px; border-radius: 6px; font-size: 18px; line-height: 1; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; }
@@ -246,17 +251,20 @@
 <div class="app">
 
   <header>
-    <div class="logo">
-      <img src="/static/logo.png" alt="Top-Shelf" style="height:36px; object-fit:contain;">
-    </div>
-    <div class="header-right">
-      <div id="retryPill" style="display:none;font-size:11px;color:var(--dim);padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);letter-spacing:0.06em"></div>
-      <button class="btn-secondary" id="btnRetryNow" onclick="retryNow()" title="Retry failed files" style="font-family:Acidoze,var(--sans);font-size:18px;color:#ffffff;letter-spacing:0.06em;text-transform:uppercase;padding:8px 16px">Retry Failed</button>
+    <div style="display:flex;align-items:center;gap:16px">
+      <div class="logo">
+        <img src="/static/logo.png" alt="Top-Shelf" style="height:36px; object-fit:contain;">
+      </div>
       <div id="statusPill" class="status-pill">
         <span class="status-dot"></span>
         <span id="statusText">Idle</span>
       </div>
-      <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies" style="font-family:Acidoze,var(--sans);font-size:16px;color:#ffffff;letter-spacing:0.06em;text-transform:uppercase;padding:8px 14px"><i class="fa-solid fa-film"></i></button></a>
+    </div>
+    <div class="header-right">
+      <div id="retryPill" style="display:none;font-size:11px;color:var(--dim);padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);letter-spacing:0.06em"></div>
+      <button class="btn-secondary" id="btnRetryNow" onclick="retryNow()" title="Retry failed files"><i class="fa-solid fa-arrows-rotate"></i></button>
+      <a href="/" style="text-decoration:none"><button class="btn-secondary" title="TV Series"><i class="fa-solid fa-tv"></i></button></a>
+      <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-film"></i></button></a>
       <button class="btn-secondary" onclick="openSettings()" title="Settings"><i class="fa-solid fa-gear"></i></button>
     </div>
   </header>
@@ -264,19 +272,19 @@
   <div class="stats-bar">
     <a class="stat-card stat-filed" href="/history?status=filed" style="text-decoration:none;cursor:pointer">
       <span class="stat-value" id="statFiled">0</span>
-      <span class="stat-label">Filed ↗</span>
+      <span class="stat-label">Filed</span>
     </a>
     <a class="stat-card stat-unmatched" href="/history?status=unmatched" style="text-decoration:none;cursor:pointer">
       <span class="stat-value" id="statUnmatched">0</span>
-      <span class="stat-label">Unmatched ↗</span>
+      <span class="stat-label">Unmatched</span>
     </a>
     <a class="stat-card stat-no_dir" href="/history?status=no_dir" style="text-decoration:none;cursor:pointer">
       <span class="stat-value" id="statNoDir">0</span>
-      <span class="stat-label">No Directory ↗</span>
+      <span class="stat-label">No Directory</span>
     </a>
     <a class="stat-card stat-errors" href="/history?status=error" style="text-decoration:none;cursor:pointer">
       <span class="stat-value" id="statErrors">0</span>
-      <span class="stat-label">Errors ↗</span>
+      <span class="stat-label">Errors</span>
     </a>
   </div>
 

@@ -9,6 +9,9 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
+  @font-face { font-family: 'Seconds'; src: url('/static/23-seconds-to-midnight.regular.ttf') format('truetype'); }
+</style>
+<style>
   @font-face {
     font-family: 'Acidoze';
     src: url('/static/vtks-acidoze.regular.ttf') format('truetype');
@@ -82,7 +85,7 @@
   .tab-count.unmatched { color: var(--amber); }
   .tab-count.no_dir    { color: var(--blue); }
   .tab-count.error     { color: var(--red); }
-  .tab-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
+  .tab-label { font-family: Seconds, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
 
   .search-row { display: flex; gap: 10px; margin-bottom: 16px; }
   .filter-input {
@@ -184,7 +187,10 @@
 
   <header>
     <div class="logo"><img src="/static/logo.png" alt="Top-Shelf"></div>
-    <a class="back-link" href="/">← Dashboard</a>
+    <div style="display:flex;gap:8px">
+      <a href="/" style="text-decoration:none"><button style="background:none;border:1px solid var(--border);color:var(--dim);padding:8px 12px;border-radius:6px;font-size:16px;cursor:pointer;transition:all 0.15s" title="TV Series"><i class="fa-solid fa-tv"></i></button></a>
+      <a href="/movies" style="text-decoration:none"><button style="background:none;border:1px solid var(--border);color:var(--dim);padding:8px 12px;border-radius:6px;font-size:16px;cursor:pointer;transition:all 0.15s" title="Movies"><i class="fa-solid fa-film"></i></button></a>
+    </div>
   </header>
 
   <div class="filter-bar" id="filterBar">
