@@ -80,8 +80,8 @@
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
   /* ── Stats ── */
-  .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 16px; }
-  .stat-card { background: var(--surface); border: none; border-radius: 10px; padding: 32px 20px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 160px; }
+  .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-card { background: var(--surface); border: none; border-radius: 10px; padding: 32px 20px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; flex-direction: column; align-items: center; justify-content: center; height: 160px; }
   .stat-value { font-family: var(--acid); font-size: 72px; font-weight: 400; line-height: 1; display: block; letter-spacing: 0.02em; text-align: center; }
   .stat-label { font-family: var(--secs); font-size: 26px; text-transform: uppercase; letter-spacing: -0.02em; color: var(--dim); display: block; margin-top: 10px; text-align: center; }
   .stat-filed .stat-value     { color: var(--green); }
@@ -90,7 +90,7 @@
   .stat-errors .stat-value    { color: var(--red); }
 
   /* ── Main grid ── */
-  .main-grid { display: grid; grid-template-columns: 3fr 1fr; gap: 16px; margin-bottom: 20px; align-items: start; }
+  .main-grid { display: grid; grid-template-columns: 3fr 1fr; gap: 16px; margin-bottom: 20px; align-items: start; grid-auto-rows: min-content; }
 
   /* ── Panels ── */
   .panel { background: var(--surface); border: none; border-radius: 10px; overflow: hidden; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
