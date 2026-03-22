@@ -8,9 +8,10 @@ from datetime import datetime
 from pathlib import Path
 
 import os
-DB_PATH = Path(os.environ.get("DB_PATH", str(Path(__file__).parent / "phash_filer.db")))
 
-# Container paths are used when running in Docker; dev paths used otherwise
+# Use /app/database if it exists (Docker), otherwise fall back to app directory
+_db_dir    = Path("/app/database") if Path("/app/database").exists() else Path(__file__).parent
+DB_PATH    = Path(os.environ.get("DB_PATH", str(_db_dir / "phash_filer.db")))
 _in_docker = Path("/app/database").exists()
 
 DEFAULTS = {
