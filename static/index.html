@@ -303,6 +303,7 @@
     <div class="header-right">
       <div id="retryPill" style="display:none;font-size:11px;color:var(--dim);padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);letter-spacing:0.06em"></div>
       <div id="watcherPill" style="display:none;font-size:11px;color:var(--amber);padding:6px 14px;border-radius:20px;border:1px solid var(--amber);background:var(--surface);letter-spacing:0.06em"></div>
+      <div id="scanPill" style="display:none;font-size:11px;color:var(--blue);padding:6px 14px;border-radius:20px;border:1px solid var(--blue);background:var(--surface);letter-spacing:0.06em"></div>
       <button class="btn-secondary" id="btnRetryNow" onclick="retryNow()" title="Retry failed files"><i class="fa-solid fa-arrows-rotate"></i></button>
       <a href="/" style="text-decoration:none"><button class="btn-secondary" title="TV Series"><i class="fa-solid fa-tv"></i></button></a>
       <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-film"></i></button></a>
@@ -646,39 +647,66 @@
 
       <!-- Media Server Integration -->
       <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title">Media Server Scans</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgMediaScanEnabled">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="field-hint" style="margin-top:6px">Trigger library scans after filing. Scans are debounced — multiple files filing in quick succession fire only one scan.</div>
+        <div style="margin-top:10px">
+          <label class="field-label">Debounce delay (minutes)</label>
+          <input class="field-input" id="cfgScanDebounce" type="number" min="1" max="60" placeholder="5" style="width:100px;margin-top:4px">
+        </div>
+      </div>
+
+      <div class="settings-section">
         <div class="settings-section-title">Media Servers</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="field-row">
-            <label class="field-label">Stash URL</label>
-            <input class="field-input" id="cfgStashUrl" type="text" placeholder="http://192.168.1.x:9999">
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <!-- Stash -->
+          <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div class="toggle-row" style="margin-bottom:10px">
+              <span style="font-size:12px;font-weight:600;color:var(--text)">Stash</span>
+              <label class="toggle"><input type="checkbox" id="cfgStashEnabled"><span class="toggle-slider"></span></label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field-row"><label class="field-label">URL</label><input class="field-input" id="cfgStashUrl" type="text" placeholder="http://192.168.1.x:9999"></div>
+              <div class="field-row"><label class="field-label">API Key</label><input class="field-input" id="cfgStashKey" type="password" autocomplete="off"></div>
+            </div>
           </div>
-          <div class="field-row">
-            <label class="field-label">Stash API Key</label>
-            <input class="field-input" id="cfgStashKey" type="password" autocomplete="off">
+          <!-- Jellyfin -->
+          <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div class="toggle-row" style="margin-bottom:10px">
+              <span style="font-size:12px;font-weight:600;color:var(--text)">Jellyfin</span>
+              <label class="toggle"><input type="checkbox" id="cfgJellyfinEnabled"><span class="toggle-slider"></span></label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field-row"><label class="field-label">URL</label><input class="field-input" id="cfgJellyfinUrl" type="text" placeholder="http://192.168.1.x:8096"></div>
+              <div class="field-row"><label class="field-label">API Key</label><input class="field-input" id="cfgJellyfinKey" type="password" autocomplete="off"></div>
+            </div>
           </div>
-          <div class="field-row">
-            <label class="field-label">Jellyfin URL</label>
-            <input class="field-input" id="cfgJellyfinUrl" type="text" placeholder="http://192.168.1.x:8096">
+          <!-- Plex -->
+          <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div class="toggle-row" style="margin-bottom:10px">
+              <span style="font-size:12px;font-weight:600;color:var(--text)">Plex</span>
+              <label class="toggle"><input type="checkbox" id="cfgPlexEnabled"><span class="toggle-slider"></span></label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field-row"><label class="field-label">URL</label><input class="field-input" id="cfgPlexUrl" type="text" placeholder="http://192.168.1.x:32400"></div>
+              <div class="field-row"><label class="field-label">Token</label><input class="field-input" id="cfgPlexToken" type="password" autocomplete="off"></div>
+            </div>
           </div>
-          <div class="field-row">
-            <label class="field-label">Jellyfin API Key</label>
-            <input class="field-input" id="cfgJellyfinKey" type="password" autocomplete="off">
-          </div>
-          <div class="field-row">
-            <label class="field-label">Plex URL</label>
-            <input class="field-input" id="cfgPlexUrl" type="text" placeholder="http://192.168.1.x:32400">
-          </div>
-          <div class="field-row">
-            <label class="field-label">Plex Token</label>
-            <input class="field-input" id="cfgPlexToken" type="password" autocomplete="off">
-          </div>
-          <div class="field-row">
-            <label class="field-label">Emby URL</label>
-            <input class="field-input" id="cfgEmbyUrl" type="text" placeholder="http://192.168.1.x:8096">
-          </div>
-          <div class="field-row">
-            <label class="field-label">Emby API Key</label>
-            <input class="field-input" id="cfgEmbyKey" type="password" autocomplete="off">
+          <!-- Emby -->
+          <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div class="toggle-row" style="margin-bottom:10px">
+              <span style="font-size:12px;font-weight:600;color:var(--text)">Emby</span>
+              <label class="toggle"><input type="checkbox" id="cfgEmbyEnabled"><span class="toggle-slider"></span></label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field-row"><label class="field-label">URL</label><input class="field-input" id="cfgEmbyUrl" type="text" placeholder="http://192.168.1.x:8096"></div>
+              <div class="field-row"><label class="field-label">API Key</label><input class="field-input" id="cfgEmbyKey" type="password" autocomplete="off"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -885,6 +913,12 @@
     });
     document.getElementById('cfgSubmitPhash').checked     = (s.submit_phash_enabled || 'true') === 'true';
     document.getElementById('cfgKeyTmdb').value          = s.api_key_tmdb      || '';
+    document.getElementById('cfgMediaScanEnabled').checked = (s.media_scan_enabled || 'true') === 'true';
+    document.getElementById('cfgScanDebounce').value        = s.media_scan_debounce_mins || '5';
+    document.getElementById('cfgStashEnabled').checked    = (s.stash_enabled    || 'true') === 'true';
+    document.getElementById('cfgJellyfinEnabled').checked = (s.jellyfin_enabled || 'true') === 'true';
+    document.getElementById('cfgPlexEnabled').checked     = (s.plex_enabled     || 'true') === 'true';
+    document.getElementById('cfgEmbyEnabled').checked     = (s.emby_enabled     || 'true') === 'true';
     document.getElementById('cfgStashUrl').value          = s.stash_url          || '';
     document.getElementById('cfgStashKey').value          = s.stash_api_key      || '';
     document.getElementById('cfgJellyfinUrl').value       = s.jellyfin_url       || '';
@@ -976,6 +1010,12 @@
         retry_frequency_h: document.getElementById('cfgRetryFreq').value,
         submit_phash_enabled: document.getElementById('cfgSubmitPhash').checked ? 'true' : 'false',
         api_key_tmdb:      document.getElementById('cfgKeyTmdb').value.trim(),
+        media_scan_enabled:        document.getElementById('cfgMediaScanEnabled').checked ? 'true' : 'false',
+        media_scan_debounce_mins:  document.getElementById('cfgScanDebounce').value.trim(),
+        stash_enabled:     document.getElementById('cfgStashEnabled').checked     ? 'true' : 'false',
+        jellyfin_enabled:  document.getElementById('cfgJellyfinEnabled').checked  ? 'true' : 'false',
+        plex_enabled:      document.getElementById('cfgPlexEnabled').checked      ? 'true' : 'false',
+        emby_enabled:      document.getElementById('cfgEmbyEnabled').checked      ? 'true' : 'false',
         stash_url:         document.getElementById('cfgStashUrl').value.trim(),
         stash_api_key:     document.getElementById('cfgStashKey').value.trim(),
         jellyfin_url:      document.getElementById('cfgJellyfinUrl').value.trim(),
@@ -1292,6 +1332,22 @@
     } catch {}
   }
 
+  async function loadScanStatus() {
+    try {
+      const r = await fetch('/api/scan/status');
+      const d = await r.json();
+      const pill = document.getElementById('scanPill');
+      const servers = Object.keys(d.pending || {});
+      if (servers.length) {
+        const soonest = Math.min(...Object.values(d.pending));
+        pill.style.display = 'inline-block';
+        pill.textContent = `⟳ scan in ${soonest}s`;
+      } else {
+        pill.style.display = 'none';
+      }
+    } catch {}
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────
 
   startSSE();
@@ -1302,6 +1358,8 @@
   setInterval(pollStatus, 2000);
   setInterval(loadRetryStatus, 30000);
   setInterval(loadWatcherStatus, 15000);
+  loadScanStatus();
+  setInterval(loadScanStatus, 10000);
 </script>
 </body>
 </html>

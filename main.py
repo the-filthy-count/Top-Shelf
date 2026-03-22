@@ -481,6 +481,165 @@ def normalise(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Media server integration
+# ---------------------------------------------------------------------------
+
+# Debounce tracker - {server: scheduled_time}
+_scan_pending: dict = {}
+_scan_lock = threading.Lock()
+
+
+def _trigger_scan_after_debounce(server: str, delay_secs: int, fn):
+    """Schedule a scan, cancelling any pending one for the same server."""
+    with _scan_lock:
+        _scan_pending[server] = time.time() + delay_secs
+
+    def _wait_and_fire():
+        time.sleep(delay_secs)
+        with _scan_lock:
+            fire_at = _scan_pending.get(server, 0)
+        if time.time() >= fire_at:
+            try:
+                fn()
+            except Exception as e:
+                print(f"[{server}] scan trigger failed: {e}")
+
+    threading.Thread(target=_wait_and_fire, daemon=True).start()
+
+
+def trigger_media_scans(destination: str = None):
+    """Fire scan triggers for all configured media servers with debounce."""
+    s = db.get_settings()
+    if s.get("media_scan_enabled", "true").lower() != "true":
+        return
+    debounce = int(s.get("media_scan_debounce_mins", "5")) * 60
+
+    # Stash
+    stash_url = s.get("stash_url", "").rstrip("/")
+    stash_key = s.get("stash_api_key", "")
+    if stash_url and stash_key and s.get("stash_enabled", "true") == "true":
+        def _stash_scan():
+            emit("  Scan: triggering Stash library scan...")
+            query = 'mutation { metadataScan(input: {scanGeneratePhashes: false}) }'
+            resp = requests.post(
+                f"{stash_url}/graphql",
+                json={"query": query},
+                headers={"ApiKey": stash_key, "Content-Type": "application/json"},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            emit("  Scan: Stash scan triggered")
+        _trigger_scan_after_debounce("stash", debounce, _stash_scan)
+
+    # Jellyfin
+    jellyfin_url = s.get("jellyfin_url", "").rstrip("/")
+    jellyfin_key = s.get("jellyfin_api_key", "")
+    if jellyfin_url and jellyfin_key and s.get("jellyfin_enabled", "true") == "true":
+        def _jellyfin_scan():
+            emit("  Scan: triggering Jellyfin library scan...")
+            resp = requests.post(
+                f"{jellyfin_url}/Library/Refresh",
+                headers={"X-Emby-Token": jellyfin_key},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            emit("  Scan: Jellyfin scan triggered")
+        _trigger_scan_after_debounce("jellyfin", debounce, _jellyfin_scan)
+
+    # Plex
+    plex_url = s.get("plex_url", "").rstrip("/")
+    plex_token = s.get("plex_token", "")
+    if plex_url and plex_token and s.get("plex_enabled", "true") == "true":
+        def _plex_scan():
+            emit("  Scan: triggering Plex library scan...")
+            resp = requests.get(
+                f"{plex_url}/library/sections/all/refresh",
+                params={"X-Plex-Token": plex_token},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            emit("  Scan: Plex scan triggered")
+        _trigger_scan_after_debounce("plex", debounce, _plex_scan)
+
+    # Emby
+    emby_url = s.get("emby_url", "").rstrip("/")
+    emby_key = s.get("emby_api_key", "")
+    if emby_url and emby_key and s.get("emby_enabled", "true") == "true":
+        def _emby_scan():
+            emit("  Scan: triggering Emby library scan...")
+            resp = requests.post(
+                f"{emby_url}/Library/Refresh",
+                headers={"X-Emby-Token": emby_key},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            emit("  Scan: Emby scan triggered")
+        _trigger_scan_after_debounce("emby", debounce, _emby_scan)
+
+
+def push_to_stash(scene: dict, destination: str, source: str, phash: str = None) -> bool:
+    """
+    Create or update a scene in local Stash with metadata from our match.
+    Uses sceneCreate mutation - Stash will link it when it scans the file.
+    """
+    s = db.get_settings()
+    if s.get("stash_enabled", "true") != "true":
+        return False
+    stash_url = s.get("stash_url", "").rstrip("/")
+    stash_key = s.get("stash_api_key", "")
+    if not stash_url or not stash_key:
+        return False
+
+    try:
+        title       = scene.get("title") or ""
+        date        = scene.get("release_date") or scene.get("date") or ""
+        studio_name = (scene.get("studio") or {}).get("name") or ""
+        performers  = scene.get("performers") or []
+        perf_names  = [p["performer"]["name"] for p in performers if p.get("performer")]
+        details     = scene.get("details") or scene.get("_plot") or ""
+
+        # Build fingerprints list if we have a phash
+        fingerprints = []
+        if phash:
+            fingerprints.append({"algorithm": "PHASH", "hash": phash, "duration": 0})
+
+        mutation = """
+        mutation SceneCreate($input: SceneCreateInput!) {
+            sceneCreate(input: $input) { id title }
+        }
+        """
+        variables = {
+            "input": {
+                "title":        title,
+                "date":         date,
+                "details":      details,
+                "organized":    True,
+                "path":         destination,
+                "fingerprints": fingerprints,
+                "performer_ids": [],  # Stash resolves by name on scan
+            }
+        }
+
+        resp = requests.post(
+            f"{stash_url}/graphql",
+            json={"query": mutation, "variables": variables},
+            headers={"ApiKey": stash_key, "Content-Type": "application/json"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if "errors" in data:
+            emit(f"  Stash: push failed ({data['errors'][0].get('message', '')})")
+            return False
+        scene_id = (data.get("data") or {}).get("sceneCreate", {}).get("id")
+        emit(f"  Stash: scene created (id {scene_id})")
+        return True
+    except Exception as e:
+        emit(f"  Stash: push error ({e})")
+        return False
+
+
+# ---------------------------------------------------------------------------
 # StashDB phash submission
 # ---------------------------------------------------------------------------
 
@@ -845,6 +1004,11 @@ def file_scene_from_match(video: Path, scene: dict, source: str = "") -> dict:
         if scene_id and phash:
             submit_phash_to_stashdb(scene_id, phash)
 
+    # Push metadata to local Stash and trigger media server scans
+    phash_val = db.get_phash(filename)
+    push_to_stash(scene, destination, source, phash=phash_val)
+    trigger_media_scans(destination)
+
     emit("  DONE")
     return {"status": "filed", "destination": destination}
 
@@ -1046,6 +1210,10 @@ def file_movie(video: Path, movie: dict) -> dict:
     db.update_movie(filename, status="filed", tmdb_id=movie.get("id"),
                     title=title, year=year, overview=movie.get("overview"),
                     poster_url=movie.get("poster_url"), destination=destination)
+
+    # Trigger media server scans
+    trigger_media_scans(destination)
+
     emit("  DONE")
     return {"status": "filed", "destination": destination}
 
@@ -1412,6 +1580,19 @@ async def parse_filename_endpoint(filename: str):
     settings = db.get_settings()
     result = parse_filename(filename, settings)
     return result
+
+
+@app.get("/api/scan/status")
+async def scan_status():
+    """Return pending scan info for all media servers."""
+    now = time.time()
+    with _scan_lock:
+        pending = {
+            server: max(0, int(fire_at - now))
+            for server, fire_at in _scan_pending.items()
+            if fire_at > now
+        }
+    return {"pending": pending}
 
 
 @app.get("/api/watcher/status")
