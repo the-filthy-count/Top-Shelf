@@ -416,19 +416,25 @@ def find_studio_dir(studio_name: str, settings: dict) -> Path | None:
 
 
 def find_performer_dir(performers: list, performer_dirs: list) -> tuple | None:
+    # Strictly female performers first
     female_names = [
         p["performer"]["name"] for p in performers
-        if (p["performer"].get("gender") or "").upper() in ("FEMALE", "TRANSGENDER_FEMALE", "")
+        if (p["performer"].get("gender") or "").upper() in ("FEMALE", "TRANSGENDER_FEMALE")
     ]
-    if not female_names:
-        female_names = [p["performer"]["name"] for p in performers]
+    # Performers with no gender info as fallback
+    unknown_names = [
+        p["performer"]["name"] for p in performers
+        if not (p["performer"].get("gender") or "").strip()
+    ]
+    # Try female first, then unknown, then all as last resort
+    candidates = female_names or unknown_names or [p["performer"]["name"] for p in performers]
 
     for entry in sorted(performer_dirs, key=lambda x: x["rank"]):
         base = Path(entry["path"])
         if not base.exists():
             continue
         norm_folders = {normalise(d.name): d.name for d in base.iterdir() if d.is_dir()}
-        for name in female_names:
+        for name in candidates:
             if normalise(name) in norm_folders:
                 return base / norm_folders[normalise(name)], name
     return None
@@ -691,6 +697,135 @@ def run_pipeline(filenames: list = None) -> None:
         processing_state["current_file"] = None
 
 # ---------------------------------------------------------------------------
+# TMDB movie search and filing
+# ---------------------------------------------------------------------------
+
+TMDB_BASE = "https://api.themoviedb.org/3"
+TMDB_IMG_BASE = "https://image.tmdb.org/t/p/w500"
+
+
+def get_tmdb_headers() -> dict:
+    s = db.get_settings()
+    return {
+        "Authorization": f"Bearer {s.get('api_key_tmdb', '')}",
+        "Accept": "application/json",
+    }
+
+
+def search_tmdb(query: str, year: str = None) -> list[dict]:
+    params = {"query": query, "include_adult": "true", "language": "en-US", "page": 1}
+    if year:
+        params["year"] = year
+    resp = requests.get(f"{TMDB_BASE}/search/movie", params=params,
+                        headers=get_tmdb_headers(), timeout=15)
+    resp.raise_for_status()
+    results = resp.json().get("results", [])
+    return [{
+        "id":          str(r["id"]),
+        "title":       r.get("title") or r.get("original_title") or "Unknown",
+        "year":        (r.get("release_date") or "")[:4],
+        "overview":    r.get("overview") or "",
+        "poster_url":  f"{TMDB_IMG_BASE}{r['poster_path']}" if r.get("poster_path") else None,
+        "rating":      r.get("vote_average"),
+    } for r in results]
+
+
+def get_tmdb_movie(tmdb_id: str) -> dict:
+    resp = requests.get(f"{TMDB_BASE}/movie/{tmdb_id}",
+                        params={"append_to_response": "credits"},
+                        headers=get_tmdb_headers(), timeout=15)
+    resp.raise_for_status()
+    data = resp.json()
+    cast = [m["name"] for m in data.get("credits", {}).get("cast", [])[:10]]
+    crew = data.get("credits", {}).get("crew", [])
+    directors = [m["name"] for m in crew if m.get("job") == "Director"]
+    return {
+        "id":          str(data["id"]),
+        "title":       data.get("title") or data.get("original_title") or "Unknown",
+        "year":        (data.get("release_date") or "")[:4],
+        "overview":    data.get("overview") or "",
+        "poster_url":  f"{TMDB_IMG_BASE}{data['poster_path']}" if data.get("poster_path") else None,
+        "rating":      data.get("vote_average"),
+        "cast":        cast,
+        "directors":   directors,
+        "genres":      [g["name"] for g in data.get("genres", [])],
+        "runtime":     data.get("runtime"),
+        "tagline":     data.get("tagline") or "",
+    }
+
+
+def build_movie_nfo(movie: dict, filename: str) -> str:
+    root = ET.Element("movie")
+    ET.SubElement(root, "title").text        = movie["title"]
+    ET.SubElement(root, "originaltitle").text = movie["title"]
+    ET.SubElement(root, "year").text         = movie.get("year") or ""
+    ET.SubElement(root, "plot").text         = movie.get("overview") or ""
+    ET.SubElement(root, "outline").text      = movie.get("tagline") or ""
+    ET.SubElement(root, "rating").text       = str(movie.get("rating") or "")
+    ET.SubElement(root, "runtime").text      = str(movie.get("runtime") or "")
+    ET.SubElement(root, "id").text           = movie.get("id") or ""
+    ET.SubElement(root, "tmdbid").text       = movie.get("id") or ""
+    ET.SubElement(root, "mpaa").text         = "Adult"
+    ET.SubElement(root, "tag").text          = "Porn"
+    ET.SubElement(root, "tag").text          = "XXX"
+    for genre in movie.get("genres") or []:
+        ET.SubElement(root, "genre").text = genre
+    for director in movie.get("directors") or []:
+        ET.SubElement(root, "director").text = director
+    for name in movie.get("cast") or []:
+        actor = ET.SubElement(root, "actor")
+        ET.SubElement(actor, "name").text = name
+    tree = ET.ElementTree(root)
+    ET.indent(tree, space="  ")
+    buf = io.BytesIO()
+    tree.write(buf, encoding="utf-8", xml_declaration=True)
+    return buf.getvalue().decode("utf-8")
+
+
+def file_movie(video: Path, movie: dict) -> dict:
+    """File a movie using TMDB metadata."""
+    filename = video.name
+    db.upsert_movie(filename)
+    settings = db.get_settings()
+    features_dir = Path(settings.get("features_dir", ""))
+
+    title = movie["title"]
+    year  = movie.get("year") or "0000"
+    folder_name = f"{title} ({year})"
+    dest_dir = features_dir / folder_name
+    ext = video.suffix
+    base_name = f"{title} ({year})"
+
+    emit(f"  Movie: {title} ({year})")
+    emit(f"  Dest:  {folder_name}/{base_name}{ext}")
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # NFO
+    nfo = build_movie_nfo(movie, filename)
+    (dest_dir / f"{base_name}.nfo").write_text(nfo, encoding="utf-8")
+    emit("  NFO: saved")
+
+    # Poster
+    if movie.get("poster_url"):
+        if download_image(movie["poster_url"], dest_dir / f"{base_name}-poster.jpg"):
+            emit("  Poster: downloaded")
+        else:
+            emit("  Poster: download failed")
+
+    # Move video
+    safe_move(video, dest_dir / f"{base_name}{ext}")
+    emit("  Video: moved")
+
+    destination = str(dest_dir / f"{base_name}{ext}")
+    db.update_movie(filename, status="filed", tmdb_id=movie.get("id"),
+                    title=title, year=year, overview=movie.get("overview"),
+                    poster_url=movie.get("poster_url"), destination=destination)
+    emit("  DONE")
+    return {"status": "filed", "destination": destination}
+
+
+# ---------------------------------------------------------------------------
 # API routes
 # ---------------------------------------------------------------------------
 
@@ -874,6 +1009,100 @@ async def file_manual(payload: dict, background_tasks: BackgroundTasks):
             emit(f"  Result: {result.get('status')}")
         except Exception as e:
             emit(f"  ERROR: {e}")
+        finally:
+            processing_state["running"] = False
+            processing_state["current_file"] = None
+            emit("---")
+
+    background_tasks.add_task(run)
+    return {"started": True, "filename": filename}
+
+
+@app.get("/movies", response_class=HTMLResponse)
+async def movies_page():
+    with open("static/movies.html") as f:
+        return f.read()
+
+
+@app.get("/api/movies/search")
+async def movies_search(q: str, year: str = None):
+    if not q.strip():
+        return JSONResponse({"error": "Query required"}, status_code=400)
+    try:
+        results = search_tmdb(q.strip(), year=year or None)
+        return {"results": results}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/movies/detail/{tmdb_id}")
+async def movies_detail(tmdb_id: str):
+    try:
+        movie = get_tmdb_movie(tmdb_id)
+        return {"movie": movie}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/movies/queue")
+async def movies_queue():
+    settings = db.get_settings()
+    source_dir = Path(settings.get("source_dir", ""))
+    if not source_dir.exists():
+        return {"files": [], "error": f"Source dir not found: {source_dir}"}
+    filed = {r["filename"] for r in db.get_movie_history() if r["status"] == "filed"}
+    files = []
+    for f in sorted(source_dir.iterdir()):
+        if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
+            files.append({
+                "filename":        f.name,
+                "size_mb":         round(f.stat().st_size / 1024 / 1024, 1),
+                "previously_filed": f.name in filed,
+            })
+    return {"files": files}
+
+
+@app.get("/api/movies/history")
+async def movies_history():
+    return {"history": db.get_movie_history()}
+
+
+@app.get("/api/movies/stats")
+async def movies_stats():
+    return db.get_movie_stats()
+
+
+@app.post("/api/movies/file")
+async def file_movie_endpoint(payload: dict, background_tasks: BackgroundTasks):
+    """File a video as a movie using TMDB metadata."""
+    if processing_state["running"]:
+        return JSONResponse({"error": "Pipeline already running"}, status_code=409)
+
+    filename = payload.get("filename", "").strip()
+    tmdb_id  = payload.get("tmdb_id", "").strip()
+
+    if not filename or not tmdb_id:
+        return JSONResponse({"error": "filename and tmdb_id required"}, status_code=400)
+
+    settings = db.get_settings()
+    source_dir = Path(settings.get("source_dir", ""))
+    video = source_dir / filename
+
+    if not video.exists():
+        return JSONResponse({"error": f"File not found: {filename}"}, status_code=404)
+
+    def run():
+        processing_state["running"] = True
+        processing_state["log"] = []
+        processing_state["current_file"] = filename
+        try:
+            emit(f"FILE {filename}")
+            emit(f"  Fetching TMDB details for ID {tmdb_id}...")
+            movie = get_tmdb_movie(tmdb_id)
+            file_movie(video, movie)
+        except Exception as e:
+            emit(f"  ERROR: {e}")
+            db.update_movie(filename, status="error", error=str(e))
         finally:
             processing_state["running"] = False
             processing_state["current_file"] = None

@@ -256,6 +256,7 @@
         <span class="status-dot"></span>
         <span id="statusText">Idle</span>
       </div>
+      <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies" style="font-family:Acidoze,var(--sans);font-size:16px;color:#ffffff;letter-spacing:0.06em;text-transform:uppercase;padding:8px 14px"><i class="fa-solid fa-film"></i></button></a>
       <button class="btn-secondary" onclick="openSettings()" title="Settings"><i class="fa-solid fa-gear"></i></button>
     </div>
   </header>
@@ -473,9 +474,52 @@
         <div class="field-hint" id="retryNextRun" style="margin-top:8px"></div>
       </div>
 
+      <!-- Media Server Integration -->
+      <div class="settings-section">
+        <div class="settings-section-title">Media Servers</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-row">
+            <label class="field-label">Stash URL</label>
+            <input class="field-input" id="cfgStashUrl" type="text" placeholder="http://192.168.1.x:9999">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Stash API Key</label>
+            <input class="field-input" id="cfgStashKey" type="password" autocomplete="off">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Jellyfin URL</label>
+            <input class="field-input" id="cfgJellyfinUrl" type="text" placeholder="http://192.168.1.x:8096">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Jellyfin API Key</label>
+            <input class="field-input" id="cfgJellyfinKey" type="password" autocomplete="off">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Plex URL</label>
+            <input class="field-input" id="cfgPlexUrl" type="text" placeholder="http://192.168.1.x:32400">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Plex Token</label>
+            <input class="field-input" id="cfgPlexToken" type="password" autocomplete="off">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Emby URL</label>
+            <input class="field-input" id="cfgEmbyUrl" type="text" placeholder="http://192.168.1.x:8096">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Emby API Key</label>
+            <input class="field-input" id="cfgEmbyKey" type="password" autocomplete="off">
+          </div>
+        </div>
+      </div>
+
       <!-- API Keys -->
       <div class="settings-section">
         <div class="settings-section-title">API Keys</div>
+        <div class="field-row">
+          <label class="field-label">TMDB</label>
+          <input class="field-input" id="cfgKeyTmdb" type="password" autocomplete="off">
+        </div>
         <div class="field-row">
           <label class="field-label">StashDB</label>
           <input class="field-input" id="cfgKeyStashdb" type="password" autocomplete="off">
@@ -629,6 +673,7 @@
 
     document.getElementById('cfgSourceDir').value        = s.source_dir        || '';
     document.getElementById('cfgSeriesDir').value        = s.series_dir        || '';
+    document.getElementById('cfgFeaturesDir').value      = s.features_dir      || '';
     document.getElementById('cfgPatternSeries').value    = s.pattern_series    || '';
     document.getElementById('cfgPatternPerformer').value = s.pattern_performer || '';
     document.getElementById('cfgRetryEnabled').value = s.retry_enabled     || 'true';
@@ -640,7 +685,16 @@
       if (d.next_run) el.textContent = `Next run: ${d.next_run.slice(0,16)} — ${d.pending} file(s) queued for retry`;
       else el.textContent = d.enabled ? 'Scheduler active, no job scheduled yet' : 'Retries disabled';
     });
-    document.getElementById('cfgKeyStashdb').value       = s.api_key_stashdb   || '';
+    document.getElementById('cfgKeyTmdb').value          = s.api_key_tmdb      || '';
+    document.getElementById('cfgStashUrl').value          = s.stash_url          || '';
+    document.getElementById('cfgStashKey').value          = s.stash_api_key      || '';
+    document.getElementById('cfgJellyfinUrl').value       = s.jellyfin_url       || '';
+    document.getElementById('cfgJellyfinKey').value       = s.jellyfin_api_key   || '';
+    document.getElementById('cfgPlexUrl').value           = s.plex_url           || '';
+    document.getElementById('cfgPlexToken').value         = s.plex_token         || '';
+    document.getElementById('cfgEmbyUrl').value           = s.emby_url           || '';
+    document.getElementById('cfgEmbyKey').value           = s.emby_api_key       || '';
+    document.getElementById('cfgKeyStashdb').value        = s.api_key_stashdb    || '';
     document.getElementById('cfgKeyTpdb').value          = s.api_key_tpdb      || '';
     document.getElementById('cfgKeyFansdb').value        = s.api_key_fansdb    || '';
 
@@ -709,11 +763,21 @@
       settings: {
         source_dir:        document.getElementById('cfgSourceDir').value.trim(),
         series_dir:        document.getElementById('cfgSeriesDir').value.trim(),
+        features_dir:      document.getElementById('cfgFeaturesDir').value.trim(),
         pattern_series:    document.getElementById('cfgPatternSeries').value.trim(),
         pattern_performer: document.getElementById('cfgPatternPerformer').value.trim(),
         retry_enabled:     document.getElementById('cfgRetryEnabled').value,
         retry_hour:        document.getElementById('cfgRetryHour').value.trim(),
         retry_frequency_h: document.getElementById('cfgRetryFreq').value,
+        api_key_tmdb:      document.getElementById('cfgKeyTmdb').value.trim(),
+        stash_url:         document.getElementById('cfgStashUrl').value.trim(),
+        stash_api_key:     document.getElementById('cfgStashKey').value.trim(),
+        jellyfin_url:      document.getElementById('cfgJellyfinUrl').value.trim(),
+        jellyfin_api_key:  document.getElementById('cfgJellyfinKey').value.trim(),
+        plex_url:          document.getElementById('cfgPlexUrl').value.trim(),
+        plex_token:        document.getElementById('cfgPlexToken').value.trim(),
+        emby_url:          document.getElementById('cfgEmbyUrl').value.trim(),
+        emby_api_key:      document.getElementById('cfgEmbyKey').value.trim(),
         api_key_stashdb:   document.getElementById('cfgKeyStashdb').value.trim(),
         api_key_tpdb:      document.getElementById('cfgKeyTpdb').value.trim(),
         api_key_fansdb:    document.getElementById('cfgKeyFansdb').value.trim(),

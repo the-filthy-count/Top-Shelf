@@ -24,6 +24,18 @@ DEFAULTS = {
     "retry_enabled":      "true",
     "retry_hour":         "1",
     "retry_frequency_h":  "24",
+    "features_dir":       "/library/Features" if _in_docker else "/home/mjm/Top-Shelf/Features",
+    "api_key_tmdb":       "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxOWYxY2VlNDA5YmMzYzRlYWFlZDM3ZDcyZGI5NDE0YiIsIm5iZiI6MTUzMTg1Njg5MC4zNDYsInN1YiI6IjViNGU0N2ZhOTI1MTQxN2QwZDA0ZWIyMiIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.ZVFb3f-ogfF4XugJekeQ0ToR6HrovCl3veAHed04ej0",
+    "stash_url":          "http://172.16.0.6:35969",
+    "stash_api_key":      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiJtam0iLCJzdWIiOiJBUElLZXkiLCJpYXQiOjE3NzM2MDQ4ODB9.f3Ah8XSfhPHrDJVCZe2j1sNqyRZTLuxt1bLfP4EmOhM",
+    "jellyfin_url":       "",
+    "jellyfin_api_key":   "",
+    "plex_url":           "",
+    "plex_token":         "",
+    "emby_url":           "",
+    "emby_api_key":       "",
+    "media_scan_enabled": "true",
+    "media_scan_debounce_mins": "5",
 }
 
 DEFAULT_PERFORMER_DIRS = [
@@ -58,6 +70,23 @@ def init_db() -> None:
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_filename ON processed_files(filename)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS processed_movies (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename      TEXT NOT NULL,
+                tmdb_id       TEXT,
+                title         TEXT,
+                year          TEXT,
+                overview      TEXT,
+                poster_url    TEXT,
+                destination   TEXT,
+                status        TEXT NOT NULL DEFAULT 'pending',
+                error         TEXT,
+                processed_at  TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_movie_filename ON processed_movies(filename)")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -187,6 +216,61 @@ def get_history(limit: int = 200) -> list[dict]:
             (limit,)
         )
         return [dict(r) for r in cur.fetchall()]
+
+
+# ---------------------------------------------------------------------------
+# Movie history
+# ---------------------------------------------------------------------------
+
+def upsert_movie(filename: str) -> int:
+    with get_conn() as conn:
+        cur = conn.execute("SELECT id FROM processed_movies WHERE filename = ?", (filename,))
+        row = cur.fetchone()
+        if row:
+            return row["id"]
+        cur = conn.execute(
+            "INSERT INTO processed_movies (filename, status) VALUES (?, 'pending')", (filename,)
+        )
+        conn.commit()
+        return cur.lastrowid
+
+
+def update_movie(filename: str, status: str, tmdb_id: str = None, title: str = None,
+                 year: str = None, overview: str = None, poster_url: str = None,
+                 destination: str = None, error: str = None) -> None:
+    fields = {"status": status, "processed_at": datetime.now().isoformat(timespec="seconds")}
+    for k, v in [("tmdb_id", tmdb_id), ("title", title), ("year", year),
+                 ("overview", overview), ("poster_url", poster_url),
+                 ("destination", destination), ("error", error)]:
+        if v is not None:
+            fields[k] = v
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [filename]
+    with get_conn() as conn:
+        conn.execute(f"UPDATE processed_movies SET {set_clause} WHERE filename = ?", values)
+        conn.commit()
+
+
+def get_movie_history(limit: int = 200) -> list[dict]:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "SELECT * FROM processed_movies WHERE status != 'pending' ORDER BY processed_at DESC LIMIT ?",
+            (limit,)
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_movie_stats() -> dict:
+    with get_conn() as conn:
+        cur = conn.execute("""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN status='filed'   THEN 1 ELSE 0 END) AS filed,
+                SUM(CASE WHEN status='error'   THEN 1 ELSE 0 END) AS errors,
+                SUM(CASE WHEN status='skipped' THEN 1 ELSE 0 END) AS skipped
+            FROM processed_movies WHERE status != 'pending'
+        """)
+        return dict(cur.fetchone())
 
 
 def get_retry_files() -> list[str]:
