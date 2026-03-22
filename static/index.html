@@ -108,8 +108,8 @@
   .queue-filename { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .queue-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .badge { font-family: var(--secs); font-size: 11px; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
-  .badge-cached { background: rgba(96,165,250,0.25); color: #ffffff; border: 1px solid rgba(96,165,250,0.4); }
-  .badge-size   { background: rgba(74,222,128,0.2); color: #ffffff; border: 1px solid rgba(74,222,128,0.35); }
+  .badge-cached { background: none; border: none; color: var(--blue); font-family: var(--secs); font-size: 16px; padding: 0 4px; }
+  .badge-size   { background: none; border: none; color: var(--green); font-family: var(--secs); font-size: 16px; padding: 0 4px; }
   .empty { padding: 32px 18px; text-align: center; color: var(--dim); font-size: 12px; }
 
   /* ── Log ── */
@@ -145,13 +145,13 @@
   tr:hover td { background: rgba(255,255,255,0.015); }
   .td-filename { color: var(--text); }
   .td-title, .td-performers, .td-date { color: var(--dim); }
-  .status-tag { font-family: var(--secs); display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #ffffff; }
-  .status-filed      { background: rgba(74,222,128,0.25);  }
-  .status-unmatched  { background: rgba(251,191,36,0.25);  }
-  .status-no_dir     { background: rgba(96,165,250,0.25);  }
-  .status-error      { background: rgba(248,113,113,0.25); }
-  .status-processing { background: rgba(192,132,252,0.25); }
-  .source-tag { font-family: var(--secs); font-size: 11px; color: #ffffff; padding: 2px 6px; border-radius: 3px; background: rgba(255,255,255,0.08); }
+  .status-tag { font-family: var(--secs); display: inline-block; padding: 0 4px; font-size: 16px; text-transform: uppercase; letter-spacing: 0.06em; background: none; border: none; }
+  .status-filed      { color: var(--green); }
+  .status-unmatched  { color: var(--amber); }
+  .status-no_dir     { color: var(--blue); }
+  .status-error      { color: var(--red); }
+  .status-processing { color: var(--accent); }
+  .source-tag { font-family: var(--secs); font-size: 16px; color: var(--dim); padding: 0 4px; background: none; }
 
   /* ── Buttons ── */
   .btn-primary { background: var(--accent); color: #0c0c0e; border: none; padding: 8px 14px; border-radius: 6px; font-size: 18px; line-height: 1; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; }
@@ -262,6 +262,7 @@
     </div>
     <div class="header-right">
       <div id="retryPill" style="display:none;font-size:11px;color:var(--dim);padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);letter-spacing:0.06em"></div>
+      <div id="watcherPill" style="display:none;font-size:11px;color:var(--amber);padding:6px 14px;border-radius:20px;border:1px solid var(--amber);background:var(--surface);letter-spacing:0.06em"></div>
       <button class="btn-secondary" id="btnRetryNow" onclick="retryNow()" title="Retry failed files"><i class="fa-solid fa-arrows-rotate"></i></button>
       <a href="/" style="text-decoration:none"><button class="btn-secondary" title="TV Series"><i class="fa-solid fa-tv"></i></button></a>
       <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-film"></i></button></a>
@@ -364,6 +365,49 @@
 <!-- Image overlay -->
 <div id="imageOverlay" onclick="closeImageOverlay()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:200;align-items:center;justify-content:center;cursor:zoom-out;backdrop-filter:blur(8px)">
   <img id="overlayImg" src="" style="max-width:90vw;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 24px 80px rgba(0,0,0,0.8)">
+</div>
+
+<!-- Manual Metadata Modal -->
+<div class="modal-overlay" id="manualModal">
+  <div class="modal" style="width:600px">
+    <div class="modal-header">
+      <span class="modal-title" id="manualModalTitle">Manual Filing</span>
+      <button class="btn-icon" onclick="closeManual()"><i class="fa-solid fa-x"></i></button>
+    </div>
+    <div class="modal-body" style="gap:16px">
+      <div style="font-size:11px;color:var(--dim)" id="manualFilename"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field-row">
+          <label class="field-label">Title *</label>
+          <input class="field-input" id="mTitle" type="text" placeholder="Scene title">
+        </div>
+        <div class="field-row">
+          <label class="field-label">Studio *</label>
+          <input class="field-input" id="mStudio" type="text" placeholder="Studio name">
+        </div>
+        <div class="field-row">
+          <label class="field-label">Date * (YYYY-MM-DD)</label>
+          <input class="field-input" id="mDate" type="text" placeholder="2024-01-15">
+        </div>
+        <div class="field-row">
+          <label class="field-label">Performers</label>
+          <input class="field-input" id="mPerformers" type="text" placeholder="Name, Name">
+        </div>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Plot / Description</label>
+        <textarea class="field-input" id="mPlot" rows="3" placeholder="Optional description..." style="resize:vertical"></textarea>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Thumbnail Image URL</label>
+        <input class="field-input" id="mImageUrl" type="text" placeholder="https://...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeManual()">Cancel</button>
+      <button class="btn-primary" onclick="submitManual()"><i class="fa-solid fa-play"></i></button>
+    </div>
+  </div>
 </div>
 
 <!-- Settings Modal -->
@@ -496,6 +540,28 @@
           </div>
         </div>
         <div class="field-hint" id="retryNextRun" style="margin-top:8px"></div>
+      </div>
+
+      <!-- Folder Watch -->
+      <div class="settings-section">
+        <div class="settings-section-title">Folder Watch</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+          <div class="field-row">
+            <label class="field-label">Enabled</label>
+            <select class="select-input" id="cfgWatchEnabled" style="width:100%">
+              <option value="true">On</option>
+              <option value="false">Off</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label class="field-label">Hold time (seconds)</label>
+            <input class="field-input" id="cfgWatchHold" type="number" min="10" max="600" placeholder="60">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Status</label>
+            <div id="watcherStatus" style="font-size:11px;color:var(--dim);padding:9px 0">Checking...</div>
+          </div>
+        </div>
       </div>
 
       <!-- Media Server Integration -->
@@ -653,6 +719,7 @@
             <span class="badge badge-size">${f.size_mb} MB</span>
             ${f.has_phash ? '<span class="badge badge-cached">phash</span>' : ''}
             <button class="btn-icon" onclick="openManualSearch(window._queueFiles[${i}].filename)" title="Search manually"><i class="fa-solid fa-magnifying-glass"></i></button>
+            <button class="btn-icon" onclick="openManual(window._queueFiles[${i}].filename)" title="Manual metadata"><i class="fa-solid fa-pen"></i></button>
             <button class="btn-run-file" onclick="runFile(window._queueFiles[${i}].filename)" title="Run"><i class="fa-solid fa-play"></i></button>
           </div>
         </div>`).join('');
@@ -701,6 +768,13 @@
     document.getElementById('cfgFeaturesDir').value      = s.features_dir      || '';
     document.getElementById('cfgPatternSeries').value    = s.pattern_series    || '';
     document.getElementById('cfgPatternPerformer').value = s.pattern_performer || '';
+    document.getElementById('cfgWatchEnabled').value  = s.folder_watch_enabled   || 'true';
+    document.getElementById('cfgWatchHold').value      = s.folder_watch_hold_secs  || '60';
+    fetch('/api/watcher/status').then(r=>r.json()).then(d=>{
+      const el = document.getElementById('watcherStatus');
+      el.textContent = d.watching ? `Watching${d.pending.length ? ` · ${d.pending.length} pending` : ''}` : 'Not watching';
+      el.style.color = d.watching ? 'var(--green)' : 'var(--red)';
+    });
     document.getElementById('cfgRetryEnabled').value = s.retry_enabled     || 'true';
     document.getElementById('cfgRetryHour').value    = s.retry_hour         || '1';
     document.getElementById('cfgRetryFreq').value    = s.retry_frequency_h  || '24';
@@ -792,6 +866,8 @@
         features_dir:      document.getElementById('cfgFeaturesDir').value.trim(),
         pattern_series:    document.getElementById('cfgPatternSeries').value.trim(),
         pattern_performer: document.getElementById('cfgPatternPerformer').value.trim(),
+        folder_watch_enabled:   document.getElementById('cfgWatchEnabled').value,
+        folder_watch_hold_secs: document.getElementById('cfgWatchHold').value.trim(),
         retry_enabled:     document.getElementById('cfgRetryEnabled').value,
         retry_hour:        document.getElementById('cfgRetryHour').value.trim(),
         retry_frequency_h: document.getElementById('cfgRetryFreq').value,
@@ -1012,14 +1088,96 @@
     document.getElementById('btnRunAll').disabled = true;
   }
 
+  // ── Manual metadata ──────────────────────────────────────────────────
+
+  let _manualFile = null;
+
+  function openManual(filename) {
+    _manualFile = filename;
+    document.getElementById('manualFilename').textContent = filename;
+    // Pre-populate from filename if namer-style pipe format
+    const parts = filename.replace(/\.[^.]+$/, '').split('|');
+    if (parts.length >= 4) {
+      document.getElementById('mStudio').value     = parts[0]?.trim() || '';
+      document.getElementById('mDate').value       = parts[1]?.trim() || '';
+      document.getElementById('mPerformers').value = parts[2]?.trim() || '';
+      document.getElementById('mTitle').value      = parts[3]?.trim() || '';
+    } else {
+      // Try dot-separated: site.YY.MM.DD.performer.title
+      const stem = filename.replace(/\.[^.]+$/, '').replace(/\./g, ' ');
+      document.getElementById('mTitle').value = stem;
+      document.getElementById('mStudio').value = '';
+      document.getElementById('mDate').value = '';
+      document.getElementById('mPerformers').value = '';
+    }
+    document.getElementById('mPlot').value = '';
+    document.getElementById('mImageUrl').value = '';
+    document.getElementById('manualModal').classList.add('open');
+  }
+
+  function closeManual() {
+    document.getElementById('manualModal').classList.remove('open');
+    _manualFile = null;
+  }
+
+  async function submitManual() {
+    if (!_manualFile) return;
+    const payload = {
+      filename:   _manualFile,
+      title:      document.getElementById('mTitle').value.trim(),
+      studio:     document.getElementById('mStudio').value.trim(),
+      date:       document.getElementById('mDate').value.trim(),
+      performers: document.getElementById('mPerformers').value.trim(),
+      plot:       document.getElementById('mPlot').value.trim(),
+      image_url:  document.getElementById('mImageUrl').value.trim(),
+    };
+    if (!payload.title || !payload.studio || !payload.date) {
+      alert('Title, studio and date are required');
+      return;
+    }
+    closeManual();
+    clearLog();
+    const r = await fetch('/api/file/manual/metadata', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (d.error) alert(`Error: ${d.error}`);
+    else { isRunning = true; document.getElementById('btnRunAll').disabled = true; }
+  }
+
+  // Close manual modal on overlay click
+  document.getElementById('manualModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeManual();
+  });
+
+  // ── Watcher status ────────────────────────────────────────────────────
+
+  async function loadWatcherStatus() {
+    try {
+      const r = await fetch('/api/watcher/status');
+      const d = await r.json();
+      const pill = document.getElementById('watcherPill');
+      if (d.pending?.length) {
+        pill.style.display = 'inline-block';
+        pill.textContent = `⟳ ${d.pending.length} arriving`;
+      } else {
+        pill.style.display = 'none';
+      }
+    } catch {}
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────
 
   startSSE();
   loadQueue();
   loadStats();
   loadRetryStatus();
+  loadWatcherStatus();
   setInterval(pollStatus, 2000);
   setInterval(loadRetryStatus, 30000);
+  setInterval(loadWatcherStatus, 15000);
 </script>
 </body>
 </html>

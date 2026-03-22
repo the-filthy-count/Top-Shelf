@@ -38,6 +38,8 @@ DEFAULTS = {
     "emby_api_key":       "",
     "media_scan_enabled": "true",
     "media_scan_debounce_mins": "5",
+    "folder_watch_enabled":    "true",
+    "folder_watch_hold_secs":  "60",
 }
 
 DEFAULT_PERFORMER_DIRS = [

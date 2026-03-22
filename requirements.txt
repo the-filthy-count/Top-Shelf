@@ -5,3 +5,4 @@ Pillow
 requests
 python-multipart
 APScheduler
+watchdog

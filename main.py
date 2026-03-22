@@ -22,7 +22,11 @@ from typing import AsyncGenerator
 
 import imagehash
 import requests
+import threading
+import time
 from apscheduler.schedulers.background import BackgroundScheduler
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
@@ -69,6 +73,73 @@ def get_api_keys() -> dict:
 processing_state = {"running": False, "current_file": None, "log": []}
 log_queue: asyncio.Queue = None
 scheduler = BackgroundScheduler(daemon=True)
+observer  = None  # watchdog observer instance
+_pending_files: dict = {}  # filename -> scheduled time
+_pending_lock = threading.Lock()
+
+
+class NewVideoHandler(FileSystemEventHandler):
+    """Watches source folder and queues new video files after a hold period."""
+
+    def on_created(self, event):
+        if event.is_directory:
+            return
+        path = Path(event.src_path)
+        if path.suffix.lower() not in VIDEO_EXTENSIONS:
+            return
+        s = db.get_settings()
+        if s.get("folder_watch_enabled", "true").lower() != "true":
+            return
+        hold = int(s.get("folder_watch_hold_secs", "60"))
+        with _pending_lock:
+            _pending_files[path.name] = time.time() + hold
+
+    def on_moved(self, event):
+        # Handle files moved/renamed into the folder
+        self.on_created(type("E", (), {"is_directory": False, "src_path": event.dest_path})())
+
+
+def _check_pending_files():
+    """Called by scheduler every 30s - fires pipeline for files past their hold time."""
+    if processing_state["running"]:
+        return
+    now = time.time()
+    ready = []
+    with _pending_lock:
+        for fname, fire_at in list(_pending_files.items()):
+            if now >= fire_at:
+                ready.append(fname)
+                del _pending_files[fname]
+    if ready:
+        s = db.get_settings()
+        source_dir = Path(s.get("source_dir", ""))
+        to_run = [f for f in ready if (source_dir / f).exists()]
+        if to_run:
+            run_pipeline(to_run)
+
+
+def _start_watcher():
+    global observer
+    s = db.get_settings()
+    if s.get("folder_watch_enabled", "true").lower() != "true":
+        return
+    source_dir = Path(s.get("source_dir", ""))
+    if not source_dir.exists():
+        return
+    if observer:
+        observer.stop()
+    observer = Observer()
+    observer.schedule(NewVideoHandler(), str(source_dir), recursive=False)
+    observer.start()
+
+
+def _restart_watcher():
+    """Restart watcher with current settings - called after settings save."""
+    global observer
+    if observer:
+        observer.stop()
+        observer = None
+    _start_watcher()
 
 app = FastAPI(title="Top-Shelf")
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -110,11 +181,16 @@ async def startup():
     db.init_db()
     _migrate_sidecar_phashes()
     _apply_retry_schedule()
+    scheduler.add_job(_check_pending_files, "interval", seconds=30, id="pending_check")
     scheduler.start()
+    _start_watcher()
 
 
 @app.on_event("shutdown")
 async def shutdown():
+    global observer
+    if observer:
+        observer.stop()
     scheduler.shutdown(wait=False)
 
 
@@ -893,6 +969,7 @@ async def save_settings(payload: dict):
     db.save_settings(payload.get("settings", {}))
     db.save_directories(payload.get("directories", []))
     _apply_retry_schedule()
+    _restart_watcher()
     return {"saved": True}
 
 
@@ -1110,6 +1187,81 @@ async def file_movie_endpoint(payload: dict, background_tasks: BackgroundTasks):
 
     background_tasks.add_task(run)
     return {"started": True, "filename": filename}
+
+
+@app.post("/api/file/manual/metadata")
+async def file_manual_metadata(payload: dict, background_tasks: BackgroundTasks):
+    """
+    File a video using manually entered metadata, bypassing all database lookups.
+    Accepts: filename, title, studio, date (YYYY-MM-DD), performers (comma-separated),
+             plot (optional), image_url (optional)
+    """
+    if processing_state["running"]:
+        return JSONResponse({"error": "Pipeline already running"}, status_code=409)
+
+    filename   = payload.get("filename", "").strip()
+    title      = payload.get("title", "").strip()
+    studio     = payload.get("studio", "").strip()
+    date       = payload.get("date", "").strip()
+    performers = payload.get("performers", "").strip()
+    plot       = payload.get("plot", "").strip()
+    image_url  = payload.get("image_url", "").strip()
+
+    if not all([filename, title, studio, date]):
+        return JSONResponse({"error": "filename, title, studio and date are required"}, status_code=400)
+
+    settings   = db.get_settings()
+    source_dir = Path(settings.get("source_dir", ""))
+    video      = source_dir / filename
+
+    if not video.exists():
+        return JSONResponse({"error": f"File not found: {filename}"}, status_code=404)
+
+    # Build a scene dict in stash-box shape so file_scene_from_match can handle it
+    perf_list = [p.strip() for p in performers.split(",") if p.strip()]
+    scene = {
+        "title":        title,
+        "release_date": date,
+        "studio":       {"name": studio},
+        "performers":   [{"performer": {"name": n, "gender": ""}} for n in perf_list],
+        "images":       [{"url": image_url, "width": 0, "height": 0}] if image_url else [],
+        "_plot":        plot,
+    }
+
+    def run():
+        processing_state["running"] = True
+        processing_state["log"] = []
+        processing_state["current_file"] = filename
+        try:
+            db.upsert_file(filename)
+            emit(f"FILE {filename}")
+            emit("  Source: manual metadata")
+            result = file_scene_from_match(video, scene, source="Manual")
+            emit(f"  Result: {result.get('status')}")
+        except Exception as e:
+            emit(f"  ERROR: {e}")
+            db.update_file(filename, status="error", error=str(e))
+        finally:
+            processing_state["running"] = False
+            processing_state["current_file"] = None
+            emit("---")
+
+    background_tasks.add_task(run)
+    return {"started": True, "filename": filename}
+
+
+@app.get("/api/watcher/status")
+async def watcher_status():
+    s = db.get_settings()
+    with _pending_lock:
+        pending = [{"filename": f, "fires_in": max(0, int(t - time.time()))}
+                   for f, t in _pending_files.items()]
+    return {
+        "enabled":  s.get("folder_watch_enabled", "true").lower() == "true",
+        "watching": observer is not None and observer.is_alive() if observer else False,
+        "hold_secs": int(s.get("folder_watch_hold_secs", "60")),
+        "pending":  pending,
+    }
 
 
 @app.get("/api/log/stream")
