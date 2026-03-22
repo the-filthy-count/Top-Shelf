@@ -307,6 +307,7 @@
       <button class="btn-secondary" id="btnRetryNow" onclick="retryNow()" title="Retry failed files"><i class="fa-solid fa-arrows-rotate"></i></button>
       <a href="/" style="text-decoration:none"><button class="btn-secondary" title="TV Series"><i class="fa-solid fa-tv"></i></button></a>
       <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-film"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library Health"><i class="fa-solid fa-house-medical"></i></button></a>
       <button class="btn-secondary" onclick="openSettings()" title="Settings"><i class="fa-solid fa-gear"></i></button>
     </div>
   </header>
@@ -638,9 +639,14 @@
         </div>
         <div class="collapsible-body" id="abbrevBody">
           <div class="field-row" style="margin-top:12px">
-            <label class="field-label">JSON map of abbreviation → full name</label>
+            <label class="field-label">Abbreviations — JSON map of short name → full name</label>
             <textarea class="field-input" id="cfgSiteAbbrevs" rows="5" style="font-size:11px;resize:vertical" placeholder='{"brcc": "Backroom Casting Couch", "nvg": "Net Video Girls"}'></textarea>
-            <div class="field-hint" style="margin-top:4px">Used to expand short site names found in filenames during parsing and search pre-population</div>
+            <div class="field-hint" style="margin-top:4px">Expands short site names found in filenames during parsing</div>
+          </div>
+          <div class="field-row" style="margin-top:10px">
+            <label class="field-label">Rename map — JSON map of wrong name → correct name</label>
+            <textarea class="field-input" id="cfgSiteRenameMap" rows="4" style="font-size:11px;resize:vertical" placeholder='{"Tonights Girlfriend": "Tonights Girlfriend"}'></textarea>
+            <div class="field-hint" style="margin-top:4px">Corrects known bad site names returned by databases (e.g. "BANG! Casting" → "Bang! Casting")</div>
           </div>
         </div>
       </div>
@@ -903,6 +909,7 @@
     document.getElementById('cfgFilenamePatterns').value = s.filename_patterns || 'pipe|dot_date|dot_date_short|bracket_site|dash_date';
     document.getElementById('cfgMinFileSize').value      = s.min_file_size_mb  || '10';
     try { document.getElementById('cfgSiteAbbrevs').value = JSON.stringify(JSON.parse(s.site_abbreviations || '{}'), null, 2); } catch { document.getElementById('cfgSiteAbbrevs').value = s.site_abbreviations || ''; }
+    try { document.getElementById('cfgSiteRenameMap').value = JSON.stringify(JSON.parse(s.site_rename_map || '{}'), null, 2); } catch { document.getElementById('cfgSiteRenameMap').value = s.site_rename_map || ''; }
     document.getElementById('cfgRetryHour').value    = s.retry_hour         || '1';
     document.getElementById('cfgRetryFreq').value    = s.retry_frequency_h  || '24';
     // Show next run time
@@ -1006,6 +1013,7 @@
         filename_patterns: document.getElementById('cfgFilenamePatterns').value.trim(),
         min_file_size_mb:  document.getElementById('cfgMinFileSize').value.trim(),
         site_abbreviations: (() => { try { return JSON.stringify(JSON.parse(document.getElementById('cfgSiteAbbrevs').value)); } catch { return document.getElementById('cfgSiteAbbrevs').value; } })(),
+        site_rename_map:    (() => { try { return JSON.stringify(JSON.parse(document.getElementById('cfgSiteRenameMap').value)); } catch { return document.getElementById('cfgSiteRenameMap').value; } })(),
         retry_hour:        document.getElementById('cfgRetryHour').value.trim(),
         retry_frequency_h: document.getElementById('cfgRetryFreq').value,
         submit_phash_enabled: document.getElementById('cfgSubmitPhash').checked ? 'true' : 'false',
@@ -1092,11 +1100,14 @@
       if (d.site)       document.getElementById('srchStudio').value    = d.site;
       if (d.performers) document.getElementById('srchPerformer').value = d.performers;
       if (d.date)       document.getElementById('srchDateFrom').value  = d.date;
-      if (!d.title && !d.site) {
-        document.getElementById('srchTerm').value = filename.replace(/\.[^.]+$/, '').replace(/[._]/g, ' ');
+      // Only fall back to free text if parsing found nothing at all
+      if (!d.title && !d.site && !d.performers) {
+        const stem = filename.replace(/\.[^.]+$/, '').replace(/[._]/g, ' ');
+        document.getElementById('srchTerm').value = stem;
       }
     } catch {
-      document.getElementById('srchTerm').value = filename.replace(/\.[^.]+$/, '').replace(/[._]/g, ' ');
+      const stem = filename.replace(/\.[^.]+$/, '').replace(/[._]/g, ' ');
+      document.getElementById('srchTerm').value = stem;
     }
 
     // Show and scroll to search panel
@@ -1139,11 +1150,17 @@
   // ── Search ────────────────────────────────────────────────────────────
 
   async function runSearch() {
+    const title     = document.getElementById('srchTitle').value.trim();
+    const performer = document.getElementById('srchPerformer').value.trim();
+    const studio    = document.getElementById('srchStudio').value.trim();
+    // Only use free text term if none of the structured fields are filled
+    const termRaw   = document.getElementById('srchTerm').value.trim();
+    const term      = (title || performer || studio) ? '' : termRaw;
     const payload = {
-      term:      document.getElementById('srchTerm').value.trim(),
-      title:     document.getElementById('srchTitle').value.trim(),
-      performer: document.getElementById('srchPerformer').value.trim(),
-      studio:    document.getElementById('srchStudio').value.trim(),
+      term,
+      title,
+      performer,
+      studio,
       date_from: document.getElementById('srchDateFrom').value.trim(),
       date_to:   document.getElementById('srchDateTo').value.trim(),
     };

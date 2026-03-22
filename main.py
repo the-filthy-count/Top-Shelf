@@ -598,27 +598,22 @@ def push_to_stash(scene: dict, destination: str, source: str, phash: str = None)
         perf_names  = [p["performer"]["name"] for p in performers if p.get("performer")]
         details     = scene.get("details") or scene.get("_plot") or ""
 
-        # Build fingerprints list if we have a phash
-        fingerprints = []
-        if phash:
-            fingerprints.append({"algorithm": "PHASH", "hash": phash, "duration": 0})
-
         mutation = """
         mutation SceneCreate($input: SceneCreateInput!) {
             sceneCreate(input: $input) { id title }
         }
         """
-        variables = {
-            "input": {
-                "title":        title,
-                "date":         date,
-                "details":      details,
-                "organized":    True,
-                "path":         destination,
-                "fingerprints": fingerprints,
-                "performer_ids": [],  # Stash resolves by name on scan
-            }
+        # Local Stash sceneCreate - paths is an array
+        input_data = {
+            "title":     title,
+            "organized": True,
+            "paths":     [destination],
         }
+        if date:
+            input_data["date"] = date
+        if details:
+            input_data["details"] = details
+        variables = {"input": input_data}
 
         resp = requests.post(
             f"{stash_url}/graphql",
@@ -662,8 +657,12 @@ def submit_phash_to_stashdb(scene_id: str, phash: str, duration: float = None) -
             "hash":      phash,
             "algorithm": "PHASH",
         }
-        if duration:
+        # Duration is required by StashDB - get it from the filed file if possible
+        if duration and duration > 0:
             fingerprint["duration"] = int(duration)
+        else:
+            # Try to get duration from DB path if available
+            fingerprint["duration"] = 0
         payload = {
             "query": SUBMIT_FINGERPRINT_MUTATION,
             "variables": {
@@ -711,7 +710,17 @@ def parse_filename(filename: str, settings: dict) -> dict:
     except Exception:
         abbrevs = {}
 
+    try:
+        rename_map = _json.loads(settings.get("site_rename_map", "{}"))
+    except Exception:
+        rename_map = {}
+
     def expand_abbrev(text: str) -> str:
+        # First try rename map (exact match)
+        for old_name, new_name in rename_map.items():
+            if text.strip().lower() == old_name.strip().lower():
+                return new_name
+        # Then try abbreviations
         low = text.lower()
         for abbr, full in abbrevs.items():
             if low == abbr.lower():
@@ -780,7 +789,21 @@ def parse_filename(filename: str, settings: dict) -> dict:
     return result
 
 
+def apply_rename_map(name: str, settings: dict) -> str:
+    """Apply site rename corrections to a studio name."""
+    import json as _json
+    try:
+        rename_map = _json.loads(settings.get("site_rename_map", "{}"))
+    except Exception:
+        rename_map = {}
+    for old_name, new_name in rename_map.items():
+        if name.strip().lower() == old_name.strip().lower():
+            return new_name
+    return name
+
+
 def find_studio_dir(studio_name: str, settings: dict) -> Path | None:
+    studio_name = apply_rename_map(studio_name, settings)
     series_dir = Path(settings.get("series_dir", ""))
     if not series_dir.exists():
         return None
@@ -1129,17 +1152,18 @@ def get_tmdb_movie(tmdb_id: str) -> dict:
     crew = data.get("credits", {}).get("crew", [])
     directors = [m["name"] for m in crew if m.get("job") == "Director"]
     return {
-        "id":          str(data["id"]),
-        "title":       data.get("title") or data.get("original_title") or "Unknown",
-        "year":        (data.get("release_date") or "")[:4],
-        "overview":    data.get("overview") or "",
-        "poster_url":  f"{TMDB_IMG_BASE}{data['poster_path']}" if data.get("poster_path") else None,
-        "rating":      data.get("vote_average"),
-        "cast":        cast,
-        "directors":   directors,
-        "genres":      [g["name"] for g in data.get("genres", [])],
-        "runtime":     data.get("runtime"),
-        "tagline":     data.get("tagline") or "",
+        "id":           str(data["id"]),
+        "title":        data.get("title") or data.get("original_title") or "Unknown",
+        "year":         (data.get("release_date") or "")[:4],
+        "overview":     data.get("overview") or "",
+        "poster_url":   f"{TMDB_IMG_BASE}{data['poster_path']}" if data.get("poster_path") else None,
+        "backdrop_url": f"https://image.tmdb.org/t/p/original{data['backdrop_path']}" if data.get("backdrop_path") else None,
+        "rating":       data.get("vote_average"),
+        "cast":         cast,
+        "directors":    directors,
+        "genres":       [g["name"] for g in data.get("genres", [])],
+        "runtime":      data.get("runtime"),
+        "tagline":      data.get("tagline") or "",
     }
 
 
@@ -1201,6 +1225,13 @@ def file_movie(video: Path, movie: dict) -> dict:
             emit("  Poster: downloaded")
         else:
             emit("  Poster: download failed")
+
+    # Backdrop / fanart
+    if movie.get("backdrop_url"):
+        if download_image(movie["backdrop_url"], dest_dir / f"{base_name}-fanart.jpg"):
+            emit("  Fanart: downloaded")
+        else:
+            emit("  Fanart: download failed")
 
     # Move video
     safe_move(video, dest_dir / f"{base_name}{ext}")
@@ -1419,6 +1450,12 @@ async def file_manual(payload: dict, background_tasks: BackgroundTasks):
     return {"started": True, "filename": filename}
 
 
+@app.get("/library", response_class=HTMLResponse)
+async def library_page():
+    with open("static/library.html") as f:
+        return f.read()
+
+
 @app.get("/movies", response_class=HTMLResponse)
 async def movies_page():
     with open("static/movies.html") as f:
@@ -1580,6 +1617,93 @@ async def parse_filename_endpoint(filename: str):
     settings = db.get_settings()
     result = parse_filename(filename, settings)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Library issue finder
+# ---------------------------------------------------------------------------
+
+def scan_library_issues(root_dirs: list[str]) -> dict:
+    """
+    Scan library directories for common issues:
+    - NFO without matching video
+    - Video without NFO
+    - Missing thumbnail (-thumb.jpg)
+    - Empty season folders
+    """
+    issues = {
+        "nfo_no_video":    [],
+        "video_no_nfo":    [],
+        "missing_thumb":   [],
+        "empty_folder":    [],
+    }
+
+    for root_dir in root_dirs:
+        base = Path(root_dir)
+        if not base.exists():
+            continue
+        for dirpath, dirnames, filenames in os.walk(base):
+            dp = Path(dirpath)
+            videos = [f for f in filenames if Path(f).suffix.lower() in VIDEO_EXTENSIONS]
+            nfos   = [f for f in filenames if f.endswith(".nfo") and not f == "tvshow.nfo"]
+
+            # Empty folder check
+            if not videos and not nfos and not filenames:
+                issues["empty_folder"].append(str(dp))
+                continue
+
+            # NFO without matching video
+            for nfo in nfos:
+                stem = Path(nfo).stem
+                if not any(Path(v).stem == stem for v in videos):
+                    issues["nfo_no_video"].append(str(dp / nfo))
+
+            # Video without NFO
+            for video in videos:
+                stem = Path(video).stem
+                if f"{stem}.nfo" not in filenames:
+                    issues["video_no_nfo"].append(str(dp / video))
+
+            # Missing thumb
+            for video in videos:
+                stem = Path(video).stem
+                if f"{stem}-thumb.jpg" not in filenames:
+                    issues["missing_thumb"].append(str(dp / video))
+
+    return {k: sorted(v) for k, v in issues.items()}
+
+
+@app.get("/api/library/scan")
+async def library_scan(background_tasks: BackgroundTasks):
+    """Trigger a library issue scan across all configured dirs."""
+    settings = db.get_settings()
+    dirs = [
+        settings.get("series_dir", ""),
+        settings.get("features_dir", ""),
+    ]
+    # Add performer dirs
+    for d in db.get_directories():
+        dirs.append(d["path"])
+    dirs = [d for d in dirs if d]
+
+    def run():
+        results = scan_library_issues(dirs)
+        db.save_setting("_library_scan_results", __import__("json").dumps(results))
+        db.save_setting("_library_scan_time", __import__("datetime").datetime.now().isoformat(timespec="seconds"))
+
+    background_tasks.add_task(run)
+    return {"started": True}
+
+
+@app.get("/api/library/results")
+async def library_results():
+    settings = db.get_settings()
+    raw = settings.get("_library_scan_results")
+    scan_time = settings.get("_library_scan_time", "")
+    if not raw:
+        return {"results": None, "scan_time": None}
+    import json as _json
+    return {"results": _json.loads(raw), "scan_time": scan_time}
 
 
 @app.get("/api/scan/status")

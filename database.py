@@ -45,7 +45,8 @@ DEFAULTS = {
     "media_scan_debounce_mins": "5",
     "folder_watch_enabled":    "true",
     "folder_watch_hold_secs":  "60",
-    "site_abbreviations":      '{"brcc": "Backroom Casting Couch", "excogi": "Exploited College Girls", "nvg": "Net Video Girls", "brf": "Backroom Facials", "hmf": "Hot MILFs Fuck", "bex": "BrazzersExxtra", "ps": "PropertySex", "rk": "Reality Kings", "atk": "ATK", "ftv": "FTV Girls"}',
+    "site_abbreviations":      '{"brcc": "Backroom Casting Couch", "excogi": "Exploited College Girls", "nvg": "Net Video Girls", "brf": "Backroom Facials", "hmf": "Hot MILFs Fuck", "bex": "BrazzersExxtra", "ps": "PropertySex", "rk": "Reality Kings", "atk": "ATK", "ftv": "FTV Girls", "bangcasting": "Bang! Casting", "tonightsgf": "Tonights Girlfriend", "2drops": "2 Drops", "hookhot": "Hookup Hotshot", "spacejunk": "Space Junk", "shoplyfter": "Shoplyfter", "painal": "Painal", "wasteland": "Wasteland Ultra", "xxxjob": "XXX Job Interviews", "brandnew": "Brand New Amateurs", "czechcast": "Czech Casting", "czechstreet": "Czech Streets", "escortcast": "Escort Casting", "fuckt5": "Fuck Team Five", "hoby": "Hoby Buchanon", "perv": "Perv Principal"}',
+    "site_rename_map":         '{"Shoplyfter Mylf": "Shoplyfter", "Net Girl": "Net Video Girls", "Tonights Girlfriend": "Tonights Girlfriend", "BANG! Casting": "Bang! Casting", "Manyvids 2 Drops Studio": "2 Drops"}',
     "filename_patterns":       "pipe|dot_date|dot_date_short|bracket_site|dash_date",
     "min_file_size_mb":        "10",
 }
@@ -283,6 +284,12 @@ def get_movie_stats() -> dict:
             FROM processed_movies WHERE status != 'pending'
         """)
         return dict(cur.fetchone())
+
+
+def save_setting(key: str, value: str) -> None:
+    with get_conn() as conn:
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
+        conn.commit()
 
 
 def get_retry_files() -> list[str]:
