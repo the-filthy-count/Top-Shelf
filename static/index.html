@@ -385,6 +385,14 @@
       </div>
 
       <div class="settings-section">
+        <div class="settings-section-title">Movies Source Directory</div>
+        <div class="field-row">
+          <label class="field-label">Input folder for movie files</label>
+          <input class="field-input" id="cfgMoviesSourceDir" type="text" placeholder="/path/to/movies/folder">
+        </div>
+      </div>
+
+      <div class="settings-section">
         <div class="settings-section-title">Series Directory</div>
         <div class="field-row">
           <label class="field-label">Root folder containing studio subdirectories</label>
@@ -688,6 +696,7 @@
     dirs = d.directories.filter(x => x.type === 'performer');
 
     document.getElementById('cfgSourceDir').value        = s.source_dir        || '';
+    document.getElementById('cfgMoviesSourceDir').value  = s.movies_source_dir  || '';
     document.getElementById('cfgSeriesDir').value        = s.series_dir        || '';
     document.getElementById('cfgFeaturesDir').value      = s.features_dir      || '';
     document.getElementById('cfgPatternSeries').value    = s.pattern_series    || '';
@@ -778,6 +787,7 @@
     const payload = {
       settings: {
         source_dir:        document.getElementById('cfgSourceDir').value.trim(),
+        movies_source_dir: document.getElementById('cfgMoviesSourceDir').value.trim(),
         series_dir:        document.getElementById('cfgSeriesDir').value.trim(),
         features_dir:      document.getElementById('cfgFeaturesDir').value.trim(),
         pattern_series:    document.getElementById('cfgPatternSeries').value.trim(),

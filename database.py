@@ -26,6 +26,7 @@ DEFAULTS = {
     "retry_hour":         "1",
     "retry_frequency_h":  "24",
     "features_dir":       "/library/Features" if _in_docker else "/home/mjm/Top-Shelf/Features",
+    "movies_source_dir":  "/downloads/Top-Shelf/Movies" if _in_docker else "/home/mjm/NAS Downloads/Top-Shelf/Movies",
     "api_key_tmdb":       "",
     "stash_url":          "",
     "stash_api_key":      "",

@@ -1047,7 +1047,7 @@ async def movies_detail(tmdb_id: str):
 @app.get("/api/movies/queue")
 async def movies_queue():
     settings = db.get_settings()
-    source_dir = Path(settings.get("source_dir", ""))
+    source_dir = Path(settings.get("movies_source_dir", "") or settings.get("source_dir", ""))
     if not source_dir.exists():
         return {"files": [], "error": f"Source dir not found: {source_dir}"}
     filed = {r["filename"] for r in db.get_movie_history() if r["status"] == "filed"}
@@ -1085,7 +1085,7 @@ async def file_movie_endpoint(payload: dict, background_tasks: BackgroundTasks):
         return JSONResponse({"error": "filename and tmdb_id required"}, status_code=400)
 
     settings = db.get_settings()
-    source_dir = Path(settings.get("source_dir", ""))
+    source_dir = Path(settings.get("movies_source_dir", "") or settings.get("source_dir", ""))
     video = source_dir / filename
 
     if not video.exists():
