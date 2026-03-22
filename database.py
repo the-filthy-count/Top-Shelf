@@ -15,8 +15,8 @@ DB_PATH    = Path(os.environ.get("DB_PATH", str(_db_dir / "phash_filer.db")))
 _in_docker = Path("/app/database").exists()
 
 DEFAULTS = {
-    "source_dir":        "/downloads/Top-Shelf/Namer/Series-Process-Manual" if _in_docker else "/home/mjm/NAS Downloads/Top-Shelf/Namer/Series-Process-Manual",
-    "series_dir":        "/library/Series" if _in_docker else "/home/mjm/Top-Shelf/Series",
+    "source_dir":        "/downloads/scenes" if _in_docker else "/path/to/your/downloads/scenes",
+    "series_dir":        "/library/Series" if _in_docker else "/path/to/your/library/Series",
     "pattern_series":    "{studio} - S{year}E{month}{day} - {title}",
     "pattern_performer": "{performer} - S{year}E{month}{day} - {studio} - {title}",
     "api_key_stashdb":   "",
@@ -25,8 +25,8 @@ DEFAULTS = {
     "retry_enabled":      "true",
     "retry_hour":         "1",
     "retry_frequency_h":  "24",
-    "features_dir":       "/library/Features" if _in_docker else "/home/mjm/Top-Shelf/Features",
-    "movies_source_dir":  "/downloads/Top-Shelf/Movies" if _in_docker else "/home/mjm/NAS Downloads/Top-Shelf/Movies",
+    "features_dir":       "/library/Features" if _in_docker else "/path/to/your/library/Features",
+    "movies_source_dir":  "/downloads/movies" if _in_docker else "/path/to/your/downloads/movies",
     "api_key_tmdb":       "",
     "stash_enabled":      "true",
     "stash_url":          "",
@@ -53,9 +53,9 @@ DEFAULTS = {
 }
 
 DEFAULT_PERFORMER_DIRS = [
-    {"path": "/library/Stars"   if _in_docker else "/home/mjm/Top-Shelf/Stars",   "label": "Stars",   "rank": 1},
-    {"path": "/library/Erotica" if _in_docker else "/home/mjm/Top-Shelf/Erotica", "label": "Erotica", "rank": 2},
-    {"path": "/library/E-Girls" if _in_docker else "/home/mjm/Top-Shelf/E-Girls", "label": "E-Girls", "rank": 3},
+    {"path": "/library/Stars"   if _in_docker else "/path/to/your/library/Stars",   "label": "Stars",   "rank": 1},
+    {"path": "/library/Erotica" if _in_docker else "/path/to/your/library/Erotica", "label": "Erotica", "rank": 2},
+    {"path": "/library/E-Girls" if _in_docker else "/path/to/your/library/E-Girls", "label": "E-Girls", "rank": 3},
 ]
 
 

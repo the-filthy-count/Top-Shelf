@@ -1,7 +1,5 @@
 # Top-Shelf
 
-![Top-Shelf Dashboard](docs/dashboard.png)
-
 A self-hosted media filing tool that uses perceptual hashing to automatically identify and organise adult content scenes by matching against StashDB, ThePornDB, and FansDB.
 
 ---
@@ -80,7 +78,7 @@ services:
       - "8891:8891"
     volumes:
       - /your/path/database:/app/database       # Persistent SQLite database
-      - /your/path/static:/app/static           # Site assets
+      - /your/path/static:/app/static           # Custom branding assets (optional)
       - /your/library/path:/library             # Media library root
       - /your/downloads/path:/downloads         # Source files to process
     environment:
@@ -156,6 +154,22 @@ All settings are stored in the database and editable via the web UI:
 | Filename parsing | Pattern order and site abbreviations |
 | Submit phashes to StashDB | Contribute fingerprints back to the community (requires EDIT role) |
 | Media server scans | Stash, Jellyfin, Plex, Emby — per-server toggles and debounce delay |
+
+---
+
+## Customisation
+
+Place these files in the `static/` volume mount to override the defaults:
+
+| File | Purpose |
+|------|---------|
+| `logo.png` | Header logo |
+| `background.jpg` | Full-screen background image |
+| `favicon.ico` | Browser tab icon |
+| `TELETYPE1945-1985.ttf` | Primary display font |
+| `RUBBERST.ttf` | Secondary display font |
+
+The fonts are not included in the repository for licence reasons. Drop in any TTF files you like and update the font names in the HTML if needed.
 
 ---
 
