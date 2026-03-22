@@ -42,6 +42,7 @@ DEFAULTS = {
     "emby_api_key":       "",
     "media_scan_enabled": "true",
     "submit_phash_enabled": "true",
+    "manual_submit_stashdb_default": "false",
     "media_scan_debounce_mins": "5",
     "folder_watch_enabled":    "true",
     "folder_watch_hold_secs":  "60",

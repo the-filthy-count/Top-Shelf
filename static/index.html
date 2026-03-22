@@ -438,14 +438,46 @@
         <label class="field-label">Plot / Description</label>
         <textarea class="field-input" id="mPlot" rows="3" placeholder="Optional description..." style="resize:vertical"></textarea>
       </div>
+      <!-- Thumbnail -->
       <div class="field-row">
-        <label class="field-label">Thumbnail Image URL</label>
-        <input class="field-input" id="mImageUrl" type="text" placeholder="https://...">
+        <label class="field-label">Thumbnail</label>
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <div style="flex:1">
+            <input class="field-input" id="mImageUrl" type="text" placeholder="Paste image URL..." oninput="mThumbMode='url';mThumbPreview(this.value)">
+          </div>
+          <button class="btn-secondary" onclick="generateThumb()" title="Random frame from video" style="flex-shrink:0;white-space:nowrap">
+            <i class="fa-solid fa-dice"></i>
+          </button>
+          <button class="btn-secondary" id="mRegenBtn" onclick="generateThumb()" title="Regenerate" style="display:none;flex-shrink:0">
+            <i class="fa-solid fa-arrows-rotate"></i>
+          </button>
+        </div>
+        <div id="mThumbPreview" style="display:none;margin-top:8px">
+          <img id="mThumbImg" style="max-width:200px;border-radius:4px;cursor:pointer" onclick="this.parentElement.style.display='none'">
+          <div id="mThumbPercent" style="font-size:10px;color:var(--dim);margin-top:2px"></div>
+        </div>
+      </div>
+
+      <!-- StashDB submission toggle -->
+      <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+        <div class="toggle-row">
+          <span style="font-size:12px;color:var(--dim);letter-spacing:0.04em;text-transform:uppercase">Submit to StashDB</span>
+          <label class="toggle">
+            <input type="checkbox" id="mSubmitStashdb" onchange="toggleStashdbFields(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div id="mStashdbFields" style="display:none;margin-top:12px">
+          <div class="field-hint" style="margin-bottom:10px">Studio and performer names will be looked up on StashDB. Close matches will ask for confirmation before submitting.</div>
+          <div style="font-size:11px;color:var(--dim)" id="mResolveStatus"></div>
+          <!-- Resolve results appear here -->
+          <div id="mResolveResults"></div>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn-secondary" onclick="closeManual()">Cancel</button>
-      <button class="btn-primary" onclick="submitManual()"><i class="fa-solid fa-play"></i></button>
+      <button class="btn-primary" id="mSubmitBtn" onclick="submitManual()"><i class="fa-solid fa-play"></i></button>
     </div>
   </div>
 </div>
@@ -729,6 +761,17 @@
         <div class="field-hint" style="margin-top:6px">Automatically submits phashes to StashDB after a successful match, helping improve the database for everyone</div>
       </div>
 
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title">Default: Submit Manual Entries to StashDB</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgManualSubmitDefault">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="field-hint" style="margin-top:6px">Sets the default state of the StashDB submission toggle on the manual filing form</div>
+      </div>
+
       <!-- API Keys -->
       <div class="settings-section">
         <div class="settings-section-title">API Keys</div>
@@ -918,7 +961,8 @@
       if (d.next_run) el.textContent = `Next run: ${d.next_run.slice(0,16)} — ${d.pending} file(s) queued for retry`;
       else el.textContent = d.enabled ? 'Scheduler active, no job scheduled yet' : 'Retries disabled';
     });
-    document.getElementById('cfgSubmitPhash').checked     = (s.submit_phash_enabled || 'true') === 'true';
+    document.getElementById('cfgSubmitPhash').checked          = (s.submit_phash_enabled              || 'true')  === 'true';
+    document.getElementById('cfgManualSubmitDefault').checked  = (s.manual_submit_stashdb_default || 'false') === 'true';
     document.getElementById('cfgKeyTmdb').value          = s.api_key_tmdb      || '';
     document.getElementById('cfgMediaScanEnabled').checked = (s.media_scan_enabled || 'true') === 'true';
     document.getElementById('cfgScanDebounce').value        = s.media_scan_debounce_mins || '5';
@@ -1016,7 +1060,8 @@
         site_rename_map:    (() => { try { return JSON.stringify(JSON.parse(document.getElementById('cfgSiteRenameMap').value)); } catch { return document.getElementById('cfgSiteRenameMap').value; } })(),
         retry_hour:        document.getElementById('cfgRetryHour').value.trim(),
         retry_frequency_h: document.getElementById('cfgRetryFreq').value,
-        submit_phash_enabled: document.getElementById('cfgSubmitPhash').checked ? 'true' : 'false',
+        submit_phash_enabled:           document.getElementById('cfgSubmitPhash').checked         ? 'true' : 'false',
+        manual_submit_stashdb_default: document.getElementById('cfgManualSubmitDefault').checked ? 'true' : 'false',
         api_key_tmdb:      document.getElementById('cfgKeyTmdb').value.trim(),
         media_scan_enabled:        document.getElementById('cfgMediaScanEnabled').checked ? 'true' : 'false',
         media_scan_debounce_mins:  document.getElementById('cfgScanDebounce').value.trim(),
@@ -1270,6 +1315,18 @@
     document.getElementById('mPerformers').value = '';
     document.getElementById('mPlot').value = '';
     document.getElementById('mImageUrl').value = '';
+    document.getElementById('mThumbPreview').style.display = 'none';
+    document.getElementById('mRegenBtn').style.display = 'none';
+    document.getElementById('mResolveResults').innerHTML = '';
+    document.getElementById('mResolveStatus').textContent = '';
+    mThumbMode = null; mThumbDataUrl = null;
+    mResolvedStudio = null; mResolvedPerformers = [];
+    // Set StashDB toggle from settings default
+    fetch('/api/settings').then(r=>r.json()).then(s=>{
+      const def = (s.manual_submit_stashdb_default || 'false') === 'true';
+      document.getElementById('mSubmitStashdb').checked = def;
+      document.getElementById('mStashdbFields').style.display = def ? 'block' : 'none';
+    });
     document.getElementById('manualModal').classList.add('open');
     // Parse filename via API
     try {
@@ -1289,6 +1346,7 @@
 
   async function submitManual() {
     if (!_manualFile) return;
+    const imageUrl = mThumbMode === 'generated' ? '' : document.getElementById('mImageUrl').value.trim();
     const payload = {
       filename:   _manualFile,
       title:      document.getElementById('mTitle').value.trim(),
@@ -1296,12 +1354,28 @@
       date:       document.getElementById('mDate').value.trim(),
       performers: document.getElementById('mPerformers').value.trim(),
       plot:       document.getElementById('mPlot').value.trim(),
-      image_url:  document.getElementById('mImageUrl').value.trim(),
+      image_url:  imageUrl,
     };
+    // If generated thumb, send as data_url separately
+    if (mThumbMode === 'generated' && mThumbDataUrl) {
+      payload.thumb_data_url = mThumbDataUrl;
+    }
     if (!payload.title || !payload.studio || !payload.date) {
       alert('Title, studio and date are required');
       return;
     }
+
+    // StashDB submission
+    const submitToStashdb = document.getElementById('mSubmitStashdb').checked;
+    if (submitToStashdb) {
+      // Check if any unresolved confirmations remain
+      const unresolvedBtns = document.getElementById('mResolveResults').querySelectorAll('button');
+      if (unresolvedBtns.length > 0) {
+        alert('Please confirm the StashDB matches before submitting');
+        return;
+      }
+    }
+
     closeManual();
     clearLog();
     const r = await fetch('/api/file/manual/metadata', {
@@ -1310,14 +1384,188 @@
       body: JSON.stringify(payload),
     });
     const d = await r.json();
-    if (d.error) alert(`Error: ${d.error}`);
-    else { isRunning = true; document.getElementById('btnRunAll').disabled = true; }
+    if (d.error) { alert(`Error: ${d.error}`); return; }
+    isRunning = true;
+    document.getElementById('btnRunAll').disabled = true;
+
+    // Submit to StashDB if toggled
+    if (submitToStashdb) {
+      setTimeout(async () => {
+        const stashPayload = {
+          filename:      _manualFile || payload.filename,
+          title:         payload.title,
+          date:          payload.date,
+          plot:          payload.plot,
+          studio_id:     mResolvedStudio || null,
+          performer_ids: mResolvedPerformers.filter(Boolean),
+          image_url:     imageUrl,
+        };
+        const sr = await fetch('/api/stashdb/submit-manual', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(stashPayload),
+        });
+        const sd = await sr.json();
+        if (sd.success) {
+          console.log('StashDB scene submitted:', sd.id);
+        } else {
+          console.warn('StashDB submit failed:', sd.error);
+        }
+      }, 500);
+    }
   }
 
   // Close manual modal on overlay click
   document.getElementById('manualModal').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeManual();
   });
+
+  // ── Manual modal: thumbnail & StashDB ───────────────────────────────
+
+  let mThumbMode = null;      // 'url' or 'generated'
+  let mThumbDataUrl = null;   // base64 from generation
+  let mResolvedStudio = null;
+  let mResolvedPerformers = [];
+
+  function mThumbPreview(url) {
+    if (!url) { document.getElementById('mThumbPreview').style.display = 'none'; return; }
+    document.getElementById('mThumbImg').src = url;
+    document.getElementById('mThumbPreview').style.display = 'block';
+    document.getElementById('mThumbPercent').textContent = '';
+    document.getElementById('mRegenBtn').style.display = 'none';
+  }
+
+  async function generateThumb() {
+    if (!_manualFile) return;
+    const btn = document.querySelector('[onclick="generateThumb()"]');
+    document.getElementById('mThumbPreview').style.display = 'none';
+    try {
+      const r = await fetch('/api/thumb/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ filename: _manualFile }),
+      });
+      const d = await r.json();
+      if (d.error) { alert(`Thumb error: ${d.error}`); return; }
+      mThumbDataUrl = d.data_url;
+      mThumbMode = 'generated';
+      document.getElementById('mThumbImg').src = d.data_url;
+      document.getElementById('mThumbPreview').style.display = 'block';
+      document.getElementById('mThumbPercent').textContent = `Frame at ${d.percent}%`;
+      document.getElementById('mRegenBtn').style.display = 'inline-flex';
+      document.getElementById('mImageUrl').value = '';
+    } catch(e) { alert(`Thumb error: ${e.message}`); }
+  }
+
+  function toggleStashdbFields(show) {
+    document.getElementById('mStashdbFields').style.display = show ? 'block' : 'none';
+    if (show) resolveStashdb();
+  }
+
+  async function resolveStashdb() {
+    const studio = document.getElementById('mStudio').value.trim();
+    const performers = document.getElementById('mPerformers').value.trim();
+    if (!studio && !performers) return;
+    document.getElementById('mResolveStatus').textContent = 'Looking up on StashDB...';
+    document.getElementById('mResolveResults').innerHTML = '';
+    mResolvedStudio = null;
+    mResolvedPerformers = [];
+    try {
+      const r = await fetch('/api/stashdb/resolve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ studio, performers }),
+      });
+      const d = await r.json();
+      if (d.error) { document.getElementById('mResolveStatus').textContent = d.error; return; }
+      renderResolveResults(d);
+    } catch(e) {
+      document.getElementById('mResolveStatus').textContent = `Lookup failed: ${e.message}`;
+    }
+  }
+
+  function renderResolveResults(d) {
+    document.getElementById('mResolveStatus').textContent = '';
+    let html = '';
+
+    if (d.studio) {
+      if (d.studio.confirmed) {
+        mResolvedStudio = d.studio.id;
+        html += `<div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Studio: ${esc(d.studio.name)}</div>`;
+      } else if (d.studio.suggestions?.length) {
+        html += `<div style="font-size:11px;color:var(--amber);margin-bottom:4px">Studio not found. Did you mean:</div>`;
+        d.studio.suggestions.forEach(s => {
+          html += `<button class="btn-small" style="margin:2px" onclick="confirmStudio('${s.id}','${esc(s.name)}')">
+            ${esc(s.name)}
+          </button>`;
+        });
+        html += `<button class="btn-small" style="margin:2px;color:var(--dim)" onclick="confirmStudio(null,'${esc(d.studio.name)}')">Skip studio</button>`;
+        html += '<br style="margin-bottom:8px">';
+      } else {
+        html += `<div style="font-size:11px;color:var(--dim);margin-bottom:6px">Studio not found on StashDB — will submit without</div>`;
+        mResolvedStudio = null;
+      }
+    }
+
+    if (d.performers?.length) {
+      d.performers.forEach((p, i) => {
+        if (p.confirmed) {
+          mResolvedPerformers[i] = p.id;
+          html += `<div style="font-size:11px;color:var(--green);margin-bottom:4px">✓ Performer: ${esc(p.name)}</div>`;
+        } else if (p.suggestions?.length) {
+          html += `<div style="font-size:11px;color:var(--amber);margin-bottom:4px">${esc(p.name)}: Did you mean:</div>`;
+          p.suggestions.forEach(s => {
+            html += `<button class="btn-small" style="margin:2px" onclick="confirmPerformer(${i},'${s.id}','${esc(s.name)}')">
+              ${esc(s.name)}
+            </button>`;
+          });
+          html += `<button class="btn-small" style="margin:2px;color:var(--dim)" onclick="confirmPerformer(${i},null,'${esc(p.name)}')">Skip</button>`;
+          html += '<br style="margin-bottom:8px">';
+        } else {
+          html += `<div style="font-size:11px;color:var(--dim);margin-bottom:4px">${esc(p.name)}: not found — will skip</div>`;
+          mResolvedPerformers[i] = null;
+        }
+      });
+    }
+
+    document.getElementById('mResolveResults').innerHTML = html;
+  }
+
+  function confirmStudio(id, name) {
+    mResolvedStudio = id;
+    const colour = id ? 'var(--green)' : 'var(--dim)';
+    document.getElementById('mResolveResults').querySelectorAll('[onclick^="confirmStudio"]')
+      .forEach(b => b.closest('div')?.remove());
+    document.getElementById('mResolveResults').insertAdjacentHTML('afterbegin',
+      `<div style="font-size:11px;color:${colour};margin-bottom:6px">${id ? '✓' : '–'} Studio: ${esc(name)}</div>`);
+  }
+
+  function confirmPerformer(idx, id, name) {
+    mResolvedPerformers[idx] = id;
+    const colour = id ? 'var(--green)' : 'var(--dim)';
+    // Replace the suggestion block for this performer with confirmation
+    const results = document.getElementById('mResolveResults');
+    const marker = `confirmPerformer(${idx},`;
+    let replaced = false;
+    results.querySelectorAll('button').forEach(b => {
+      if (!replaced && b.getAttribute('onclick')?.startsWith(marker)) {
+        // Remove all sibling buttons for this performer
+        let node = b;
+        while (node && !node.tagName?.match(/^BR$/i)) {
+          const next = node.nextSibling;
+          if (node.nodeType === 1) node.remove();
+          node = next;
+        }
+        if (node) node.remove();
+        replaced = true;
+      }
+    });
+    results.insertAdjacentHTML('beforeend',
+      `<div style="font-size:11px;color:${colour};margin-bottom:4px">${id ? '✓' : '–'} Performer: ${esc(name)}</div>`);
+  }
+
+  // Patch submitManual to handle StashDB submission
+  const _origSubmitManual = submitManual;
 
   // ── Collapsible & toggle helpers ─────────────────────────────────────
 

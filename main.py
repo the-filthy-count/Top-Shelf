@@ -6,6 +6,7 @@ Run with:
 """
 
 import asyncio
+import base64
 import io
 import json
 import math
@@ -662,6 +663,96 @@ def push_to_stash(scene: dict, destination: str, source: str, phash: str = None)
 
 
 # ---------------------------------------------------------------------------
+# StashDB manual scene submission
+# ---------------------------------------------------------------------------
+
+STASHDB_STUDIO_SEARCH = """
+query SearchStudios($term: String!) {
+  searchStudio(term: $term) { id name }
+}
+"""
+
+STASHDB_PERFORMER_SEARCH = """
+query SearchPerformers($term: String!) {
+  searchPerformer(term: $term) { id name }
+}
+"""
+
+STASHDB_SCENE_CREATE = """
+mutation SceneCreate($input: SceneCreateInput!) {
+  sceneCreate(input: $input) { id title }
+}
+"""
+
+def stashdb_search_studio(name: str, api_key: str) -> list[dict]:
+    """Search StashDB for a studio by name. Returns list of {id, name}."""
+    try:
+        data = _stashbox_post(STASHDB_ENDPOINT, api_key, STASHDB_STUDIO_SEARCH, {"term": name})
+        return data.get("searchStudio") or []
+    except Exception:
+        return []
+
+
+def stashdb_search_performer(name: str, api_key: str) -> list[dict]:
+    """Search StashDB for a performer by name. Returns list of {id, name}."""
+    try:
+        data = _stashbox_post(STASHDB_ENDPOINT, api_key, STASHDB_PERFORMER_SEARCH, {"term": name})
+        return data.get("searchPerformer") or []
+    except Exception:
+        return []
+
+
+def stashdb_submit_scene(title: str, date: str, studio_id: str,
+                          performer_ids: list, phash: str,
+                          details: str, image_url: str, api_key: str) -> dict:
+    """Submit a new scene to StashDB."""
+    fingerprints = []
+    if phash:
+        fingerprints.append({"algorithm": "PHASH", "hash": phash, "duration": 0})
+
+    inp = {
+        "title":     title,
+        "date":      date,
+        "details":   details or "",
+        "fingerprints": fingerprints,
+    }
+    if studio_id:
+        inp["studio_id"] = studio_id
+    if performer_ids:
+        inp["performer_ids"] = performer_ids
+    if image_url:
+        inp["image"] = image_url
+
+    try:
+        data = _stashbox_post(STASHDB_ENDPOINT, api_key, STASHDB_SCENE_CREATE, {"input": inp})
+        scene = data.get("sceneCreate") or {}
+        return {"success": True, "id": scene.get("id"), "title": scene.get("title")}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def capture_frame_as_base64(video_path: Path, percent: float) -> str | None:
+    """Capture a single frame from a video at percent (0-100) of duration."""
+    try:
+        duration = get_video_duration(video_path)
+        if not duration:
+            return None
+        t = duration * (percent / 100.0)
+        cmd = [
+            "ffmpeg", "-ss", str(t), "-i", str(video_path),
+            "-frames:v", "1", "-f", "image2", "-vcodec", "mjpeg", "pipe:1",
+            "-loglevel", "error"
+        ]
+        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        if result.returncode != 0 or not result.stdout:
+            return None
+        import base64
+        return "data:image/jpeg;base64," + base64.b64encode(result.stdout).decode()
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
 # StashDB phash submission
 # ---------------------------------------------------------------------------
 
@@ -1032,12 +1123,22 @@ def file_scene_from_match(video: Path, scene: dict, source: str = "") -> dict:
     (dest_season / f"{base_name}.nfo").write_text(nfo, encoding="utf-8")
     emit("  NFO: saved")
 
-    image_url = best_image_url(images)
-    if image_url:
-        ok = download_image(image_url, dest_season / f"{base_name}-thumb.jpg")
-        emit("  Thumb: downloaded" if ok else "  Thumb: download failed")
+    # Prefer generated base64 thumb over URL
+    thumb_data_url = scene.get("_thumb_data_url", "")
+    if thumb_data_url and thumb_data_url.startswith("data:image"):
+        try:
+            header, b64data = thumb_data_url.split(",", 1)
+            (dest_season / f"{base_name}-thumb.jpg").write_bytes(base64.b64decode(b64data))
+            emit("  Thumb: saved (generated frame)")
+        except Exception as e:
+            emit(f"  Thumb: save failed ({e})")
     else:
-        emit("  Thumb: no image available")
+        image_url = best_image_url(images)
+        if image_url:
+            ok = download_image(image_url, dest_season / f"{base_name}-thumb.jpg")
+            emit("  Thumb: downloaded" if ok else "  Thumb: download failed")
+        else:
+            emit("  Thumb: no image available")
 
     safe_move(video, dest_season / f"{base_name}{ext}")
     emit("  Video: moved")
@@ -1587,13 +1688,14 @@ async def file_manual_metadata(payload: dict, background_tasks: BackgroundTasks)
     if processing_state["running"]:
         return JSONResponse({"error": "Pipeline already running"}, status_code=409)
 
-    filename   = payload.get("filename", "").strip()
-    title      = payload.get("title", "").strip()
-    studio     = payload.get("studio", "").strip()
-    date       = payload.get("date", "").strip()
-    performers = payload.get("performers", "").strip()
-    plot       = payload.get("plot", "").strip()
-    image_url  = payload.get("image_url", "").strip()
+    filename       = payload.get("filename", "").strip()
+    title          = payload.get("title", "").strip()
+    studio         = payload.get("studio", "").strip()
+    date           = payload.get("date", "").strip()
+    performers     = payload.get("performers", "").strip()
+    plot           = payload.get("plot", "").strip()
+    image_url      = payload.get("image_url", "").strip()
+    thumb_data_url = payload.get("thumb_data_url", "").strip()
 
     if not all([filename, title, studio, date]):
         return JSONResponse({"error": "filename, title, studio and date are required"}, status_code=400)
@@ -1608,12 +1710,13 @@ async def file_manual_metadata(payload: dict, background_tasks: BackgroundTasks)
     # Build a scene dict in stash-box shape so file_scene_from_match can handle it
     perf_list = [p.strip() for p in performers.split(",") if p.strip()]
     scene = {
-        "title":        title,
-        "release_date": date,
-        "studio":       {"name": studio},
-        "performers":   [{"performer": {"name": n, "gender": ""}} for n in perf_list],
-        "images":       [{"url": image_url, "width": 0, "height": 0}] if image_url else [],
-        "_plot":        plot,
+        "title":           title,
+        "release_date":    date,
+        "studio":          {"name": studio},
+        "performers":      [{"performer": {"name": n, "gender": ""}} for n in perf_list],
+        "images":          [{"url": image_url, "width": 0, "height": 0}] if image_url else [],
+        "_plot":           plot,
+        "_thumb_data_url": thumb_data_url,
     }
 
     def run():
@@ -1731,6 +1834,97 @@ async def library_results():
         return {"results": None, "scan_time": None}
     import json as _json
     return {"results": _json.loads(raw), "scan_time": scan_time}
+
+
+@app.post("/api/stashdb/resolve")
+async def stashdb_resolve(payload: dict):
+    """
+    Resolve studio and performer names against StashDB.
+    Returns exact matches and near-matches for confirmation.
+    """
+    s = db.get_settings()
+    api_key = s.get("api_key_stashdb", "")
+    if not api_key:
+        return JSONResponse({"error": "No StashDB API key configured"}, status_code=400)
+
+    studio_name    = payload.get("studio", "").strip()
+    performer_names = [p.strip() for p in payload.get("performers", "").split(",") if p.strip()]
+
+    result = {"studio": None, "performers": [], "needs_confirm": False}
+
+    # Resolve studio
+    if studio_name:
+        matches = stashdb_search_studio(studio_name, api_key)
+        exact = next((m for m in matches if m["name"].lower() == studio_name.lower()), None)
+        if exact:
+            result["studio"] = {"id": exact["id"], "name": exact["name"], "confirmed": True}
+        elif matches:
+            result["studio"] = {"id": None, "name": studio_name, "suggestions": matches[:3], "confirmed": False}
+            result["needs_confirm"] = True
+        else:
+            result["studio"] = {"id": None, "name": studio_name, "suggestions": [], "confirmed": False}
+
+    # Resolve performers
+    for pname in performer_names:
+        matches = stashdb_search_performer(pname, api_key)
+        exact = next((m for m in matches if m["name"].lower() == pname.lower()), None)
+        if exact:
+            result["performers"].append({"id": exact["id"], "name": exact["name"], "confirmed": True})
+        elif matches:
+            result["performers"].append({"id": None, "name": pname, "suggestions": matches[:3], "confirmed": False})
+            result["needs_confirm"] = True
+        else:
+            result["performers"].append({"id": None, "name": pname, "suggestions": [], "confirmed": False})
+
+    return result
+
+
+@app.post("/api/stashdb/submit-manual")
+async def stashdb_submit_manual(payload: dict):
+    """
+    Submit a manually-created scene to StashDB.
+    Expects resolved studio_id, performer_ids, plus title/date/phash etc.
+    """
+    s = db.get_settings()
+    api_key = s.get("api_key_stashdb", "")
+    if not api_key:
+        return JSONResponse({"error": "No StashDB API key configured"}, status_code=400)
+
+    filename = payload.get("filename", "")
+    phash    = db.get_phash(filename) if filename else None
+
+    result = stashdb_submit_scene(
+        title        = payload.get("title", ""),
+        date         = payload.get("date", ""),
+        studio_id    = payload.get("studio_id"),
+        performer_ids = payload.get("performer_ids", []),
+        phash        = phash,
+        details      = payload.get("plot", ""),
+        image_url    = payload.get("image_url", ""),
+        api_key      = api_key,
+    )
+    return result
+
+
+@app.post("/api/thumb/generate")
+async def generate_thumb(payload: dict):
+    """Generate a thumbnail from a video at a random percent between 10-90."""
+    import random
+    filename  = payload.get("filename", "").strip()
+    percent   = payload.get("percent")
+    if percent is None:
+        percent = random.uniform(10, 90)
+
+    s = db.get_settings()
+    source_dir = Path(s.get("source_dir", ""))
+    video = source_dir / filename
+    if not video.exists():
+        return JSONResponse({"error": "File not found"}, status_code=404)
+
+    data_url = capture_frame_as_base64(video, float(percent))
+    if not data_url:
+        return JSONResponse({"error": "Frame capture failed"}, status_code=500)
+    return {"data_url": data_url, "percent": round(percent, 1)}
 
 
 @app.get("/api/scan/status")
