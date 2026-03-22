@@ -80,7 +80,7 @@
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
   /* ── Stats ── */
-  .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 28px; }
+  .stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 16px; }
   .stat-card { background: var(--surface); border: none; border-radius: 10px; padding: 32px 20px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 160px; }
   .stat-value { font-family: var(--acid); font-size: 72px; font-weight: 400; line-height: 1; display: block; letter-spacing: 0.02em; text-align: center; }
   .stat-label { font-family: var(--secs); font-size: 26px; text-transform: uppercase; letter-spacing: -0.02em; color: var(--dim); display: block; margin-top: 10px; text-align: center; }
@@ -90,7 +90,7 @@
   .stat-errors .stat-value    { color: var(--red); }
 
   /* ── Main grid ── */
-  .main-grid { display: grid; grid-template-columns: 3fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .main-grid { display: grid; grid-template-columns: 3fr 1fr; gap: 16px; margin-bottom: 20px; align-items: start; }
 
   /* ── Panels ── */
   .panel { background: var(--surface); border: none; border-radius: 10px; overflow: hidden; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
@@ -673,6 +673,18 @@
         </div>
       </div>
 
+      <!-- StashDB Submission -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title">Submit Phashes to StashDB</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgSubmitPhash">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="field-hint" style="margin-top:6px">Automatically submits phashes to StashDB after a successful match, helping improve the database for everyone</div>
+      </div>
+
       <!-- API Keys -->
       <div class="settings-section">
         <div class="settings-section-title">API Keys</div>
@@ -861,6 +873,7 @@
       if (d.next_run) el.textContent = `Next run: ${d.next_run.slice(0,16)} — ${d.pending} file(s) queued for retry`;
       else el.textContent = d.enabled ? 'Scheduler active, no job scheduled yet' : 'Retries disabled';
     });
+    document.getElementById('cfgSubmitPhash').checked     = (s.submit_phash_enabled || 'true') === 'true';
     document.getElementById('cfgKeyTmdb').value          = s.api_key_tmdb      || '';
     document.getElementById('cfgStashUrl').value          = s.stash_url          || '';
     document.getElementById('cfgStashKey').value          = s.stash_api_key      || '';
@@ -951,6 +964,7 @@
         site_abbreviations: (() => { try { return JSON.stringify(JSON.parse(document.getElementById('cfgSiteAbbrevs').value)); } catch { return document.getElementById('cfgSiteAbbrevs').value; } })(),
         retry_hour:        document.getElementById('cfgRetryHour').value.trim(),
         retry_frequency_h: document.getElementById('cfgRetryFreq').value,
+        submit_phash_enabled: document.getElementById('cfgSubmitPhash').checked ? 'true' : 'false',
         api_key_tmdb:      document.getElementById('cfgKeyTmdb').value.trim(),
         stash_url:         document.getElementById('cfgStashUrl').value.trim(),
         stash_api_key:     document.getElementById('cfgStashKey').value.trim(),

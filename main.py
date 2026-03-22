@@ -481,6 +481,58 @@ def normalise(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# StashDB phash submission
+# ---------------------------------------------------------------------------
+
+SUBMIT_FINGERPRINT_MUTATION = """
+mutation SubmitFingerprint($input: FingerprintSubmission!) {
+  submitFingerprint(input: $input)
+}
+"""
+
+def submit_phash_to_stashdb(scene_id: str, phash: str, duration: float = None) -> bool:
+    """Submit a phash fingerprint to StashDB for a given scene ID."""
+    s = db.get_settings()
+    if s.get("submit_phash_enabled", "true").lower() != "true":
+        return False
+    api_key = s.get("api_key_stashdb", "")
+    if not api_key or not scene_id or not phash:
+        return False
+    try:
+        fingerprint = {
+            "hash":      phash,
+            "algorithm": "PHASH",
+        }
+        if duration:
+            fingerprint["duration"] = int(duration)
+        payload = {
+            "query": SUBMIT_FINGERPRINT_MUTATION,
+            "variables": {
+                "input": {
+                    "scene_id":    scene_id,
+                    "fingerprint": fingerprint,
+                }
+            }
+        }
+        resp = requests.post(
+            STASHDB_ENDPOINT,
+            json=payload,
+            headers={"Content-Type": "application/json", "ApiKey": api_key},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if "errors" in data:
+            emit(f"  Phash submit: failed ({data['errors']})")
+            return False
+        emit("  Phash submit: sent to StashDB")
+        return True
+    except Exception as e:
+        emit(f"  Phash submit: error ({e})")
+        return False
+
+
+# ---------------------------------------------------------------------------
 # Filename parser
 # ---------------------------------------------------------------------------
 
@@ -785,6 +837,14 @@ def file_scene_from_match(video: Path, scene: dict, source: str = "") -> dict:
     db.update_file(filename, status="filed", match_source=source,
                    match_title=title, match_studio=studio, match_date=date,
                    performers=", ".join(perf_names), destination=destination)
+
+    # Submit phash to StashDB if match came from StashDB and we have a phash cached
+    if source == "StashDB":
+        scene_id = scene.get("id")
+        phash = db.get_phash(filename)
+        if scene_id and phash:
+            submit_phash_to_stashdb(scene_id, phash)
+
     emit("  DONE")
     return {"status": "filed", "destination": destination}
 
