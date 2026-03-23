@@ -1749,9 +1749,6 @@ def fetch_performer_detail(source: str, pid: str) -> dict | None:
                                 headers=_tpdb_headers(), timeout=15)
             if resp.status_code == 200:
                 data = resp.json().get("data")
-                if data:
-                    emit(f"TPDB detail keys: {list(data.keys())[:20]}")
-                    emit(f"TPDB slug fields: id={data.get('id')} _id={data.get('_id')} slug={data.get('slug')} url={str(data.get('url',''))[:60]}")
                 return data
         except Exception:
             pass
@@ -2839,7 +2836,7 @@ async def scenes_recent(source: str, id: str, type: str = "performer", slug: str
         return {"scenes": [], "note": "Scene lookup only available for TPDB sources"}
 
     entity_type = type  # avoid shadowing builtin
-    emit(f"SCENES lookup: entity={entity_type} id={id} slug={slug}")
+
 
     lookups = []
     if slug and slug != id:
@@ -2854,17 +2851,12 @@ async def scenes_recent(source: str, id: str, type: str = "performer", slug: str
         try:
             resp = requests.get(url, params={"page": 1, "per_page": 8},
                                 headers=_tpdb_headers(), timeout=15)
-            emit(f"SCENES {lookup} → {resp.status_code}")
             if resp.status_code != 200:
                 continue
             payload  = resp.json()
             data_raw = payload.get("data")
-            emit(f"SCENES data type={data_raw.__class__.__name__} len={len(data_raw) if isinstance(data_raw, list) else 'n/a'}")
             if not isinstance(data_raw, list):
-                emit(f"SCENES unexpected data: {str(data_raw)[:120]}")
                 continue
-            if data_raw:
-                emit(f"SCENES first item keys: {list(data_raw[0].keys()) if isinstance(data_raw[0], dict) else str(data_raw[0])[:120]}")
             out = []
             for s in data_raw:
                 # TPDB scenes: thumb is poster_image or image (strings), not posters list
@@ -2881,10 +2873,9 @@ async def scenes_recent(source: str, id: str, type: str = "performer", slug: str
                     "studio": (s.get("site") or {}).get("name", ""),
                     "thumb":  thumb,
                 })
-            emit(f"SCENES returning {len(out)} scenes")
             return {"scenes": out}
-        except Exception as exc:
-            emit(f"SCENES exception: {exc}")
+        except Exception:
+            pass
     return {"scenes": []}
 
 

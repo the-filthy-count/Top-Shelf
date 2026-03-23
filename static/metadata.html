@@ -53,6 +53,8 @@
   /* Layout */
   .layout { display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start; }
   .right-col { display: flex; flex-direction: column; gap: 20px; }
+  .panel-scroll { overflow-y: auto; max-height: 420px; }
+  .search-panel-inner { overflow-y: auto; max-height: 340px; }
 
   /* Panel */
   .panel {
@@ -106,16 +108,24 @@
   .dest-btn.selected { border-color: var(--accent); color: var(--accent); background: rgba(192,132,252,0.08); }
   .dest-custom { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
 
+  /* Image overlay */
+  .img-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 1000; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .img-overlay img { max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: 8px; box-shadow: 0 32px 80px rgba(0,0,0,0.6); }
+
   /* Scenes panel */
-  .scene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; padding: 16px 18px; }
+  .scene-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 16px 18px; }
   .scene-card { cursor: pointer; border-radius: 8px; overflow: hidden; background: var(--raised); transition: all 0.15s; border: 1px solid transparent; }
   .scene-card:hover { border-color: var(--muted); }
   .scene-card.searching { border-color: var(--accent); }
   .scene-thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--raised); }
   .scene-thumb-placeholder { width: 100%; aspect-ratio: 16/9; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); }
-  .scene-info { padding: 8px; }
+  .scene-info { padding: 8px 8px 4px; }
   .scene-title { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .scene-date  { font-size: 10px; color: var(--dim); margin-top: 2px; }
+  .scene-actions { display: flex; gap: 4px; padding: 4px 6px 8px; border-top: 1px solid rgba(255,255,255,0.04); margin-top: 4px; }
+  .scene-action-btn { flex: 1; background: none; border: 1px solid var(--border); color: var(--dim); border-radius: 4px; padding: 4px; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .scene-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .scene-action-btn.search-btn:hover { border-color: var(--green); color: var(--green); }
 
   /* Search results */
   .search-result { display: grid; grid-template-columns: 1fr auto auto auto; gap: 12px; align-items: center; padding: 10px 18px; border-bottom: 1px solid rgba(255,255,255,0.03); }
@@ -162,7 +172,7 @@
           <input class="field-input" id="searchInput" type="text" placeholder="Name..." onkeydown="if(event.key==='Enter')runSearch()">
           <button class="btn-primary" onclick="runSearch()"><i class="fa-solid fa-magnifying-glass"></i></button>
         </div>
-        <div id="searchResults"><div class="empty">Search for a performer or studio</div></div>
+        <div class="search-panel-inner" id="searchResults"><div class="empty">Search for a performer or studio</div></div>
       </div>
     </div>
 
@@ -280,7 +290,7 @@
             const el = document.getElementById(`lib-${i}`);
             if (!el) return;
             if (lib.found) {
-              el.innerHTML = '<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--green)"><i class="fa-solid fa-check"></i> IN LIBRARY</span>';
+              el.innerHTML = '<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--green)"><i class="fa-solid fa-check"></i> IN-LIBRARY</span>';
               window._searchResults[i]._inLibrary = true;
               window._searchResults[i]._libraryPath = lib.path;
             } else {
@@ -300,6 +310,21 @@
     selectedResult = window._searchResults[idx];
     showDetail(selectedResult);
   }
+
+  // ── Image overlay ────────────────────────────────────────────────────
+
+  function openImageOverlay(url) {
+    if (!url) return;
+    document.getElementById('imgOverlayImg').src = url;
+    document.getElementById('imgOverlay').style.display = 'flex';
+  }
+
+  function closeImageOverlay() {
+    document.getElementById('imgOverlay').style.display = 'none';
+    document.getElementById('imgOverlayImg').src = '';
+  }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeImageOverlay(); });
 
   // ── Scenes ───────────────────────────────────────────────────────────
 
@@ -323,13 +348,25 @@
         return;
       }
       grid.innerHTML = d.scenes.map(s => `
-        <div class="scene-card" id="sc-${esc(s.id)}" onclick="searchScene(${JSON.stringify(s).replace(/"/g,'&quot;')})">
-          ${s.thumb
-            ? `<img class="scene-thumb" src="${esc(s.thumb)}" loading="lazy" onerror="this.style.display='none'">`
-            : `<div class="scene-thumb-placeholder"><i class="fa-solid fa-film"></i></div>`}
+        <div class="scene-card" id="sc-${esc(s.id)}">
+          <div style="cursor:pointer;position:relative" onclick="openImageOverlay('${esc(s.thumb || '')}')">
+            ${s.thumb
+              ? `<img class="scene-thumb" src="${esc(s.thumb)}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=scene-thumb-placeholder><i class=fa-solid fa-film></i></div>'">`
+              : `<div class="scene-thumb-placeholder"><i class="fa-solid fa-film"></i></div>`}
+          </div>
           <div class="scene-info">
             <div class="scene-title" title="${esc(s.title)}">${esc(s.title)}</div>
             <div class="scene-date">${s.date || ''} ${s.studio ? '· ' + esc(s.studio) : ''}</div>
+          </div>
+          <div class="scene-actions">
+            <button class="scene-action-btn search-btn" title="Search Prowlarr"
+              onclick="searchScene(${JSON.stringify(s).replace(/"/g,'&quot;')})">
+              <i class="fa-solid fa-magnifying-glass"></i>
+            </button>
+            <button class="scene-action-btn" title="View on ThePornDB"
+              onclick="window.open('https://theporndb.net/scenes/${esc(s.id)}','_blank')">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            </button>
           </div>
         </div>`).join('');
     } catch(e) {
@@ -420,10 +457,10 @@
       .then(r => r.json())
       .then(lib => {
         if (lib.found) {
-          libEl.innerHTML = `<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--green)"><i class="fa-solid fa-check"></i> IN LIBRARY</span>`;
+          libEl.innerHTML = `<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--green)"><i class="fa-solid fa-check"></i> IN-LIBRARY</span>`;
           if (destEl) destEl.style.display = 'none';
         } else {
-          libEl.innerHTML = `<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--dim)">NOT IN LIBRARY</span>`;
+          libEl.innerHTML = `<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--dim)">NOT IN-LIBRARY</span>`;
           if (destEl) destEl.style.display = 'block';
         }
       }).catch(() => { libEl.innerHTML = ''; if (destEl) destEl.style.display = 'block'; });
@@ -521,7 +558,7 @@
         msg.style.display = 'block';
         // Update library status and hide dest section
         document.getElementById('detailLibStatus').innerHTML =
-          `<span style="color:var(--green)"><i class="fa-solid fa-check"></i> IN LIBRARY</span>`;
+          `<span style="color:var(--green)"><i class="fa-solid fa-check"></i> IN-LIBRARY</span>`;
         const ds = document.querySelector('.dest-section');
         if (ds) ds.style.display = 'none';
         // Update search result status if visible
@@ -529,7 +566,7 @@
           window._searchResults?.forEach((item, i) => {
             if (item.name === selectedResult.name) {
               const el = document.getElementById(`lib-${i}`);
-              if (el) el.innerHTML = '<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--green)"><i class="fa-solid fa-check"></i> IN LIBRARY</span>';
+              if (el) el.innerHTML = '<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--green)"><i class="fa-solid fa-check"></i> IN-LIBRARY</span>';
             }
           });
         }
@@ -549,5 +586,9 @@
     }
   }
 </script>
+<div id="imgOverlay" class="img-overlay" style="display:none" onclick="closeImageOverlay()">
+  <img id="imgOverlayImg" src="" alt="">
+</div>
+
 </body>
 </html>
