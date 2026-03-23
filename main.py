@@ -1614,6 +1614,213 @@ def file_movie(video: Path, movie: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Performer / Studio metadata scraper
+# ---------------------------------------------------------------------------
+
+TPDB_PERFORMER_SEARCH = "https://api.theporndb.net/performers"
+TPDB_PERFORMER_DETAIL = "https://api.theporndb.net/performers/{id}"
+TPDB_STUDIO_SEARCH    = "https://api.theporndb.net/sites"
+TPDB_STUDIO_DETAIL    = "https://api.theporndb.net/sites/{id}"
+
+FANSDB_PERFORMER_SEARCH_GQL = """
+query($name: String!) {
+  queryPerformers(input: { name: $name, page: 1, per_page: 10 }) {
+    performers { id name }
+  }
+}
+"""
+
+FANSDB_PERFORMER_DETAIL_GQL = """
+query($id: ID!) {
+  findPerformer(id: $id) {
+    name disambiguation aliases birth_date ethnicity country
+    images { url }
+  }
+}
+"""
+
+
+def _tpdb_headers() -> dict:
+    s = db.get_settings()
+    return {"Accept": "application/json",
+            "Authorization": f"Bearer {s.get('api_key_tpdb', '')}"}
+
+
+def _fansdb_gql(query: str, variables: dict) -> dict:
+    s = db.get_settings()
+    resp = requests.post(
+        FANSDB_ENDPOINT,
+        json={"query": query, "variables": variables},
+        headers={"Authorization": f"Bearer {s.get('api_key_fansdb', '')}",
+                 "Content-Type": "application/json"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json().get("data", {})
+
+
+def search_performers(name: str) -> list[dict]:
+    results = []
+    # ThePornDB
+    try:
+        resp = requests.get(TPDB_PERFORMER_SEARCH, params={"q": name},
+                            headers=_tpdb_headers(), timeout=15)
+        if resp.status_code == 200:
+            for p in (resp.json().get("data") or [])[:5]:
+                results.append({"source": "TPDB", "id": str(p["id"]), "name": p["name"],
+                                 "image": (p.get("posters") or [{}])[0].get("url")})
+    except Exception:
+        pass
+    # FansDB
+    try:
+        data = _fansdb_gql(FANSDB_PERFORMER_SEARCH_GQL, {"name": name})
+        for p in (data.get("queryPerformers") or {}).get("performers", []):
+            results.append({"source": "FansDB", "id": str(p["id"]), "name": p["name"]})
+    except Exception:
+        pass
+    return results
+
+
+def search_studios(name: str) -> list[dict]:
+    results = []
+    try:
+        resp = requests.get(TPDB_STUDIO_SEARCH, params={"q": name},
+                            headers=_tpdb_headers(), timeout=15)
+        if resp.status_code == 200:
+            for s in (resp.json().get("data") or [])[:10]:
+                results.append({"source": "TPDB", "id": str(s["id"]),
+                                 "name": s.get("name") or s.get("title", ""),
+                                 "image": s.get("logo") or s.get("poster")})
+    except Exception:
+        pass
+    return results
+
+
+def fetch_performer_detail(source: str, pid: str) -> dict | None:
+    if source == "TPDB":
+        try:
+            resp = requests.get(TPDB_PERFORMER_DETAIL.format(id=pid),
+                                headers=_tpdb_headers(), timeout=15)
+            if resp.status_code == 200:
+                return resp.json().get("data")
+        except Exception:
+            pass
+    elif source == "FansDB":
+        try:
+            data = _fansdb_gql(FANSDB_PERFORMER_DETAIL_GQL, {"id": pid})
+            p = data.get("findPerformer")
+            if p:
+                return {
+                    "name":    p.get("name"),
+                    "bio":     p.get("disambiguation") or "",
+                    "aliases": p.get("aliases", []),
+                    "posters": p.get("images", []),
+                    "extras":  {
+                        "birthday":    p.get("birth_date"),
+                        "ethnicity":   p.get("ethnicity"),
+                        "nationality": p.get("country"),
+                    }
+                }
+        except Exception:
+            pass
+    return None
+
+
+def fetch_studio_detail(source: str, sid: str) -> dict | None:
+    if source == "TPDB":
+        try:
+            resp = requests.get(TPDB_STUDIO_DETAIL.format(id=sid),
+                                headers=_tpdb_headers(), timeout=15)
+            if resp.status_code == 200:
+                return resp.json().get("data")
+        except Exception:
+            pass
+    return None
+
+
+def build_performer_tvshow_nfo(data: dict) -> str:
+    extras = data.get("extras") or {}
+    plot_parts = []
+    if data.get("bio"):
+        plot_parts.append(data["bio"].strip())
+    if data.get("aliases"):
+        plot_parts.append("AKA: " + ", ".join(data["aliases"]))
+    info = []
+    for key, label in [
+        ("birthday", "Birthday"), ("birthplace", "Birthplace"),
+        ("career_start_year", "Active Since"), ("ethnicity", "Ethnicity"),
+        ("nationality", "Nationality"), ("hair_colour", "Hair"),
+        ("height", "Height"), ("weight", "Weight"),
+        ("measurements", "Measurements"), ("tattoos", "Tattoos"),
+        ("piercings", "Piercings"),
+    ]:
+        if extras.get(key):
+            info.append(f"{label}: {extras[key]}")
+    if info:
+        plot_parts.append("\n".join(info))
+
+    root = ET.Element("tvshow")
+    ET.SubElement(root, "title").text  = data.get("name", "Unknown")
+    ET.SubElement(root, "plot").text   = "\n\n".join(plot_parts)
+    ET.SubElement(root, "mpaa").text   = "Adult"
+    ET.SubElement(root, "genre").text  = "Adult"
+    ET.SubElement(root, "tag").text    = "Porn"
+
+    posters = data.get("posters") or []
+    poster_url = None
+    if posters:
+        poster_url = posters[0].get("url") if isinstance(posters[0], dict) else posters[0]
+
+    actor = ET.SubElement(root, "actor")
+    ET.SubElement(actor, "name").text  = data.get("name", "Unknown")
+    if poster_url:
+        ET.SubElement(actor, "thumb").text = poster_url
+
+    year = (extras.get("career_start_year") or
+            (extras.get("birthday") or "")[:4] or "2000")
+    ET.SubElement(root, "premiered").text = f"{year}-01-01"
+    ET.SubElement(root, "year").text      = str(year)
+
+    tree = ET.ElementTree(root)
+    ET.indent(tree, space="  ")
+    buf = io.BytesIO()
+    tree.write(buf, encoding="utf-8", xml_declaration=True)
+    return buf.getvalue().decode("utf-8")
+
+
+def build_studio_tvshow_nfo(data: dict) -> str:
+    root = ET.Element("tvshow")
+    ET.SubElement(root, "title").text  = data.get("name") or data.get("title", "Unknown")
+    ET.SubElement(root, "plot").text   = data.get("description") or data.get("bio") or ""
+    ET.SubElement(root, "mpaa").text   = "Adult"
+    ET.SubElement(root, "genre").text  = "Adult"
+    ET.SubElement(root, "tag").text    = "Porn"
+    ET.SubElement(root, "studio").text = data.get("name") or data.get("title", "")
+
+    year = (data.get("year") or
+            (data.get("founded") or "")[:4] or "2000")
+    ET.SubElement(root, "premiered").text = f"{year}-01-01"
+    ET.SubElement(root, "year").text      = str(year)
+
+    tree = ET.ElementTree(root)
+    ET.indent(tree, space="  ")
+    buf = io.BytesIO()
+    tree.write(buf, encoding="utf-8", xml_declaration=True)
+    return buf.getvalue().decode("utf-8")
+
+
+def create_tvshow_folder(name: str, dest_dir: Path, nfo_content: str,
+                          poster_url: str = None) -> Path:
+    folder = dest_dir / name
+    folder.mkdir(parents=True, exist_ok=True)
+    nfo_path = folder / "tvshow.nfo"
+    nfo_path.write_text(nfo_content, encoding="utf-8")
+    if poster_url:
+        download_image(poster_url, folder / "poster.jpg")
+    return folder
+
+
+# ---------------------------------------------------------------------------
 # API routes
 # ---------------------------------------------------------------------------
 
@@ -2275,6 +2482,82 @@ async def watcher_status():
         "download_hold_secs":  int(s.get("download_watch_hold_secs", "300")),
         "download_pending":    dl_pending,
     }
+
+
+@app.get("/metadata", response_class=HTMLResponse)
+async def metadata_page():
+    with open("static/metadata.html") as f:
+        return f.read()
+
+
+@app.get("/api/metadata/search")
+async def metadata_search(q: str, type: str = "performer"):
+    if not q.strip():
+        return JSONResponse({"error": "Query required"}, status_code=400)
+    if type == "studio":
+        results = search_studios(q.strip())
+    else:
+        results = search_performers(q.strip())
+    return {"results": results}
+
+
+@app.post("/api/metadata/create")
+async def metadata_create(payload: dict):
+    """
+    Fetch full metadata and create tvshow.nfo + poster in the chosen directory.
+    Accepts: type (performer|studio), source (TPDB|FansDB), id, dest_dir
+    """
+    mtype   = payload.get("type", "performer")
+    source  = payload.get("source", "TPDB")
+    mid     = payload.get("id", "")
+    dest    = payload.get("dest_dir", "")
+
+    if not all([mid, dest]):
+        return JSONResponse({"error": "id and dest_dir required"}, status_code=400)
+
+    dest_path = Path(dest)
+    if not dest_path.exists():
+        return JSONResponse({"error": f"Directory not found: {dest}"}, status_code=404)
+
+    if mtype == "performer":
+        data = fetch_performer_detail(source, mid)
+        if not data:
+            return JSONResponse({"error": "Failed to fetch performer data"}, status_code=500)
+        name       = data.get("name", "Unknown")
+        nfo        = build_performer_tvshow_nfo(data)
+        posters    = data.get("posters") or []
+        poster_url = posters[0].get("url") if posters and isinstance(posters[0], dict) else (posters[0] if posters else None)
+    else:
+        data = fetch_studio_detail(source, mid)
+        if not data:
+            return JSONResponse({"error": "Failed to fetch studio data"}, status_code=500)
+        name       = data.get("name") or data.get("title", "Unknown")
+        nfo        = build_studio_tvshow_nfo(data)
+        poster_url = data.get("logo") or data.get("poster")
+
+    folder = create_tvshow_folder(name, dest_path, nfo, poster_url)
+    return {
+        "success":    True,
+        "name":       name,
+        "folder":     str(folder),
+        "has_poster": poster_url is not None,
+    }
+
+
+@app.get("/api/metadata/dirs")
+async def metadata_dirs():
+    """Return all configured library directories for the destination picker."""
+    s = db.get_settings()
+    dirs = []
+    for label, path in [
+        ("Series",   s.get("series_dir",   "")),
+        ("Features", s.get("features_dir", "")),
+    ]:
+        if path:
+            dirs.append({"label": label, "path": path})
+    for d in db.get_directories():
+        dirs.append({"label": d["label"], "path": d["path"]})
+    return {"dirs": dirs}
 
 
 @app.get("/api/log/stream")

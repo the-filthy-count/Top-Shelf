@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Metadata</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  @font-face { font-family: 'Acidoze'; src: url('/static/TELETYPE1945-1985.ttf') format('truetype'); }
+  @font-face { font-family: 'Seconds'; src: url('/static/RUBBERST.ttf') format('truetype'); }
+  :root {
+    --bg:      #0c0c0e;
+    --surface: rgba(19,19,23,0.75);
+    --raised:  rgba(26,26,32,0.8);
+    --border:  #222228;
+    --muted:   #3a3a44;
+    --text:    #e8e8f0;
+    --dim:     #6b6b7a;
+    --accent:  #c084fc;
+    --green:   #4ade80;
+    --amber:   #fbbf24;
+    --red:     #f87171;
+    --blue:    #60a5fa;
+    --mono:    'DM Mono', monospace;
+    --sans:    'Syne', sans-serif;
+    --acid:    'Acidoze', 'Syne', sans-serif;
+    --secs:    'Seconds', 'DM Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg) url('/static/background.jpg') center center / cover fixed;
+    color: var(--text); font-family: var(--mono); font-size: 13px;
+    line-height: 1.6; min-height: 100vh;
+  }
+  body::before { content: ''; position: fixed; inset: 0; background: rgba(12,12,14,0.72); z-index: 0; }
+  .app { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 24px 48px; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 28px 0 24px; border-bottom: 1px solid var(--border); margin-bottom: 28px;
+  }
+  .logo img { height: 36px; object-fit: contain; }
+  .nav-links { display: flex; gap: 8px; }
+  .btn-secondary { background: none; border: 1px solid var(--border); color: var(--dim); padding: 8px 12px; border-radius: 6px; font-size: 16px; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; }
+  .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+  .btn-primary { background: var(--accent); color: #0c0c0e; border: none; padding: 8px 14px; border-radius: 6px; font-size: 16px; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .active-nav { border-color: var(--accent) !important; color: var(--accent) !important; }
+
+  /* Layout */
+  .layout { display: grid; grid-template-columns: 380px 1fr; gap: 20px; }
+
+  /* Panel */
+  .panel {
+    background: linear-gradient(160deg, rgba(36,36,48,0.88) 0%, rgba(18,18,26,0.78) 100%);
+    border: none; border-radius: 10px; overflow: hidden;
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.25);
+  }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; }
+  .panel-title { font-family: var(--acid); font-size: 28px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; color: #fff; }
+  .panel-body { padding: 16px 18px; }
+  .empty { padding: 32px 18px; text-align: center; color: var(--dim); font-size: 12px; }
+
+  /* Type toggle */
+  .type-toggle { display: flex; gap: 0; margin-bottom: 16px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+  .type-btn { flex: 1; padding: 8px; background: none; border: none; color: var(--dim); font-family: var(--secs); font-size: 14px; letter-spacing: -0.02em; cursor: pointer; transition: all 0.15s; }
+  .type-btn.active { background: var(--accent); color: #0c0c0e; }
+
+  /* Search */
+  .search-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 12px; }
+  .field-input { background: var(--raised); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-family: var(--mono); font-size: 12px; width: 100%; outline: none; transition: border-color 0.15s; }
+  .field-input:focus { border-color: var(--accent); }
+  .field-input::placeholder { color: var(--muted); }
+  select.field-input { cursor: pointer; }
+
+  /* Results */
+  .result-item { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 8px; cursor: pointer; transition: background 0.15s; margin-bottom: 4px; }
+  .result-item:hover { background: rgba(255,255,255,0.04); }
+  .result-item.selected { background: rgba(192,132,252,0.1); border: 1px solid rgba(192,132,252,0.3); }
+  .result-thumb { width: 40px; height: 56px; object-fit: cover; border-radius: 4px; flex-shrink: 0; background: var(--raised); }
+  .result-thumb-placeholder { width: 40px; height: 56px; border-radius: 4px; flex-shrink: 0; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); }
+  .result-name { font-size: 13px; color: var(--text); }
+  .result-source { font-family: var(--secs); font-size: 11px; color: var(--dim); letter-spacing: -0.02em; }
+
+  /* Detail panel */
+  .detail-poster { width: 120px; height: 180px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+  .detail-poster-placeholder { width: 120px; height: 180px; border-radius: 8px; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 32px; flex-shrink: 0; }
+  .detail-info { flex: 1; min-width: 0; }
+  .detail-name { font-family: var(--acid); font-size: 28px; color: var(--text); margin-bottom: 8px; }
+  .detail-meta { font-size: 12px; color: var(--dim); line-height: 2; }
+  .detail-meta span { color: var(--text); }
+  .detail-bio { font-size: 12px; color: var(--dim); margin-top: 12px; line-height: 1.8; max-height: 120px; overflow-y: auto; }
+
+  /* Dest picker */
+  .dest-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .dest-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin-bottom: 8px; }
+  .dest-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .dest-btn { padding: 8px 12px; background: var(--raised); border: 1px solid var(--border); border-radius: 6px; color: var(--dim); font-family: var(--secs); font-size: 13px; letter-spacing: -0.02em; cursor: pointer; transition: all 0.15s; text-align: left; }
+  .dest-btn:hover { border-color: var(--muted); color: var(--text); }
+  .dest-btn.selected { border-color: var(--accent); color: var(--accent); background: rgba(192,132,252,0.08); }
+  .dest-custom { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
+
+  /* Result message */
+  .result-msg { margin-top: 16px; padding: 12px 16px; border-radius: 8px; font-size: 12px; display: none; }
+  .result-msg.success { background: rgba(74,222,128,0.1); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
+  .result-msg.error   { background: rgba(248,113,113,0.1); color: var(--red);   border: 1px solid rgba(248,113,113,0.2); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo"><img src="/static/logo.png" alt="Top-Shelf"></div>
+    <div class="nav-links">
+      <a href="/" style="text-decoration:none"><button class="btn-secondary" title="TV Series"><i class="fa-solid fa-tv"></i></button></a>
+      <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-film"></i></button></a>
+      <a href="/metadata" style="text-decoration:none"><button class="btn-secondary active-nav" title="Metadata"><i class="fa-solid fa-id-card"></i></button></a>
+      <a href="/history" style="text-decoration:none"><button class="btn-secondary" title="History"><i class="fa-solid fa-clock-rotate-left"></i></button></a>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- Search panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Search</span>
+      </div>
+      <div class="panel-body">
+        <div class="type-toggle">
+          <button class="type-btn active" id="btnPerformer" onclick="setType('performer')">Performer</button>
+          <button class="type-btn" id="btnStudio" onclick="setType('studio')">Studio</button>
+        </div>
+        <div class="search-row">
+          <input class="field-input" id="searchInput" type="text" placeholder="Name..." onkeydown="if(event.key==='Enter')runSearch()">
+          <button class="btn-primary" onclick="runSearch()"><i class="fa-solid fa-magnifying-glass"></i></button>
+        </div>
+        <div id="searchResults"><div class="empty">Search for a performer or studio</div></div>
+      </div>
+    </div>
+
+    <!-- Detail + create panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title" id="detailTitle">Details</span>
+      </div>
+      <div class="panel-body">
+        <div id="detailEmpty" class="empty">Select a result to preview details</div>
+        <div id="detailContent" style="display:none">
+          <div style="display:flex;gap:20px;margin-bottom:16px">
+            <div id="detailPoster"></div>
+            <div class="detail-info">
+              <div class="detail-name" id="detailName"></div>
+              <div class="detail-meta" id="detailMeta"></div>
+            </div>
+          </div>
+          <div class="detail-bio" id="detailBio"></div>
+
+          <div class="dest-section">
+            <div class="dest-label">Save to directory</div>
+            <div class="dest-grid" id="destGrid"></div>
+            <div class="dest-custom">
+              <input class="field-input" id="destCustom" type="text" placeholder="Or enter custom path...">
+              <button class="btn-secondary" onclick="clearDest()" title="Clear"><i class="fa-solid fa-x"></i></button>
+            </div>
+            <div style="margin-top:12px">
+              <button class="btn-primary" id="createBtn" onclick="createTvShow()" style="width:100%">
+                <i class="fa-solid fa-folder-plus"></i> Create TVShow folder
+              </button>
+            </div>
+            <div class="result-msg" id="resultMsg"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let currentType     = 'performer';
+  let selectedResult  = null;
+  let selectedDest    = null;
+
+  function esc(str) {
+    return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function setType(type) {
+    currentType = type;
+    document.getElementById('btnPerformer').classList.toggle('active', type === 'performer');
+    document.getElementById('btnStudio').classList.toggle('active', type === 'studio');
+    document.getElementById('searchResults').innerHTML = '<div class="empty">Search for a performer or studio</div>';
+    clearDetail();
+  }
+
+  async function runSearch() {
+    const q = document.getElementById('searchInput').value.trim();
+    if (!q) return;
+    const el = document.getElementById('searchResults');
+    el.innerHTML = '<div class="empty">Searching...</div>';
+    try {
+      const r = await fetch(`/api/metadata/search?q=${encodeURIComponent(q)}&type=${currentType}`);
+      const d = await r.json();
+      if (!d.results?.length) { el.innerHTML = '<div class="empty">No results found</div>'; return; }
+      el.innerHTML = d.results.map((item, i) => `
+        <div class="result-item" id="ri-${i}" onclick="selectResult(${i})">
+          ${item.image
+            ? `<img class="result-thumb" src="${esc(item.image)}" onerror="this.outerHTML='<div class=result-thumb-placeholder><i class=fa-solid fa-person></i></div>'">`
+            : `<div class="result-thumb-placeholder"><i class="fa-solid fa-${currentType === 'studio' ? 'clapperboard' : 'person'}"></i></div>`}
+          <div>
+            <div class="result-name">${esc(item.name)}</div>
+            <div class="result-source">${item.source}</div>
+          </div>
+        </div>`).join('');
+      window._searchResults = d.results;
+    } catch(e) {
+      el.innerHTML = `<div class="empty">Search failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function selectResult(idx) {
+    document.querySelectorAll('.result-item').forEach(el => el.classList.remove('selected'));
+    document.getElementById(`ri-${idx}`)?.classList.add('selected');
+    selectedResult = window._searchResults[idx];
+    showDetail(selectedResult);
+  }
+
+  function showDetail(item) {
+    document.getElementById('detailEmpty').style.display = 'none';
+    document.getElementById('detailContent').style.display = 'block';
+    document.getElementById('detailTitle').textContent = item.name;
+    document.getElementById('detailName').textContent = item.name;
+    document.getElementById('detailMeta').innerHTML = `<span>${item.source}</span> · ${item.id}`;
+    document.getElementById('detailBio').textContent = '';
+    document.getElementById('resultMsg').style.display = 'none';
+
+    // Poster
+    const posterEl = document.getElementById('detailPoster');
+    if (item.image) {
+      posterEl.innerHTML = `<img class="detail-poster" src="${esc(item.image)}" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-person></i></div>'">`;
+    } else {
+      posterEl.innerHTML = `<div class="detail-poster-placeholder"><i class="fa-solid fa-${currentType === 'studio' ? 'clapperboard' : 'person'}"></i></div>`;
+    }
+
+    loadDirs();
+  }
+
+  function clearDetail() {
+    selectedResult = null;
+    document.getElementById('detailEmpty').style.display = 'block';
+    document.getElementById('detailContent').style.display = 'none';
+    document.getElementById('detailTitle').textContent = 'Details';
+  }
+
+  async function loadDirs() {
+    try {
+      const r = await fetch('/api/metadata/dirs');
+      const d = await r.json();
+      const grid = document.getElementById('destGrid');
+      grid.innerHTML = d.dirs.map(dir => `
+        <button class="dest-btn" onclick="selectDest('${esc(dir.path)}', this)" title="${esc(dir.path)}">
+          ${esc(dir.label)}
+        </button>`).join('');
+    } catch {}
+  }
+
+  function selectDest(path, btn) {
+    selectedDest = path;
+    document.querySelectorAll('.dest-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    document.getElementById('destCustom').value = '';
+  }
+
+  function clearDest() {
+    selectedDest = null;
+    document.getElementById('destCustom').value = '';
+    document.querySelectorAll('.dest-btn').forEach(b => b.classList.remove('selected'));
+  }
+
+  async function createTvShow() {
+    if (!selectedResult) { alert('Select a result first'); return; }
+    const dest = document.getElementById('destCustom').value.trim() || selectedDest;
+    if (!dest) { alert('Choose a destination directory'); return; }
+
+    const btn = document.getElementById('createBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating...';
+
+    try {
+      const r = await fetch('/api/metadata/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          type:     currentType,
+          source:   selectedResult.source,
+          id:       selectedResult.id,
+          dest_dir: dest,
+        }),
+      });
+      const d = await r.json();
+      const msg = document.getElementById('resultMsg');
+      if (d.success) {
+        msg.className = 'result-msg success';
+        msg.textContent = `✓ Created: ${d.folder}${d.has_poster ? ' · poster downloaded' : ''}`;
+        msg.style.display = 'block';
+      } else {
+        msg.className = 'result-msg error';
+        msg.textContent = `Error: ${d.error}`;
+        msg.style.display = 'block';
+      }
+    } catch(e) {
+      const msg = document.getElementById('resultMsg');
+      msg.className = 'result-msg error';
+      msg.textContent = `Error: ${e.message}`;
+      msg.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-folder-plus"></i> Create TVShow folder';
+    }
+  }
+</script>
+</body>
+</html>
