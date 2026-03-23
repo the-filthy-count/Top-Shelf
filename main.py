@@ -157,7 +157,7 @@ app = FastAPI(title="Top-Shelf")
 
 COOKIE_NAME   = "ts_session"
 LOGIN_PATH    = "/login"
-PUBLIC_PATHS  = {"/login", "/api/auth/login", "/api/auth/logout", "/api/scenes/test", "/api/prowlarr/debug"}
+PUBLIC_PATHS  = {"/login", "/api/auth/login", "/api/auth/logout"}
 
 
 def _is_authenticated(request: Request) -> bool:
@@ -1889,14 +1889,19 @@ def prowlarr_search(query: str) -> list[dict]:
     try:
         resp = requests.get(
             f"{base}/api/v1/search",
-            params={"query": query, "type": "search"},
+            params={"query": query},
             headers=_prowlarr_headers(),
             timeout=20,
         )
         resp.raise_for_status()
         results = resp.json()
+        # Sort: NZBs first (usenet), then torrents by seeders
+        nzbs     = [r for r in results if r.get("protocol") == "usenet"]
+        torrents = sorted([r for r in results if r.get("protocol") != "usenet"],
+                          key=lambda x: x.get("seeders") or 0, reverse=True)
+        sorted_results = nzbs + torrents
         out = []
-        for r in results[:25]:
+        for r in sorted_results[:30]:
             out.append({
                 "guid":        r.get("guid", ""),
                 "title":       r.get("title", ""),
@@ -2839,28 +2844,6 @@ async def metadata_create(payload: dict):
     }
 
 
-@app.get("/api/scenes/test")
-async def scenes_test():
-    """Quick TPDB connectivity test - no auth required."""
-    s = db.get_settings()
-    key = s.get("api_key_tpdb", "")
-    if not key:
-        return {"error": "No TPDB API key configured"}
-    try:
-        resp = requests.get(
-            "https://api.theporndb.net/performers/83401/scenes",
-            params={"page": 1, "per_page": 3},
-            headers={"Accept": "application/json", "Authorization": f"Bearer {key}"},
-            timeout=15,
-        )
-        data = resp.json()
-        return {"status": resp.status_code, "data_type": type(data.get("data")).__name__,
-                "data_len": len(data.get("data") or []),
-                "first_keys": list(data["data"][0].keys()) if data.get("data") else []}
-    except Exception as e:
-        return {"error": str(e)}
-
-
 @app.get("/api/scenes/recent")
 async def scenes_recent(source: str, id: str, type: str = "performer", slug: str = ""):
     """Get recent scenes for a performer or studio from TPDB."""
@@ -2909,27 +2892,6 @@ async def scenes_recent(source: str, id: str, type: str = "performer", slug: str
         except Exception:
             pass
     return {"scenes": []}
-
-
-@app.get("/api/prowlarr/debug")
-async def prowlarr_debug(q: str = "ariana marie"):
-    """Debug endpoint - returns raw protocol fields from Prowlarr."""
-    base = _prowlarr_url()
-    if not base:
-        return {"error": "Prowlarr not configured"}
-    try:
-        resp = requests.get(f"{base}/api/v1/search",
-                            params={"query": q, "type": "search"},
-                            headers=_prowlarr_headers(), timeout=20)
-        resp.raise_for_status()
-        results = resp.json()
-        return {"count": len(results),
-                "sample": [{"title": r.get("title","")[:50],
-                             "protocol": r.get("protocol"),
-                             "seeders": r.get("seeders"),
-                             "indexer": r.get("indexer","")} for r in results[:10]]}
-    except Exception as e:
-        return {"error": str(e)}
 
 
 @app.get("/api/prowlarr/search")
