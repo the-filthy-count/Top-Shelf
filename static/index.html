@@ -320,6 +320,7 @@
       <a href="/" style="text-decoration:none"><button class="btn-secondary" title="TV Series"><i class="fa-solid fa-tv"></i></button></a>
       <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-film"></i></button></a>
       <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library Health"><i class="fa-solid fa-house-medical"></i></button></a>
+      <a href="/metadata" style="text-decoration:none"><button class="btn-secondary" title="Metadata"><i class="fa-solid fa-id-card"></i></button></a>
       <button class="btn-secondary" onclick="openSettings()" title="Settings"><i class="fa-solid fa-gear"></i></button>
     </div>
   </header>
@@ -931,6 +932,7 @@
       window._queueFiles = d.files;
       list.innerHTML = d.files.map((f, i) => `
         <div class="queue-item" id="qi-${i}">
+          <span class="status-dot-queue ${f.prev_status || 'none'}"></span>
           <span class="queue-filename" title="${f.filename.replace(/"/g,'&quot;')}">${f.filename}</span>
           <div class="queue-meta">
             <span class="badge badge-size">${f.size_mb} MB</span>
