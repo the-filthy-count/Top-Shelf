@@ -1906,7 +1906,7 @@ def prowlarr_search(query: str) -> list[dict]:
                 "age":         r.get("ageHours"),
                 "download_url": r.get("downloadUrl", ""),
                 "magnet":      r.get("magnetUrl", ""),
-                "type":        "torrent" if r.get("seeders") is not None else "nzb",
+                "type":        "torrent" if r.get("protocol", "") == "torrent" or (r.get("protocol", "") == "" and r.get("seeders") is not None) else "nzb",
                 "indexer_id":  r.get("indexerId"),
             })
         return out

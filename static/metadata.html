@@ -378,8 +378,9 @@
   }
 
   function searchScene(scene) {
-    // Build search query from scene title + studio
-    const q = [scene.title, scene.studio].filter(Boolean).join(' ');
+    // Build search query from performer + title (most useful for NZB/torrent searches)
+    const performer = selectedResult?.name || '';
+    const q = [performer, scene.title].filter(Boolean).join(' ');
     document.getElementById('prowlarrQuery').value = q;
     document.getElementById('prowlarrSection').style.display = 'block';
     document.getElementById('prowlarrSection').scrollIntoView({behavior:'smooth', block:'start'});
