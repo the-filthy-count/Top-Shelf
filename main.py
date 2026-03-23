@@ -1445,15 +1445,17 @@ async def get_queue():
         if not (source_dir / fname).exists():
             db.update_file(fname, status="removed")
 
-    filed = {r["filename"] for r in db.get_history(limit=10000) if r["status"] == "filed"}
+    history = {r["filename"]: r["status"] for r in db.get_history(limit=10000)}
     files = []
     for f in sorted(source_dir.iterdir()):
         if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
+            prev_status = history.get(f.name)
             files.append({
-                "filename": f.name,
-                "size_mb": round(f.stat().st_size / 1024 / 1024, 1),
-                "has_phash": db.get_phash(f.name) is not None,
-                "previously_filed": f.name in filed,
+                "filename":         f.name,
+                "size_mb":          round(f.stat().st_size / 1024 / 1024, 1),
+                "has_phash":        db.get_phash(f.name) is not None,
+                "previously_filed": prev_status == "filed",
+                "prev_status":      prev_status,
             })
     return {"files": files, "source_dir": str(source_dir)}
 

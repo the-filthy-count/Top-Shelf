@@ -118,6 +118,10 @@
   .queue-item:hover { background: rgba(255,255,255,0.02); }
   .queue-item.active { background: rgba(192,132,252,0.06); border-left: 2px solid var(--accent); }
   .queue-filename { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .queue-filename.status-filed      { color: var(--green); }
+  .queue-filename.status-unmatched  { color: var(--amber); }
+  .queue-filename.status-no_dir     { color: var(--blue); }
+  .queue-filename.status-error      { color: var(--red); }
   .queue-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .badge { font-family: var(--secs); font-size: 11px; padding: 2px 7px; border-radius: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
   .badge-cached { background: none; border: none; color: var(--blue); font-family: var(--secs); font-size: 16px; padding: 0 4px; letter-spacing: -0.02em; }
