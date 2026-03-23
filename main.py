@@ -157,7 +157,7 @@ app = FastAPI(title="Top-Shelf")
 
 COOKIE_NAME   = "ts_session"
 LOGIN_PATH    = "/login"
-PUBLIC_PATHS  = {"/login", "/api/auth/login", "/api/auth/logout"}
+PUBLIC_PATHS  = {"/login", "/api/auth/login", "/api/auth/logout", "/api/scenes/test"}
 
 
 def _is_authenticated(request: Request) -> bool:
@@ -1906,7 +1906,8 @@ def prowlarr_search(query: str) -> list[dict]:
                 "age":         r.get("ageHours"),
                 "download_url": r.get("downloadUrl", ""),
                 "magnet":      r.get("magnetUrl", ""),
-                "type":        "torrent" if r.get("protocol", "") == "torrent" or (r.get("protocol", "") == "" and r.get("seeders") is not None) else "nzb",
+                "protocol":    r.get("protocol", "torrent"),
+                "type":        "torrent" if r.get("protocol", "torrent") == "torrent" else "nzb",
                 "indexer_id":  r.get("indexerId"),
             })
         return out
@@ -1916,36 +1917,45 @@ def prowlarr_search(query: str) -> list[dict]:
 
 def prowlarr_grab(guid: str, indexer_id: int, is_torrent: bool) -> dict:
     """Send a result to the configured download client via Prowlarr."""
-    s   = db.get_settings()
+    s    = db.get_settings()
     base = _prowlarr_url()
     if not base:
         return {"error": "Prowlarr URL not configured"}
     client_name = s.get("prowlarr_torrent_client" if is_torrent else "prowlarr_nzb_client", "")
-    category    = s.get("prowlarr_category", "Top-Shelf")
     try:
-        payload = {
-            "guid":          guid,
-            "indexerId":     indexer_id,
-            "downloadClientId": None,
-        }
+        # Resolve download client ID from name if configured
+        download_client_id = None
         if client_name:
-            # Look up client ID from name
-            clients_resp = requests.get(f"{base}/api/v1/downloadclient",
-                                        headers=_prowlarr_headers(), timeout=10)
-            clients_resp.raise_for_status()
-            for c in clients_resp.json():
-                if c.get("name") == client_name:
-                    payload["downloadClientId"] = c["id"]
-                    break
+            try:
+                cr = requests.get(f"{base}/api/v1/downloadclient",
+                                   headers=_prowlarr_headers(), timeout=10)
+                cr.raise_for_status()
+                for c in cr.json():
+                    if c.get("name") == client_name:
+                        download_client_id = c["id"]
+                        break
+            except Exception:
+                pass
+
+        # Prowlarr grab endpoint
+        payload = {"guid": guid, "indexerId": indexer_id}
+        if download_client_id:
+            payload["downloadClientId"] = download_client_id
+
         resp = requests.post(
             f"{base}/api/v1/search",
-            json={"guid": guid, "indexerId": indexer_id, "categories": [category]},
+            json=payload,
             headers=_prowlarr_headers(),
             timeout=15,
         )
-        if resp.status_code in (200, 201, 202):
+        if resp.status_code in (200, 201, 202, 204):
             return {"ok": True}
-        return {"error": f"Prowlarr returned {resp.status_code}"}
+        # Return Prowlarr's error message for debugging
+        try:
+            err_detail = resp.json()
+        except Exception:
+            err_detail = resp.text[:200]
+        return {"error": f"Prowlarr returned {resp.status_code}: {err_detail}"}
     except Exception as e:
         return {"error": str(e)}
 
@@ -2827,6 +2837,28 @@ async def metadata_create(payload: dict):
         "folder":     str(folder),
         "has_poster": poster_url is not None,
     }
+
+
+@app.get("/api/scenes/test")
+async def scenes_test():
+    """Quick TPDB connectivity test - no auth required."""
+    s = db.get_settings()
+    key = s.get("api_key_tpdb", "")
+    if not key:
+        return {"error": "No TPDB API key configured"}
+    try:
+        resp = requests.get(
+            "https://api.theporndb.net/performers/83401/scenes",
+            params={"page": 1, "per_page": 3},
+            headers={"Accept": "application/json", "Authorization": f"Bearer {key}"},
+            timeout=15,
+        )
+        data = resp.json()
+        return {"status": resp.status_code, "data_type": type(data.get("data")).__name__,
+                "data_len": len(data.get("data") or []),
+                "first_keys": list(data["data"][0].keys()) if data.get("data") else []}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @app.get("/api/scenes/recent")

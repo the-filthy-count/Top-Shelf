@@ -412,7 +412,7 @@
           <span class="sr-size">${r.size_mb > 1024 ? (r.size_mb/1024).toFixed(1) + ' GB' : r.size_mb + ' MB'}</span>
           <button class="btn-grab ${r.type === 'nzb' ? 'nzb' : ''}"
             onclick="grabResult(${JSON.stringify(r).replace(/"/g,'&quot;')})">
-            <i class="fa-solid fa-download"></i> ${r.type.toUpperCase()}
+            <i class="fa-solid fa-download"></i> ${r.type === 'nzb' ? 'NZB' : 'TORRENT'}
           </button>
         </div>`).join('');
     } catch(e) {
