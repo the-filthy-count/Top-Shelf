@@ -1881,56 +1881,46 @@ def _prowlarr_url() -> str:
     return s.get("prowlarr_url", "").rstrip("/")
 
 
-def _prowlarr_search_one(base: str, query: str, indexer_id: int) -> list:
-    """Single Prowlarr search call for one indexer group."""
-    try:
-        resp = requests.get(
-            f"{base}/api/v1/search",
-            params=[("query", query), ("indexerIds", indexer_id)],
-            headers=_prowlarr_headers(),
-            timeout=25,
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            return data if isinstance(data, list) else []
-    except Exception:
-        pass
-    return []
-
-
 def prowlarr_search(query: str) -> list[dict]:
-    """Search Prowlarr for a query string - queries usenet and torrents separately."""
+    """Search Prowlarr for a query string."""
     base = _prowlarr_url()
     if not base:
         return []
-
-    # Query usenet (-1) and torrents (-2) separately to ensure both are included
-    usenet_raw   = _prowlarr_search_one(base, query, -1)
-    torrent_raw  = _prowlarr_search_one(base, query, -2)
-
-    # Sort usenet by age (newest first), torrents by seeders
-    usenet_raw  = sorted(usenet_raw,  key=lambda x: x.get("ageHours") or 0)
-    torrent_raw = sorted(torrent_raw, key=lambda x: x.get("seeders") or 0, reverse=True)
-
-    # Interleave: NZBs first, then torrents
-    combined = usenet_raw[:15] + torrent_raw[:15]
-
-    out = []
-    for r in combined:
-        out.append({
-            "guid":        r.get("guid", ""),
-            "title":       r.get("title", ""),
-            "indexer":     r.get("indexer", ""),
-            "size_mb":     round((r.get("size") or 0) / 1024 / 1024, 0),
-            "seeders":     r.get("seeders"),
-            "age":         r.get("ageHours"),
-            "download_url": r.get("downloadUrl", ""),
-            "magnet":      r.get("magnetUrl", ""),
-            "protocol":    r.get("protocol", "torrent"),
-            "type":        "torrent" if r.get("protocol", "torrent") == "torrent" else "nzb",
-            "indexer_id":  r.get("indexerId"),
-        })
-    return out
+    try:
+        resp = requests.get(
+            f"{base}/api/v1/search",
+            params={"query": query},
+            headers=_prowlarr_headers(),
+            timeout=25,
+        )
+        if resp.status_code != 200:
+            return []
+        results = resp.json()
+        if not isinstance(results, list):
+            return []
+        nzbs     = sorted([r for r in results if r.get("protocol") == "usenet"],
+                          key=lambda x: x.get("ageHours") or 0)
+        torrents = sorted([r for r in results if r.get("protocol") != "usenet"],
+                          key=lambda x: x.get("seeders") or 0, reverse=True)
+        combined = nzbs[:15] + torrents[:15]
+        out = []
+        for r in combined:
+            out.append({
+                "guid":         r.get("guid", ""),
+                "title":        r.get("title", ""),
+                "indexer":      r.get("indexer", ""),
+                "size_mb":      round((r.get("size") or 0) / 1024 / 1024, 0),
+                "seeders":      r.get("seeders"),
+                "age":          r.get("ageHours"),
+                "download_url": r.get("downloadUrl", ""),
+                "magnet":       r.get("magnetUrl", ""),
+                "protocol":     r.get("protocol", "torrent"),
+                "type":         "torrent" if r.get("protocol", "torrent") == "torrent" else "nzb",
+                "indexer_id":   r.get("indexerId"),
+            })
+        return out
+    except Exception:
+        return []
 
 
 def prowlarr_grab(guid: str, indexer_id: int, is_torrent: bool) -> dict:
