@@ -234,7 +234,7 @@
 
 <!-- Prowlarr results panel -->
 <div id="prowlarrSection" style="display:none;max-width:1400px;margin:0 auto;padding:0 24px 28px;position:relative;z-index:1">
-  <div class="panel">
+  <div class="panel" style="overflow:visible">
     <div class="panel-header">
       <span class="panel-title">Search Results</span>
       <div style="display:flex;align-items:center;gap:8px">
@@ -243,7 +243,7 @@
         <button class="btn-secondary" onclick="document.getElementById('prowlarrSection').style.display='none'"><i class="fa-solid fa-x"></i></button>
       </div>
     </div>
-    <div id="prowlarrResults"><div class="empty">No results yet</div></div>
+    <div id="prowlarrResults" style="max-height:600px;overflow-y:auto"><div class="empty">No results yet</div></div>
   </div>
 </div>
 
