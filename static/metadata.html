@@ -147,7 +147,10 @@
 <body>
 <div class="app">
   <header>
-    <div style="display:flex;flex-direction:column;gap:3px"><div class="logo"><img src="/static/logo.png" alt="Top-Shelf"></div><span style="font-family:'DM Mono',monospace;font-size:10px;color:#6b6b7a;letter-spacing:0.06em;text-align:center">v1.0.8</span></div>
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <div class="logo"><img src="/static/logo.png" alt="Top-Shelf"></div>
+      <span style="font-family:'DM Mono',monospace;font-size:10px;color:#6b6b7a;letter-spacing:0.06em;text-align:center">v1.0.8</span>
+    </div>
     <div class="nav-links">
       <a href="/" style="text-decoration:none"><button class="btn-secondary" title="TV Series"><i class="fa-solid fa-tv"></i></button></a>
       <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-film"></i></button></a>
@@ -156,47 +159,47 @@
     </div>
   </header>
 
+  <!-- Top row: fixed height, two equal columns -->
   <div class="layout">
 
     <!-- Search panel -->
-    <div class="panel">
-      <div class="panel-header">
+    <div class="panel" style="height:460px;display:flex;flex-direction:column">
+      <div class="panel-header" style="flex-shrink:0">
         <span class="panel-title">Search</span>
       </div>
-      <div class="panel-body">
-        <div class="type-toggle">
+      <div class="panel-body" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+        <div class="type-toggle" style="flex-shrink:0">
           <button class="type-btn active" id="btnPerformer" onclick="setType('performer')">Performer</button>
           <button class="type-btn" id="btnStudio" onclick="setType('studio')">Studio</button>
         </div>
-        <div class="search-row">
+        <div class="search-row" style="flex-shrink:0">
           <input class="field-input" id="searchInput" type="text" placeholder="Name..." onkeydown="if(event.key==='Enter')runSearch()">
           <button class="btn-primary" onclick="runSearch()"><i class="fa-solid fa-magnifying-glass"></i></button>
         </div>
-        <div class="search-panel-inner" id="searchResults"><div class="empty">Search for a performer or studio</div></div>
+        <div id="searchResults" style="flex:1;overflow-y:auto;margin-top:4px">
+          <div class="empty">Search for a performer or studio</div>
+        </div>
       </div>
     </div>
 
-    <!-- Right column -->
-    <div class="right-col">
-    <!-- Detail + create panel -->
-    <div class="panel">
-      <div class="panel-header">
+    <!-- Detail panel -->
+    <div class="panel" style="height:460px;display:flex;flex-direction:column">
+      <div class="panel-header" style="flex-shrink:0">
         <div style="display:flex;align-items:center;gap:12px">
           <span class="panel-title" id="detailTitle">Details</span>
           <span id="detailLibStatus" style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em"></span>
         </div>
       </div>
-      <div class="panel-body">
+      <div class="panel-body" style="flex:1;overflow-y:auto">
         <div id="detailEmpty" class="empty">Select a result to preview details</div>
         <div id="detailContent" style="display:none">
           <div style="display:flex;gap:20px;margin-bottom:16px;align-items:flex-start">
             <div id="detailPoster" style="flex-shrink:0"></div>
-            <div class="detail-info" style="flex:1;min-width:0">
+            <div style="flex:1;min-width:0">
               <div class="detail-meta" id="detailMeta"></div>
               <div class="detail-bio" id="detailBio" style="margin-top:6px"></div>
             </div>
           </div>
-
           <div class="dest-section">
             <div class="dest-label">Save to directory</div>
             <div class="dest-grid" id="destGrid"></div>
@@ -218,7 +221,7 @@
   </div>
 </div>
 
-<!-- Scenes panel -->
+<!-- Scenes panel - full width below -->
 <div id="scenesSection" style="display:none;max-width:1400px;margin:0 auto;padding:0 24px 20px;position:relative;z-index:1">
   <div class="panel">
     <div class="panel-header">
