@@ -1896,7 +1896,7 @@ def prowlarr_search(query: str) -> list[dict]:
         resp.raise_for_status()
         results = resp.json()
         out = []
-        for r in results[:15]:
+        for r in results[:25]:
             out.append({
                 "guid":        r.get("guid", ""),
                 "title":       r.get("title", ""),

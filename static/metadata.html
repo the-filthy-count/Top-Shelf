@@ -402,16 +402,16 @@
       const d = await r.json();
       if (d.error) { el.innerHTML = `<div class="empty">${esc(d.error)}</div>`; return; }
       if (!d.results?.length) { el.innerHTML = '<div class="empty">No results found</div>'; return; }
-      el.innerHTML = d.results.map(r => `
+      window._prowlarrResults = d.results;
+      el.innerHTML = d.results.map((r, i) => `
         <div class="search-result">
           <div>
             <div class="sr-title" title="${esc(r.title)}">${esc(r.title)}</div>
-            <div class="sr-meta">${r.age ? Math.round(r.age/24) + 'd ago' : ''} ${r.seeders !== null ? '· ' + r.seeders + ' seeders' : ''}</div>
+            <div class="sr-meta">${r.age ? Math.round(r.age/24) + 'd ago' : ''} ${r.seeders != null && r.seeders !== undefined ? '· ' + r.seeders + ' seeders' : ''}</div>
           </div>
           <span class="sr-indexer">${esc(r.indexer)}</span>
           <span class="sr-size">${r.size_mb > 1024 ? (r.size_mb/1024).toFixed(1) + ' GB' : r.size_mb + ' MB'}</span>
-          <button class="btn-grab ${r.type === 'nzb' ? 'nzb' : ''}"
-            onclick="grabResult(${JSON.stringify(r).replace(/"/g,'&quot;')})">
+          <button class="btn-grab ${r.type === 'nzb' ? 'nzb' : ''}" onclick="grabResult(${i})">
             <i class="fa-solid fa-download"></i> ${r.type === 'nzb' ? 'NZB' : 'TORRENT'}
           </button>
         </div>`).join('');
@@ -420,7 +420,8 @@
     }
   }
 
-  async function grabResult(result) {
+  async function grabResult(idx) {
+    const result = window._prowlarrResults[idx];
     const btn = event.target.closest('button');
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
