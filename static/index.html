@@ -946,7 +946,7 @@
       const r = await fetch('/api/queue');
       const d = await r.json();
       const list = document.getElementById('queueList');
-      document.getElementById('queueCount').textContent = d.files?.length ? `-${d.files.length}-` : '';
+      const qc = document.getElementById('queueCount'); qc.textContent = d.files?.length ? `-${d.files.length}-` : ''; qc.style.color = '#d4cfc4';
       if (d.error) { list.innerHTML = `<div class="empty">${d.error}</div>`; return; }
       if (!d.files.length) { list.innerHTML = '<div class="empty">No files in queue</div>'; return; }
       // Store files array for index-based access from onclick handlers
@@ -1060,6 +1060,12 @@
     document.getElementById('cfgKeyFansdb').value        = s.api_key_fansdb    || '';
 
     renderDirList();
+    // Load auth status
+    try {
+      const ra = await fetch('/api/auth/status');
+      const da = await ra.json();
+      document.getElementById('cfgSessionHours').value = da.session_hours || 24;
+    } catch {}
     document.getElementById('settingsModal').classList.add('open');
   }
 
@@ -1699,16 +1705,7 @@
     setTimeout(() => msg.style.display = 'none', 3000);
   }
 
-  // Load auth status when settings open
-  const _origOpenSettings = openSettings;
-  async function openSettings() {
-    await _origOpenSettings();
-    try {
-      const r = await fetch('/api/auth/status');
-      const d = await r.json();
-      document.getElementById('cfgSessionHours').value = d.session_hours || 24;
-    } catch {}
-  }
+
 
   // ── Download folder ──────────────────────────────────────────────────
 

@@ -87,8 +87,8 @@
   .result-source { font-family: var(--secs); font-size: 11px; color: var(--dim); letter-spacing: -0.02em; }
 
   /* Detail panel */
-  .detail-poster { width: 120px; height: 180px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
-  .detail-poster-placeholder { width: 120px; height: 180px; border-radius: 8px; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 32px; flex-shrink: 0; }
+  .detail-poster { max-height: 200px; max-width: 300px; width: auto; height: auto; object-fit: contain; border-radius: 8px; flex-shrink: 0; display: block; }
+  .detail-poster-placeholder { width: 80px; height: 80px; border-radius: 8px; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 32px; flex-shrink: 0; }
   .detail-info { flex: 1; min-width: 0; }
   .detail-name { font-family: var(--acid); font-size: 28px; color: var(--text); margin-bottom: 8px; }
   .detail-meta { font-size: 12px; color: var(--dim); line-height: 2; }
@@ -113,7 +113,7 @@
 <body>
 <div class="app">
   <header>
-    <div style="display:flex;flex-direction:column;gap:3px"><div class="logo"><img src="/static/logo.png" alt="Top-Shelf"></div><span style="font-family:'DM Mono',monospace;font-size:10px;color:#6b6b7a;letter-spacing:0.06em;text-align:center">v1.0.4</span></div>
+    <div style="display:flex;flex-direction:column;gap:3px"><div class="logo"><img src="/static/logo.png" alt="Top-Shelf"></div><span style="font-family:'DM Mono',monospace;font-size:10px;color:#6b6b7a;letter-spacing:0.06em;text-align:center">v1.0.5</span></div>
     <div class="nav-links">
       <a href="/" style="text-decoration:none"><button class="btn-secondary" title="TV Series"><i class="fa-solid fa-tv"></i></button></a>
       <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-film"></i></button></a>
@@ -150,14 +150,13 @@
       <div class="panel-body">
         <div id="detailEmpty" class="empty">Select a result to preview details</div>
         <div id="detailContent" style="display:none">
-          <div style="display:flex;gap:20px;margin-bottom:16px">
-            <div id="detailPoster"></div>
-            <div class="detail-info">
-              <div class="detail-name" id="detailName"></div>
+          <div style="display:flex;gap:20px;margin-bottom:16px;align-items:flex-start">
+            <div id="detailPoster" style="flex-shrink:0"></div>
+            <div class="detail-info" style="flex:1;min-width:0">
               <div class="detail-meta" id="detailMeta"></div>
+              <div class="detail-bio" id="detailBio" style="margin-top:8px"></div>
             </div>
           </div>
-          <div class="detail-bio" id="detailBio"></div>
 
           <div class="dest-section">
             <div class="dest-label">Save to directory</div>
@@ -233,8 +232,7 @@
     document.getElementById('detailEmpty').style.display = 'none';
     document.getElementById('detailContent').style.display = 'block';
     document.getElementById('detailTitle').textContent = item.name;
-    document.getElementById('detailName').textContent = item.name;
-    document.getElementById('detailMeta').innerHTML = `<span>${item.source}</span> · ${item.id}`;
+    document.getElementById('detailMeta').innerHTML = `<span style="color:var(--dim);font-size:11px">${item.source}</span>`;
     document.getElementById('detailBio').textContent = 'Loading...';
     document.getElementById('resultMsg').style.display = 'none';
 
@@ -269,8 +267,7 @@
       if (d.image) {
         posterEl.innerHTML = `<img class="detail-poster" src="${esc(d.image)}" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-${icon}></i></div>'">`;
       }
-      if (d.bio) document.getElementById('detailBio').textContent = d.bio;
-      else document.getElementById('detailBio').textContent = '';
+      document.getElementById('detailBio').textContent = d.bio || '';
       if (d.meta) document.getElementById('detailMeta').innerHTML = d.meta;
     } catch {
       document.getElementById('detailBio').textContent = '';

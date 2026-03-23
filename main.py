@@ -42,7 +42,7 @@ import database as db
 # Constants
 # ---------------------------------------------------------------------------
 
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".wmv", ".mov", ".m4v", ".flv", ".webm"}
 
