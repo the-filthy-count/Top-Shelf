@@ -1746,7 +1746,11 @@ def fetch_performer_detail(source: str, pid: str) -> dict | None:
             resp = requests.get(TPDB_PERFORMER_DETAIL.format(id=pid),
                                 headers=_tpdb_headers(), timeout=15)
             if resp.status_code == 200:
-                return resp.json().get("data")
+                data = resp.json().get("data")
+                if data:
+                    emit(f"TPDB detail keys: {list(data.keys())[:20]}")
+                    emit(f"TPDB slug fields: id={data.get('id')} _id={data.get('_id')} slug={data.get('slug')} url={str(data.get('url',''))[:60]}")
+                return data
         except Exception:
             pass
     elif source == "FansDB":
@@ -2853,10 +2857,12 @@ async def scenes_recent(source: str, id: str, type: str = "performer", slug: str
                 continue
             payload  = resp.json()
             data_raw = payload.get("data")
-            emit(f"SCENES data type={__builtins__['type'](data_raw).__name__ if isinstance(__builtins__, dict) else str(data_raw)[:80]}")
+            emit(f"SCENES data type={data_raw.__class__.__name__} len={len(data_raw) if isinstance(data_raw, list) else 'n/a'}")
             if not isinstance(data_raw, list):
                 emit(f"SCENES unexpected data: {str(data_raw)[:120]}")
                 continue
+            if data_raw:
+                emit(f"SCENES first item keys: {list(data_raw[0].keys()) if isinstance(data_raw[0], dict) else str(data_raw[0])[:120]}")
             out = []
             for s in data_raw:
                 posters = s.get("posters") or []
