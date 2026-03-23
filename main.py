@@ -157,7 +157,7 @@ app = FastAPI(title="Top-Shelf")
 
 COOKIE_NAME   = "ts_session"
 LOGIN_PATH    = "/login"
-PUBLIC_PATHS  = {"/login", "/api/auth/login", "/api/auth/logout", "/api/scenes/test"}
+PUBLIC_PATHS  = {"/login", "/api/auth/login", "/api/auth/logout", "/api/scenes/test", "/api/prowlarr/debug"}
 
 
 def _is_authenticated(request: Request) -> bool:
@@ -2909,6 +2909,27 @@ async def scenes_recent(source: str, id: str, type: str = "performer", slug: str
         except Exception:
             pass
     return {"scenes": []}
+
+
+@app.get("/api/prowlarr/debug")
+async def prowlarr_debug(q: str = "ariana marie"):
+    """Debug endpoint - returns raw protocol fields from Prowlarr."""
+    base = _prowlarr_url()
+    if not base:
+        return {"error": "Prowlarr not configured"}
+    try:
+        resp = requests.get(f"{base}/api/v1/search",
+                            params={"query": q, "type": "search"},
+                            headers=_prowlarr_headers(), timeout=20)
+        resp.raise_for_status()
+        results = resp.json()
+        return {"count": len(results),
+                "sample": [{"title": r.get("title","")[:50],
+                             "protocol": r.get("protocol"),
+                             "seeders": r.get("seeders"),
+                             "indexer": r.get("indexer","")} for r in results[:10]]}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @app.get("/api/prowlarr/search")
