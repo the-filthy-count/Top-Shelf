@@ -838,6 +838,22 @@
         <div class="field-hint" style="margin-top:6px">Sets the default state of the StashDB submission toggle on the manual filing form</div>
       </div>
 
+      <!-- Whisparr -->
+      <div class="settings-section">
+        <div class="settings-section-title">Whisparr</div>
+        <div class="field-hint" style="margin-top:4px;margin-bottom:10px">Used for release search - provides better NZB coverage than Prowlarr direct search</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-row">
+            <label class="field-label">Whisparr URL</label>
+            <input class="field-input" id="cfgWhisparrUrl" type="text" placeholder="http://192.168.1.x:6969">
+          </div>
+          <div class="field-row">
+            <label class="field-label">API Key</label>
+            <input class="field-input" id="cfgWhisparrKey" type="password" autocomplete="off">
+          </div>
+        </div>
+      </div>
+
       <!-- Prowlarr -->
       <div class="settings-section">
         <div class="settings-section-title">Prowlarr</div>
@@ -856,7 +872,11 @@
           </div>
           <div class="field-row">
             <label class="field-label">Status</label>
-            <div id="prowlarrStatus" style="font-size:11px;color:var(--dim);padding:9px 0">Not checked</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div id="prowlarrStatus" style="font-size:11px;color:var(--dim);padding:9px 0">Not checked</div>
+              <button class="btn-secondary" onclick="refreshIndexers()" style="font-size:11px;padding:4px 8px">Refresh indexers</button>
+              <span id="indexerCount" style="font-size:11px;color:var(--dim)"></span>
+            </div>
           </div>
           <div class="field-row">
             <label class="field-label">Torrent Client</label>
@@ -1071,11 +1091,16 @@
     });
     document.getElementById('cfgSubmitPhash').checked          = (s.submit_phash_enabled              || 'true')  === 'true';
     document.getElementById('cfgManualSubmitDefault').checked  = (s.manual_submit_stashdb_default || 'false') === 'true';
+    document.getElementById('cfgWhisparrUrl').value      = s.whisparr_url       || '';
+    document.getElementById('cfgWhisparrKey').value      = s.whisparr_api_key   || '';
     document.getElementById('cfgProwlarrUrl').value      = s.prowlarr_url       || '';
     document.getElementById('cfgProwlarrKey').value      = s.prowlarr_api_key   || '';
     document.getElementById('cfgProwlarrCategory').value = s.prowlarr_category  || 'Top-Shelf';
     document.getElementById('cfgProwlarrTorrent').value  = s.prowlarr_torrent_client || '';
     document.getElementById('cfgProwlarrNzb').value      = s.prowlarr_nzb_client    || '';
+    fetch('/api/prowlarr/indexers').then(r=>r.json()).then(d=>{
+      if (d.count) document.getElementById('indexerCount').textContent = `${d.count} indexers cached`;
+    });
     fetch('/api/prowlarr/status').then(r=>r.json()).then(d=>{
       const el = document.getElementById('prowlarrStatus');
       el.textContent = d.connected ? `Connected v${d.version}` : (d.error || 'Not connected');
@@ -1191,6 +1216,8 @@
         submit_phash_enabled:           document.getElementById('cfgSubmitPhash').checked         ? 'true' : 'false',
         manual_submit_stashdb_default: document.getElementById('cfgManualSubmitDefault').checked ? 'true' : 'false',
         api_key_tmdb:      document.getElementById('cfgKeyTmdb').value.trim(),
+        whisparr_url:            document.getElementById('cfgWhisparrUrl').value.trim(),
+        whisparr_api_key:        document.getElementById('cfgWhisparrKey').value.trim(),
         prowlarr_url:              document.getElementById('cfgProwlarrUrl').value.trim(),
         prowlarr_api_key:          document.getElementById('cfgProwlarrKey').value.trim(),
         prowlarr_category:         document.getElementById('cfgProwlarrCategory').value.trim(),
@@ -1754,6 +1781,22 @@
 
 
   // ── Download folder ──────────────────────────────────────────────────
+
+  async function refreshIndexers() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Refreshing...';
+    try {
+      const r = await fetch('/api/prowlarr/indexers/refresh', { method: 'POST' });
+      const d = await r.json();
+      document.getElementById('indexerCount').textContent = `${d.count} indexers cached`;
+    } catch(e) {
+      document.getElementById('indexerCount').textContent = 'Failed';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Refresh indexers';
+    }
+  }
 
   async function processAllDownloads() {
     const r = await fetch('/api/download/process-all', { method: 'POST' });

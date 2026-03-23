@@ -45,6 +45,8 @@ DEFAULTS = {
     "prowlarr_category":  "Top-Shelf",
     "prowlarr_torrent_client": "",
     "prowlarr_nzb_client": "",
+    "whisparr_url":       "",
+    "whisparr_api_key":   "",
     "media_scan_enabled": "true",
     "submit_phash_enabled": "true",
     "manual_submit_stashdb_default": "false",
@@ -93,6 +95,15 @@ def init_db() -> None:
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_filename ON processed_files(filename)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS prowlarr_indexers (
+                id           INTEGER PRIMARY KEY,
+                name         TEXT NOT NULL,
+                protocol     TEXT NOT NULL,
+                fetched_at   TEXT NOT NULL
+            )
+        """)
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
@@ -461,4 +472,31 @@ def purge_expired_sessions() -> None:
     with get_conn() as conn:
         conn.execute("DELETE FROM sessions WHERE expires_at < ?",
                      (datetime.now().isoformat(),))
+        conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Prowlarr indexer cache
+# ---------------------------------------------------------------------------
+
+def get_cached_indexers() -> list[dict]:
+    with get_conn() as conn:
+        cur = conn.execute("SELECT id, name, protocol FROM prowlarr_indexers ORDER BY id")
+        return [{"id": r["id"], "name": r["name"], "protocol": r["protocol"]} for r in cur.fetchall()]
+
+
+def cache_indexers(indexers: list[dict]) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM prowlarr_indexers")
+        for idx in indexers:
+            conn.execute(
+                "INSERT INTO prowlarr_indexers (id, name, protocol, fetched_at) VALUES (?, ?, ?, ?)",
+                (idx["id"], idx["name"], idx["protocol"], datetime.now().isoformat())
+            )
+        conn.commit()
+
+
+def clear_indexer_cache() -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM prowlarr_indexers")
         conn.commit()

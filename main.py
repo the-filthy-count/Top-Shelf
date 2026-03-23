@@ -1881,31 +1881,28 @@ def _prowlarr_url() -> str:
     return s.get("prowlarr_url", "").rstrip("/")
 
 
-def prowlarr_search(query: str) -> list[dict]:
-    """Search Prowlarr for a query string."""
-    base = _prowlarr_url()
-    if not base:
+def whisparr_search(query: str) -> list[dict]:
+    """Search via Whisparr's release search endpoint - returns NZBs and torrents."""
+    s    = db.get_settings()
+    base = s.get("whisparr_url", "").rstrip("/")
+    key  = s.get("whisparr_api_key", "")
+    if not base or not key:
         return []
     try:
         resp = requests.get(
-            f"{base}/api/v1/search",
-            params={"query": query},
-            headers=_prowlarr_headers(),
-            timeout=25,
+            f"{base}/api/v3/release",
+            params={"term": query},
+            headers={"X-Api-Key": key},
+            timeout=30,
         )
         if resp.status_code != 200:
             return []
         results = resp.json()
         if not isinstance(results, list):
             return []
-        # Sort ALL results before slicing - NZBs first by age, torrents by seeders
-        nzbs     = sorted([r for r in results if r.get("protocol") == "usenet"],
-                          key=lambda x: x.get("ageHours") or 0)
-        torrents = sorted([r for r in results if r.get("protocol") != "usenet"],
-                          key=lambda x: x.get("seeders") or 0, reverse=True)
-        combined = nzbs[:20] + torrents[:20]
         out = []
-        for r in combined:
+        for r in results:
+            protocol = r.get("protocol", "torrent").lower()
             out.append({
                 "guid":         r.get("guid", ""),
                 "title":        r.get("title", ""),
@@ -1915,13 +1912,150 @@ def prowlarr_search(query: str) -> list[dict]:
                 "age":          r.get("ageHours"),
                 "download_url": r.get("downloadUrl", ""),
                 "magnet":       r.get("magnetUrl", ""),
-                "protocol":     r.get("protocol", "torrent"),
-                "type":         "torrent" if r.get("protocol", "torrent") == "torrent" else "nzb",
+                "protocol":     protocol,
+                "type":         "torrent" if protocol == "torrent" else "nzb",
                 "indexer_id":   r.get("indexerId"),
+                "guid_whisparr": r.get("guid", ""),
             })
-        return out
+        nzbs     = sorted([r for r in out if r["type"] == "nzb"],
+                          key=lambda x: x.get("age") or 0)
+        torrents = sorted([r for r in out if r["type"] == "torrent"],
+                          key=lambda x: x.get("seeders") or 0, reverse=True)
+        return nzbs[:20] + torrents[:20]
     except Exception:
         return []
+
+
+def _fetch_and_cache_indexers() -> list[dict]:
+    """Fetch indexers from Prowlarr API and cache in DB."""
+    base = _prowlarr_url()
+    if not base:
+        return []
+    try:
+        resp = requests.get(f"{base}/api/v1/indexer",
+                            headers=_prowlarr_headers(), timeout=10)
+        resp.raise_for_status()
+        indexers = [{"id": i["id"], "name": i["name"],
+                     "protocol": i.get("protocol", "torrent")}
+                    for i in resp.json()]
+        db.cache_indexers(indexers)
+        return indexers
+    except Exception:
+        return []
+
+
+def _get_indexers() -> list[dict]:
+    """Get indexers from cache, fetching from Prowlarr if empty."""
+    cached = db.get_cached_indexers()
+    if cached:
+        return cached
+    return _fetch_and_cache_indexers()
+
+
+def _parse_newznab_xml(xml_text: str, indexer_name: str, protocol: str) -> list[dict]:
+    """Parse Newznab RSS XML into result dicts."""
+    import xml.etree.ElementTree as ET
+    out = []
+    try:
+        root = ET.fromstring(xml_text)
+        ns = {"newznab": "http://www.newznab.com/DTD/2010/feeds/attributes/",
+              "torznab":  "http://torznab.com/schemas/2015/feed"}
+        for item in root.findall(".//item"):
+            title     = (item.findtext("title") or "").strip()
+            guid      = item.findtext("guid") or ""
+            size      = 0
+            link      = item.findtext("link") or ""
+            seeders   = None
+            pub_date  = item.findtext("pubDate") or ""
+
+            enc = item.find("enclosure")
+            if enc is not None:
+                size = int(enc.get("length") or 0)
+                if not link:
+                    link = enc.get("url") or ""
+
+            for attr in item.findall("newznab:attr", ns) + item.findall("torznab:attr", ns):
+                name = attr.get("name", "")
+                val  = attr.get("value", "")
+                if name == "size" and not size:
+                    size = int(val or 0)
+                elif name == "seeders":
+                    try: seeders = int(val)
+                    except: pass
+
+            if not title:
+                continue
+
+            # Calculate age in hours from pubDate
+            age_hours = None
+            if pub_date:
+                try:
+                    from email.utils import parsedate_to_datetime
+                    dt = parsedate_to_datetime(pub_date)
+                    age_hours = (datetime.now(dt.tzinfo) - dt).total_seconds() / 3600
+                except Exception:
+                    pass
+
+            out.append({
+                "guid":         guid,
+                "title":        title,
+                "indexer":      indexer_name,
+                "size_mb":      round(size / 1024 / 1024, 0),
+                "seeders":      seeders,
+                "age":          age_hours,
+                "download_url": link,
+                "magnet":       "",
+                "protocol":     protocol,
+                "type":         "torrent" if protocol == "torrent" else "nzb",
+                "indexer_id":   None,
+            })
+    except Exception:
+        pass
+    return out
+
+
+def _search_indexer(base: str, api_key: str, indexer: dict, query: str) -> list[dict]:
+    """Search a single indexer via Prowlarr's Newznab proxy."""
+    iid      = indexer["id"]
+    name     = indexer["name"]
+    protocol = indexer.get("protocol", "torrent")
+    try:
+        resp = requests.get(
+            f"{base}/{iid}/api",
+            params={"t": "search", "q": query, "apikey": api_key},
+            timeout=20,
+        )
+        if resp.status_code == 200:
+            return _parse_newznab_xml(resp.text, name, protocol)
+        elif resp.status_code in (400, 404, 500):
+            # Indexer may be broken - clear cache so it gets re-fetched next time
+            db.clear_indexer_cache()
+    except Exception:
+        pass
+    return []
+
+
+def prowlarr_search(query: str) -> list[dict]:
+    """Search all Prowlarr indexers via their Newznab proxy endpoints."""
+    base    = _prowlarr_url()
+    api_key = db.get_settings().get("prowlarr_api_key", "")
+    if not base or not api_key:
+        return []
+
+    indexers = _get_indexers()
+    if not indexers:
+        return []
+
+    all_results = []
+    for indexer in indexers:
+        results = _search_indexer(base, api_key, indexer, query)
+        all_results.extend(results)
+
+    nzbs     = sorted([r for r in all_results if r["type"] == "nzb"],
+                      key=lambda x: x.get("age") or 0)
+    torrents = sorted([r for r in all_results if r["type"] == "torrent"],
+                      key=lambda x: x.get("seeders") or 0, reverse=True)
+    return nzbs[:20] + torrents[:20]
 
 
 def prowlarr_grab(guid: str, indexer_id: int, is_torrent: bool) -> dict:
@@ -2902,7 +3036,10 @@ async def scenes_recent(source: str, id: str, type: str = "performer", slug: str
 async def prowlarr_search_endpoint(q: str):
     if not q.strip():
         return JSONResponse({"error": "Query required"}, status_code=400)
-    results = prowlarr_search(q.strip())
+    # Try Whisparr first (better NZB coverage), fall back to Prowlarr
+    results = whisparr_search(q.strip())
+    if not results:
+        results = prowlarr_search(q.strip())
     return {"results": results}
 
 
@@ -2911,10 +3048,42 @@ async def prowlarr_grab_endpoint(payload: dict):
     guid       = payload.get("guid", "")
     indexer_id = payload.get("indexer_id")
     is_torrent = payload.get("type", "torrent") == "torrent"
+    source     = payload.get("source", "prowlarr")
     if not guid:
         return JSONResponse({"error": "guid required"}, status_code=400)
+    # Try Whisparr grab if that's where the result came from
+    s = db.get_settings()
+    whisparr_base = s.get("whisparr_url", "").rstrip("/")
+    whisparr_key  = s.get("whisparr_api_key", "")
+    if whisparr_base and whisparr_key:
+        try:
+            resp = requests.post(
+                f"{whisparr_base}/api/v3/release",
+                json={"guid": guid, "indexerId": indexer_id},
+                headers={"X-Api-Key": whisparr_key},
+                timeout=15,
+            )
+            if resp.status_code in (200, 201, 202, 204):
+                return {"ok": True}
+            # Fall through to Prowlarr if Whisparr fails
+        except Exception:
+            pass
     result = prowlarr_grab(guid, indexer_id, is_torrent)
     return result
+
+
+@app.get("/api/prowlarr/indexers")
+async def prowlarr_indexers_endpoint():
+    """Get cached indexers, refreshing from Prowlarr if needed."""
+    indexers = _get_indexers()
+    return {"indexers": indexers, "count": len(indexers)}
+
+
+@app.post("/api/prowlarr/indexers/refresh")
+async def prowlarr_indexers_refresh():
+    """Force refresh of indexer cache from Prowlarr."""
+    indexers = _fetch_and_cache_indexers()
+    return {"indexers": indexers, "count": len(indexers)}
 
 
 @app.get("/api/prowlarr/clients")
