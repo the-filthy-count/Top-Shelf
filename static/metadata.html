@@ -207,6 +207,32 @@
   </div>
 </div>
 
+<!-- Scenes panel -->
+<div id="scenesSection" style="display:none;max-width:1400px;margin:0 auto;padding:0 24px 20px;position:relative;z-index:1">
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title" id="scenesTitle">Recent Scenes</span>
+      <span style="font-size:11px;color:var(--dim)" id="scenesNote"></span>
+    </div>
+    <div id="scenesGrid" class="scene-grid"><div class="empty">Loading...</div></div>
+  </div>
+</div>
+
+<!-- Prowlarr results panel -->
+<div id="prowlarrSection" style="display:none;max-width:1400px;margin:0 auto;padding:0 24px 28px;position:relative;z-index:1">
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Search Results</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input id="prowlarrQuery" class="field-input" type="text" placeholder="Edit search term..." style="width:280px" onkeydown="if(event.key==='Enter')runProwlarrSearch()">
+        <button class="btn-primary" onclick="runProwlarrSearch()"><i class="fa-solid fa-magnifying-glass"></i></button>
+        <button class="btn-secondary" onclick="document.getElementById('prowlarrSection').style.display='none'"><i class="fa-solid fa-x"></i></button>
+      </div>
+    </div>
+    <div id="prowlarrResults"><div class="empty">No results yet</div></div>
+  </div>
+</div>
+
 <script>
   let currentType     = 'performer';
   let selectedResult  = null;
@@ -414,19 +440,6 @@
 
     loadDirs();
     loadScenes(item);
-
-    // Fetch full detail to get better image and bio
-    try {
-      const r = await fetch('/api/metadata/create', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          type: currentType, source: item.source, id: item.id,
-          dest_dir: '__preview__',  // sentinel - backend won't create folder
-        }),
-      });
-      // We use a dedicated preview endpoint instead
-    } catch {}
 
     // Use a lightweight preview fetch
     try {
