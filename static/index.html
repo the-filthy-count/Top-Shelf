@@ -118,6 +118,12 @@
   .queue-item:hover { background: rgba(255,255,255,0.02); }
   .queue-item.active { background: rgba(192,132,252,0.06); border-left: 2px solid var(--accent); }
   .queue-filename { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status-dot-queue { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-right: 2px; }
+  .status-dot-queue.filed      { background: var(--green); }
+  .status-dot-queue.unmatched  { background: var(--amber); }
+  .status-dot-queue.no_dir     { background: var(--blue); }
+  .status-dot-queue.error      { background: var(--red); }
+  .status-dot-queue.none       { background: transparent; }
   .queue-filename.status-filed      { color: var(--green); }
   .queue-filename.status-unmatched  { color: var(--amber); }
   .queue-filename.status-no_dir     { color: var(--blue); }
@@ -364,8 +370,7 @@
     <div class="panel-header">
       <div style="display:flex;align-items:center;gap:12px">
         <span class="panel-title">Scene Search</span>
-        <span id="searchFileLabel" style="display:none;font-size:11px;color:var(--accent);padding:3px 10px;background:rgba(192,132,252,0.1);border-radius:4px;border:1px solid rgba(192,132,252,0.25)"></span>
-        <button id="searchClearFile" style="display:none" class="btn-icon danger" onclick="clearSelectedFile()" title="Deselect file"><i class="fa-solid fa-x"></i></button>
+        <span id="searchFileLabel" style="display:none;font-size:11px;color:var(--accent);padding:3px 10px;background:rgba(192,132,252,0.1);border-radius:4px;border:1px solid rgba(192,132,252,0.25);cursor:pointer" onclick="clearSelectedFile()" title="Click to deselect"></span>
       </div>
       <div class="header-actions">
         <button class="btn-secondary" onclick="clearSearch()" title="Clear search"><i class="fa-solid fa-x"></i></button>
@@ -695,6 +700,10 @@
             <label class="field-label">Min file size (MB) — smaller files are skipped</label>
             <input class="field-input" id="cfgMinFileSize" type="number" min="0" placeholder="10" style="width:120px">
           </div>
+          <div class="field-row" style="margin-top:10px">
+            <label class="field-label">Strip words <span style="color:var(--muted)">(comma-separated — removed from filenames before parsing)</span></label>
+            <input class="field-input" id="cfgStripWords" type="text" placeholder="fuckingsession.com,lulustream.com">
+          </div>
         </div>
       </div>
 
@@ -993,7 +1002,8 @@
     const retryOn = (s.retry_enabled || 'true') === 'true';
     document.getElementById('cfgRetryEnabled').checked = retryOn;
     toggleSection('retryBody', retryOn);
-    document.getElementById('cfgFilenamePatterns').value = s.filename_patterns || 'pipe|dot_date|dot_date_short|bracket_site|dash_date';
+    document.getElementById('cfgFilenamePatterns').value = s.filename_patterns  || 'pipe|dot_date|dot_date_short|bracket_site|dash_date';
+    document.getElementById('cfgStripWords').value         = s.filename_strip_words || '';
     document.getElementById('cfgMinFileSize').value      = s.min_file_size_mb  || '10';
     try { document.getElementById('cfgSiteAbbrevs').value = JSON.stringify(JSON.parse(s.site_abbreviations || '{}'), null, 2); } catch { document.getElementById('cfgSiteAbbrevs').value = s.site_abbreviations || ''; }
     try { document.getElementById('cfgSiteRenameMap').value = JSON.stringify(JSON.parse(s.site_rename_map || '{}'), null, 2); } catch { document.getElementById('cfgSiteRenameMap').value = s.site_rename_map || ''; }
@@ -1101,7 +1111,8 @@
         folder_watch_enabled:   document.getElementById('cfgWatchEnabled').checked ? 'true' : 'false',
         folder_watch_hold_secs: document.getElementById('cfgWatchHold').value.trim(),
         retry_enabled:     document.getElementById('cfgRetryEnabled').checked ? 'true' : 'false',
-        filename_patterns: document.getElementById('cfgFilenamePatterns').value.trim(),
+        filename_patterns:     document.getElementById('cfgFilenamePatterns').value.trim(),
+        filename_strip_words: document.getElementById('cfgStripWords').value.trim(),
         min_file_size_mb:  document.getElementById('cfgMinFileSize').value.trim(),
         site_abbreviations: (() => { try { return JSON.stringify(JSON.parse(document.getElementById('cfgSiteAbbrevs').value)); } catch { return document.getElementById('cfgSiteAbbrevs').value; } })(),
         site_rename_map:    (() => { try { return JSON.stringify(JSON.parse(document.getElementById('cfgSiteRenameMap').value)); } catch { return document.getElementById('cfgSiteRenameMap').value; } })(),
@@ -1214,7 +1225,6 @@
   function clearSelectedFile() {
     selectedFile = null;
     document.getElementById('searchFileLabel').style.display = 'none';
-    document.getElementById('searchClearFile').style.display = 'none';
     document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('active'));
     document.getElementById('searchPanel').style.display = 'none';
     window._searchResults = null;
@@ -1679,11 +1689,16 @@
       const r = await fetch('/api/scan/status');
       const d = await r.json();
       const pill = document.getElementById('scanPill');
-      const servers = Object.keys(d.pending || {});
+      const pending = d.pending || {};
+      const servers = Object.keys(pending);
       if (servers.length) {
-        const soonest = Math.min(...Object.values(d.pending));
-        pill.style.display = 'inline-block';
-        pill.textContent = `⟳ scan in ${soonest}s`;
+        const soonest = Math.min(...Object.values(pending));
+        if (soonest > 0) {
+          pill.style.display = 'inline-block';
+          pill.textContent = `⟳ scan in ${soonest}s`;
+        } else {
+          pill.style.display = 'none';
+        }
       } else {
         pill.style.display = 'none';
       }

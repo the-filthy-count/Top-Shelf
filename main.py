@@ -1053,6 +1053,11 @@ def parse_filename(filename: str, settings: dict) -> dict:
 
     stem = Path(filename).stem
 
+    # Strip gubbins words from stem first
+    strip_words = [w.strip().lower() for w in settings.get("filename_strip_words", "").split(",") if w.strip()]
+    for word in strip_words:
+        stem = re.sub(re.escape(word), "", stem, flags=re.IGNORECASE).strip(".-_ ")
+
     # Load site abbreviations and expand them
     try:
         abbrevs = _json.loads(settings.get("site_abbreviations", "{}"))
