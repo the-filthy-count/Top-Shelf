@@ -5,6 +5,3 @@ __pycache__/
 phash_filer.db
 *.phash
 .env
-static/logo.png
-static/background.jpg
-static/favicon.ico
