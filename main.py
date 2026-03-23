@@ -9,6 +9,7 @@ import asyncio
 import base64
 import io
 import json
+import secrets
 import math
 import os
 import re
@@ -21,6 +22,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import AsyncGenerator
 
+import bcrypt
 import imagehash
 import requests
 import threading
@@ -188,6 +190,7 @@ async def startup():
     _migrate_sidecar_phashes()
     _apply_retry_schedule()
     scheduler.add_job(_check_pending_files, "interval", seconds=30, id="pending_check")
+    scheduler.add_job(db.purge_expired_sessions, "interval", hours=1, id="session_purge")
     scheduler.add_job(_check_pending_downloads, "interval", seconds=30, id="download_check")
     scheduler.start()
     _start_watcher()
@@ -1823,6 +1826,77 @@ def create_tvshow_folder(name: str, dest_dir: Path, nfo_content: str,
 # ---------------------------------------------------------------------------
 # API routes
 # ---------------------------------------------------------------------------
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(next: str = "/"):
+    with open("static/login.html") as f:
+        html = f.read().replace("__NEXT__", next)
+    return html
+
+
+@app.post("/api/auth/login")
+async def auth_login(request):
+    from fastapi.responses import JSONResponse, RedirectResponse
+    body = await request.json()
+    password  = body.get("password", "")
+    next_path = body.get("next", "/")
+    ph = db.get_password_hash()
+    if not ph:
+        # No password set - allow through
+        return JSONResponse({"ok": True})
+    if not bcrypt.checkpw(password.encode(), ph.encode()):
+        return JSONResponse({"error": "Incorrect password"}, status_code=401)
+    token = secrets.token_urlsafe(32)
+    hours = db.get_session_hours()
+    db.create_session(token, hours)
+    resp = JSONResponse({"ok": True, "next": next_path})
+    resp.set_cookie(COOKIE_NAME, token, httponly=True, samesite="lax",
+                    max_age=hours * 3600)
+    return resp
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(request):
+    from fastapi.responses import JSONResponse
+    token = request.cookies.get(COOKIE_NAME, "")
+    if token:
+        db.delete_session(token)
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(COOKIE_NAME)
+    return resp
+
+
+@app.post("/api/auth/set-password")
+async def auth_set_password(request):
+    from fastapi.responses import JSONResponse
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "Unauthorised"}, status_code=401)
+    body = await request.json()
+    password = body.get("password", "").strip()
+    if len(password) < 6:
+        return JSONResponse({"error": "Password must be at least 6 characters"}, status_code=400)
+    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    db.set_password(hashed)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/auth/remove-password")
+async def auth_remove_password(request):
+    from fastapi.responses import JSONResponse
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "Unauthorised"}, status_code=401)
+    db.set_password(None)
+    return JSONResponse({"ok": True})
+
+
+@app.get("/api/auth/status")
+async def auth_status(request):
+    return {
+        "password_set":   db.get_password_hash() is not None,
+        "session_hours":  db.get_session_hours(),
+        "authenticated":  _is_authenticated(request),
+    }
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index():

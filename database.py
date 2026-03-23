@@ -90,6 +90,25 @@ def init_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_filename ON processed_files(filename)")
 
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                token      TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS auth (
+                id             INTEGER PRIMARY KEY CHECK (id = 1),
+                password_hash  TEXT,
+                session_hours  INTEGER NOT NULL DEFAULT 24
+            )
+        """)
+        # Ensure single auth row exists
+        conn.execute("INSERT OR IGNORE INTO auth (id) VALUES (1)")
+        conn.commit()
+
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS processed_movies (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 filename      TEXT NOT NULL,
@@ -366,3 +385,75 @@ def get_stats() -> dict:
             FROM processed_files WHERE status != 'pending'
         """)
         return dict(cur.fetchone())
+
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+
+def get_password_hash() -> str | None:
+    with get_conn() as conn:
+        cur = conn.execute("SELECT password_hash, session_hours FROM auth WHERE id = 1")
+        row = cur.fetchone()
+        return row["password_hash"] if row else None
+
+
+def get_session_hours() -> int:
+    with get_conn() as conn:
+        cur = conn.execute("SELECT session_hours FROM auth WHERE id = 1")
+        row = cur.fetchone()
+        return row["session_hours"] if row else 24
+
+
+def set_password(hashed: str) -> None:
+    with get_conn() as conn:
+        conn.execute("UPDATE auth SET password_hash = ? WHERE id = 1", (hashed,))
+        conn.commit()
+
+
+def set_session_hours(hours: int) -> None:
+    with get_conn() as conn:
+        conn.execute("UPDATE auth SET session_hours = ? WHERE id = 1", (hours,))
+        conn.commit()
+
+
+def create_session(token: str, hours: int) -> None:
+    from datetime import timedelta
+    now = datetime.now()
+    expires = now + timedelta(hours=hours)
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO sessions (token, created_at, expires_at) VALUES (?, ?, ?)",
+            (token, now.isoformat(), expires.isoformat())
+        )
+        conn.commit()
+
+
+def validate_session(token: str) -> bool:
+    if not token:
+        return False
+    with get_conn() as conn:
+        cur = conn.execute(
+            "SELECT expires_at FROM sessions WHERE token = ?", (token,)
+        )
+        row = cur.fetchone()
+        if not row:
+            return False
+        if datetime.fromisoformat(row["expires_at"]) < datetime.now():
+            conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+            conn.commit()
+            return False
+        return True
+
+
+def delete_session(token: str) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.commit()
+
+
+def purge_expired_sessions() -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM sessions WHERE expires_at < ?",
+                     (datetime.now().isoformat(),))
+        conn.commit()

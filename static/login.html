@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Login</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  @font-face { font-family: 'Acidoze'; src: url('/static/TELETYPE1945-1985.ttf') format('truetype'); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0c0c0e url('/static/background.jpg') center center / cover fixed;
+    color: #e8e8f0; font-family: 'DM Mono', monospace;
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background: rgba(12,12,14,0.82); z-index: 0;
+  }
+  .card {
+    position: relative; z-index: 1;
+    background: linear-gradient(160deg, rgba(36,36,48,0.92) 0%, rgba(18,18,26,0.88) 100%);
+    border-radius: 16px; padding: 48px 40px; width: 360px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 24px 64px rgba(0,0,0,0.5);
+    backdrop-filter: blur(20px);
+    display: flex; flex-direction: column; align-items: center; gap: 28px;
+  }
+  .logo { height: 40px; object-fit: contain; }
+  .version { font-size: 10px; color: #6b6b7a; letter-spacing: 0.06em; margin-top: -20px; }
+  h1 {
+    font-family: 'Acidoze', monospace; font-size: 18px; font-weight: 400;
+    letter-spacing: 0.12em; text-transform: uppercase; color: #c084fc;
+  }
+  .field { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+  label { font-size: 11px; color: #6b6b7a; text-transform: uppercase; letter-spacing: 0.08em; }
+  input[type="password"] {
+    width: 100%; padding: 10px 14px;
+    background: rgba(26,26,32,0.8); border: 1px solid #222228;
+    border-radius: 8px; color: #e8e8f0; font-family: 'DM Mono', monospace;
+    font-size: 14px; outline: none; transition: border-color 0.15s;
+  }
+  input[type="password"]:focus { border-color: #c084fc; }
+  button {
+    width: 100%; padding: 12px;
+    background: #c084fc; color: #0c0c0e; border: none;
+    border-radius: 8px; font-family: 'Acidoze', monospace;
+    font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase;
+    cursor: pointer; transition: filter 0.15s;
+  }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
+  .error {
+    width: 100%; padding: 10px 14px; border-radius: 8px;
+    background: rgba(248,113,113,0.1); color: #f87171;
+    border: 1px solid rgba(248,113,113,0.2);
+    font-size: 12px; display: none; text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <img class="logo" src="/static/logo.png" alt="Top-Shelf">
+  <div class="version">v1.0.4</div>
+  <h1>Enter Password</h1>
+  <div class="field">
+    <label>Password</label>
+    <input type="password" id="pw" autofocus onkeydown="if(event.key==='Enter')login()">
+  </div>
+  <div class="error" id="err"></div>
+  <button id="btn" onclick="login()">Enter</button>
+</div>
+<script>
+  async function login() {
+    const pw  = document.getElementById('pw').value;
+    const btn = document.getElementById('btn');
+    const err = document.getElementById('err');
+    if (!pw) return;
+    btn.disabled = true;
+    btn.textContent = '...';
+    err.style.display = 'none';
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const next = params.get('next') || '/';
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ password: pw, next }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        window.location.href = d.next || '/';
+      } else {
+        err.textContent = d.error || 'Incorrect password';
+        err.style.display = 'block';
+        document.getElementById('pw').value = '';
+        document.getElementById('pw').focus();
+      }
+    } catch(e) {
+      err.textContent = 'Login failed';
+      err.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Enter';
+    }
+  }
+</script>
+</body>
+</html>

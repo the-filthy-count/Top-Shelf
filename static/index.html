@@ -83,7 +83,7 @@
   .stats-bar { display: contents; }
   .stat-card { background: linear-gradient(145deg, rgba(40,40,52,0.85) 0%, rgba(22,22,30,0.75) 100%); border: none; border-radius: 10px; padding: 32px 20px; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); display: flex; flex-direction: column; align-items: center; justify-content: center; height: 160px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 8px 32px rgba(0,0,0,0.3); }
   .stat-value { font-family: var(--acid); font-size: 72px; font-weight: 400; line-height: 1; display: block; letter-spacing: 0.02em; text-align: center; }
-  .stat-label { font-family: var(--secs); font-size: 26px; text-transform: uppercase; letter-spacing: -0.02em; color: var(--dim); display: block; margin-top: 10px; text-align: center; }
+  .stat-label { font-family: var(--secs); font-size: 26px; text-transform: uppercase; letter-spacing: -0.02em; color: #d4cfc4; display: block; margin-top: 10px; text-align: center; }
   .stat-filed .stat-value     { color: var(--green); }
   .stat-unmatched .stat-value { color: var(--amber); }
   .stat-no_dir .stat-value    { color: var(--blue); }
@@ -321,6 +321,7 @@
       <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-film"></i></button></a>
       <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library Health"><i class="fa-solid fa-house-medical"></i></button></a>
       <a href="/metadata" style="text-decoration:none"><button class="btn-secondary" title="Metadata"><i class="fa-solid fa-id-card"></i></button></a>
+      <button class="btn-secondary" onclick="logout()" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
       <button class="btn-secondary" onclick="openSettings()" title="Settings"><i class="fa-solid fa-gear"></i></button>
     </div>
   </header>
@@ -503,6 +504,26 @@
       <button class="btn-icon" onclick="closeSettings()"><i class="fa-solid fa-x"></i></button>
     </div>
     <div class="modal-body">
+
+      <!-- Password -->
+      <div class="settings-section">
+        <div class="settings-section-title">Password Protection</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-row">
+            <label class="field-label">New password</label>
+            <input class="field-input" id="cfgNewPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Session duration (hours)</label>
+            <input class="field-input" id="cfgSessionHours" type="number" min="1" max="8760" placeholder="24">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn-secondary" onclick="setPassword()" style="font-size:12px;padding:6px 12px">Set Password</button>
+          <button class="btn-secondary" onclick="removePassword()" style="font-size:12px;padding:6px 12px;color:var(--red);border-color:var(--red)">Remove Password</button>
+        </div>
+        <div id="pwMsg" style="font-size:11px;margin-top:8px;display:none"></div>
+      </div>
 
       <!-- Directories -->
       <div class="settings-section">
@@ -1641,6 +1662,53 @@
 
   // Patch submitManual to handle StashDB submission
   const _origSubmitManual = submitManual;
+
+  // ── Auth ─────────────────────────────────────────────────────────────
+
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+  }
+
+  async function setPassword() {
+    const pw = document.getElementById('cfgNewPassword').value.trim();
+    const hours = parseInt(document.getElementById('cfgSessionHours').value) || 24;
+    const msg = document.getElementById('pwMsg');
+    if (pw) {
+      const r = await fetch('/api/auth/set-password', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ password: pw }),
+      });
+      const d = await r.json();
+      if (d.error) { msg.style.cssText = 'display:block;color:var(--red)'; msg.textContent = d.error; return; }
+    }
+    // Save session hours via settings
+    msg.style.cssText = 'display:block;color:var(--green)';
+    msg.textContent = pw ? 'Password updated' : 'Settings saved';
+    document.getElementById('cfgNewPassword').value = '';
+    setTimeout(() => msg.style.display = 'none', 3000);
+  }
+
+  async function removePassword() {
+    if (!confirm('Remove password protection? Anyone on the network will be able to access Top-Shelf.')) return;
+    const r = await fetch('/api/auth/remove-password', { method: 'POST' });
+    const d = await r.json();
+    const msg = document.getElementById('pwMsg');
+    msg.style.cssText = 'display:block;color:var(--amber)';
+    msg.textContent = 'Password removed — access is now open';
+    setTimeout(() => msg.style.display = 'none', 3000);
+  }
+
+  // Load auth status when settings open
+  const _origOpenSettings = openSettings;
+  async function openSettings() {
+    await _origOpenSettings();
+    try {
+      const r = await fetch('/api/auth/status');
+      const d = await r.json();
+      document.getElementById('cfgSessionHours').value = d.session_hours || 24;
+    } catch {}
+  }
 
   // ── Download folder ──────────────────────────────────────────────────
 
