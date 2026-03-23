@@ -42,7 +42,7 @@ import database as db
 # Constants
 # ---------------------------------------------------------------------------
 
-VERSION = "1.0.5"
+VERSION = "1.0.8"
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".wmv", ".mov", ".m4v", ".flv", ".webm"}
 
@@ -2842,7 +2842,9 @@ async def scenes_recent(type: str, source: str, id: str, slug: str = ""):
                                 headers=_tpdb_headers(), timeout=15)
             emit(f"SCENES {lookup} → {resp.status_code}")
             if resp.status_code == 200:
-                scenes = resp.json().get("data") or []
+                raw = resp.json()
+                emit(f"SCENES raw keys: {list(raw.keys())} data_type: {type(raw.get('data')).__name__} data_len: {len(raw.get('data') or [])}")
+                scenes = raw.get("data") or []
                 return {"scenes": [{
                     "id":     str(s.get("id", "")),
                     "title":  s.get("title", ""),
@@ -2851,7 +2853,8 @@ async def scenes_recent(type: str, source: str, id: str, slug: str = ""):
                     "thumb":  ((s.get("posters") or [{}])[0]).get("url"),
                 } for s in scenes]}
         except Exception as e:
-            emit(f"SCENES error: {e}")
+            import traceback
+            emit(f"SCENES error: {e} | {traceback.format_exc()[:200]}")
     return {"scenes": []}
 
 
