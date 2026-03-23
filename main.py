@@ -1881,21 +1881,18 @@ def _prowlarr_url() -> str:
     return s.get("prowlarr_url", "").rstrip("/")
 
 
-def _prowlarr_search_one(base: str, query: str, indexer_ids: list) -> list:
-    """Single Prowlarr search call with given indexer IDs."""
-    params = {"query": query}
-    for iid in indexer_ids:
-        params[f"indexerIds"] = iid  # last one wins - use repeated params below
+def _prowlarr_search_one(base: str, query: str, indexer_id: int) -> list:
+    """Single Prowlarr search call for one indexer group."""
     try:
-        # requests supports lists for repeated params
         resp = requests.get(
             f"{base}/api/v1/search",
-            params=[("query", query)] + [("indexerIds", iid) for iid in indexer_ids],
+            params=[("query", query), ("indexerIds", indexer_id)],
             headers=_prowlarr_headers(),
-            timeout=20,
+            timeout=25,
         )
         if resp.status_code == 200:
-            return resp.json()
+            data = resp.json()
+            return data if isinstance(data, list) else []
     except Exception:
         pass
     return []
@@ -1908,8 +1905,8 @@ def prowlarr_search(query: str) -> list[dict]:
         return []
 
     # Query usenet (-1) and torrents (-2) separately to ensure both are included
-    usenet_raw   = _prowlarr_search_one(base, query, [-1])
-    torrent_raw  = _prowlarr_search_one(base, query, [-2])
+    usenet_raw   = _prowlarr_search_one(base, query, -1)
+    torrent_raw  = _prowlarr_search_one(base, query, -2)
 
     # Sort usenet by age (newest first), torrents by seeders
     usenet_raw  = sorted(usenet_raw,  key=lambda x: x.get("ageHours") or 0)
