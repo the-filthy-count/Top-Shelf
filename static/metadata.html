@@ -51,7 +51,8 @@
   .active-nav { border-color: var(--accent) !important; color: var(--accent) !important; }
 
   /* Layout */
-  .layout { display: grid; grid-template-columns: 380px 1fr; gap: 20px; }
+  .layout { display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start; }
+  .right-col { display: flex; flex-direction: column; gap: 20px; }
 
   /* Panel */
   .panel {
@@ -104,6 +105,28 @@
   .dest-btn.selected { border-color: var(--accent); color: var(--accent); background: rgba(192,132,252,0.08); }
   .dest-custom { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
 
+  /* Scenes panel */
+  .scene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; padding: 16px 18px; }
+  .scene-card { cursor: pointer; border-radius: 8px; overflow: hidden; background: var(--raised); transition: all 0.15s; border: 1px solid transparent; }
+  .scene-card:hover { border-color: var(--muted); }
+  .scene-card.searching { border-color: var(--accent); }
+  .scene-thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--raised); }
+  .scene-thumb-placeholder { width: 100%; aspect-ratio: 16/9; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); }
+  .scene-info { padding: 8px; }
+  .scene-title { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .scene-date  { font-size: 10px; color: var(--dim); margin-top: 2px; }
+
+  /* Search results */
+  .search-result { display: grid; grid-template-columns: 1fr auto auto auto; gap: 12px; align-items: center; padding: 10px 18px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .search-result:last-child { border-bottom: none; }
+  .sr-title { font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sr-meta  { font-size: 11px; color: var(--dim); margin-top: 2px; }
+  .sr-indexer { font-family: var(--secs); font-size: 13px; color: var(--dim); letter-spacing: -0.02em; white-space: nowrap; }
+  .sr-size    { font-size: 11px; color: var(--dim); white-space: nowrap; }
+  .btn-grab { background: var(--green); color: #0c0c0e; border: none; padding: 5px 12px; border-radius: 5px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .btn-grab:hover { filter: brightness(1.1); }
+  .btn-grab.nzb { background: var(--blue); }
+
   /* Result message */
   .result-msg { margin-top: 16px; padding: 12px 16px; border-radius: 8px; font-size: 12px; display: none; }
   .result-msg.success { background: rgba(74,222,128,0.1); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
@@ -142,6 +165,8 @@
       </div>
     </div>
 
+    <!-- Right column -->
+    <div class="right-col">
     <!-- Detail + create panel -->
     <div class="panel">
       <div class="panel-header">
@@ -228,6 +253,113 @@
     showDetail(selectedResult);
   }
 
+  // ── Scenes ───────────────────────────────────────────────────────────
+
+  async function loadScenes(item) {
+    if (item.source !== 'TPDB') {
+      document.getElementById('scenesSection').style.display = 'none';
+      return;
+    }
+    const section = document.getElementById('scenesSection');
+    const grid    = document.getElementById('scenesGrid');
+    const title   = document.getElementById('scenesTitle');
+    title.textContent = `Recent Scenes — ${item.name}`;
+    document.getElementById('scenesNote').textContent = '';
+    section.style.display = 'block';
+    grid.innerHTML = '<div class="empty">Loading...</div>';
+    try {
+      const r = await fetch(`/api/scenes/recent?type=${currentType}&source=${encodeURIComponent(item.source)}&id=${encodeURIComponent(item.id)}`);
+      const d = await r.json();
+      if (!d.scenes?.length) {
+        grid.innerHTML = '<div class="empty">No recent scenes found</div>';
+        return;
+      }
+      grid.innerHTML = d.scenes.map(s => `
+        <div class="scene-card" id="sc-${esc(s.id)}" onclick="searchScene(${JSON.stringify(s).replace(/"/g,'&quot;')})">
+          ${s.thumb
+            ? `<img class="scene-thumb" src="${esc(s.thumb)}" loading="lazy" onerror="this.style.display='none'">`
+            : `<div class="scene-thumb-placeholder"><i class="fa-solid fa-film"></i></div>`}
+          <div class="scene-info">
+            <div class="scene-title" title="${esc(s.title)}">${esc(s.title)}</div>
+            <div class="scene-date">${s.date || ''} ${s.studio ? '· ' + esc(s.studio) : ''}</div>
+          </div>
+        </div>`).join('');
+    } catch(e) {
+      grid.innerHTML = `<div class="empty">Failed to load scenes</div>`;
+    }
+  }
+
+  function searchScene(scene) {
+    // Build search query from scene title + studio
+    const q = [scene.title, scene.studio].filter(Boolean).join(' ');
+    document.getElementById('prowlarrQuery').value = q;
+    document.getElementById('prowlarrSection').style.display = 'block';
+    document.getElementById('prowlarrSection').scrollIntoView({behavior:'smooth', block:'start'});
+    // Highlight selected scene card
+    document.querySelectorAll('.scene-card').forEach(c => c.classList.remove('searching'));
+    document.getElementById(`sc-${scene.id}`)?.classList.add('searching');
+    runProwlarrSearch();
+  }
+
+  // ── Prowlarr ──────────────────────────────────────────────────────────
+
+  async function runProwlarrSearch() {
+    const q = document.getElementById('prowlarrQuery').value.trim();
+    if (!q) return;
+    const el = document.getElementById('prowlarrResults');
+    el.innerHTML = '<div class="empty">Searching...</div>';
+    try {
+      const r = await fetch(`/api/prowlarr/search?q=${encodeURIComponent(q)}`);
+      const d = await r.json();
+      if (d.error) { el.innerHTML = `<div class="empty">${esc(d.error)}</div>`; return; }
+      if (!d.results?.length) { el.innerHTML = '<div class="empty">No results found</div>'; return; }
+      el.innerHTML = d.results.map(r => `
+        <div class="search-result">
+          <div>
+            <div class="sr-title" title="${esc(r.title)}">${esc(r.title)}</div>
+            <div class="sr-meta">${r.age ? Math.round(r.age/24) + 'd ago' : ''} ${r.seeders !== null ? '· ' + r.seeders + ' seeders' : ''}</div>
+          </div>
+          <span class="sr-indexer">${esc(r.indexer)}</span>
+          <span class="sr-size">${r.size_mb > 1024 ? (r.size_mb/1024).toFixed(1) + ' GB' : r.size_mb + ' MB'}</span>
+          <button class="btn-grab ${r.type === 'nzb' ? 'nzb' : ''}"
+            onclick="grabResult(${JSON.stringify(r).replace(/"/g,'&quot;')})">
+            <i class="fa-solid fa-download"></i> ${r.type.toUpperCase()}
+          </button>
+        </div>`).join('');
+    } catch(e) {
+      el.innerHTML = `<div class="empty">Search failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  async function grabResult(result) {
+    const btn = event.target.closest('button');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    try {
+      const r = await fetch('/api/prowlarr/grab', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          guid:       result.guid,
+          indexer_id: result.indexer_id,
+          type:       result.type,
+        }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> Sent';
+        btn.style.background = 'var(--green)';
+      } else {
+        btn.innerHTML = 'Error';
+        btn.disabled = false;
+        alert(`Download failed: ${d.error}`);
+      }
+    } catch(e) {
+      btn.innerHTML = 'Error';
+      btn.disabled = false;
+    }
+  }
+
   async function showDetail(item) {
     document.getElementById('detailEmpty').style.display = 'none';
     document.getElementById('detailContent').style.display = 'block';
@@ -246,6 +378,7 @@
     }
 
     loadDirs();
+    loadScenes(item);
 
     // Fetch full detail to get better image and bio
     try {

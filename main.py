@@ -1856,6 +1856,151 @@ def create_tvshow_folder(name: str, dest_dir: Path, nfo_content: str,
 
 
 # ---------------------------------------------------------------------------
+# Prowlarr integration
+# ---------------------------------------------------------------------------
+
+def _prowlarr_headers() -> dict:
+    s = db.get_settings()
+    return {"X-Api-Key": s.get("prowlarr_api_key", ""), "Content-Type": "application/json"}
+
+
+def _prowlarr_url() -> str:
+    s = db.get_settings()
+    return s.get("prowlarr_url", "").rstrip("/")
+
+
+def prowlarr_search(query: str) -> list[dict]:
+    """Search Prowlarr for a query string."""
+    base = _prowlarr_url()
+    if not base:
+        return []
+    try:
+        resp = requests.get(
+            f"{base}/api/v1/search",
+            params={"query": query, "type": "search"},
+            headers=_prowlarr_headers(),
+            timeout=20,
+        )
+        resp.raise_for_status()
+        results = resp.json()
+        out = []
+        for r in results[:15]:
+            out.append({
+                "guid":        r.get("guid", ""),
+                "title":       r.get("title", ""),
+                "indexer":     r.get("indexer", ""),
+                "size_mb":     round((r.get("size") or 0) / 1024 / 1024, 0),
+                "seeders":     r.get("seeders"),
+                "age":         r.get("ageHours"),
+                "download_url": r.get("downloadUrl", ""),
+                "magnet":      r.get("magnetUrl", ""),
+                "type":        "torrent" if r.get("seeders") is not None else "nzb",
+                "indexer_id":  r.get("indexerId"),
+            })
+        return out
+    except Exception as e:
+        return []
+
+
+def prowlarr_grab(guid: str, indexer_id: int, is_torrent: bool) -> dict:
+    """Send a result to the configured download client via Prowlarr."""
+    s   = db.get_settings()
+    base = _prowlarr_url()
+    if not base:
+        return {"error": "Prowlarr URL not configured"}
+    client_name = s.get("prowlarr_torrent_client" if is_torrent else "prowlarr_nzb_client", "")
+    category    = s.get("prowlarr_category", "Top-Shelf")
+    try:
+        payload = {
+            "guid":          guid,
+            "indexerId":     indexer_id,
+            "downloadClientId": None,
+        }
+        if client_name:
+            # Look up client ID from name
+            clients_resp = requests.get(f"{base}/api/v1/downloadclient",
+                                        headers=_prowlarr_headers(), timeout=10)
+            clients_resp.raise_for_status()
+            for c in clients_resp.json():
+                if c.get("name") == client_name:
+                    payload["downloadClientId"] = c["id"]
+                    break
+        resp = requests.post(
+            f"{base}/api/v1/search",
+            json={"guid": guid, "indexerId": indexer_id, "categories": [category]},
+            headers=_prowlarr_headers(),
+            timeout=15,
+        )
+        if resp.status_code in (200, 201, 202):
+            return {"ok": True}
+        return {"error": f"Prowlarr returned {resp.status_code}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def prowlarr_get_clients() -> list[dict]:
+    """Get configured download clients from Prowlarr."""
+    base = _prowlarr_url()
+    if not base:
+        return []
+    try:
+        resp = requests.get(f"{base}/api/v1/downloadclient",
+                            headers=_prowlarr_headers(), timeout=10)
+        resp.raise_for_status()
+        return [{"id": c["id"], "name": c["name"],
+                 "type": "torrent" if "torrent" in c.get("implementation", "").lower() else "nzb"}
+                for c in resp.json()]
+    except Exception:
+        return []
+
+
+def tpdb_performer_scenes(performer_id: str, limit: int = 8) -> list[dict]:
+    """Fetch recent scenes for a performer from TPDB."""
+    try:
+        resp = requests.get(
+            f"https://api.theporndb.net/performers/{performer_id}/scenes",
+            params={"page": 1, "per_page": limit},
+            headers=_tpdb_headers(),
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            scenes = resp.json().get("data") or []
+            return [{
+                "id":       str(s.get("id", "")),
+                "title":    s.get("title", ""),
+                "date":     s.get("date", ""),
+                "studio":   (s.get("site") or {}).get("name", ""),
+                "thumb":    ((s.get("posters") or [{}])[0]).get("url"),
+            } for s in scenes]
+    except Exception:
+        pass
+    return []
+
+
+def tpdb_studio_scenes(studio_id: str, limit: int = 8) -> list[dict]:
+    """Fetch recent scenes for a studio from TPDB."""
+    try:
+        resp = requests.get(
+            f"https://api.theporndb.net/sites/{studio_id}/scenes",
+            params={"page": 1, "per_page": limit},
+            headers=_tpdb_headers(),
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            scenes = resp.json().get("data") or []
+            return [{
+                "id":       str(s.get("id", "")),
+                "title":    s.get("title", ""),
+                "date":     s.get("date", ""),
+                "studio":   (s.get("site") or {}).get("name", ""),
+                "thumb":    ((s.get("posters") or [{}])[0]).get("url"),
+            } for s in scenes]
+    except Exception:
+        pass
+    return []
+
+
+# ---------------------------------------------------------------------------
 # API routes
 # ---------------------------------------------------------------------------
 
@@ -2648,6 +2793,58 @@ async def metadata_create(payload: dict):
         "folder":     str(folder),
         "has_poster": poster_url is not None,
     }
+
+
+@app.get("/api/scenes/recent")
+async def scenes_recent(type: str, source: str, id: str):
+    """Get recent scenes for a performer or studio from TPDB."""
+    if source != "TPDB":
+        return {"scenes": [], "note": "Scene lookup only available for TPDB sources"}
+    if type == "performer":
+        scenes = tpdb_performer_scenes(id)
+    else:
+        scenes = tpdb_studio_scenes(id)
+    return {"scenes": scenes}
+
+
+@app.get("/api/prowlarr/search")
+async def prowlarr_search_endpoint(q: str):
+    if not q.strip():
+        return JSONResponse({"error": "Query required"}, status_code=400)
+    results = prowlarr_search(q.strip())
+    return {"results": results}
+
+
+@app.post("/api/prowlarr/grab")
+async def prowlarr_grab_endpoint(payload: dict):
+    guid       = payload.get("guid", "")
+    indexer_id = payload.get("indexer_id")
+    is_torrent = payload.get("type", "torrent") == "torrent"
+    if not guid:
+        return JSONResponse({"error": "guid required"}, status_code=400)
+    result = prowlarr_grab(guid, indexer_id, is_torrent)
+    return result
+
+
+@app.get("/api/prowlarr/clients")
+async def prowlarr_clients_endpoint():
+    return {"clients": prowlarr_get_clients()}
+
+
+@app.get("/api/prowlarr/status")
+async def prowlarr_status():
+    s = db.get_settings()
+    base = s.get("prowlarr_url", "").rstrip("/")
+    if not base:
+        return {"connected": False, "error": "Not configured"}
+    try:
+        resp = requests.get(f"{base}/api/v1/system/status",
+                            headers=_prowlarr_headers(), timeout=8)
+        resp.raise_for_status()
+        d = resp.json()
+        return {"connected": True, "version": d.get("version")}
+    except Exception as e:
+        return {"connected": False, "error": str(e)}
 
 
 @app.get("/api/metadata/preview")

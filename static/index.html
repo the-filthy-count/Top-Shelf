@@ -838,6 +838,37 @@
         <div class="field-hint" style="margin-top:6px">Sets the default state of the StashDB submission toggle on the manual filing form</div>
       </div>
 
+      <!-- Prowlarr -->
+      <div class="settings-section">
+        <div class="settings-section-title">Prowlarr</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-row">
+            <label class="field-label">Prowlarr URL</label>
+            <input class="field-input" id="cfgProwlarrUrl" type="text" placeholder="http://192.168.1.x:9696">
+          </div>
+          <div class="field-row">
+            <label class="field-label">API Key</label>
+            <input class="field-input" id="cfgProwlarrKey" type="password" autocomplete="off">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Download Category</label>
+            <input class="field-input" id="cfgProwlarrCategory" type="text" placeholder="Top-Shelf">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Status</label>
+            <div id="prowlarrStatus" style="font-size:11px;color:var(--dim);padding:9px 0">Not checked</div>
+          </div>
+          <div class="field-row">
+            <label class="field-label">Torrent Client</label>
+            <input class="field-input" id="cfgProwlarrTorrent" type="text" placeholder="qBittorrent">
+          </div>
+          <div class="field-row">
+            <label class="field-label">NZB Client</label>
+            <input class="field-input" id="cfgProwlarrNzb" type="text" placeholder="SABnzbd">
+          </div>
+        </div>
+      </div>
+
       <!-- API Keys -->
       <div class="settings-section">
         <div class="settings-section-title">API Keys</div>
@@ -1040,6 +1071,16 @@
     });
     document.getElementById('cfgSubmitPhash').checked          = (s.submit_phash_enabled              || 'true')  === 'true';
     document.getElementById('cfgManualSubmitDefault').checked  = (s.manual_submit_stashdb_default || 'false') === 'true';
+    document.getElementById('cfgProwlarrUrl').value      = s.prowlarr_url       || '';
+    document.getElementById('cfgProwlarrKey').value      = s.prowlarr_api_key   || '';
+    document.getElementById('cfgProwlarrCategory').value = s.prowlarr_category  || 'Top-Shelf';
+    document.getElementById('cfgProwlarrTorrent').value  = s.prowlarr_torrent_client || '';
+    document.getElementById('cfgProwlarrNzb').value      = s.prowlarr_nzb_client    || '';
+    fetch('/api/prowlarr/status').then(r=>r.json()).then(d=>{
+      const el = document.getElementById('prowlarrStatus');
+      el.textContent = d.connected ? `Connected v${d.version}` : (d.error || 'Not connected');
+      el.style.color = d.connected ? 'var(--green)' : 'var(--red)';
+    });
     document.getElementById('cfgKeyTmdb').value          = s.api_key_tmdb      || '';
     document.getElementById('cfgMediaScanEnabled').checked = (s.media_scan_enabled || 'true') === 'true';
     document.getElementById('cfgScanDebounce').value        = s.media_scan_debounce_mins || '5';
@@ -1150,6 +1191,11 @@
         submit_phash_enabled:           document.getElementById('cfgSubmitPhash').checked         ? 'true' : 'false',
         manual_submit_stashdb_default: document.getElementById('cfgManualSubmitDefault').checked ? 'true' : 'false',
         api_key_tmdb:      document.getElementById('cfgKeyTmdb').value.trim(),
+        prowlarr_url:              document.getElementById('cfgProwlarrUrl').value.trim(),
+        prowlarr_api_key:          document.getElementById('cfgProwlarrKey').value.trim(),
+        prowlarr_category:         document.getElementById('cfgProwlarrCategory').value.trim(),
+        prowlarr_torrent_client:   document.getElementById('cfgProwlarrTorrent').value.trim(),
+        prowlarr_nzb_client:       document.getElementById('cfgProwlarrNzb').value.trim(),
         media_scan_enabled:        document.getElementById('cfgMediaScanEnabled').checked ? 'true' : 'false',
         media_scan_debounce_mins:  document.getElementById('cfgScanDebounce').value.trim(),
         stash_enabled:     document.getElementById('cfgStashEnabled').checked     ? 'true' : 'false',
