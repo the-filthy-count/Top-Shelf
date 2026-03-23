@@ -2544,6 +2544,35 @@ async def metadata_create(payload: dict):
     }
 
 
+@app.get("/api/metadata/preview")
+async def metadata_preview(type: str, source: str, id: str):
+    """Fetch preview data (image, bio, meta) without creating any files."""
+    if type == "performer":
+        data = fetch_performer_detail(source, id)
+        if not data:
+            return {"image": None, "bio": "", "meta": ""}
+        extras  = data.get("extras") or {}
+        posters = data.get("posters") or []
+        image   = posters[0].get("url") if posters and isinstance(posters[0], dict) else (posters[0] if posters else None)
+        bio     = data.get("bio") or ""
+        aliases = data.get("aliases") or []
+        meta_parts = [f"<span>{source}</span>"]
+        if extras.get("birthday"):       meta_parts.append(f"Born: <span>{extras['birthday']}</span>")
+        if extras.get("birthplace"):     meta_parts.append(f"From: <span>{extras['birthplace']}</span>")
+        if extras.get("career_start_year"): meta_parts.append(f"Active: <span>{extras['career_start_year']}</span>")
+        if extras.get("ethnicity"):      meta_parts.append(f"Ethnicity: <span>{extras['ethnicity']}</span>")
+        if extras.get("measurements"):   meta_parts.append(f"Stats: <span>{extras['measurements']}</span>")
+        if aliases: meta_parts.append(f"AKA: <span>{', '.join(aliases[:3])}</span>")
+        return {"image": image, "bio": bio[:500] if bio else "", "meta": " &middot; ".join(meta_parts)}
+    else:
+        data = fetch_studio_detail(source, id)
+        if not data:
+            return {"image": None, "bio": "", "meta": ""}
+        image = data.get("logo") or data.get("poster")
+        bio   = data.get("description") or data.get("bio") or ""
+        return {"image": image, "bio": bio[:500] if bio else "", "meta": f"<span>{source}</span>"}
+
+
 @app.get("/api/metadata/dirs")
 async def metadata_dirs():
     """Return all configured library directories for the destination picker."""

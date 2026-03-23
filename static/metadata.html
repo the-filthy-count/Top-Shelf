@@ -229,24 +229,52 @@
     showDetail(selectedResult);
   }
 
-  function showDetail(item) {
+  async function showDetail(item) {
     document.getElementById('detailEmpty').style.display = 'none';
     document.getElementById('detailContent').style.display = 'block';
     document.getElementById('detailTitle').textContent = item.name;
     document.getElementById('detailName').textContent = item.name;
     document.getElementById('detailMeta').innerHTML = `<span>${item.source}</span> · ${item.id}`;
-    document.getElementById('detailBio').textContent = '';
+    document.getElementById('detailBio').textContent = 'Loading...';
     document.getElementById('resultMsg').style.display = 'none';
 
-    // Poster
+    // Show search result image immediately
     const posterEl = document.getElementById('detailPoster');
+    const icon = currentType === 'studio' ? 'clapperboard' : 'person';
     if (item.image) {
-      posterEl.innerHTML = `<img class="detail-poster" src="${esc(item.image)}" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-person></i></div>'">`;
+      posterEl.innerHTML = `<img class="detail-poster" src="${esc(item.image)}" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-${icon}></i></div>'">`;
     } else {
-      posterEl.innerHTML = `<div class="detail-poster-placeholder"><i class="fa-solid fa-${currentType === 'studio' ? 'clapperboard' : 'person'}"></i></div>`;
+      posterEl.innerHTML = `<div class="detail-poster-placeholder"><i class="fa-solid fa-${icon}"></i></div>`;
     }
 
     loadDirs();
+
+    // Fetch full detail to get better image and bio
+    try {
+      const r = await fetch('/api/metadata/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          type: currentType, source: item.source, id: item.id,
+          dest_dir: '__preview__',  // sentinel - backend won't create folder
+        }),
+      });
+      // We use a dedicated preview endpoint instead
+    } catch {}
+
+    // Use a lightweight preview fetch
+    try {
+      const r = await fetch(`/api/metadata/preview?type=${currentType}&source=${encodeURIComponent(item.source)}&id=${encodeURIComponent(item.id)}`);
+      const d = await r.json();
+      if (d.image) {
+        posterEl.innerHTML = `<img class="detail-poster" src="${esc(d.image)}" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-${icon}></i></div>'">`;
+      }
+      if (d.bio) document.getElementById('detailBio').textContent = d.bio;
+      else document.getElementById('detailBio').textContent = '';
+      if (d.meta) document.getElementById('detailMeta').innerHTML = d.meta;
+    } catch {
+      document.getElementById('detailBio').textContent = '';
+    }
   }
 
   function clearDetail() {
