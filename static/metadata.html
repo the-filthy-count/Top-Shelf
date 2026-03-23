@@ -64,11 +64,12 @@
   .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; }
   .panel-title { font-family: var(--acid); font-size: 28px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; color: #fff; }
   .panel-body { padding: 16px 18px; }
+  .layout { align-items: start; }
   .empty { padding: 32px 18px; text-align: center; color: var(--dim); font-size: 12px; }
 
   /* Type toggle */
   .type-toggle { display: flex; gap: 0; margin-bottom: 16px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
-  .type-btn { flex: 1; padding: 8px; background: none; border: none; color: var(--dim); font-family: var(--secs); font-size: 14px; letter-spacing: -0.02em; cursor: pointer; transition: all 0.15s; }
+  .type-btn { flex: 1; padding: 8px; background: none; border: none; color: var(--dim); font-family: var(--mono); font-size: 13px; cursor: pointer; transition: all 0.15s; }
   .type-btn.active { background: var(--accent); color: #0c0c0e; }
 
   /* Search */
@@ -172,7 +173,7 @@
       <div class="panel-header">
         <div style="display:flex;align-items:center;gap:12px">
           <span class="panel-title" id="detailTitle">Details</span>
-          <span id="detailLibStatus" style="font-family:var(--secs);font-size:14px;letter-spacing:-0.02em"></span>
+          <span id="detailLibStatus" style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em"></span>
         </div>
       </div>
       <div class="panel-body">
@@ -279,7 +280,7 @@
             const el = document.getElementById(`lib-${i}`);
             if (!el) return;
             if (lib.found) {
-              el.innerHTML = '<span style="font-family:var(--secs);font-size:13px;letter-spacing:-0.02em;color:var(--green)"><i class="fa-solid fa-check"></i> IN LIBRARY</span>';
+              el.innerHTML = '<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--green)"><i class="fa-solid fa-check"></i> IN LIBRARY</span>';
               window._searchResults[i]._inLibrary = true;
               window._searchResults[i]._libraryPath = lib.path;
             } else {
@@ -419,10 +420,10 @@
       .then(r => r.json())
       .then(lib => {
         if (lib.found) {
-          libEl.innerHTML = `<span style="color:var(--green)"><i class="fa-solid fa-check"></i> IN LIBRARY</span>`;
+          libEl.innerHTML = `<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--green)"><i class="fa-solid fa-check"></i> IN LIBRARY</span>`;
           if (destEl) destEl.style.display = 'none';
         } else {
-          libEl.innerHTML = `<span style="color:var(--dim)">NOT IN LIBRARY</span>`;
+          libEl.innerHTML = `<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--dim)">NOT IN LIBRARY</span>`;
           if (destEl) destEl.style.display = 'block';
         }
       }).catch(() => { libEl.innerHTML = ''; if (destEl) destEl.style.display = 'block'; });
@@ -523,7 +524,7 @@
           window._searchResults?.forEach((item, i) => {
             if (item.name === selectedResult.name) {
               const el = document.getElementById(`lib-${i}`);
-              if (el) el.innerHTML = '<span style="font-family:var(--secs);font-size:13px;letter-spacing:-0.02em;color:var(--green)"><i class="fa-solid fa-check"></i> IN LIBRARY</span>';
+              if (el) el.innerHTML = '<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--green)"><i class="fa-solid fa-check"></i> IN LIBRARY</span>';
             }
           });
         }

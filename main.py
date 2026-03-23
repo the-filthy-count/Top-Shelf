@@ -2831,18 +2831,28 @@ async def scenes_recent(type: str, source: str, id: str, slug: str = ""):
     """Get recent scenes for a performer or studio from TPDB."""
     if source != "TPDB":
         return {"scenes": [], "note": "Scene lookup only available for TPDB sources"}
-    # Prefer slug over numeric id for TPDB API calls
-    lookup_id = slug if slug else id
-    if type == "performer":
-        scenes = tpdb_performer_scenes(lookup_id)
-        # Fallback to numeric id if slug fails
-        if not scenes and slug and slug != id:
-            scenes = tpdb_performer_scenes(id)
-    else:
-        scenes = tpdb_studio_scenes(lookup_id)
-        if not scenes and slug and slug != id:
-            scenes = tpdb_studio_scenes(id)
-    return {"scenes": scenes}
+    emit(f"SCENES lookup: type={type} id={id} slug={slug}")
+    # Try slug first, then numeric id
+    for lookup in ([slug, id] if slug and slug != id else [id]):
+        if not lookup:
+            continue
+        url = f"https://api.theporndb.net/performers/{lookup}/scenes" if type == "performer"               else f"https://api.theporndb.net/sites/{lookup}/scenes"
+        try:
+            resp = requests.get(url, params={"page": 1, "per_page": 8},
+                                headers=_tpdb_headers(), timeout=15)
+            emit(f"SCENES {lookup} → {resp.status_code}")
+            if resp.status_code == 200:
+                scenes = resp.json().get("data") or []
+                return {"scenes": [{
+                    "id":     str(s.get("id", "")),
+                    "title":  s.get("title", ""),
+                    "date":   s.get("date", ""),
+                    "studio": (s.get("site") or {}).get("name", ""),
+                    "thumb":  ((s.get("posters") or [{}])[0]).get("url"),
+                } for s in scenes]}
+        except Exception as e:
+            emit(f"SCENES error: {e}")
+    return {"scenes": []}
 
 
 @app.get("/api/prowlarr/search")
