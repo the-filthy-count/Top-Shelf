@@ -1898,11 +1898,12 @@ def prowlarr_search(query: str) -> list[dict]:
         results = resp.json()
         if not isinstance(results, list):
             return []
+        # Sort ALL results before slicing - NZBs first by age, torrents by seeders
         nzbs     = sorted([r for r in results if r.get("protocol") == "usenet"],
                           key=lambda x: x.get("ageHours") or 0)
         torrents = sorted([r for r in results if r.get("protocol") != "usenet"],
                           key=lambda x: x.get("seeders") or 0, reverse=True)
-        combined = nzbs[:15] + torrents[:15]
+        combined = nzbs[:20] + torrents[:20]
         out = []
         for r in combined:
             out.append({
