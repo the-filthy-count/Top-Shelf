@@ -315,7 +315,7 @@
     section.style.display = 'block';
     grid.innerHTML = '<div class="empty">Loading...</div>';
     try {
-      const r = await fetch(`/api/scenes/recent?type=${currentType}&source=${encodeURIComponent(item.source)}&id=${encodeURIComponent(item.id)}`);
+      const r = await fetch(`/api/scenes/recent?type=${currentType}&source=${encodeURIComponent(item.source)}&id=${encodeURIComponent(item.id)}&slug=${encodeURIComponent(item.slug||'')}`);
       const d = await r.json();
       if (!d.scenes?.length) {
         grid.innerHTML = '<div class="empty">No recent scenes found</div>';

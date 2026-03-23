@@ -1702,8 +1702,13 @@ def search_performers(name: str) -> list[dict]:
                             headers=_tpdb_headers(), timeout=15)
         if resp.status_code == 200:
             for p in (resp.json().get("data") or [])[:5]:
-                results.append({"source": "TPDB", "id": str(p["id"]), "name": p["name"],
-                                 "image": (p.get("posters") or [{}])[0].get("url")})
+                results.append({
+                    "source": "TPDB",
+                    "id":     str(p["id"]),
+                    "slug":   p.get("_id") or p.get("slug") or str(p["id"]),
+                    "name":   p["name"],
+                    "image":  (p.get("posters") or [{}])[0].get("url"),
+                })
     except Exception:
         pass
     # FansDB
@@ -1723,9 +1728,13 @@ def search_studios(name: str) -> list[dict]:
                             headers=_tpdb_headers(), timeout=15)
         if resp.status_code == 200:
             for s in (resp.json().get("data") or [])[:10]:
-                results.append({"source": "TPDB", "id": str(s["id"]),
-                                 "name": s.get("name") or s.get("title", ""),
-                                 "image": s.get("logo") or s.get("poster")})
+                results.append({
+                    "source": "TPDB",
+                    "id":     str(s["id"]),
+                    "slug":   s.get("_id") or s.get("slug") or str(s["id"]),
+                    "name":   s.get("name") or s.get("title", ""),
+                    "image":  s.get("logo") or s.get("poster"),
+                })
     except Exception:
         pass
     return results
@@ -2818,14 +2827,21 @@ async def metadata_create(payload: dict):
 
 
 @app.get("/api/scenes/recent")
-async def scenes_recent(type: str, source: str, id: str):
+async def scenes_recent(type: str, source: str, id: str, slug: str = ""):
     """Get recent scenes for a performer or studio from TPDB."""
     if source != "TPDB":
         return {"scenes": [], "note": "Scene lookup only available for TPDB sources"}
+    # Prefer slug over numeric id for TPDB API calls
+    lookup_id = slug if slug else id
     if type == "performer":
-        scenes = tpdb_performer_scenes(id)
+        scenes = tpdb_performer_scenes(lookup_id)
+        # Fallback to numeric id if slug fails
+        if not scenes and slug and slug != id:
+            scenes = tpdb_performer_scenes(id)
     else:
-        scenes = tpdb_studio_scenes(id)
+        scenes = tpdb_studio_scenes(lookup_id)
+        if not scenes and slug and slug != id:
+            scenes = tpdb_studio_scenes(id)
     return {"scenes": scenes}
 
 
