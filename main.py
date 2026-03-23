@@ -1853,15 +1853,7 @@ def scan_library_issues(root_dirs: list[str], movie_dirs: list[str] = None) -> d
                     stem = Path(nfo).stem
                     if not any(Path(v).stem == stem for v in videos):
                         issues["nfo_no_video"].append(str(dp / nfo))
-                # Missing poster/thumb
-                if videos:
-                    has_thumb = any(
-                        f.endswith("-poster.jpg") or f.endswith("-thumb.jpg")
-                        for f in filenames
-                    )
-                    if not has_thumb:
-                        issues["missing_thumb"].append(str(dp))
-                continue
+                continue  # No thumb check for movies - artwork naming varies too much
 
             # Standard scene library logic
             for nfo in nfos:
