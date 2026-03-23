@@ -157,7 +157,7 @@ app = FastAPI(title="Top-Shelf")
 
 COOKIE_NAME   = "ts_session"
 LOGIN_PATH    = "/login"
-PUBLIC_PATHS  = {"/login", "/api/auth/login", "/api/auth/logout"}
+PUBLIC_PATHS  = {"/login", "/api/auth/login", "/api/auth/logout", "/api/prowlarr/debug"}
 
 
 def _is_authenticated(request: Request) -> bool:
@@ -2892,6 +2892,27 @@ async def scenes_recent(source: str, id: str, type: str = "performer", slug: str
         except Exception:
             pass
     return {"scenes": []}
+
+
+@app.get("/api/prowlarr/debug")
+async def prowlarr_debug(q: str = "deeper summer kline"):
+    base = _prowlarr_url()
+    if not base:
+        return {"error": "not configured"}
+    try:
+        resp = requests.get(f"{base}/api/v1/search",
+                            params={"query": q},
+                            headers=_prowlarr_headers(), timeout=20)
+        results = resp.json()
+        # Show ALL unique protocol values and first 15 results raw protocol
+        protocols = list(set(r.get("protocol") for r in results))
+        return {
+            "total": len(results),
+            "unique_protocols": protocols,
+            "all": [{"title": r.get("title","")[:40], "protocol": r.get("protocol"), "indexer": r.get("indexer","")} for r in results[:20]]
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @app.get("/api/prowlarr/search")
