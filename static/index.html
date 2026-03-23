@@ -106,7 +106,7 @@
 
   /* ── Panels ── */
   .panel { background: linear-gradient(160deg, rgba(36,36,48,0.88) 0%, rgba(18,18,26,0.78) 100%); border: none; border-radius: 10px; overflow: hidden; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.25); }
-  .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: none; }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: none; gap: 12px; }
   .panel-title { font-family: var(--acid); font-size: 32px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; color: #ffffff; }
   .panel-body { max-height: 520px; overflow-y: auto; }
   .panel-body::-webkit-scrollbar { width: 4px; }
@@ -182,7 +182,8 @@
   .btn-run-file { background: none; border: 1px solid var(--muted); color: #ffffff; padding: 3px 10px; border-radius: 4px; font-family: Acidoze, var(--sans); font-size: 17px; cursor: pointer; letter-spacing: 0.05em; transition: all 0.15s; text-transform: uppercase; }
   .btn-run-file:hover { border-color: var(--accent); color: var(--accent); }
   .btn-run-file:disabled { opacity: 0.3; cursor: not-allowed; }
-  .header-actions { display: flex; gap: 8px; align-items: center; }
+  .header-actions { display: flex; gap: 8px; align-items: center; flex: 1; }
+  .header-actions .queue-filter { flex: 1; }
 
   /* ── Collapsible sections ── */
   .collapsible-header {
@@ -299,6 +300,7 @@
       <div class="logo">
         <img src="/static/logo.png" alt="Top-Shelf" style="height:36px; object-fit:contain;">
       </div>
+      <span id="appVersion" style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.06em"></span>
       <div id="statusPill" class="status-pill">
         <span class="status-dot"></span>
         <span id="statusText">Idle</span>
@@ -338,7 +340,7 @@
       <div class="panel-header">
         <span class="panel-title">Queue <span id="queueCount" style="font-family:var(--secs);letter-spacing:-0.02em;color:var(--dim)"></span></span>
         <div class="header-actions">
-          <input id="queueFilter" type="text" placeholder="Filter..." oninput="filterQueue()" style="background:var(--raised);border:none;color:var(--text);padding:6px 10px;border-radius:6px;font-family:var(--mono);font-size:12px;width:160px;outline:none;" spellcheck="false">
+          <input id="queueFilter" class="queue-filter" type="text" placeholder="Filter..." oninput="filterQueue()" style="background:var(--raised);border:none;color:var(--text);padding:6px 10px;border-radius:6px;font-family:var(--mono);font-size:12px;outline:none;min-width:80px;" spellcheck="false">
           <button class="btn-secondary" onclick="loadQueue()" title="Refresh queue"><i class="fa-solid fa-arrows-rotate"></i></button>
           <button id="btnRunAll" class="btn-primary" onclick="runAll()" title="Run All"><i class="fa-solid fa-play"></i></button>
         </div>
@@ -617,6 +619,30 @@
             </div>
           </div>
           <div class="field-hint" id="retryNextRun" style="margin-top:8px"></div>
+        </div>
+      </div>
+
+      <!-- Download Watch -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title">Download Folder Watch</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgDownloadWatchEnabled" onchange="toggleSection('downloadWatchBody', this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="field-hint" style="margin-top:6px">Watches a folder for completed NZB/torrent downloads, cleans up junk, renames gibberish filenames using the folder name, and moves videos to your scene input folder.</div>
+        <div class="collapsible-body" id="downloadWatchBody" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="field-row" style="grid-column:1/-1">
+              <label class="field-label">Download watch directory</label>
+              <input class="field-input" id="cfgDownloadWatchDir" type="text" placeholder="/path/to/downloads/complete">
+            </div>
+            <div class="field-row">
+              <label class="field-label">Hold time (seconds)</label>
+              <input class="field-input" id="cfgDownloadWatchHold" type="number" min="30" max="3600" placeholder="300">
+            </div>
+          </div>
         </div>
       </div>
 
@@ -947,6 +973,11 @@
     document.getElementById('cfgPatternSeries').value    = s.pattern_series    || '';
     document.getElementById('cfgPatternPerformer').value = s.pattern_performer || '';
     const watchOn = (s.folder_watch_enabled || 'true') === 'true';
+    const dlWatchOn = (s.download_watch_enabled || 'false') === 'true';
+    document.getElementById('cfgDownloadWatchEnabled').checked = dlWatchOn;
+    toggleSection('downloadWatchBody', dlWatchOn);
+    document.getElementById('cfgDownloadWatchDir').value  = s.download_watch_dir       || '';
+    document.getElementById('cfgDownloadWatchHold').value = s.download_watch_hold_secs || '300';
     document.getElementById('cfgWatchEnabled').checked = watchOn;
     toggleSection('watchBody', watchOn);
     document.getElementById('cfgWatchHold').value = s.folder_watch_hold_secs || '60';
@@ -1060,6 +1091,9 @@
         features_dir:      document.getElementById('cfgFeaturesDir').value.trim(),
         pattern_series:    document.getElementById('cfgPatternSeries').value.trim(),
         pattern_performer: document.getElementById('cfgPatternPerformer').value.trim(),
+        download_watch_enabled:  document.getElementById('cfgDownloadWatchEnabled').checked ? 'true' : 'false',
+        download_watch_dir:      document.getElementById('cfgDownloadWatchDir').value.trim(),
+        download_watch_hold_secs: document.getElementById('cfgDownloadWatchHold').value.trim(),
         folder_watch_enabled:   document.getElementById('cfgWatchEnabled').checked ? 'true' : 'false',
         folder_watch_hold_secs: document.getElementById('cfgWatchHold').value.trim(),
         retry_enabled:     document.getElementById('cfgRetryEnabled').checked ? 'true' : 'false',

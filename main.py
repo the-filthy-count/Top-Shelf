@@ -40,6 +40,8 @@ import database as db
 # Constants
 # ---------------------------------------------------------------------------
 
+VERSION = "1.0.0"
+
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".wmv", ".mov", ".m4v", ".flv", ".webm"}
 
 UPPERCASE_KEYWORDS = {
@@ -74,9 +76,12 @@ def get_api_keys() -> dict:
 processing_state = {"running": False, "current_file": None, "log": []}
 log_queue: asyncio.Queue = None
 scheduler = BackgroundScheduler(daemon=True)
-observer  = None  # watchdog observer instance
-_pending_files: dict = {}  # filename -> scheduled time
-_pending_lock = threading.Lock()
+observer          = None  # scene folder watchdog observer
+download_observer = None  # download folder watchdog observer
+_pending_files: dict     = {}  # filename -> scheduled time (scene watcher)
+_pending_downloads: dict = {}  # path -> scheduled time (download watcher)
+_pending_lock    = threading.Lock()
+_download_lock   = threading.Lock()
 
 
 class NewVideoHandler(FileSystemEventHandler):
@@ -183,15 +188,19 @@ async def startup():
     _migrate_sidecar_phashes()
     _apply_retry_schedule()
     scheduler.add_job(_check_pending_files, "interval", seconds=30, id="pending_check")
+    scheduler.add_job(_check_pending_downloads, "interval", seconds=30, id="download_check")
     scheduler.start()
     _start_watcher()
+    _start_download_watcher()
 
 
 @app.on_event("shutdown")
 async def shutdown():
-    global observer
+    global observer, download_observer
     if observer:
         observer.stop()
+    if download_observer:
+        download_observer.stop()
     scheduler.shutdown(wait=False)
 
 
@@ -469,6 +478,183 @@ def query_with_fallback(phash_hex):
     except Exception as e:
         raise RuntimeError(f"FansDB also failed: {e}")
     return [], "none"
+
+# ---------------------------------------------------------------------------
+# Download folder processor
+# ---------------------------------------------------------------------------
+
+JUNK_EXTENSIONS = {
+    ".nfo", ".nzb", ".srr", ".sfv", ".jpg", ".jpeg", ".png", ".gif",
+    ".txt", ".url", ".exe", ".bat", ".sub", ".srt", ".ass", ".ssa",
+    ".idx", ".md5", ".xml", ".html", ".htm", ".lnk", ".torrent",
+}
+
+
+def _looks_like_gibberish(stem: str) -> bool:
+    """
+    True if the filename stem has no separators at all.
+    Readable names use dots, spaces, dashes or underscores as word breaks.
+    Pure gibberish is a run of characters with no breaks whatsoever.
+    """
+    return not any(c in stem for c in ".-_ ")
+
+
+def _process_download_entry(entry_path: Path, dest_dir: Path) -> None:
+    """
+    Process a single file or folder from the download watch directory.
+    - Deletes junk and sample files
+    - Renames video to folder name if filename looks like gibberish
+    - Moves video(s) to dest_dir
+    - Deletes the source folder
+    """
+    emit(f"DOWNLOAD {entry_path.name}")
+
+    if entry_path.is_file():
+        # Single file dropped directly
+        if entry_path.suffix.lower() not in VIDEO_EXTENSIONS:
+            emit(f"  Skipped: not a video ({entry_path.suffix})")
+            return
+        if "sample" in entry_path.name.lower():
+            emit(f"  Skipped: sample file")
+            entry_path.unlink()
+            return
+        dest = dest_dir / entry_path.name
+        safe_move(entry_path, dest)
+        emit(f"  Moved: {entry_path.name}")
+        return
+
+    if not entry_path.is_dir():
+        return
+
+    folder_name = entry_path.name
+
+    # Gather all files recursively
+    all_files = list(entry_path.rglob("*"))
+
+    # Find non-sample videos
+    videos = [
+        f for f in all_files
+        if f.is_file()
+        and f.suffix.lower() in VIDEO_EXTENSIONS
+        and "sample" not in f.name.lower()
+    ]
+
+    # Find and delete samples
+    samples = [
+        f for f in all_files
+        if f.is_file()
+        and f.suffix.lower() in VIDEO_EXTENSIONS
+        and "sample" in f.name.lower()
+    ]
+    for s in samples:
+        s.unlink()
+        emit(f"  Deleted sample: {s.name}")
+
+    if not videos:
+        emit(f"  No videos found - deleting folder")
+        shutil.rmtree(entry_path, ignore_errors=True)
+        return
+
+    for video in videos:
+        stem = video.stem
+        ext  = video.suffix
+
+        # Use folder name if only one video and filename looks like gibberish
+        if len(videos) == 1 and _looks_like_gibberish(stem):
+            new_name = f"{folder_name}{ext}"
+            emit(f"  Renamed: {video.name} → {new_name}")
+        else:
+            new_name = video.name
+
+        dest = dest_dir / new_name
+        # Avoid collision
+        if dest.exists():
+            dest = dest_dir / f"{Path(new_name).stem}_1{ext}"
+
+        safe_move(video, dest)
+        emit(f"  Moved: {new_name} → {dest_dir.name}/")
+
+    # Delete the source folder and everything remaining
+    shutil.rmtree(entry_path, ignore_errors=True)
+    emit(f"  Folder deleted: {folder_name}")
+    emit("---")
+
+
+def _check_pending_downloads() -> None:
+    """Called by scheduler every 30s - fires download processor for entries past hold time."""
+    now = time.time()
+    ready = []
+    with _download_lock:
+        for path_str, fire_at in list(_pending_downloads.items()):
+            if now >= fire_at:
+                ready.append(path_str)
+                del _pending_downloads[path_str]
+    if ready:
+        s = db.get_settings()
+        dest_dir = Path(s.get("source_dir", ""))
+        if not dest_dir.exists():
+            return
+        for path_str in ready:
+            entry = Path(path_str)
+            if entry.exists():
+                try:
+                    _process_download_entry(entry, dest_dir)
+                except Exception as e:
+                    emit(f"  Download process error: {e}")
+
+
+class DownloadWatchHandler(FileSystemEventHandler):
+    """Watches the download folder and queues new entries after a hold period."""
+
+    def _queue(self, path_str: str) -> None:
+        s = db.get_settings()
+        if s.get("download_watch_enabled", "false").lower() != "true":
+            return
+        hold = int(s.get("download_watch_hold_secs", "300"))
+        with _download_lock:
+            # Only queue the top-level entry (folder or file)
+            entry = Path(path_str)
+            dl_dir = Path(s.get("download_watch_dir", ""))
+            if entry.parent == dl_dir or entry == dl_dir:
+                top = path_str
+            else:
+                # Find the immediate child of dl_dir
+                try:
+                    rel = entry.relative_to(dl_dir)
+                    top = str(dl_dir / rel.parts[0])
+                except ValueError:
+                    top = path_str
+            _pending_downloads[top] = time.time() + hold
+
+    def on_created(self, event):
+        self._queue(event.src_path)
+
+    def on_moved(self, event):
+        self._queue(event.dest_path)
+
+
+def _start_download_watcher() -> None:
+    global download_observer
+    s = db.get_settings()
+    if s.get("download_watch_enabled", "false").lower() != "true":
+        return
+    dl_dir = Path(s.get("download_watch_dir", ""))
+    if not dl_dir.exists():
+        return
+    if download_observer:
+        download_observer.stop()
+    download_observer = Observer()
+    download_observer.schedule(DownloadWatchHandler(), str(dl_dir), recursive=True)
+    download_observer.start()
+
+
+def _restart_download_watcher() -> None:
+    global download_observer
+    if download_observer:
+        download_observer.stop()
+        download_observer = None
+    _start_download_watcher()
+
 
 # ---------------------------------------------------------------------------
 # Directory matching (settings-driven)
@@ -1500,6 +1686,7 @@ async def save_settings(payload: dict):
     db.save_directories(payload.get("directories", []))
     _apply_retry_schedule()
     _restart_watcher()
+    _restart_download_watcher()
     return {"saved": True}
 
 
