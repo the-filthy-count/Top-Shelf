@@ -1702,12 +1702,14 @@ def search_performers(name: str) -> list[dict]:
                             headers=_tpdb_headers(), timeout=15)
         if resp.status_code == 200:
             for p in (resp.json().get("data") or [])[:5]:
+                posters = p.get("posters") or []
+                img = posters[0] if posters and isinstance(posters[0], str) else (posters[0].get("url") if posters else None)
                 results.append({
                     "source": "TPDB",
-                    "id":     str(p["id"]),
-                    "slug":   p.get("_id") or p.get("slug") or str(p["id"]),
+                    "id":     str(p.get("id", "")),
+                    "slug":   p.get("slug") or p.get("_id") or str(p.get("id", "")),
                     "name":   p["name"],
-                    "image":  (p.get("posters") or [{}])[0].get("url"),
+                    "image":  img,
                 })
     except Exception:
         pass
@@ -2865,10 +2867,15 @@ async def scenes_recent(source: str, id: str, type: str = "performer", slug: str
                 emit(f"SCENES first item keys: {list(data_raw[0].keys()) if isinstance(data_raw[0], dict) else str(data_raw[0])[:120]}")
             out = []
             for s in data_raw:
-                posters = s.get("posters") or []
-                thumb   = posters[0].get("url") if posters and isinstance(posters[0], dict) else None
+                # TPDB scenes: thumb is poster_image or image (strings), not posters list
+                thumb = s.get("poster_image") or s.get("image") or s.get("poster")
+                # posters may be list of strings
+                if not thumb:
+                    posters = s.get("posters") or []
+                    if posters:
+                        thumb = posters[0] if isinstance(posters[0], str) else posters[0].get("url")
                 out.append({
-                    "id":     str(s.get("id", "")),
+                    "id":     str(s.get("_id") or s.get("id") or ""),
                     "title":  s.get("title", ""),
                     "date":   s.get("date", ""),
                     "studio": (s.get("site") or {}).get("name", ""),
@@ -2940,7 +2947,8 @@ async def metadata_preview(type: str, source: str, id: str):
         if extras.get("ethnicity"):      meta_parts.append(f"Ethnicity: <span>{extras['ethnicity']}</span>")
         if extras.get("measurements"):   meta_parts.append(f"Stats: <span>{extras['measurements']}</span>")
         if aliases: meta_parts.append(f"AKA: <span>{', '.join(aliases[:3])}</span>")
-        return {"image": image, "bio": bio[:500] if bio else "", "meta": " &middot; ".join(meta_parts)}
+        return {"image": image, "bio": bio[:500] if bio else "", "meta": " &middot; ".join(meta_parts),
+                "slug": data.get("slug") or ""}
     else:
         data = fetch_studio_detail(source, id)
         if not data:

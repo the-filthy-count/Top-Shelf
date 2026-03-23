@@ -451,6 +451,11 @@
       }
       document.getElementById('detailBio').textContent = d.bio || '';
       if (d.meta) document.getElementById('detailMeta').innerHTML = d.meta;
+      // Update slug on selected result for better scene lookups
+      if (d.slug && selectedResult) {
+        selectedResult.slug = d.slug;
+        loadScenes(selectedResult);
+      }
     } catch {
       document.getElementById('detailBio').textContent = '';
     }
