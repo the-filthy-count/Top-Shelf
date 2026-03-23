@@ -31,7 +31,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
@@ -150,6 +150,38 @@ def _restart_watcher():
     _start_watcher()
 
 app = FastAPI(title="Top-Shelf")
+
+# ---------------------------------------------------------------------------
+# Auth helpers
+# ---------------------------------------------------------------------------
+
+COOKIE_NAME   = "ts_session"
+LOGIN_PATH    = "/login"
+PUBLIC_PATHS  = {"/login", "/api/auth/login", "/api/auth/logout"}
+
+
+def _is_authenticated(request: Request) -> bool:
+    if not db.get_password_hash():
+        return True  # No password set - open access
+    token = request.cookies.get(COOKIE_NAME, "")
+    return db.validate_session(token)
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+    # Always allow public paths and static assets
+    if path in PUBLIC_PATHS or path.startswith("/static"):
+        return await call_next(request)
+    if not _is_authenticated(request):
+        if path.startswith("/api/"):
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"error": "Unauthorised"}, status_code=401)
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=f"{LOGIN_PATH}?next={path}", status_code=302)
+    return await call_next(request)
+
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
@@ -1835,8 +1867,8 @@ async def login_page(next: str = "/"):
 
 
 @app.post("/api/auth/login")
-async def auth_login(request):
-    from fastapi.responses import JSONResponse, RedirectResponse
+async def auth_login(request: Request):
+    from fastapi.responses import JSONResponse
     body = await request.json()
     password  = body.get("password", "")
     next_path = body.get("next", "/")
@@ -1856,7 +1888,7 @@ async def auth_login(request):
 
 
 @app.post("/api/auth/logout")
-async def auth_logout(request):
+async def auth_logout(request: Request):
     from fastapi.responses import JSONResponse
     token = request.cookies.get(COOKIE_NAME, "")
     if token:
@@ -1867,7 +1899,7 @@ async def auth_logout(request):
 
 
 @app.post("/api/auth/set-password")
-async def auth_set_password(request):
+async def auth_set_password(request: Request):
     from fastapi.responses import JSONResponse
     if not _is_authenticated(request):
         return JSONResponse({"error": "Unauthorised"}, status_code=401)
@@ -1881,7 +1913,7 @@ async def auth_set_password(request):
 
 
 @app.post("/api/auth/remove-password")
-async def auth_remove_password(request):
+async def auth_remove_password(request: Request):
     from fastapi.responses import JSONResponse
     if not _is_authenticated(request):
         return JSONResponse({"error": "Unauthorised"}, status_code=401)
@@ -1890,7 +1922,7 @@ async def auth_remove_password(request):
 
 
 @app.get("/api/auth/status")
-async def auth_status(request):
+async def auth_status(request: Request):
     return {
         "password_set":   db.get_password_hash() is not None,
         "session_hours":  db.get_session_hours(),
