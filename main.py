@@ -2827,34 +2827,51 @@ async def metadata_create(payload: dict):
 
 
 @app.get("/api/scenes/recent")
-async def scenes_recent(type: str, source: str, id: str, slug: str = ""):
+async def scenes_recent(source: str, id: str, type: str = "performer", slug: str = ""):
     """Get recent scenes for a performer or studio from TPDB."""
     if source != "TPDB":
         return {"scenes": [], "note": "Scene lookup only available for TPDB sources"}
-    emit(f"SCENES lookup: type={type} id={id} slug={slug}")
-    # Try slug first, then numeric id
-    for lookup in ([slug, id] if slug and slug != id else [id]):
-        if not lookup:
-            continue
-        url = f"https://api.theporndb.net/performers/{lookup}/scenes" if type == "performer"               else f"https://api.theporndb.net/sites/{lookup}/scenes"
+
+    entity_type = type  # avoid shadowing builtin
+    emit(f"SCENES lookup: entity={entity_type} id={id} slug={slug}")
+
+    lookups = []
+    if slug and slug != id:
+        lookups.append(slug)
+    lookups.append(id)
+
+    for lookup in lookups:
+        if entity_type == "performer":
+            url = f"https://api.theporndb.net/performers/{lookup}/scenes"
+        else:
+            url = f"https://api.theporndb.net/sites/{lookup}/scenes"
         try:
             resp = requests.get(url, params={"page": 1, "per_page": 8},
                                 headers=_tpdb_headers(), timeout=15)
             emit(f"SCENES {lookup} → {resp.status_code}")
-            if resp.status_code == 200:
-                raw = resp.json()
-                emit(f"SCENES raw keys: {list(raw.keys())} data_type: {type(raw.get('data')).__name__} data_len: {len(raw.get('data') or [])}")
-                scenes = raw.get("data") or []
-                return {"scenes": [{
+            if resp.status_code != 200:
+                continue
+            payload  = resp.json()
+            data_raw = payload.get("data")
+            emit(f"SCENES data type={__builtins__['type'](data_raw).__name__ if isinstance(__builtins__, dict) else str(data_raw)[:80]}")
+            if not isinstance(data_raw, list):
+                emit(f"SCENES unexpected data: {str(data_raw)[:120]}")
+                continue
+            out = []
+            for s in data_raw:
+                posters = s.get("posters") or []
+                thumb   = posters[0].get("url") if posters and isinstance(posters[0], dict) else None
+                out.append({
                     "id":     str(s.get("id", "")),
                     "title":  s.get("title", ""),
                     "date":   s.get("date", ""),
                     "studio": (s.get("site") or {}).get("name", ""),
-                    "thumb":  ((s.get("posters") or [{}])[0]).get("url"),
-                } for s in scenes]}
-        except Exception as e:
-            import traceback
-            emit(f"SCENES error: {e} | {traceback.format_exc()[:200]}")
+                    "thumb":  thumb,
+                })
+            emit(f"SCENES returning {len(out)} scenes")
+            return {"scenes": out}
+        except Exception as exc:
+            emit(f"SCENES exception: {exc}")
     return {"scenes": []}
 
 
