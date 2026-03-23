@@ -10,6 +10,9 @@ on:
     branches:
       - main
 
+env:
+  IMAGE: thefilthycount/top-shelf
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,6 +31,16 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Set tags
+        id: tags
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            echo "tags=${{ env.IMAGE }}:latest,${{ env.IMAGE }}:${VERSION}" >> $GITHUB_OUTPUT
+          else
+            echo "tags=${{ env.IMAGE }}:latest" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and push
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6.15.0
@@ -35,6 +48,6 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: thefilthycount/top-shelf:latest
+          tags: ${{ steps.tags.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
