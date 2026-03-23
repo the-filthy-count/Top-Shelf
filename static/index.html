@@ -334,6 +334,7 @@
       <div class="panel-header">
         <span class="panel-title">Queue <span id="queueCount" style="font-family:var(--secs);letter-spacing:-0.02em;color:var(--dim)"></span></span>
         <div class="header-actions">
+          <input id="queueFilter" type="text" placeholder="Filter..." oninput="filterQueue()" style="background:var(--raised);border:none;color:var(--text);padding:6px 10px;border-radius:6px;font-family:var(--mono);font-size:12px;width:160px;outline:none;" spellcheck="false">
           <button class="btn-secondary" onclick="loadQueue()" title="Refresh queue"><i class="fa-solid fa-arrows-rotate"></i></button>
           <button id="btnRunAll" class="btn-primary" onclick="runAll()" title="Run All"><i class="fa-solid fa-play"></i></button>
         </div>
@@ -1308,6 +1309,16 @@
     if (d.error) { alert(d.error); btn.disabled = false; return; }
     isRunning = true;
     document.getElementById('btnRunAll').disabled = true;
+  }
+
+  // ── Queue filter ──────────────────────────────────────────────────────
+
+  function filterQueue() {
+    const term = document.getElementById('queueFilter').value.toLowerCase();
+    document.querySelectorAll('#queueList .queue-item').forEach(item => {
+      const filename = item.querySelector('.queue-filename')?.title?.toLowerCase() || '';
+      item.style.display = (!term || filename.includes(term)) ? '' : 'none';
+    });
   }
 
   // ── Manual metadata ──────────────────────────────────────────────────

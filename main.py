@@ -1798,48 +1798,82 @@ async def parse_filename_endpoint(filename: str):
 # Library issue finder
 # ---------------------------------------------------------------------------
 
-def scan_library_issues(root_dirs: list[str]) -> dict:
+NFO_SKIP = {"tvshow.nfo", "season.nfo", "season-all.nfo", "season-specials.nfo"}
+
+
+def scan_library_issues(root_dirs: list[str], movie_dirs: list[str] = None) -> dict:
     """
     Scan library directories for common issues:
     - NFO without matching video
     - Video without NFO
     - Missing thumbnail (-thumb.jpg)
     - Empty season folders
+
+    movie_dirs: directories where each subfolder is a movie folder.
+    For movies, NFO must match the video filename or be named movie.nfo.
     """
     issues = {
-        "nfo_no_video":    [],
-        "video_no_nfo":    [],
-        "missing_thumb":   [],
-        "empty_folder":    [],
+        "nfo_no_video":  [],
+        "video_no_nfo":  [],
+        "missing_thumb": [],
+        "empty_folder":  [],
     }
+
+    movie_dir_set = set(str(Path(d)) for d in (movie_dirs or []) if d)
 
     for root_dir in root_dirs:
         base = Path(root_dir)
         if not base.exists():
             continue
+
+        is_movie_root = str(base) in movie_dir_set
+
         for dirpath, dirnames, filenames in os.walk(base):
             dp = Path(dirpath)
             videos = [f for f in filenames if Path(f).suffix.lower() in VIDEO_EXTENSIONS]
-            nfos   = [f for f in filenames if f.endswith(".nfo") and not f == "tvshow.nfo"]
+            nfos   = [f for f in filenames if f.endswith(".nfo") and f.lower() not in NFO_SKIP]
 
             # Empty folder check
             if not videos and not nfos and not filenames:
                 issues["empty_folder"].append(str(dp))
                 continue
 
-            # NFO without matching video
+            # Movie folder logic - one level below the movie root
+            if is_movie_root and dp.parent == base:
+                for video in videos:
+                    stem = Path(video).stem
+                    # Accept: matching name NFO or movie.nfo
+                    has_nfo = f"{stem}.nfo" in filenames or "movie.nfo" in filenames
+                    if not has_nfo:
+                        issues["video_no_nfo"].append(str(dp / video))
+                    # NFO without video (orphan NFOs, excluding movie.nfo)
+                for nfo in nfos:
+                    if nfo.lower() == "movie.nfo":
+                        continue
+                    stem = Path(nfo).stem
+                    if not any(Path(v).stem == stem for v in videos):
+                        issues["nfo_no_video"].append(str(dp / nfo))
+                # Missing poster/thumb
+                if videos:
+                    has_thumb = any(
+                        f.endswith("-poster.jpg") or f.endswith("-thumb.jpg")
+                        for f in filenames
+                    )
+                    if not has_thumb:
+                        issues["missing_thumb"].append(str(dp))
+                continue
+
+            # Standard scene library logic
             for nfo in nfos:
                 stem = Path(nfo).stem
                 if not any(Path(v).stem == stem for v in videos):
                     issues["nfo_no_video"].append(str(dp / nfo))
 
-            # Video without NFO
             for video in videos:
                 stem = Path(video).stem
                 if f"{stem}.nfo" not in filenames:
                     issues["video_no_nfo"].append(str(dp / video))
 
-            # Missing thumb
             for video in videos:
                 stem = Path(video).stem
                 if f"{stem}-thumb.jpg" not in filenames:
@@ -1861,8 +1895,11 @@ async def library_scan(background_tasks: BackgroundTasks):
         dirs.append(d["path"])
     dirs = [d for d in dirs if d]
 
+    features_dir = settings.get("features_dir", "")
+    movie_dirs = [features_dir] if features_dir else []
+
     def run():
-        results = scan_library_issues(dirs)
+        results = scan_library_issues(dirs, movie_dirs=movie_dirs)
         db.save_setting("_library_scan_results", __import__("json").dumps(results))
         db.save_setting("_library_scan_time", __import__("datetime").datetime.now().isoformat(timespec="seconds"))
 

@@ -299,7 +299,7 @@
       const end   = Math.min(d.page * d.per_page, d.total);
       document.getElementById('tableMeta').textContent = d.total ? `${start}–${end} of ${d.total}` : '0 records';
 
-      const labels = {'':'All Records', filed:'Filed', unmatched:'Unmatched', no_dir:'No Directory', error:'Errors'};
+      const labels = {'':'All Records', filed:'Filed', unmatched:'Unmatched', no_dir:'No-Directory', error:'Errors'};
       document.getElementById('tableTitle').textContent = labels[currentFilter] || 'All Records';
 
       const tbody = document.getElementById('tableBody');
@@ -309,7 +309,7 @@
         tbody.innerHTML = d.rows.map(row => `
           <tr>
             <td class="td-filename" title="${esc(row.filename)}">${esc(row.filename)}</td>
-            <td><span class="status-tag status-${row.status}">${row.status}</span></td>
+            <td><span class="status-tag status-${row.status}">${row.status.replace('no_dir','no-dir')}</span></td>
             <td class="td-dim" title="${esc(row.match_title||'')}">${esc(row.match_title||'-')}</td>
             <td class="td-dim" title="${esc(row.match_studio||'')}">${esc(row.match_studio||'-')}</td>
             <td class="td-dim" title="${esc(row.performers||'')}">${esc(row.performers||'-')}</td>
