@@ -157,7 +157,7 @@ app = FastAPI(title="Top-Shelf")
 
 COOKIE_NAME   = "ts_session"
 LOGIN_PATH    = "/login"
-PUBLIC_PATHS  = {"/login", "/api/auth/login", "/api/auth/logout", "/api/prowlarr/debug"}
+PUBLIC_PATHS  = {"/login", "/api/auth/login", "/api/auth/logout"}
 
 
 def _is_authenticated(request: Request) -> bool:
@@ -1881,43 +1881,59 @@ def _prowlarr_url() -> str:
     return s.get("prowlarr_url", "").rstrip("/")
 
 
-def prowlarr_search(query: str) -> list[dict]:
-    """Search Prowlarr for a query string."""
-    base = _prowlarr_url()
-    if not base:
-        return []
+def _prowlarr_search_one(base: str, query: str, indexer_ids: list) -> list:
+    """Single Prowlarr search call with given indexer IDs."""
+    params = {"query": query}
+    for iid in indexer_ids:
+        params[f"indexerIds"] = iid  # last one wins - use repeated params below
     try:
+        # requests supports lists for repeated params
         resp = requests.get(
             f"{base}/api/v1/search",
-            params={"query": query},
+            params=[("query", query)] + [("indexerIds", iid) for iid in indexer_ids],
             headers=_prowlarr_headers(),
             timeout=20,
         )
-        resp.raise_for_status()
-        results = resp.json()
-        # Sort: NZBs first (usenet), then torrents by seeders
-        nzbs     = [r for r in results if r.get("protocol") == "usenet"]
-        torrents = sorted([r for r in results if r.get("protocol") != "usenet"],
-                          key=lambda x: x.get("seeders") or 0, reverse=True)
-        sorted_results = nzbs + torrents
-        out = []
-        for r in sorted_results[:30]:
-            out.append({
-                "guid":        r.get("guid", ""),
-                "title":       r.get("title", ""),
-                "indexer":     r.get("indexer", ""),
-                "size_mb":     round((r.get("size") or 0) / 1024 / 1024, 0),
-                "seeders":     r.get("seeders"),
-                "age":         r.get("ageHours"),
-                "download_url": r.get("downloadUrl", ""),
-                "magnet":      r.get("magnetUrl", ""),
-                "protocol":    r.get("protocol", "torrent"),
-                "type":        "torrent" if r.get("protocol", "torrent") == "torrent" else "nzb",
-                "indexer_id":  r.get("indexerId"),
-            })
-        return out
-    except Exception as e:
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return []
+
+
+def prowlarr_search(query: str) -> list[dict]:
+    """Search Prowlarr for a query string - queries usenet and torrents separately."""
+    base = _prowlarr_url()
+    if not base:
         return []
+
+    # Query usenet (-1) and torrents (-2) separately to ensure both are included
+    usenet_raw   = _prowlarr_search_one(base, query, [-1])
+    torrent_raw  = _prowlarr_search_one(base, query, [-2])
+
+    # Sort usenet by age (newest first), torrents by seeders
+    usenet_raw  = sorted(usenet_raw,  key=lambda x: x.get("ageHours") or 0)
+    torrent_raw = sorted(torrent_raw, key=lambda x: x.get("seeders") or 0, reverse=True)
+
+    # Interleave: NZBs first, then torrents
+    combined = usenet_raw[:15] + torrent_raw[:15]
+
+    out = []
+    for r in combined:
+        out.append({
+            "guid":        r.get("guid", ""),
+            "title":       r.get("title", ""),
+            "indexer":     r.get("indexer", ""),
+            "size_mb":     round((r.get("size") or 0) / 1024 / 1024, 0),
+            "seeders":     r.get("seeders"),
+            "age":         r.get("ageHours"),
+            "download_url": r.get("downloadUrl", ""),
+            "magnet":      r.get("magnetUrl", ""),
+            "protocol":    r.get("protocol", "torrent"),
+            "type":        "torrent" if r.get("protocol", "torrent") == "torrent" else "nzb",
+            "indexer_id":  r.get("indexerId"),
+        })
+    return out
 
 
 def prowlarr_grab(guid: str, indexer_id: int, is_torrent: bool) -> dict:
@@ -2892,27 +2908,6 @@ async def scenes_recent(source: str, id: str, type: str = "performer", slug: str
         except Exception:
             pass
     return {"scenes": []}
-
-
-@app.get("/api/prowlarr/debug")
-async def prowlarr_debug(q: str = "deeper summer kline"):
-    base = _prowlarr_url()
-    if not base:
-        return {"error": "not configured"}
-    try:
-        resp = requests.get(f"{base}/api/v1/search",
-                            params={"query": q},
-                            headers=_prowlarr_headers(), timeout=20)
-        results = resp.json()
-        # Show ALL unique protocol values and first 15 results raw protocol
-        protocols = list(set(r.get("protocol") for r in results))
-        return {
-            "total": len(results),
-            "unique_protocols": protocols,
-            "all": [{"title": r.get("title","")[:40], "protocol": r.get("protocol"), "indexer": r.get("indexer","")} for r in results[:20]]
-        }
-    except Exception as e:
-        return {"error": str(e)}
 
 
 @app.get("/api/prowlarr/search")
