@@ -1180,7 +1180,6 @@
     // Show file label in search panel
     document.getElementById('searchFileLabel').textContent = `Filing: ${filename}`;
     document.getElementById('searchFileLabel').style.display = 'inline-block';
-    document.getElementById('searchClearFile').style.display = 'inline-block';
 
     // Highlight queue item
     document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('active'));
@@ -1329,7 +1328,6 @@
     document.getElementById('searchResults').innerHTML = '<div class="empty">Enter search terms above and press Search</div>';
     selectedFile = null;
     document.getElementById('searchFileLabel').style.display = 'none';
-    document.getElementById('searchClearFile').style.display = 'none';
     document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('active'));
     document.getElementById('searchPanel').style.display = 'none';
   }
