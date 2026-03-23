@@ -178,8 +178,11 @@
           <div style="display:flex;gap:20px;margin-bottom:16px;align-items:flex-start">
             <div id="detailPoster" style="flex-shrink:0"></div>
             <div class="detail-info" style="flex:1;min-width:0">
-              <div class="detail-meta" id="detailMeta"></div>
-              <div class="detail-bio" id="detailBio" style="margin-top:8px"></div>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                <div class="detail-meta" id="detailMeta"></div>
+                <div id="detailLibStatus"></div>
+              </div>
+              <div class="detail-bio" id="detailBio"></div>
             </div>
           </div>
 
@@ -230,17 +233,35 @@
       const r = await fetch(`/api/metadata/search?q=${encodeURIComponent(q)}&type=${currentType}`);
       const d = await r.json();
       if (!d.results?.length) { el.innerHTML = '<div class="empty">No results found</div>'; return; }
+      window._searchResults = d.results;
       el.innerHTML = d.results.map((item, i) => `
         <div class="result-item" id="ri-${i}" onclick="selectResult(${i})">
           ${item.image
             ? `<img class="result-thumb" src="${esc(item.image)}" onerror="this.outerHTML='<div class=result-thumb-placeholder><i class=fa-solid fa-person></i></div>'">`
             : `<div class="result-thumb-placeholder"><i class="fa-solid fa-${currentType === 'studio' ? 'clapperboard' : 'person'}"></i></div>`}
-          <div>
+          <div style="flex:1;min-width:0">
             <div class="result-name">${esc(item.name)}</div>
             <div class="result-source">${item.source}</div>
           </div>
+          <div id="lib-${i}" style="flex-shrink:0;font-size:11px;color:var(--dim)">...</div>
         </div>`).join('');
-      window._searchResults = d.results;
+      // Check library status for each result
+      d.results.forEach((item, i) => {
+        fetch(`/api/library/check?name=${encodeURIComponent(item.name)}`)
+          .then(r => r.json())
+          .then(lib => {
+            const el = document.getElementById(`lib-${i}`);
+            if (!el) return;
+            if (lib.found) {
+              el.innerHTML = '<span style="color:var(--green)"><i class="fa-solid fa-check"></i> In Library</span>';
+              window._searchResults[i]._inLibrary = true;
+              window._searchResults[i]._libraryPath = lib.path;
+            } else {
+              el.innerHTML = '';
+              window._searchResults[i]._inLibrary = false;
+            }
+          }).catch(() => { const el = document.getElementById(`lib-${i}`); if (el) el.innerHTML = ''; });
+      });
     } catch(e) {
       el.innerHTML = `<div class="empty">Search failed: ${esc(e.message)}</div>`;
     }
@@ -365,6 +386,17 @@
     document.getElementById('detailContent').style.display = 'block';
     document.getElementById('detailTitle').textContent = item.name;
     document.getElementById('detailMeta').innerHTML = `<span style="color:var(--dim);font-size:11px">${item.source}</span>`;
+    const libEl = document.getElementById('detailLibStatus');
+    libEl.innerHTML = '<span style="color:var(--dim);font-size:11px">checking library...</span>';
+    fetch(`/api/library/check?name=${encodeURIComponent(item.name)}`)
+      .then(r => r.json())
+      .then(lib => {
+        if (lib.found) {
+          libEl.innerHTML = `<span style="color:var(--green);font-size:11px"><i class="fa-solid fa-check"></i> In Library</span>`;
+        } else {
+          libEl.innerHTML = `<button class="btn-small" style="border-color:var(--accent);color:var(--accent)" onclick="addToLibraryFromDetail()"><i class="fa-solid fa-folder-plus"></i> Add to Library</button>`;
+        }
+      }).catch(() => { libEl.innerHTML = ''; });
     document.getElementById('detailBio').textContent = 'Loading...';
     document.getElementById('resultMsg').style.display = 'none';
 
@@ -439,6 +471,16 @@
     document.querySelectorAll('.dest-btn').forEach(b => b.classList.remove('selected'));
   }
 
+  async function addToLibraryFromDetail() {
+    // Scroll to dest section and highlight it
+    document.querySelector('.dest-section')?.scrollIntoView({behavior:'smooth', block:'center'});
+    // Flash the create button
+    const btn = document.getElementById('createBtn');
+    btn.style.animation = 'none';
+    btn.style.boxShadow = '0 0 0 3px var(--accent)';
+    setTimeout(() => btn.style.boxShadow = '', 1500);
+  }
+
   async function createTvShow() {
     if (!selectedResult) { alert('Select a result first'); return; }
     const dest = document.getElementById('destCustom').value.trim() || selectedDest;
@@ -465,6 +507,18 @@
         msg.className = 'result-msg success';
         msg.textContent = `✓ Created: ${d.folder}${d.has_poster ? ' · poster downloaded' : ''}`;
         msg.style.display = 'block';
+        // Update library status
+        document.getElementById('detailLibStatus').innerHTML =
+          `<span style="color:var(--green);font-size:11px"><i class="fa-solid fa-check"></i> In Library</span>`;
+        // Update search result status if visible
+        if (selectedResult) {
+          window._searchResults?.forEach((item, i) => {
+            if (item.name === selectedResult.name) {
+              const el = document.getElementById(`lib-${i}`);
+              if (el) el.innerHTML = '<span style="color:var(--green)"><i class="fa-solid fa-check"></i> In Library</span>';
+            }
+          });
+        }
       } else {
         msg.className = 'result-msg error';
         msg.textContent = `Error: ${d.error}`;

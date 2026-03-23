@@ -2741,6 +2741,28 @@ async def metadata_page():
         return f.read()
 
 
+@app.get("/api/library/check")
+async def library_check(name: str):
+    """Check if a performer/studio name exists in any library directory."""
+    s    = db.get_settings()
+    norm = normalise(name)
+    dirs = [
+        s.get("series_dir",   ""),
+        s.get("features_dir", ""),
+    ] + [d["path"] for d in db.get_directories()]
+
+    for dir_path in dirs:
+        if not dir_path:
+            continue
+        base = Path(dir_path)
+        if not base.exists():
+            continue
+        for folder in base.iterdir():
+            if folder.is_dir() and normalise(folder.name) == norm:
+                return {"found": True, "path": str(folder), "dir": str(base)}
+    return {"found": False}
+
+
 @app.get("/api/metadata/search")
 async def metadata_search(q: str, type: str = "performer"):
     if not q.strip():
