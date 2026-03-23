@@ -642,6 +642,10 @@
               <label class="field-label">Hold time (seconds)</label>
               <input class="field-input" id="cfgDownloadWatchHold" type="number" min="30" max="3600" placeholder="300">
             </div>
+            <div class="field-row" style="grid-column:1/-1">
+              <label class="field-label">Process existing files now</label>
+              <button class="btn-secondary" onclick="processAllDownloads()" style="margin-top:4px"><i class="fa-solid fa-play"></i> Process download folder now</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1627,6 +1631,18 @@
 
   // Patch submitManual to handle StashDB submission
   const _origSubmitManual = submitManual;
+
+  // ── Download folder ──────────────────────────────────────────────────
+
+  async function processAllDownloads() {
+    const r = await fetch('/api/download/process-all', { method: 'POST' });
+    const d = await r.json();
+    if (d.error) { alert(`Error: ${d.error}`); return; }
+    if (!d.started) { alert('No entries found in download folder'); return; }
+    alert(`Processing ${d.count} entr${d.count === 1 ? 'y' : 'ies'} - check the log`);
+    closeSettings();
+    clearLog();
+  }
 
   // ── Collapsible & toggle helpers ─────────────────────────────────────
 

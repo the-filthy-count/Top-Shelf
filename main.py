@@ -2209,6 +2209,32 @@ async def generate_thumb(payload: dict):
     return {"data_url": data_url, "percent": round(percent, 1)}
 
 
+@app.post("/api/download/process-all")
+async def process_all_downloads(background_tasks: BackgroundTasks):
+    """Manually trigger processing of all existing entries in the download watch folder."""
+    s = db.get_settings()
+    dl_dir = Path(s.get("download_watch_dir", ""))
+    dest_dir = Path(s.get("source_dir", ""))
+    if not dl_dir.exists():
+        return JSONResponse({"error": f"Download watch dir not found: {dl_dir}"}, status_code=404)
+    if not dest_dir.exists():
+        return JSONResponse({"error": f"Source dir not found: {dest_dir}"}, status_code=404)
+
+    entries = [e for e in dl_dir.iterdir() if e.name not in ('.', '..')]
+    if not entries:
+        return {"started": False, "message": "No entries found"}
+
+    def run():
+        for entry in entries:
+            try:
+                _process_download_entry(entry, dest_dir)
+            except Exception as e:
+                emit(f"  ERROR processing {entry.name}: {e}")
+
+    background_tasks.add_task(run)
+    return {"started": True, "count": len(entries)}
+
+
 @app.get("/api/scan/status")
 async def scan_status():
     """Return pending scan info for all media servers."""
@@ -2228,11 +2254,21 @@ async def watcher_status():
     with _pending_lock:
         pending = [{"filename": f, "fires_in": max(0, int(t - time.time()))}
                    for f, t in _pending_files.items()]
+    with _download_lock:
+        dl_pending = [{"path": p, "fires_in": max(0, int(t - time.time()))}
+                      for p, t in _pending_downloads.items()]
+    dl_dir = Path(s.get("download_watch_dir", ""))
     return {
-        "enabled":  s.get("folder_watch_enabled", "true").lower() == "true",
-        "watching": observer is not None and observer.is_alive() if observer else False,
-        "hold_secs": int(s.get("folder_watch_hold_secs", "60")),
-        "pending":  pending,
+        "enabled":             s.get("folder_watch_enabled", "true").lower() == "true",
+        "watching":            observer is not None and observer.is_alive() if observer else False,
+        "hold_secs":           int(s.get("folder_watch_hold_secs", "60")),
+        "pending":             pending,
+        "download_enabled":    s.get("download_watch_enabled", "false").lower() == "true",
+        "download_watching":   download_observer is not None and download_observer.is_alive() if download_observer else False,
+        "download_dir":        str(dl_dir),
+        "download_dir_exists": dl_dir.exists(),
+        "download_hold_secs":  int(s.get("download_watch_hold_secs", "300")),
+        "download_pending":    dl_pending,
     }
 
 
