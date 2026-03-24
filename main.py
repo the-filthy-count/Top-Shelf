@@ -3045,31 +3045,48 @@ async def prowlarr_search_endpoint(q: str):
 
 @app.post("/api/prowlarr/grab")
 async def prowlarr_grab_endpoint(payload: dict):
-    guid       = payload.get("guid", "")
-    indexer_id = payload.get("indexer_id")
-    is_torrent = payload.get("type", "torrent") == "torrent"
-    source     = payload.get("source", "prowlarr")
-    if not guid:
-        return JSONResponse({"error": "guid required"}, status_code=400)
-    # Try Whisparr grab if that's where the result came from
+    guid         = payload.get("guid", "")
+    indexer_id   = payload.get("indexer_id")
+    is_torrent   = payload.get("type", "torrent") == "torrent"
+    download_url = payload.get("download_url", "")
+    if not guid and not download_url:
+        return JSONResponse({"error": "guid or download_url required"}, status_code=400)
+
     s = db.get_settings()
+
+    # If we have a direct download URL (Prowlarr Newznab proxy link), GET it
+    # Prowlarr intercepts the download and routes to the configured download client
+    if download_url:
+        try:
+            resp = requests.get(download_url, timeout=20, allow_redirects=True)
+            if resp.status_code == 200:
+                return {"ok": True}
+            emit(f"GRAB download_url failed: {resp.status_code}")
+        except Exception as e:
+            emit(f"GRAB download_url error: {e}")
+
+    # Try Whisparr if configured
     whisparr_base = s.get("whisparr_url", "").rstrip("/")
     whisparr_key  = s.get("whisparr_api_key", "")
-    if whisparr_base and whisparr_key:
+    if whisparr_base and whisparr_key and guid:
         try:
             resp = requests.post(
                 f"{whisparr_base}/api/v3/release",
-                json={"guid": guid, "indexerId": indexer_id},
+                json={"guid": guid, "indexerId": indexer_id or 0},
                 headers={"X-Api-Key": whisparr_key},
                 timeout=15,
             )
             if resp.status_code in (200, 201, 202, 204):
                 return {"ok": True}
-            # Fall through to Prowlarr if Whisparr fails
         except Exception:
             pass
-    result = prowlarr_grab(guid, indexer_id, is_torrent)
-    return result
+
+    # Fall back to Prowlarr grab
+    if indexer_id:
+        result = prowlarr_grab(guid, indexer_id, is_torrent)
+        return result
+
+    return {"error": "Could not send to download client"}
 
 
 @app.get("/api/prowlarr/indexers")

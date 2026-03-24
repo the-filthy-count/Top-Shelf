@@ -430,9 +430,10 @@
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
-          guid:       result.guid,
-          indexer_id: result.indexer_id,
-          type:       result.type,
+          guid:         result.guid,
+          indexer_id:   result.indexer_id,
+          type:         result.type,
+          download_url: result.download_url,
         }),
       });
       const d = await r.json();
