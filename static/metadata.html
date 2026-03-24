@@ -71,7 +71,7 @@
 
   /* Type toggle */
   .type-toggle { display: flex; gap: 0; margin-bottom: 16px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
-  .type-btn { flex: 1; padding: 8px; background: none; border: none; color: var(--dim); font-family: var(--mono); font-size: 13px; cursor: pointer; transition: all 0.15s; }
+  .type-btn { flex: 1; padding: 8px; background: none; border: none; color: var(--dim); font-family: var(--secs); font-size: 14px; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
   .type-btn.active { background: var(--accent); color: #0c0c0e; }
 
   /* Search */
@@ -149,7 +149,7 @@
   <header>
     <div style="display:flex;flex-direction:column;gap:3px">
       <div class="logo"><img src="/static/logo.png" alt="Top-Shelf"></div>
-      <span style="font-family:'DM Mono',monospace;font-size:10px;color:#6b6b7a;letter-spacing:0.06em;text-align:center">v1.0.8</span>
+      <span style="font-family:'DM Mono',monospace;font-size:10px;color:#6b6b7a;letter-spacing:0.06em;text-align:center">v1.1.0</span>
     </div>
     <div class="nav-links">
       <a href="/" style="text-decoration:none"><button class="btn-secondary" title="TV Series"><i class="fa-solid fa-tv"></i></button></a>
@@ -339,7 +339,7 @@
     const section = document.getElementById('scenesSection');
     const grid    = document.getElementById('scenesGrid');
     const title   = document.getElementById('scenesTitle');
-    title.textContent = `Recent Scenes — ${item.name}`;
+    title.textContent = 'Recent Scenes';
     document.getElementById('scenesNote').textContent = '';
     section.style.display = 'block';
     grid.innerHTML = '<div class="empty">Loading...</div>';
@@ -359,7 +359,7 @@
           </div>
           <div class="scene-info">
             <div class="scene-title" title="${esc(s.title)}">${esc(s.title)}</div>
-            <div class="scene-date">${s.date || ''} ${s.studio ? '· ' + esc(s.studio) : ''}</div>
+            <div class="scene-date">${s.date || ''}</div>
           </div>
           <div class="scene-actions">
             <button class="scene-action-btn search-btn" title="Search Prowlarr"

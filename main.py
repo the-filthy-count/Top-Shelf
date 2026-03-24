@@ -42,7 +42,7 @@ import database as db
 # Constants
 # ---------------------------------------------------------------------------
 
-VERSION = "1.0.8"
+VERSION = "1.1.0"
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".wmv", ".mov", ".m4v", ".flv", ".webm"}
 
@@ -3054,16 +3054,23 @@ async def prowlarr_grab_endpoint(payload: dict):
 
     s = db.get_settings()
 
-    # If we have a direct download URL (Prowlarr Newznab proxy link), GET it
-    # Prowlarr intercepts the download and routes to the configured download client
+    # For Newznab results: use Prowlarr's /api/v1/release endpoint to grab
     if download_url:
-        try:
-            resp = requests.get(download_url, timeout=20, allow_redirects=True)
-            if resp.status_code == 200:
-                return {"ok": True}
-            emit(f"GRAB download_url failed: {resp.status_code}")
-        except Exception as e:
-            emit(f"GRAB download_url error: {e}")
+        base = _prowlarr_url()
+        if base:
+            try:
+                resp = requests.post(
+                    f"{base}/api/v1/release",
+                    json={"downloadUrl": download_url, "guid": guid or download_url,
+                          "indexerId": indexer_id or 0},
+                    headers=_prowlarr_headers(),
+                    timeout=20,
+                )
+                if resp.status_code in (200, 201, 202, 204):
+                    return {"ok": True}
+                emit(f"GRAB /api/v1/release failed {resp.status_code}: {resp.text[:200]}")
+            except Exception as e:
+                emit(f"GRAB error: {e}")
 
     # Try Whisparr if configured
     whisparr_base = s.get("whisparr_url", "").rstrip("/")
