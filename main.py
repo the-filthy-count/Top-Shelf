@@ -1962,9 +1962,9 @@ def _parse_newznab_xml(xml_text: str, indexer_name: str, protocol: str) -> list[
               "torznab":  "http://torznab.com/schemas/2015/feed"}
         for item in root.findall(".//item"):
             title     = (item.findtext("title") or "").strip()
-            guid      = item.findtext("guid") or ""
+            guid      = (item.findtext("guid") or "").strip()
             size      = 0
-            link      = item.findtext("link") or ""
+            link      = (item.findtext("link") or "").strip()
             seeders   = None
             pub_date  = item.findtext("pubDate") or ""
 
@@ -1983,6 +1983,7 @@ def _parse_newznab_xml(xml_text: str, indexer_name: str, protocol: str) -> list[
                 except Exception:
                     pass
 
+            magnet_url = ""
             for attr in item.findall("newznab:attr", ns) + item.findall("torznab:attr", ns):
                 name = attr.get("name", "")
                 val  = attr.get("value", "")
@@ -1991,6 +1992,8 @@ def _parse_newznab_xml(xml_text: str, indexer_name: str, protocol: str) -> list[
                 elif name == "seeders":
                     try: seeders = int(val)
                     except: pass
+                elif name == "magneturl" and val:
+                    magnet_url = val
 
             if not title:
                 continue
@@ -2005,6 +2008,10 @@ def _parse_newznab_xml(xml_text: str, indexer_name: str, protocol: str) -> list[
                 except Exception:
                     pass
 
+            # Determine magnet: prefer explicit magneturl attr, else check link
+            if not magnet_url and link.startswith("magnet:"):
+                magnet_url = link
+
             out.append({
                 "guid":         guid,
                 "title":        title,
@@ -2013,7 +2020,7 @@ def _parse_newznab_xml(xml_text: str, indexer_name: str, protocol: str) -> list[
                 "seeders":      seeders,
                 "age":          age_hours,
                 "download_url": link if not link.startswith("magnet:") else "",
-                "magnet":       link if link.startswith("magnet:") else "",
+                "magnet":       magnet_url,
                 "protocol":     protocol,
                 "type":         "torrent" if protocol == "torrent" else "nzb",
                 "indexer_id":   parsed_indexer_id,
@@ -3082,6 +3089,9 @@ async def prowlarr_grab_endpoint(payload: dict):
                     if nzb_pref and c.get("name") != nzb_pref:
                         continue
                     impl   = c.get("implementation", "").lower()
+                    # Skip non-NZB clients (qBittorrent, Transmission, etc.)
+                    if "nzbget" not in impl and "sabnzbd" not in impl and "nzbvortex" not in impl:
+                        continue
                     fields = {f["name"]: f.get("value") for f in c.get("fields", [])}
                     host   = fields.get("host", "localhost")
                     port   = int(fields.get("port") or 6789)
@@ -3089,8 +3099,13 @@ async def prowlarr_grab_endpoint(payload: dict):
                     if "nzbget" in impl:
                         user = (fields.get("username") or fields.get("Username") or "")
                         pwd  = (fields.get("password") or fields.get("Password") or "")
-                        emit(f"GRAB NZBGet user={user!r}")
-                        for auth_arg in ([{"auth": (user, pwd)}] if user else [{"auth": None}, {"auth": (user, pwd)}]):
+                        emit(f"GRAB NZBGet user={user!r} pwd={'(set)' if pwd else '(empty)'}")
+                        # Always try with credentials first, then without auth as fallback
+                        auth_attempts = []
+                        if user or pwd:
+                            auth_attempts.append({"auth": (user, pwd)})
+                        auth_attempts.append({"auth": None})
+                        for auth_arg in auth_attempts:
                             gr = requests.post(
                                 f"http://{host}:{port}/jsonrpc",
                                 json={"method": "append", "params": [
@@ -3105,6 +3120,10 @@ async def prowlarr_grab_endpoint(payload: dict):
                                 if result and result > 0:
                                     return {"ok": True}
                                 break
+                            if gr.status_code == 401:
+                                emit("GRAB NZBGet auth failed, trying next method")
+                                continue
+                            break
                     elif "sabnzbd" in impl:
                         api_key = fields.get("apiKey", "")
                         gr = requests.post(
@@ -3130,6 +3149,9 @@ async def prowlarr_grab_endpoint(payload: dict):
                     if torrent_pref and c.get("name") != torrent_pref:
                         continue
                     impl   = c.get("implementation", "").lower()
+                    # Skip non-torrent clients
+                    if "torrent" not in impl and "qbittorrent" not in impl and "transmission" not in impl and "deluge" not in impl and "rtorrent" not in impl:
+                        continue
                     fields = {f["name"]: f.get("value") for f in c.get("fields", [])}
                     host   = fields.get("host", "localhost")
                     port   = int(fields.get("port") or 8080)
@@ -3148,15 +3170,37 @@ async def prowlarr_grab_endpoint(payload: dict):
                                 timeout=15,
                             )
                         else:
-                            # Fetch torrent file then upload
-                            r = requests.get(download_url, timeout=20, allow_redirects=True)
-                            emit(f"GRAB torrent fetch → {r.status_code}")
-                            gr = sess.post(
-                                f"http://{host}:{port}/api/v2/torrents/add",
-                                data={"category": category},
-                                files={"torrents": ("release.torrent", r.content)},
-                                timeout=15,
-                            )
+                            # Fetch torrent file — handle redirects to magnet URIs
+                            r = requests.get(download_url, timeout=20, allow_redirects=False)
+                            if r.status_code in (301, 302, 303, 307, 308):
+                                redirect_url = r.headers.get("Location", "")
+                                if redirect_url.startswith("magnet:"):
+                                    emit(f"GRAB torrent redirect → magnet, sending directly")
+                                    gr = sess.post(
+                                        f"http://{host}:{port}/api/v2/torrents/add",
+                                        data={"urls": redirect_url, "category": category},
+                                        timeout=15,
+                                    )
+                                else:
+                                    r = requests.get(redirect_url, timeout=20, allow_redirects=True)
+                                    emit(f"GRAB torrent fetch → {r.status_code}")
+                                    gr = sess.post(
+                                        f"http://{host}:{port}/api/v2/torrents/add",
+                                        data={"category": category},
+                                        files={"torrents": ("release.torrent", r.content)},
+                                        timeout=15,
+                                    )
+                            elif r.status_code == 200:
+                                emit(f"GRAB torrent fetch → {r.status_code}")
+                                gr = sess.post(
+                                    f"http://{host}:{port}/api/v2/torrents/add",
+                                    data={"category": category},
+                                    files={"torrents": ("release.torrent", r.content)},
+                                    timeout=15,
+                                )
+                            else:
+                                emit(f"GRAB torrent fetch failed → {r.status_code}")
+                                continue
                         emit(f"GRAB qBittorrent → {gr.status_code} {gr.text[:80]}")
                         if gr.status_code == 200:
                             return {"ok": True}
