@@ -321,6 +321,7 @@
       <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-film"></i></button></a>
       <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library Health"><i class="fa-solid fa-house-medical"></i></button></a>
       <a href="/metadata" style="text-decoration:none"><button class="btn-secondary" title="Metadata"><i class="fa-solid fa-id-card"></i></button></a>
+      <a href="/history" style="text-decoration:none"><button class="btn-secondary" title="History"><i class="fa-solid fa-clock-rotate-left"></i></button></a>
       <button class="btn-secondary" onclick="logout()" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
       <button class="btn-secondary" onclick="openSettings()" title="Settings"><i class="fa-solid fa-gear"></i></button>
     </div>
@@ -838,18 +839,72 @@
         <div class="field-hint" style="margin-top:6px">Sets the default state of the StashDB submission toggle on the manual filing form</div>
       </div>
 
-      <!-- Whisparr -->
+      <!-- Download Clients -->
       <div class="settings-section">
-        <div class="settings-section-title">Whisparr</div>
-        <div class="field-hint" style="margin-top:4px;margin-bottom:10px">Used for release search - provides better NZB coverage than Prowlarr direct search</div>
+        <div class="settings-section-title">Download Clients</div>
+        <div class="field-hint" style="margin-top:4px;margin-bottom:10px">Configure your NZB and torrent clients directly — Top-Shelf will send downloads to them</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="grid-column:1/-1;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:4px">NZB Client</div>
           <div class="field-row">
-            <label class="field-label">Whisparr URL</label>
-            <input class="field-input" id="cfgWhisparrUrl" type="text" placeholder="http://192.168.1.x:6969">
+            <label class="field-label">Client</label>
+            <select class="field-input" id="cfgDlNzbClient" onchange="toggleNzbFields()">
+              <option value="">None</option>
+              <option value="nzbget">NZBGet</option>
+              <option value="sabnzbd">SABnzbd</option>
+            </select>
           </div>
           <div class="field-row">
-            <label class="field-label">API Key</label>
-            <input class="field-input" id="cfgWhisparrKey" type="password" autocomplete="off">
+            <label class="field-label">Host</label>
+            <input class="field-input" id="cfgDlNzbHost" type="text" placeholder="192.168.1.x">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Port</label>
+            <input class="field-input" id="cfgDlNzbPort" type="text" placeholder="6789">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Username</label>
+            <input class="field-input" id="cfgDlNzbUser" type="text" placeholder="nzbget">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Password</label>
+            <input class="field-input" id="cfgDlNzbPass" type="password" autocomplete="off">
+          </div>
+          <div class="field-row" id="nzbApiKeyRow">
+            <label class="field-label">API Key <span style="color:var(--dim)">(SABnzbd only)</span></label>
+            <input class="field-input" id="cfgDlNzbApiKey" type="password" autocomplete="off">
+          </div>
+
+          <div style="grid-column:1/-1;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:12px;border-top:1px solid var(--border);margin-top:4px">Torrent Client</div>
+          <div class="field-row">
+            <label class="field-label">Client</label>
+            <select class="field-input" id="cfgDlTorrentClient">
+              <option value="">None</option>
+              <option value="qbittorrent">qBittorrent</option>
+              <option value="transmission">Transmission</option>
+              <option value="deluge">Deluge</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label class="field-label">Host</label>
+            <input class="field-input" id="cfgDlTorrentHost" type="text" placeholder="192.168.1.x">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Port</label>
+            <input class="field-input" id="cfgDlTorrentPort" type="text" placeholder="8080">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Username</label>
+            <input class="field-input" id="cfgDlTorrentUser" type="text" placeholder="admin">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Password</label>
+            <input class="field-input" id="cfgDlTorrentPass" type="password" autocomplete="off">
+          </div>
+
+          <div style="grid-column:1/-1;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:12px;border-top:1px solid var(--border);margin-top:4px">Download Category</div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label">Category <span style="color:var(--dim)">(applied to all downloads)</span></label>
+            <input class="field-input" id="cfgProwlarrCategory" type="text" placeholder="Top-Shelf">
           </div>
         </div>
       </div>
@@ -857,6 +912,7 @@
       <!-- Prowlarr -->
       <div class="settings-section">
         <div class="settings-section-title">Prowlarr</div>
+        <div class="field-hint" style="margin-top:4px;margin-bottom:10px">Prowlarr is used to search indexers — download clients are configured above</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="field-row">
             <label class="field-label">Prowlarr URL</label>
@@ -866,37 +922,13 @@
             <label class="field-label">API Key</label>
             <input class="field-input" id="cfgProwlarrKey" type="password" autocomplete="off">
           </div>
-          <div class="field-row">
-            <label class="field-label">Download Category</label>
-            <input class="field-input" id="cfgProwlarrCategory" type="text" placeholder="Top-Shelf">
-          </div>
-          <div class="field-row">
+          <div class="field-row" style="grid-column:1/-1">
             <label class="field-label">Status</label>
             <div style="display:flex;align-items:center;gap:8px">
               <div id="prowlarrStatus" style="font-size:11px;color:var(--dim);padding:9px 0">Not checked</div>
               <button class="btn-secondary" onclick="refreshIndexers()" style="font-size:11px;padding:4px 8px">Refresh indexers</button>
               <span id="indexerCount" style="font-size:11px;color:var(--dim)"></span>
             </div>
-          </div>
-          <div class="field-row">
-            <label class="field-label">Torrent Client</label>
-            <input class="field-input" id="cfgProwlarrTorrent" type="text" placeholder="qBittorrent">
-          </div>
-          <div class="field-row">
-            <label class="field-label">NZB Client</label>
-            <input class="field-input" id="cfgProwlarrNzb" type="text" placeholder="SABnzbd">
-          </div>
-          <div class="field-row" style="grid-column:1/-1">
-            <label class="field-label">NZBGet URL <span style="color:var(--dim)">(for direct NZB push)</span></label>
-            <input class="field-input" id="cfgNzbgetUrl" type="text" placeholder="http://192.168.1.x:6789">
-          </div>
-          <div class="field-row">
-            <label class="field-label">NZBGet Username</label>
-            <input class="field-input" id="cfgNzbgetUser" type="text" placeholder="nzbget">
-          </div>
-          <div class="field-row">
-            <label class="field-label">NZBGet Password</label>
-            <input class="field-input" id="cfgNzbgetPass" type="password" autocomplete="off">
           </div>
         </div>
       </div>
@@ -1103,16 +1135,21 @@
     });
     document.getElementById('cfgSubmitPhash').checked          = (s.submit_phash_enabled              || 'true')  === 'true';
     document.getElementById('cfgManualSubmitDefault').checked  = (s.manual_submit_stashdb_default || 'false') === 'true';
-    document.getElementById('cfgWhisparrUrl').value      = s.whisparr_url       || '';
-    document.getElementById('cfgWhisparrKey').value      = s.whisparr_api_key   || '';
+    document.getElementById('cfgDlNzbClient').value    = s.dl_nzb_client     || '';
+    document.getElementById('cfgDlNzbHost').value      = s.dl_nzb_host       || '';
+    document.getElementById('cfgDlNzbPort').value      = s.dl_nzb_port       || '';
+    document.getElementById('cfgDlNzbUser').value      = s.dl_nzb_user       || '';
+    document.getElementById('cfgDlNzbPass').value      = s.dl_nzb_pass       || '';
+    document.getElementById('cfgDlNzbApiKey').value    = s.dl_nzb_api_key    || '';
+    document.getElementById('cfgDlTorrentClient').value = s.dl_torrent_client || '';
+    document.getElementById('cfgDlTorrentHost').value  = s.dl_torrent_host   || '';
+    document.getElementById('cfgDlTorrentPort').value  = s.dl_torrent_port   || '';
+    document.getElementById('cfgDlTorrentUser').value  = s.dl_torrent_user   || '';
+    document.getElementById('cfgDlTorrentPass').value  = s.dl_torrent_pass   || '';
     document.getElementById('cfgProwlarrUrl').value      = s.prowlarr_url       || '';
     document.getElementById('cfgProwlarrKey').value      = s.prowlarr_api_key   || '';
     document.getElementById('cfgProwlarrCategory').value = s.prowlarr_category  || 'Top-Shelf';
-    document.getElementById('cfgProwlarrTorrent').value  = s.prowlarr_torrent_client || '';
-    document.getElementById('cfgProwlarrNzb').value      = s.prowlarr_nzb_client    || '';
-    document.getElementById('cfgNzbgetUrl').value        = s.nzbget_url             || '';
-    document.getElementById('cfgNzbgetUser').value       = s.nzbget_user            || 'nzbget';
-    document.getElementById('cfgNzbgetPass').value       = s.nzbget_pass            || '';
+    toggleNzbFields();
     fetch('/api/prowlarr/indexers').then(r=>r.json()).then(d=>{
       if (d.count) document.getElementById('indexerCount').textContent = `${d.count} indexers cached`;
     });
@@ -1231,16 +1268,20 @@
         submit_phash_enabled:           document.getElementById('cfgSubmitPhash').checked         ? 'true' : 'false',
         manual_submit_stashdb_default: document.getElementById('cfgManualSubmitDefault').checked ? 'true' : 'false',
         api_key_tmdb:      document.getElementById('cfgKeyTmdb').value.trim(),
-        whisparr_url:            document.getElementById('cfgWhisparrUrl').value.trim(),
-        whisparr_api_key:        document.getElementById('cfgWhisparrKey').value.trim(),
-        prowlarr_url:              document.getElementById('cfgProwlarrUrl').value.trim(),
-        prowlarr_api_key:          document.getElementById('cfgProwlarrKey').value.trim(),
-        prowlarr_category:         document.getElementById('cfgProwlarrCategory').value.trim(),
-        prowlarr_torrent_client:   document.getElementById('cfgProwlarrTorrent').value.trim(),
-        prowlarr_nzb_client:       document.getElementById('cfgProwlarrNzb').value.trim(),
-        nzbget_url:                document.getElementById('cfgNzbgetUrl').value.trim(),
-        nzbget_user:               document.getElementById('cfgNzbgetUser').value.trim(),
-        nzbget_pass:               document.getElementById('cfgNzbgetPass').value.trim(),
+        dl_nzb_client:       document.getElementById('cfgDlNzbClient').value.trim(),
+        dl_nzb_host:         document.getElementById('cfgDlNzbHost').value.trim(),
+        dl_nzb_port:         document.getElementById('cfgDlNzbPort').value.trim(),
+        dl_nzb_user:         document.getElementById('cfgDlNzbUser').value.trim(),
+        dl_nzb_pass:         document.getElementById('cfgDlNzbPass').value,
+        dl_nzb_api_key:      document.getElementById('cfgDlNzbApiKey').value.trim(),
+        dl_torrent_client:   document.getElementById('cfgDlTorrentClient').value.trim(),
+        dl_torrent_host:     document.getElementById('cfgDlTorrentHost').value.trim(),
+        dl_torrent_port:     document.getElementById('cfgDlTorrentPort').value.trim(),
+        dl_torrent_user:     document.getElementById('cfgDlTorrentUser').value.trim(),
+        dl_torrent_pass:     document.getElementById('cfgDlTorrentPass').value,
+        prowlarr_url:          document.getElementById('cfgProwlarrUrl').value.trim(),
+        prowlarr_api_key:      document.getElementById('cfgProwlarrKey').value.trim(),
+        prowlarr_category:     document.getElementById('cfgProwlarrCategory').value.trim(),
         media_scan_enabled:        document.getElementById('cfgMediaScanEnabled').checked ? 'true' : 'false',
         media_scan_debounce_mins:  document.getElementById('cfgScanDebounce').value.trim(),
         stash_enabled:     document.getElementById('cfgStashEnabled').checked     ? 'true' : 'false',
@@ -1831,6 +1872,12 @@
   function toggleSection(bodyId, show) {
     const el = document.getElementById(bodyId);
     if (el) el.style.display = show ? 'block' : 'none';
+  }
+
+  function toggleNzbFields() {
+    const client = document.getElementById('cfgDlNzbClient').value;
+    const row = document.getElementById('nzbApiKeyRow');
+    if (row) row.style.display = client === 'sabnzbd' ? '' : 'none';
   }
 
   function toggleCollapsible(bodyId, arrowId) {

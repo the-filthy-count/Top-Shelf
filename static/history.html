@@ -65,6 +65,10 @@
     transition: all 0.15s;
   }
   .back-link:hover { color: var(--text); border-color: var(--muted); }
+  .nav-links { display: flex; gap: 8px; align-items: center; }
+  .btn-secondary { background: none; border: 1px solid var(--border); color: var(--dim); padding: 8px 12px; border-radius: 6px; font-size: 16px; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+  .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+  .active-nav { border-color: var(--accent) !important; color: var(--accent) !important; }
 
   .filter-bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
   .filter-tab {
@@ -188,10 +192,12 @@
 
   <header>
     <div style="display:flex;flex-direction:column;gap:3px"><div class="logo"><img src="/static/logo.png" alt="Top-Shelf"></div><span style="font-family:'DM Mono',monospace;font-size:10px;color:#6b6b7a;letter-spacing:0.06em;text-align:center">v1.1.0</span></div>
-    <div style="display:flex;gap:8px">
-      <a href="/" style="text-decoration:none"><button style="background:none;border:1px solid var(--border);color:var(--dim);padding:8px 12px;border-radius:6px;font-size:16px;cursor:pointer;transition:all 0.15s" title="TV Series"><i class="fa-solid fa-tv"></i></button></a>
-      <a href="/movies" style="text-decoration:none"><button style="background:none;border:1px solid var(--border);color:var(--dim);padding:8px 12px;border-radius:6px;font-size:16px;cursor:pointer;transition:all 0.15s" title="Movies"><i class="fa-solid fa-film"></i></button></a>
-      <a href="/library" style="text-decoration:none"><button style="background:none;border:1px solid var(--border);color:var(--dim);padding:8px 12px;border-radius:6px;font-size:16px;cursor:pointer;transition:all 0.15s" title="Library Health"><i class="fa-solid fa-house-medical"></i></button></a>
+    <div class="nav-links">
+      <a href="/" style="text-decoration:none"><button class="btn-secondary" title="TV Series"><i class="fa-solid fa-tv"></i></button></a>
+      <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-film"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library Health"><i class="fa-solid fa-house-medical"></i></button></a>
+      <a href="/metadata" style="text-decoration:none"><button class="btn-secondary" title="Metadata"><i class="fa-solid fa-id-card"></i></button></a>
+      <a href="/history" style="text-decoration:none"><button class="btn-secondary active-nav" title="History"><i class="fa-solid fa-clock-rotate-left"></i></button></a>
     </div>
   </header>
 
