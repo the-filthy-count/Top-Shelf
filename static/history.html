@@ -198,6 +198,8 @@
       <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library Health"><i class="fa-solid fa-house-medical"></i></button></a>
       <a href="/metadata" style="text-decoration:none"><button class="btn-secondary" title="Metadata"><i class="fa-solid fa-id-card"></i></button></a>
       <a href="/history" style="text-decoration:none"><button class="btn-secondary active-nav" title="History"><i class="fa-solid fa-clock-rotate-left"></i></button></a>
+      <button class="btn-secondary" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>location.href='/login')" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+      <a href="/?settings=1" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="fa-solid fa-gear"></i></button></a>
     </div>
   </header>
 

@@ -1936,6 +1936,10 @@
   setInterval(loadWatcherStatus, 15000);
   loadScanStatus();
   setInterval(loadScanStatus, 10000);
+  if (new URLSearchParams(window.location.search).get('settings') === '1') {
+    openSettings();
+    history.replaceState(null, '', '/');
+  }
 </script>
 </body>
 </html>

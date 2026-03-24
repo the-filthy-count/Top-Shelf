@@ -91,8 +91,10 @@
   .result-source { font-family: var(--secs); font-size: 11px; color: var(--dim); letter-spacing: -0.02em; }
 
   /* Detail panel */
-  .detail-poster { width: 160px; height: 100%; object-fit: cover; border-radius: 8px; flex-shrink: 0; display: block; }
-  .detail-poster-placeholder { width: 120px; height: 100%; min-height: 180px; border-radius: 8px; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 32px; flex-shrink: 0; }
+  .detail-poster { width: 190px; height: 100%; object-fit: cover; border-radius: 8px; flex-shrink: 0; display: block; }
+  .detail-poster-placeholder { width: 140px; height: 100%; min-height: 180px; border-radius: 8px; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 32px; flex-shrink: 0; }
+  /* Studio layout: landscape image on top, text below */
+  .detail-poster-studio { width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; display: block; }
   .detail-info { flex: 1; min-width: 0; }
   .detail-name { font-family: var(--acid); font-size: 28px; color: var(--text); margin-bottom: 8px; }
   .detail-meta { font-size: 12px; color: var(--dim); line-height: 2; }
@@ -120,7 +122,7 @@
   .scene-thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--raised); }
   .scene-thumb-placeholder { width: 100%; aspect-ratio: 16/9; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); }
   .scene-info { padding: 8px 8px 4px; }
-  .scene-title { font-family: var(--secs); font-size: 13px; color: #d4cfc4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4; min-height: 2.8em; word-break: break-word; letter-spacing: -0.02em; }
+  .scene-title { font-family: var(--secs); font-size: 15px; color: #d4cfc4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4; min-height: 2.8em; word-break: break-word; letter-spacing: -0.02em; }
   .scene-date  { font-size: 10px; color: var(--dim); margin-top: 4px; }
   .scene-actions { display: flex; gap: 4px; padding: 4px 6px 8px; border-top: 1px solid rgba(255,255,255,0.04); margin-top: 4px; }
   .scene-action-btn { flex: 1; background: none; border: 1px solid var(--border); color: var(--dim); border-radius: 4px; padding: 4px; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
@@ -157,6 +159,8 @@
       <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library Health"><i class="fa-solid fa-house-medical"></i></button></a>
       <a href="/metadata" style="text-decoration:none"><button class="btn-secondary active-nav" title="Metadata"><i class="fa-solid fa-id-card"></i></button></a>
       <a href="/history" style="text-decoration:none"><button class="btn-secondary" title="History"><i class="fa-solid fa-clock-rotate-left"></i></button></a>
+      <button class="btn-secondary" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>location.href='/login')" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+      <a href="/?settings=1" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="fa-solid fa-gear"></i></button></a>
     </div>
   </header>
 
@@ -194,9 +198,9 @@
       <div class="panel-body" style="flex:1;overflow-y:auto">
         <div id="detailEmpty" class="empty">Select a result to preview details</div>
         <div id="detailContent" style="display:none;height:100%;flex-direction:column">
-          <div style="display:flex;gap:20px;flex:1;min-height:0;align-items:stretch">
+          <div id="detailLayout" style="display:flex;gap:20px;flex:1;min-height:0;align-items:stretch">
             <div id="detailPoster" style="flex-shrink:0;cursor:pointer;display:flex" onclick="openPosterOverlay()"></div>
-            <div style="flex:1;min-width:0;overflow-y:auto">
+            <div id="detailTextCol" style="flex:1;min-width:0;overflow-y:auto">
               <div class="detail-meta" id="detailMeta"></div>
               <div class="detail-bio" id="detailBio" style="margin-top:6px"></div>
             </div>
@@ -366,7 +370,7 @@
               : `<div class="scene-thumb-placeholder"><i class="fa-solid fa-film"></i></div>`}
           </div>
           <div class="scene-info">
-            <div class="scene-title" title="${esc(s.title)}">${esc(s.title)}</div>
+            <div class="scene-title" title="${esc(s.title)}">${esc(s.title).replace(/ /g, '-')}</div>
             <div class="scene-date">${s.date || ''}</div>
           </div>
           <div class="scene-actions">
@@ -482,11 +486,31 @@
     document.getElementById('detailBio').textContent = 'Loading...';
     document.getElementById('resultMsg').style.display = 'none';
 
-    // Show search result image immediately
+    // Switch layout based on type
+    const layoutEl = document.getElementById('detailLayout');
     const posterEl = document.getElementById('detailPoster');
-    const icon = currentType === 'studio' ? 'clapperboard' : 'person';
+    const isStudio = currentType === 'studio';
+    const icon = isStudio ? 'clapperboard' : 'person';
+    const posterClass = isStudio ? 'detail-poster-studio' : 'detail-poster';
+
+    if (isStudio) {
+      // Studio: stacked — image on top, text below
+      layoutEl.style.flexDirection = 'column';
+      layoutEl.style.alignItems = 'stretch';
+      layoutEl.style.gap = '12px';
+      posterEl.style.flexShrink = '0';
+      posterEl.style.display = 'block';
+    } else {
+      // Performer: side-by-side — image left, text right
+      layoutEl.style.flexDirection = 'row';
+      layoutEl.style.alignItems = 'stretch';
+      layoutEl.style.gap = '20px';
+      posterEl.style.flexShrink = '0';
+      posterEl.style.display = 'flex';
+    }
+
     if (item.image) {
-      posterEl.innerHTML = `<img class="detail-poster" src="${esc(item.image)}" onclick="openImageOverlay('${esc(item.image)}')" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-${icon}></i></div>'">`;
+      posterEl.innerHTML = `<img class="${posterClass}" src="${esc(item.image)}" onclick="openImageOverlay('${esc(item.image)}')" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-${icon}></i></div>'">`;
     } else {
       posterEl.innerHTML = `<div class="detail-poster-placeholder"><i class="fa-solid fa-${icon}"></i></div>`;
     }
@@ -499,7 +523,7 @@
       const r = await fetch(`/api/metadata/preview?type=${currentType}&source=${encodeURIComponent(item.source)}&id=${encodeURIComponent(item.id)}`);
       const d = await r.json();
       if (d.image) {
-        posterEl.innerHTML = `<img class="detail-poster" src="${esc(d.image)}" onclick="openImageOverlay('${esc(d.image)}')" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-${icon}></i></div>'">`;
+        posterEl.innerHTML = `<img class="${posterClass}" src="${esc(d.image)}" onclick="openImageOverlay('${esc(d.image)}')" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-${icon}></i></div>'">`;
       }
       document.getElementById('detailBio').textContent = d.bio || '';
       if (d.meta) document.getElementById('detailMeta').innerHTML = d.meta;
