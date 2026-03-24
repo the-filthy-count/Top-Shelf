@@ -440,7 +440,7 @@
           guid:         result.guid,
           indexer_id:   result.indexer_id,
           type:         result.type,
-          download_url: result.download_url,
+          download_url: result.type === 'torrent' && result.magnet ? result.magnet : result.download_url,
         }),
       });
       const d = await r.json();

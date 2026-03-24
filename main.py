@@ -2012,8 +2012,8 @@ def _parse_newznab_xml(xml_text: str, indexer_name: str, protocol: str) -> list[
                 "size_mb":      round(size / 1024 / 1024, 0),
                 "seeders":      seeders,
                 "age":          age_hours,
-                "download_url": link,
-                "magnet":       "",
+                "download_url": link if not link.startswith("magnet:") else "",
+                "magnet":       link if link.startswith("magnet:") else "",
                 "protocol":     protocol,
                 "type":         "torrent" if protocol == "torrent" else "nzb",
                 "indexer_id":   parsed_indexer_id,
@@ -3089,13 +3089,13 @@ async def prowlarr_grab_endpoint(payload: dict):
                     if "nzbget" in impl:
                         user = fields.get("username", "") or ""
                         pwd  = fields.get("password", "") or ""
-                        auth = f"{user}:{pwd}@" if user or pwd else ""
                         gr = requests.post(
-                            f"http://{auth}{host}:{port}/jsonrpc",
+                            f"http://{host}:{port}/jsonrpc",
                             json={"method": "append", "params": [
                                 nzb_filename, b64.b64encode(nzb_content).decode(),
                                 category, 0, False, False, "", 0, "SCORE"
                             ]},
+                            auth=(user, pwd) if user or pwd else None,
                             timeout=15,
                         )
                         emit(f"GRAB NZBGet → {gr.status_code} {gr.text[:100]}")
@@ -3117,13 +3117,12 @@ async def prowlarr_grab_endpoint(payload: dict):
         except Exception as e:
             emit(f"GRAB nzb error: {e}")
 
-    # ---- Torrents: fetch torrent, push to qBittorrent ----
+    # ---- Torrents: magnet or .torrent file to qBittorrent ----
     if download_url and is_torrent:
+        is_magnet = download_url.startswith("magnet:")
         try:
-            r = requests.get(download_url, timeout=20, allow_redirects=True)
-            emit(f"GRAB torrent fetch → {r.status_code}")
-            if r.status_code == 200 and base:
-                torrent_pref = s.get("prowlarr_torrent_client", "")
+            torrent_pref = s.get("prowlarr_torrent_client", "")
+            if base:
                 cr = requests.get(f"{base}/api/v1/downloadclient", headers=_prowlarr_headers(), timeout=10)
                 for c in cr.json():
                     if torrent_pref and c.get("name") != torrent_pref:
@@ -3139,12 +3138,23 @@ async def prowlarr_grab_endpoint(payload: dict):
                         sess = requests.Session()
                         sess.post(f"http://{host}:{port}/api/v2/auth/login",
                                   data={"username": user, "password": pwd}, timeout=10)
-                        gr = sess.post(
-                            f"http://{host}:{port}/api/v2/torrents/add",
-                            data={"category": category},
-                            files={"torrents": ("release.torrent", r.content)},
-                            timeout=15,
-                        )
+                        if is_magnet:
+                            # Send magnet link directly
+                            gr = sess.post(
+                                f"http://{host}:{port}/api/v2/torrents/add",
+                                data={"urls": download_url, "category": category},
+                                timeout=15,
+                            )
+                        else:
+                            # Fetch torrent file then upload
+                            r = requests.get(download_url, timeout=20, allow_redirects=True)
+                            emit(f"GRAB torrent fetch → {r.status_code}")
+                            gr = sess.post(
+                                f"http://{host}:{port}/api/v2/torrents/add",
+                                data={"category": category},
+                                files={"torrents": ("release.torrent", r.content)},
+                                timeout=15,
+                            )
                         emit(f"GRAB qBittorrent → {gr.status_code} {gr.text[:80]}")
                         if gr.status_code == 200:
                             return {"ok": True}
