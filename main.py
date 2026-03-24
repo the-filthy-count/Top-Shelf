@@ -1974,6 +1974,15 @@ def _parse_newznab_xml(xml_text: str, indexer_name: str, protocol: str) -> list[
                 if not link:
                     link = enc.get("url") or ""
 
+            # Get indexer ID from prowlarrindexer element
+            indexer_elem = item.find("prowlarrindexer")
+            parsed_indexer_id = None
+            if indexer_elem is not None:
+                try:
+                    parsed_indexer_id = int(indexer_elem.get("id", 0))
+                except Exception:
+                    pass
+
             for attr in item.findall("newznab:attr", ns) + item.findall("torznab:attr", ns):
                 name = attr.get("name", "")
                 val  = attr.get("value", "")
@@ -2007,7 +2016,7 @@ def _parse_newznab_xml(xml_text: str, indexer_name: str, protocol: str) -> list[
                 "magnet":       "",
                 "protocol":     protocol,
                 "type":         "torrent" if protocol == "torrent" else "nzb",
-                "indexer_id":   None,
+                "indexer_id":   parsed_indexer_id,
             })
     except Exception:
         pass
@@ -3054,24 +3063,45 @@ async def prowlarr_grab_endpoint(payload: dict):
 
     s = db.get_settings()
 
-    # For Newznab results: push to download client via Prowlarr
+    # For Newznab results: GET the Prowlarr proxy download URL
+    # Prowlarr intercepts this, downloads the NZB, and pushes to configured download client
     if download_url:
-        base = _prowlarr_url()
-        if base:
-            # Try /api/v1/search POST (grab by downloadUrl)
-            for endpoint, payload in [
-                (f"{base}/api/v1/search",  {"downloadUrl": download_url}),
-                (f"{base}/api/v1/release", {"downloadUrl": download_url, "guid": guid or "", "indexerId": 0}),
-                (f"{base}/api/v1/release", {"guid": guid or "", "indexerId": 0}),
-            ]:
-                try:
-                    resp = requests.post(endpoint, json=payload,
-                                        headers=_prowlarr_headers(), timeout=20)
-                    emit(f"GRAB {endpoint.split('/')[-1]} → {resp.status_code}")
-                    if resp.status_code in (200, 201, 202, 204):
-                        return {"ok": True}
-                except Exception as e:
-                    emit(f"GRAB error: {e}")
+        try:
+            resp = requests.get(download_url, headers=_prowlarr_headers(),
+                                timeout=30, allow_redirects=True)
+            emit(f"GRAB download_url → {resp.status_code} content-type={resp.headers.get('content-type','')[:40]}")
+            if resp.status_code == 200:
+                ct = resp.headers.get("content-type", "")
+                # If we got actual NZB/torrent content back, push it directly to NZBGet/SABnzbd
+                if "nzb" in ct or "x-nzb" in ct or len(resp.content) > 100:
+                    # Try NZBGet if configured
+                    s2 = db.get_settings()
+                    # Push to NZBGet via its API
+                    nzbget_url = s2.get("nzbget_url", "").rstrip("/")
+                    nzbget_user = s2.get("nzbget_user", "nzbget")
+                    nzbget_pass = s2.get("nzbget_pass", "")
+                    category    = s2.get("prowlarr_category", "Top-Shelf")
+                    if nzbget_url:
+                        try:
+                            import base64
+                            nzb_b64 = base64.b64encode(resp.content).decode()
+                            filename = download_url.split("file=")[-1] if "file=" in download_url else "download.nzb"
+                            ng_resp = requests.post(
+                                f"{nzbget_url}/jsonrpc",
+                                json={"method": "append", "params": [
+                                    filename, nzb_b64, category, 0, False, False, "", 0, "SCORE"
+                                ]},
+                                auth=(nzbget_user, nzbget_pass) if nzbget_pass else None,
+                                timeout=15,
+                            )
+                            if ng_resp.status_code == 200 and ng_resp.json().get("result", 0) > 0:
+                                return {"ok": True}
+                        except Exception as e:
+                            emit(f"GRAB NZBGet error: {e}")
+                    # If no NZBGet or it failed, the download URL GET itself may have triggered Prowlarr
+                    return {"ok": True}
+        except Exception as e:
+            emit(f"GRAB error: {e}")
 
     # Try Whisparr if configured
     whisparr_base = s.get("whisparr_url", "").rstrip("/")

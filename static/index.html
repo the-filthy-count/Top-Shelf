@@ -886,6 +886,18 @@
             <label class="field-label">NZB Client</label>
             <input class="field-input" id="cfgProwlarrNzb" type="text" placeholder="SABnzbd">
           </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label">NZBGet URL <span style="color:var(--dim)">(for direct NZB push)</span></label>
+            <input class="field-input" id="cfgNzbgetUrl" type="text" placeholder="http://192.168.1.x:6789">
+          </div>
+          <div class="field-row">
+            <label class="field-label">NZBGet Username</label>
+            <input class="field-input" id="cfgNzbgetUser" type="text" placeholder="nzbget">
+          </div>
+          <div class="field-row">
+            <label class="field-label">NZBGet Password</label>
+            <input class="field-input" id="cfgNzbgetPass" type="password" autocomplete="off">
+          </div>
         </div>
       </div>
 
@@ -1098,6 +1110,9 @@
     document.getElementById('cfgProwlarrCategory').value = s.prowlarr_category  || 'Top-Shelf';
     document.getElementById('cfgProwlarrTorrent').value  = s.prowlarr_torrent_client || '';
     document.getElementById('cfgProwlarrNzb').value      = s.prowlarr_nzb_client    || '';
+    document.getElementById('cfgNzbgetUrl').value        = s.nzbget_url             || '';
+    document.getElementById('cfgNzbgetUser').value       = s.nzbget_user            || 'nzbget';
+    document.getElementById('cfgNzbgetPass').value       = s.nzbget_pass            || '';
     fetch('/api/prowlarr/indexers').then(r=>r.json()).then(d=>{
       if (d.count) document.getElementById('indexerCount').textContent = `${d.count} indexers cached`;
     });
@@ -1223,6 +1238,9 @@
         prowlarr_category:         document.getElementById('cfgProwlarrCategory').value.trim(),
         prowlarr_torrent_client:   document.getElementById('cfgProwlarrTorrent').value.trim(),
         prowlarr_nzb_client:       document.getElementById('cfgProwlarrNzb').value.trim(),
+        nzbget_url:                document.getElementById('cfgNzbgetUrl').value.trim(),
+        nzbget_user:               document.getElementById('cfgNzbgetUser').value.trim(),
+        nzbget_pass:               document.getElementById('cfgNzbgetPass').value.trim(),
         media_scan_enabled:        document.getElementById('cfgMediaScanEnabled').checked ? 'true' : 'false',
         media_scan_debounce_mins:  document.getElementById('cfgScanDebounce').value.trim(),
         stash_enabled:     document.getElementById('cfgStashEnabled').checked     ? 'true' : 'false',
