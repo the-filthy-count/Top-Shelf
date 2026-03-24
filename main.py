@@ -3124,28 +3124,38 @@ async def prowlarr_grab_endpoint(payload: dict):
         try:
             if torrent_client == "qbittorrent":
                 port = torrent_port or "8080"
-                emit(f"GRAB qBittorrent → {torrent_host}:{port}")
+                qb_base = f"http://{torrent_host}:{port}"
+                emit(f"GRAB qBittorrent → {torrent_host}:{port} user={torrent_user!r}")
                 sess = requests.Session()
+                # qBittorrent 4.6.1+ requires Referer/Origin for CSRF protection
+                sess.headers.update({
+                    "Referer": f"{qb_base}/",
+                    "Origin": qb_base,
+                })
                 login_r = sess.post(
-                    f"http://{torrent_host}:{port}/api/v2/auth/login",
+                    f"{qb_base}/api/v2/auth/login",
                     data={"username": torrent_user, "password": torrent_pass}, timeout=10,
                 )
-                emit(f"GRAB qBittorrent login → {login_r.status_code}")
+                emit(f"GRAB qBittorrent login → {login_r.status_code} {login_r.text[:60]}")
+                if login_r.status_code == 403:
+                    return {"error": "qBittorrent returned 403 — check Web UI is enabled, and host IP is not banned. Try restarting qBittorrent."}
+                if login_r.text.strip() == "Fails.":
+                    return {"error": "qBittorrent login failed — wrong username or password in Settings"}
                 if is_magnet:
                     gr = sess.post(
-                        f"http://{torrent_host}:{port}/api/v2/torrents/add",
+                        f"{qb_base}/api/v2/torrents/add",
                         data={"urls": download_url, "category": category}, timeout=15,
                     )
                 else:
                     magnet, torrent_bytes = _fetch_torrent(download_url)
                     if magnet:
                         gr = sess.post(
-                            f"http://{torrent_host}:{port}/api/v2/torrents/add",
+                            f"{qb_base}/api/v2/torrents/add",
                             data={"urls": magnet, "category": category}, timeout=15,
                         )
                     else:
                         gr = sess.post(
-                            f"http://{torrent_host}:{port}/api/v2/torrents/add",
+                            f"{qb_base}/api/v2/torrents/add",
                             data={"category": category},
                             files={"torrents": ("release.torrent", torrent_bytes)}, timeout=15,
                         )
