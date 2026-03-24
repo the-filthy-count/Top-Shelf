@@ -3063,48 +3063,95 @@ async def prowlarr_grab_endpoint(payload: dict):
         return JSONResponse({"error": "guid or download_url required"}, status_code=400)
 
     s = db.get_settings()
+    base = _prowlarr_url()
+    category = s.get("prowlarr_category", "Top-Shelf")
 
-    # For Newznab results: GET the Prowlarr proxy download URL
-    # Prowlarr intercepts this, downloads the NZB, and pushes to configured download client
-    if download_url:
+    # ---- NZBs: fetch file, push to NZBGet or SABnzbd ----
+    if download_url and not is_torrent:
         try:
-            resp = requests.get(download_url, headers=_prowlarr_headers(),
-                                timeout=30, allow_redirects=True)
-            emit(f"GRAB download_url → {resp.status_code} content-type={resp.headers.get('content-type','')[:40]}")
-            if resp.status_code == 200:
-                ct = resp.headers.get("content-type", "")
-                # If we got actual NZB/torrent content back, push it directly to NZBGet/SABnzbd
-                if "nzb" in ct or "x-nzb" in ct or len(resp.content) > 100:
-                    # Try NZBGet if configured
-                    s2 = db.get_settings()
-                    # Push to NZBGet via its API
-                    nzbget_url = s2.get("nzbget_url", "").rstrip("/")
-                    nzbget_user = s2.get("nzbget_user", "nzbget")
-                    nzbget_pass = s2.get("nzbget_pass", "")
-                    category    = s2.get("prowlarr_category", "Top-Shelf")
-                    if nzbget_url:
-                        try:
-                            import base64
-                            nzb_b64 = base64.b64encode(resp.content).decode()
-                            filename = download_url.split("file=")[-1] if "file=" in download_url else "download.nzb"
-                            ng_resp = requests.post(
-                                f"{nzbget_url}/jsonrpc",
-                                json={"method": "append", "params": [
-                                    filename, nzb_b64, category, 0, False, False, "", 0, "SCORE"
-                                ]},
-                                auth=(nzbget_user, nzbget_pass) if nzbget_pass else None,
-                                timeout=15,
-                            )
-                            if ng_resp.status_code == 200 and ng_resp.json().get("result", 0) > 0:
+            r = requests.get(download_url, timeout=20, allow_redirects=True)
+            emit(f"GRAB nzb fetch → {r.status_code}")
+            if r.status_code == 200 and base:
+                import base64 as b64
+                nzb_content  = r.content
+                nzb_filename = (download_url.split("file=")[-1] if "file=" in download_url else "release") + ".nzb"
+                nzb_pref     = s.get("prowlarr_nzb_client", "")
+                cr = requests.get(f"{base}/api/v1/downloadclient", headers=_prowlarr_headers(), timeout=10)
+                emit(f"GRAB clients: {[c.get('name') for c in cr.json()]}")
+                for c in cr.json():
+                    if nzb_pref and c.get("name") != nzb_pref:
+                        continue
+                    impl   = c.get("implementation", "").lower()
+                    fields = {f["name"]: f.get("value") for f in c.get("fields", [])}
+                    host   = fields.get("host", "localhost")
+                    port   = int(fields.get("port") or 6789)
+                    emit(f"GRAB trying {impl} at {host}:{port}")
+                    if "nzbget" in impl:
+                        user = fields.get("username", "") or ""
+                        pwd  = fields.get("password", "") or ""
+                        auth = f"{user}:{pwd}@" if user or pwd else ""
+                        gr = requests.post(
+                            f"http://{auth}{host}:{port}/jsonrpc",
+                            json={"method": "append", "params": [
+                                nzb_filename, b64.b64encode(nzb_content).decode(),
+                                category, 0, False, False, "", 0, "SCORE"
+                            ]},
+                            timeout=15,
+                        )
+                        emit(f"GRAB NZBGet → {gr.status_code} {gr.text[:100]}")
+                        if gr.status_code == 200:
+                            result = gr.json().get("result")
+                            if result and result > 0:
                                 return {"ok": True}
-                        except Exception as e:
-                            emit(f"GRAB NZBGet error: {e}")
-                    # If no NZBGet or it failed, the download URL GET itself may have triggered Prowlarr
-                    return {"ok": True}
+                    elif "sabnzbd" in impl:
+                        api_key = fields.get("apiKey", "")
+                        gr = requests.post(
+                            f"http://{host}:{port}/sabnzbd/api",
+                            data={"mode": "addfile", "apikey": api_key, "cat": category, "output": "json"},
+                            files={"nzbfile": (nzb_filename, nzb_content)},
+                            timeout=15,
+                        )
+                        emit(f"GRAB SABnzbd → {gr.status_code} {gr.text[:100]}")
+                        if gr.status_code == 200:
+                            return {"ok": True}
         except Exception as e:
-            emit(f"GRAB error: {e}")
+            emit(f"GRAB nzb error: {e}")
 
-    # Try Whisparr if configured
+    # ---- Torrents: fetch torrent, push to qBittorrent ----
+    if download_url and is_torrent:
+        try:
+            r = requests.get(download_url, timeout=20, allow_redirects=True)
+            emit(f"GRAB torrent fetch → {r.status_code}")
+            if r.status_code == 200 and base:
+                torrent_pref = s.get("prowlarr_torrent_client", "")
+                cr = requests.get(f"{base}/api/v1/downloadclient", headers=_prowlarr_headers(), timeout=10)
+                for c in cr.json():
+                    if torrent_pref and c.get("name") != torrent_pref:
+                        continue
+                    impl   = c.get("implementation", "").lower()
+                    fields = {f["name"]: f.get("value") for f in c.get("fields", [])}
+                    host   = fields.get("host", "localhost")
+                    port   = int(fields.get("port") or 8080)
+                    emit(f"GRAB trying {impl} at {host}:{port}")
+                    if "qbittorrent" in impl:
+                        user = fields.get("username", "") or ""
+                        pwd  = fields.get("password", "") or ""
+                        sess = requests.Session()
+                        sess.post(f"http://{host}:{port}/api/v2/auth/login",
+                                  data={"username": user, "password": pwd}, timeout=10)
+                        gr = sess.post(
+                            f"http://{host}:{port}/api/v2/torrents/add",
+                            data={"category": category},
+                            files={"torrents": ("release.torrent", r.content)},
+                            timeout=15,
+                        )
+                        emit(f"GRAB qBittorrent → {gr.status_code} {gr.text[:80]}")
+                        if gr.status_code == 200:
+                            return {"ok": True}
+        except Exception as e:
+            emit(f"GRAB torrent error: {e}")
+
+    # ---- Whisparr fallback ----
     whisparr_base = s.get("whisparr_url", "").rstrip("/")
     whisparr_key  = s.get("whisparr_api_key", "")
     if whisparr_base and whisparr_key and guid:
