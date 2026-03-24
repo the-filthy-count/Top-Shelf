@@ -2031,7 +2031,8 @@ def _search_indexer(base: str, api_key: str, indexer: dict, query: str) -> list[
     try:
         resp = requests.get(
             f"{base}/{iid}/api",
-            params={"t": "search", "q": query, "apikey": api_key},
+            params={"t": "search", "q": query, "apikey": api_key,
+                    "cat": "6000,6010,6020,6030,6040,6050,6060,6070,6080,6090"},
             timeout=20,
         )
         if resp.status_code == 200:
