@@ -71,7 +71,7 @@
 
   /* Type toggle */
   .type-toggle { display: flex; gap: 0; margin-bottom: 16px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
-  .type-btn { flex: 1; padding: 8px; background: none; border: none; color: var(--dim); font-family: var(--secs); font-size: 14px; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
+  .type-btn { flex: 1; padding: 8px; background: none; border: none; color: var(--dim); font-family: var(--mono); font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; transition: all 0.15s; }
   .type-btn.active { background: var(--accent); color: #0c0c0e; }
 
   /* Search */
@@ -120,8 +120,8 @@
   .scene-thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--raised); }
   .scene-thumb-placeholder { width: 100%; aspect-ratio: 16/9; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); }
   .scene-info { padding: 8px 8px 4px; }
-  .scene-title { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .scene-date  { font-size: 10px; color: var(--dim); margin-top: 2px; }
+  .scene-title { font-family: 'Acidoze', monospace; font-size: 10px; color: #d4cfc4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; min-height: 2.6em; }
+  .scene-date  { font-size: 10px; color: var(--dim); margin-top: 4px; }
   .scene-actions { display: flex; gap: 4px; padding: 4px 6px 8px; border-top: 1px solid rgba(255,255,255,0.04); margin-top: 4px; }
   .scene-action-btn { flex: 1; background: none; border: 1px solid var(--border); color: var(--dim); border-radius: 4px; padding: 4px; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
   .scene-action-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -222,7 +222,7 @@
 </div>
 
 <!-- Scenes panel - full width below -->
-<div id="scenesSection" style="display:none;max-width:1400px;margin:0 auto;padding:0 24px 20px;position:relative;z-index:1">
+<div id="scenesSection" style="display:none;max-width:1400px;margin:0 auto;padding:0 24px 20px;position:relative;z-index:1;margin-top:-4px">
   <div class="panel">
     <div class="panel-header">
       <span class="panel-title" id="scenesTitle">Recent Scenes</span>

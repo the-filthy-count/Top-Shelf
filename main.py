@@ -3054,23 +3054,24 @@ async def prowlarr_grab_endpoint(payload: dict):
 
     s = db.get_settings()
 
-    # For Newznab results: use Prowlarr's /api/v1/release endpoint to grab
+    # For Newznab results: push to download client via Prowlarr
     if download_url:
         base = _prowlarr_url()
         if base:
-            try:
-                resp = requests.post(
-                    f"{base}/api/v1/release",
-                    json={"downloadUrl": download_url, "guid": guid or download_url,
-                          "indexerId": indexer_id or 0},
-                    headers=_prowlarr_headers(),
-                    timeout=20,
-                )
-                if resp.status_code in (200, 201, 202, 204):
-                    return {"ok": True}
-                emit(f"GRAB /api/v1/release failed {resp.status_code}: {resp.text[:200]}")
-            except Exception as e:
-                emit(f"GRAB error: {e}")
+            # Try /api/v1/search POST (grab by downloadUrl)
+            for endpoint, payload in [
+                (f"{base}/api/v1/search",  {"downloadUrl": download_url}),
+                (f"{base}/api/v1/release", {"downloadUrl": download_url, "guid": guid or "", "indexerId": 0}),
+                (f"{base}/api/v1/release", {"guid": guid or "", "indexerId": 0}),
+            ]:
+                try:
+                    resp = requests.post(endpoint, json=payload,
+                                        headers=_prowlarr_headers(), timeout=20)
+                    emit(f"GRAB {endpoint.split('/')[-1]} → {resp.status_code}")
+                    if resp.status_code in (200, 201, 202, 204):
+                        return {"ok": True}
+                except Exception as e:
+                    emit(f"GRAB error: {e}")
 
     # Try Whisparr if configured
     whisparr_base = s.get("whisparr_url", "").rstrip("/")
