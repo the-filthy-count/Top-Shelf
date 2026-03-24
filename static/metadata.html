@@ -99,7 +99,7 @@
   .detail-poster { width: 190px; height: 100%; object-fit: cover; border-radius: 8px; flex-shrink: 0; display: block; }
   .detail-poster-placeholder { width: 140px; height: 100%; min-height: 180px; border-radius: 8px; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 32px; flex-shrink: 0; }
   /* Studio layout: landscape image on top, text below */
-  .detail-poster-studio { width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; display: block; }
+  .detail-poster-studio { width: 100%; max-height: 240px; object-fit: contain; object-position: left; border-radius: 8px; display: block; }
   .detail-info { flex: 1; min-width: 0; }
   .detail-name { font-family: var(--acid); font-size: 28px; color: var(--text); margin-bottom: 8px; }
   .detail-meta { font-size: 12px; color: var(--dim); line-height: 2; }
@@ -506,7 +506,7 @@
           libEl.innerHTML = `<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--green)">IN-LIBRARY</span>`;
           if (destEl) destEl.style.display = 'none';
         } else {
-          libEl.innerHTML = `<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--dim)">NOT IN-LIBRARY</span>`;
+          libEl.innerHTML = `<span style="font-family:var(--secs);font-size:20px;letter-spacing:-0.02em;color:var(--red)">NOT-IN-LIBRARY</span>`;
           if (destEl) destEl.style.display = 'block';
         }
       }).catch(() => { libEl.innerHTML = ''; if (destEl) destEl.style.display = 'block'; });
