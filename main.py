@@ -3087,22 +3087,24 @@ async def prowlarr_grab_endpoint(payload: dict):
                     port   = int(fields.get("port") or 6789)
                     emit(f"GRAB trying {impl} at {host}:{port}")
                     if "nzbget" in impl:
-                        user = fields.get("username", "") or ""
-                        pwd  = fields.get("password", "") or ""
-                        gr = requests.post(
-                            f"http://{host}:{port}/jsonrpc",
-                            json={"method": "append", "params": [
-                                nzb_filename, b64.b64encode(nzb_content).decode(),
-                                category, 0, False, False, "", 0, "SCORE"
-                            ]},
-                            auth=(user, pwd) if user or pwd else None,
-                            timeout=15,
-                        )
-                        emit(f"GRAB NZBGet → {gr.status_code} {gr.text[:100]}")
-                        if gr.status_code == 200:
-                            result = gr.json().get("result")
-                            if result and result > 0:
-                                return {"ok": True}
+                        user = (fields.get("username") or fields.get("Username") or "")
+                        pwd  = (fields.get("password") or fields.get("Password") or "")
+                        emit(f"GRAB NZBGet user={user!r}")
+                        for auth_arg in ([{"auth": (user, pwd)}] if user else [{"auth": None}, {"auth": (user, pwd)}]):
+                            gr = requests.post(
+                                f"http://{host}:{port}/jsonrpc",
+                                json={"method": "append", "params": [
+                                    nzb_filename, b64.b64encode(nzb_content).decode(),
+                                    category, 0, False, False, "", 0, "SCORE"
+                                ]},
+                                timeout=15, **auth_arg,
+                            )
+                            emit(f"GRAB NZBGet → {gr.status_code} {gr.text[:100]}")
+                            if gr.status_code == 200:
+                                result = gr.json().get("result")
+                                if result and result > 0:
+                                    return {"ok": True}
+                                break
                     elif "sabnzbd" in impl:
                         api_key = fields.get("apiKey", "")
                         gr = requests.post(
@@ -3177,12 +3179,7 @@ async def prowlarr_grab_endpoint(payload: dict):
         except Exception:
             pass
 
-    # Fall back to Prowlarr grab
-    if indexer_id:
-        result = prowlarr_grab(guid, indexer_id, is_torrent)
-        return result
-
-    return {"error": "Could not send to download client"}
+    return {"error": "Could not send to download client - check NZBGet/qBittorrent credentials in Prowlarr"}
 
 
 @app.get("/api/prowlarr/indexers")
