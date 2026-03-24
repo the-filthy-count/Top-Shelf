@@ -416,7 +416,7 @@
             <div class="sr-title" title="${esc(r.title)}">${esc(r.title)}</div>
             <div class="sr-meta">${r.age ? Math.round(r.age/24) + 'd ago' : ''} ${r.seeders != null && r.seeders !== undefined ? '· ' + r.seeders + ' seeders' : ''}</div>
           </div>
-          <span class="sr-indexer">${esc(r.indexer)}</span>
+          <span class="sr-indexer">${esc(r.indexer.replace(/ /g, '-'))}</span>
           <span class="sr-size">${r.size_mb > 1024 ? (r.size_mb/1024).toFixed(1) + ' GB' : r.size_mb + ' MB'}</span>
           <button class="btn-grab ${r.type === 'nzb' ? 'nzb' : ''}" onclick="grabResult(${i})">
             <i class="fa-solid fa-download"></i> ${r.type === 'nzb' ? 'NZB' : 'TORRENT'}
@@ -445,8 +445,9 @@
       });
       const d = await r.json();
       if (d.ok) {
-        btn.innerHTML = '<i class="fa-solid fa-check"></i> Sent';
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> SENT';
         btn.style.background = 'var(--green)';
+        btn.style.color = '#0c0c0e';
       } else {
         btn.innerHTML = 'Error';
         btn.disabled = false;
