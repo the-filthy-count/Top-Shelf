@@ -93,8 +93,34 @@
   .empty { padding: 32px 18px; text-align: center; color: var(--dim); font-size: 12px; }
 
   /* Type toggle */
-  .type-toggle { display: flex; gap: 0; margin-bottom: 16px; border-radius: 5px; overflow: hidden; border: 1px solid var(--border); }
-  .type-btn { flex: 1; padding: 8px; background: rgba(255,255,255,0.04); border: none; color: var(--text); text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; transition: all 0.15s; }
+  .type-toggle {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+    margin-bottom: 16px;
+    border-radius: 5px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .type-btn {
+    min-height: 42px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.04);
+    border: none;
+    border-right: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-toggle);
+    font-size: max(15px, calc(13px + 2pt));
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  .type-btn:last-child { border-right: none; }
   .type-btn:hover { background: rgba(255,255,255,0.08); }
   .type-btn.active { background: var(--accent); color: #0c0c0e; }
 
@@ -115,7 +141,9 @@
     border-bottom: 1px solid rgba(255,255,255,0.08);
   }
   .feed-mode-toggle {
-    display: inline-flex;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: min(100%, 400px);
     gap: 0;
     border-radius: 5px;
     overflow: hidden;
@@ -123,17 +151,27 @@
     flex-shrink: 0;
   }
   .feed-mode-btn {
-    padding: 6px 12px;
+    min-height: 42px;
+    padding: 10px 8px;
+    margin: 0;
     background: rgba(255,255,255,0.05);
     border: none;
+    border-right: 1px solid rgba(192,132,252,0.28);
     color: var(--dim);
     font-family: var(--font-toggle);
-    font-size: var(--font-reversed-min);
+    font-size: max(15px, calc(13px + 2pt));
     text-transform: none;
     letter-spacing: 0.04em;
     cursor: pointer;
     transition: background 0.15s, color 0.15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    width: 100%;
+    min-width: 0;
   }
+  .feed-mode-btn:last-child { border-right: none; }
   .feed-mode-btn:hover { color: var(--text); background: rgba(255,255,255,0.08); }
   .feed-mode-btn.active { background: var(--accent); color: #0c0c0e; }
   .scenes-title-wrap {
@@ -144,13 +182,6 @@
     min-width: 0;
   }
   .scenes-toolbar-spacer { min-width: 0; }
-  .scenes-note {
-    font-size: 11px;
-    color: var(--dim);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
   #sceneTabs.source-toggle {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -494,7 +525,6 @@
           <button type="button" class="feed-mode-btn" data-mode="random" onclick="setScenesFeedMode('random')">Random</button>
           <button type="button" class="feed-mode-btn" data-mode="favourites" onclick="setScenesFeedMode('favourites')">favourites</button>
         </div>
-        <span class="scenes-note" id="scenesNote"></span>
       </div>
       <div id="sceneTabs" style="display:none" class="source-toggle">
         <button class="source-btn active" data-src="tpdb" onclick="switchSceneSource('tpdb')">TPDB</button>
@@ -720,8 +750,7 @@
     const grid    = document.getElementById('scenesGrid');
     const title   = document.getElementById('scenesTitle');
     const tabs    = document.getElementById('sceneTabs');
-    title.textContent = 'Recent Scenes';
-    document.getElementById('scenesNote').textContent = item.name || '';
+    title.textContent = item.name ? ('Recent Scenes — ' + item.name) : 'Recent Scenes';
     tabs.style.display = 'none';
     _sceneSources = {};
     section.style.display = 'block';
@@ -1075,7 +1104,6 @@
     const section = document.getElementById('scenesSection');
     const grid    = document.getElementById('scenesGrid');
     const title   = document.getElementById('scenesTitle');
-    const note    = document.getElementById('scenesNote');
     _applyFeedModeToggleUI();
     document.getElementById('sceneTabs').style.display = 'none';
     _sceneSources = {};
@@ -1086,7 +1114,6 @@
       const d = await r.json();
       if (_scenesFeedMode === 'favourites') {
         title.textContent = 'Your Feed';
-        note.textContent = 'TPDB scenes for hearts on Favourites';
         if (!d.scenes?.length) {
           grid.innerHTML = '<div class="empty">No scenes yet — open Favourites, click the heart on performers or studios you care about, and link TPDB (refresh or manual search). Only starred entries with a TPDB id appear here.</div>';
           return;
@@ -1096,22 +1123,17 @@
       }
       if (_scenesFeedMode === 'recent') {
         title.textContent = 'Your Feed';
-        note.textContent = 'TPDB newest releases (global)';
         if (!d.scenes?.length) {
-          grid.innerHTML = '<div class="empty">No feed scenes — check your TPDB API key in Settings</div>';
+          grid.innerHTML = '<div class="empty">No feed scenes — check your TPDB API key in Settings, and favourite performers or sites on ThePornDB so the recent feed can list their new releases.</div>';
           return;
         }
         renderSceneGrid(d.scenes, true);
         return;
       }
       title.textContent = 'Your Feed';
-      note.textContent = 'Random sample from library performer folders';
       if (!d.scenes?.length) {
         grid.innerHTML = '<div class="empty">No feed scenes — add performer folders under Settings, or check your TPDB API key</div>';
         return;
-      }
-      if (d.source === 'api') {
-        note.textContent = 'TPDB newest (no library folders to sample)';
       }
       renderSceneGrid(d.scenes, true);
     } catch(e) {

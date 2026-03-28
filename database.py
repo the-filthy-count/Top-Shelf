@@ -76,6 +76,7 @@ DEFAULTS = {
     "folder_watch_hold_secs":  "60",
     "download_watch_enabled":  "false",
     "download_watch_dir":      "/downloads/complete" if _in_docker else "/path/to/your/downloads/complete",
+    "movie_download_watch_dir": "",
     "download_watch_hold_secs": "300",
     "download_import_remove_client": "false",
     "favourites_scan_enabled": "false",

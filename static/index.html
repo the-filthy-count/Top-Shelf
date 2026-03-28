@@ -724,7 +724,7 @@
 
       <!-- Directories -->
       <div class="settings-section">
-        <div class="settings-section-title">Scenes Download Directory</div>
+        <div class="settings-section-title">Scene Source Directory</div>
         <div class="field-row">
           <label class="field-label">Input folder (files to process)</label>
           <input class="field-input" id="cfgSourceDir" type="text" placeholder="/path/to/folder">
@@ -740,7 +740,7 @@
       </div>
 
       <div class="settings-section">
-        <div class="settings-section-title">Series Directory</div>
+        <div class="settings-section-title">Series Library Directory</div>
         <div class="field-row">
           <label class="field-label">Root folder containing studio subdirectories</label>
           <input class="field-input" id="cfgSeriesDir" type="text" placeholder="/path/to/Series">
@@ -748,7 +748,7 @@
       </div>
 
       <div class="settings-section">
-        <div class="settings-section-title">Movies Directory</div>
+        <div class="settings-section-title">Movies Library Directory</div>
         <div class="field-row">
           <label class="field-label">Root folder for movies (one subfolder per film)</label>
           <input class="field-input" id="cfgFeaturesDir" type="text" placeholder="/path/to/Movies">
@@ -756,7 +756,7 @@
       </div>
 
       <div class="settings-section">
-        <div class="settings-section-title">Performer Directories</div>
+        <div class="settings-section-title">Performer Library Directories</div>
         <div class="field-hint" style="margin-bottom:8px">Matched in rank order. Files route to the first directory that contains a matching performer folder. Use gender toggles to narrow Favourites auto-matching (TPDB / StashDB / FansDB).</div>
         <div class="dir-list" id="dirList"></div>
         <div style="margin-top:12px">
@@ -843,34 +843,6 @@
             </div>
           </div>
           <div class="field-hint" id="retryNextRun" style="margin-top:8px"></div>
-        </div>
-      </div>
-
-      <!-- Download Watch -->
-      <div class="settings-section">
-        <div class="toggle-row">
-          <div class="settings-section-title">Download Folder Watch</div>
-          <label class="toggle">
-            <input type="checkbox" id="cfgDownloadWatchEnabled" onchange="toggleSection('downloadWatchBody', this.checked)">
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-        <div class="field-hint" style="margin-top:6px">Watches a folder for completed NZB/torrent downloads, cleans up junk, renames gibberish filenames using the folder name, and moves videos to your scene input folder.</div>
-        <div class="collapsible-body" id="downloadWatchBody" style="display:none">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
-            <div class="field-row" style="grid-column:1/-1">
-              <label class="field-label">Download watch directory</label>
-              <input class="field-input" id="cfgDownloadWatchDir" type="text" placeholder="/path/to/downloads/complete">
-            </div>
-            <div class="field-row">
-              <label class="field-label">Hold time (seconds)</label>
-              <input class="field-input" id="cfgDownloadWatchHold" type="number" min="30" max="3600" placeholder="300">
-            </div>
-            <div class="field-row" style="grid-column:1/-1">
-              <label class="field-label">Process existing files now</label>
-              <button class="btn-secondary" onclick="processAllDownloads()" style="margin-top:4px"><i class="fa-solid fa-play"></i> Process download folder now</button>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -1154,6 +1126,35 @@
             <input class="field-input" id="cfgDlTorrentPass" type="password" autocomplete="off">
           </div>
 
+          <div style="grid-column:1/-1;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:12px;border-top:1px solid var(--border);margin-top:4px">Download Folder Watch</div>
+          <div class="field-hint" style="grid-column:1/-1;margin-top:0;margin-bottom:4px">Watches folders for completed NZB/torrent downloads (same processing for both): junk cleanup, gibberish renames from folder name, then moves videos to your <strong>Scene Source</strong> or <strong>Movies Library</strong> folder. Uses the same hold time as below.</div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="toggle" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+              <input type="checkbox" id="cfgDownloadWatchEnabled" onchange="toggleSection('downloadWatchBody', this.checked)">
+              <span>Enable download folder watch</span>
+            </label>
+          </div>
+          <div class="collapsible-body" id="downloadWatchBody" style="display:none;grid-column:1/-1">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+              <div class="field-row" style="grid-column:1/-1">
+                <label class="field-label">Scene watch directory</label>
+                <input class="field-input" id="cfgDownloadWatchDir" type="text" placeholder="/path/to/scene downloads complete">
+              </div>
+              <div class="field-row" style="grid-column:1/-1">
+                <label class="field-label">Movie watch directory</label>
+                <input class="field-input" id="cfgMovieDownloadWatchDir" type="text" placeholder="/path/to/movie downloads complete">
+              </div>
+              <div class="field-row">
+                <label class="field-label">Hold time (seconds)</label>
+                <input class="field-input" id="cfgDownloadWatchHold" type="number" min="30" max="3600" placeholder="300">
+              </div>
+              <div class="field-row" style="grid-column:1/-1">
+                <label class="field-label">Process existing files now</label>
+                <button class="btn-secondary" onclick="processAllDownloads()" style="margin-top:4px"><i class="fa-solid fa-play"></i> Process download folders now</button>
+              </div>
+            </div>
+          </div>
+
           <div style="grid-column:1/-1;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:12px;border-top:1px solid var(--border);margin-top:4px">Download Category</div>
           <div class="field-row" style="grid-column:1/-1">
             <label class="field-label">Category <span style="color:var(--dim)">(applied to all downloads)</span></label>
@@ -1412,6 +1413,7 @@
     document.getElementById('cfgDownloadWatchEnabled').checked = dlWatchOn;
     toggleSection('downloadWatchBody', dlWatchOn);
     document.getElementById('cfgDownloadWatchDir').value  = s.download_watch_dir       || '';
+    document.getElementById('cfgMovieDownloadWatchDir').value = s.movie_download_watch_dir || '';
     document.getElementById('cfgDownloadWatchHold').value = s.download_watch_hold_secs || '300';
     document.getElementById('cfgWatchEnabled').checked = watchOn;
     toggleSection('watchBody', watchOn);
@@ -1618,6 +1620,7 @@
         pattern_performer: document.getElementById('cfgPatternPerformer').value.trim(),
         download_watch_enabled:  document.getElementById('cfgDownloadWatchEnabled').checked ? 'true' : 'false',
         download_watch_dir:      document.getElementById('cfgDownloadWatchDir').value.trim(),
+        movie_download_watch_dir: document.getElementById('cfgMovieDownloadWatchDir').value.trim(),
         download_watch_hold_secs: document.getElementById('cfgDownloadWatchHold').value.trim(),
         folder_watch_enabled:   document.getElementById('cfgWatchEnabled').checked ? 'true' : 'false',
         folder_watch_hold_secs: document.getElementById('cfgWatchHold').value.trim(),

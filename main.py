@@ -83,12 +83,13 @@ processing_state = {"running": False, "current_file": None, "log": []}
 log_queue: asyncio.Queue = None
 scheduler = BackgroundScheduler(daemon=True)
 observer          = None  # scene folder watchdog observer
-download_observer = None  # download folder watchdog observer
+download_observer = None  # scene + movie download folder watchdog observer (may schedule multiple paths)
 _pending_files: dict     = {}  # filename -> scheduled time (scene watcher)
 _pending_movie_files: dict = {}  # filename -> scheduled time (movies folder watcher)
 _movie_poll_seen: set = set()
 movie_observer = None  # movies download folder watchdog
-_pending_downloads: dict = {}  # path -> scheduled time (download watcher)
+_pending_downloads: dict = {}  # path -> scheduled time (scene download watch)
+_pending_movie_downloads: dict = {}  # path -> scheduled time (movie download watch)
 _pending_lock    = threading.Lock()
 _download_lock   = threading.Lock()
 _content_cache_lock = threading.Lock()
@@ -870,11 +871,16 @@ def _check_pending_downloads() -> None:
     """Called by scheduler every 30s - fires download processor for entries past hold time."""
     now = time.time()
     ready = []
+    ready_m = []
     with _download_lock:
         for path_str, fire_at in list(_pending_downloads.items()):
             if now >= fire_at:
                 ready.append(path_str)
                 del _pending_downloads[path_str]
+        for path_str, fire_at in list(_pending_movie_downloads.items()):
+            if now >= fire_at:
+                ready_m.append(path_str)
+                del _pending_movie_downloads[path_str]
     if ready:
         s = db.get_settings()
         for path_str in ready:
@@ -892,6 +898,26 @@ def _check_pending_downloads() -> None:
                 _process_download_entry(entry, dest_dir)
             except Exception as e:
                 emit(f"  Download process error: {e}")
+    if ready_m:
+        s = db.get_settings()
+        fd = (s.get("features_dir") or "").strip()
+        if not fd:
+            for path_str in ready_m:
+                emit(f"  Movie download process skipped ({Path(path_str).name}): Movies Library Directory not set in Settings")
+        else:
+            dest_root = Path(fd).expanduser()
+            if not dest_root.is_dir():
+                for path_str in ready_m:
+                    emit(f"  Movie download process skipped ({Path(path_str).name}): Movies Library Directory not found: {fd}")
+            else:
+                for path_str in ready_m:
+                    entry = Path(path_str)
+                    if not entry.exists():
+                        continue
+                    try:
+                        _process_download_entry(entry, dest_root)
+                    except Exception as e:
+                        emit(f"  Movie download process error: {e}")
 
 
 class DownloadWatchHandler(FileSystemEventHandler):
@@ -901,11 +927,14 @@ class DownloadWatchHandler(FileSystemEventHandler):
         s = db.get_settings()
         if s.get("download_watch_enabled", "false").lower() != "true":
             return
+        dl_raw = (s.get("download_watch_dir") or "").strip()
+        if not dl_raw:
+            return
         hold = int(s.get("download_watch_hold_secs", "300"))
         with _download_lock:
             # Only queue the top-level entry (folder or file)
             entry = Path(path_str)
-            dl_dir = Path(s.get("download_watch_dir", ""))
+            dl_dir = Path(dl_raw)
             if entry.parent == dl_dir or entry == dl_dir:
                 top = path_str
             else:
@@ -924,18 +953,65 @@ class DownloadWatchHandler(FileSystemEventHandler):
         self._queue(event.dest_path)
 
 
+class MovieDownloadWatchHandler(FileSystemEventHandler):
+    """Watches the movie download folder; queues top-level entries after hold (same hold as scene watch)."""
+
+    def _queue(self, path_str: str) -> None:
+        s = db.get_settings()
+        if s.get("download_watch_enabled", "false").lower() != "true":
+            return
+        mdl_raw = (s.get("movie_download_watch_dir") or "").strip()
+        if not mdl_raw:
+            return
+        hold = int(s.get("download_watch_hold_secs", "300"))
+        with _download_lock:
+            entry = Path(path_str)
+            dl_dir = Path(mdl_raw)
+            if entry.parent == dl_dir or entry == dl_dir:
+                top = path_str
+            else:
+                try:
+                    rel = entry.relative_to(dl_dir)
+                    top = str(dl_dir / rel.parts[0])
+                except ValueError:
+                    top = path_str
+            _pending_movie_downloads[top] = time.time() + hold
+
+    def on_created(self, event):
+        self._queue(event.src_path)
+
+    def on_moved(self, event):
+        self._queue(event.dest_path)
+
+
 def _start_download_watcher() -> None:
     global download_observer
     s = db.get_settings()
     if s.get("download_watch_enabled", "false").lower() != "true":
-        return
-    dl_dir = Path(s.get("download_watch_dir", ""))
-    if not dl_dir.exists():
+        if download_observer:
+            download_observer.stop()
+            download_observer = None
         return
     if download_observer:
         download_observer.stop()
-    download_observer = Observer()
-    download_observer.schedule(DownloadWatchHandler(), str(dl_dir), recursive=True)
+        download_observer = None
+    dl_raw = (s.get("download_watch_dir") or "").strip()
+    mdl_raw = (s.get("movie_download_watch_dir") or "").strip()
+    obs = Observer()
+    scheduled = False
+    if dl_raw:
+        dl_dir = Path(dl_raw)
+        if dl_dir.exists():
+            obs.schedule(DownloadWatchHandler(), str(dl_dir), recursive=True)
+            scheduled = True
+    if mdl_raw:
+        mdl_dir = Path(mdl_raw)
+        if mdl_dir.exists():
+            obs.schedule(MovieDownloadWatchHandler(), str(mdl_dir), recursive=True)
+            scheduled = True
+    if not scheduled:
+        return
+    download_observer = obs
     download_observer.start()
 
 
@@ -3942,7 +4018,7 @@ def _dl_resolve_import_dest_dir(
     if not sd:
         return None, (
             "Scenes input folder is missing — set Input folder (files to process) "
-            "(queue folder) under Scenes Download Directory in Settings"
+            "(queue folder) under Scene Source Directory in Settings"
         )
     p = Path(sd).expanduser()
     if not p.is_dir():
@@ -4434,8 +4510,9 @@ def _resolve_local_download_path(raw_path: Path, s: dict) -> Path | None:
     Map paths reported by download clients (NAS/container) to paths visible on this host.
 
     1) URL-decode, normalise, and check existence.
-    2) If the path is under download_watch_dir, source_dir, or movies_source_dir, resolve via
-       that directory prefix (same paths as in Settings — no remapping needed when mounts match).
+    2) If the path is under download_watch_dir, movie_download_watch_dir, source_dir,
+       movies_source_dir, or features_dir, resolve via that directory prefix (same paths as in
+       Settings — no remapping needed when mounts match).
     """
     qs = _normalize_import_path_str(str(raw_path))
     if not qs:
@@ -4475,7 +4552,7 @@ def _resolve_local_download_path(raw_path: Path, s: dict) -> Path | None:
             pass
         return None
 
-    for key in ("download_watch_dir", "source_dir", "movies_source_dir"):
+    for key in ("download_watch_dir", "movie_download_watch_dir", "source_dir", "movies_source_dir", "features_dir"):
         got = _try_anchor_prefix(s.get(key) or "")
         if got:
             return got
@@ -4514,23 +4591,27 @@ def _relative_path_under_client_root(client_abs: str, root: str) -> Path | None:
 
 def _dest_dir_for_local_download_path(local: Path, s: dict) -> Path | None:
     """
-    Scene queue (source_dir) vs movie queue (movies_source_dir) from where the file actually
-    lives on this host (watch folder vs movies download folder).
+    Scene queue (source_dir), movie queue (movies_source_dir), or movie library (features_dir)
+    from where the file actually lives on this host (watch folders vs movies input).
     """
     watch = (s.get("download_watch_dir") or "").strip()
+    mdw = (s.get("movie_download_watch_dir") or "").strip()
     ms = (s.get("movies_source_dir") or "").strip()
     sd = (s.get("source_dir") or "").strip()
-    if not sd:
-        return None
+    feat = (s.get("features_dir") or "").strip()
     try:
         lr = local.resolve()
     except OSError:
         return None
     try:
-        if watch:
+        if watch and sd:
             wr = Path(watch).expanduser().resolve()
             if lr == wr or wr in lr.parents:
                 return Path(sd).expanduser()
+        if mdw and feat:
+            mwr = Path(mdw).expanduser().resolve()
+            if lr == mwr or mwr in lr.parents:
+                return Path(feat).expanduser()
         if ms:
             mr = Path(ms).expanduser().resolve()
             if lr == mr or mr in lr.parents:
@@ -4577,7 +4658,7 @@ def _resolve_local_download_path_via_save_mirror(
 ) -> Path | None:
     """
     When the client reports paths that only exist on another machine (e.g. /share/... on the
-    torrent host) but the same files exist here under Download watch directory or Movies input
+    torrent host) but the same files exist here under scene/movie watch directories or Movies input
     folder, map by path relative to each plausible client root onto local anchors.
 
     Tries multiple roots (save_path, content_path, parent of file video, etc.), then a
@@ -4591,13 +4672,14 @@ def _resolve_local_download_path_via_save_mirror(
     if not rep_s:
         return None
     watch = (s.get("download_watch_dir") or "").strip()
+    mwatch = (s.get("movie_download_watch_dir") or "").strip()
     ms = (s.get("movies_source_dir") or "").strip()
     try:
         bn_early = Path(rep_s).name
     except OSError:
         bn_early = ""
     if bn_early:
-        for anchor_str in (watch, ms):
+        for anchor_str in (watch, mwatch, ms):
             if not anchor_str:
                 continue
             anchor = Path(anchor_str).expanduser()
@@ -4629,7 +4711,7 @@ def _resolve_local_download_path_via_save_mirror(
                 continue
         if rel is None:
             continue
-        for anchor_str in (watch, ms):
+        for anchor_str in (watch, mwatch, ms):
             if not anchor_str:
                 continue
             anchor = Path(anchor_str).expanduser()
@@ -4648,9 +4730,11 @@ def _download_path_missing_message(s: dict, reported_path: str) -> str:
     """User-facing hint when a client-reported path is not visible to this process."""
     bits = []
     for key, label in (
-        ("download_watch_dir", "Download watch directory"),
-        ("source_dir", "Scenes input folder"),
+        ("download_watch_dir", "Scene watch directory"),
+        ("movie_download_watch_dir", "Movie watch directory"),
+        ("source_dir", "Scene source folder"),
         ("movies_source_dir", "Movies input folder"),
+        ("features_dir", "Movies Library Directory"),
     ):
         raw = (s.get(key) or "").strip()
         if not raw:
@@ -4664,9 +4748,9 @@ def _download_path_missing_message(s: dict, reported_path: str) -> str:
     cfg = (" (" + "; ".join(bits) + ")") if bits else ""
     return (
         f"Download path not found on this host: {reported_path}{cfg}. "
-        "If the file exists under your Download watch directory (or Movies input folder) with the same path "
+        "If the file exists under your scene or movie watch directory (or Movies input folder) with the same path "
         "relative to the torrent save path, import should still work; otherwise align bind mounts so that path "
-        "is visible here, or set Download watch directory to the root that matches the client’s folder layout."
+        "is visible here, or set those directories to the roots that match the client’s folder layout."
     )
 
 
@@ -6584,18 +6668,25 @@ async def generate_thumb(payload: dict):
 
 @app.post("/api/download/process-all")
 async def process_all_downloads(background_tasks: BackgroundTasks):
-    """Manually trigger processing of all existing entries in the download watch folder."""
+    """Manually trigger processing of all existing entries in scene and movie download watch folders."""
     s = db.get_settings()
     dl_dir = Path(s.get("download_watch_dir", ""))
-    if not dl_dir.exists():
-        return JSONResponse({"error": f"Download watch dir not found: {dl_dir}"}, status_code=404)
+    mdl_dir = Path((s.get("movie_download_watch_dir") or "").strip())
+    fd = (s.get("features_dir") or "").strip()
+    dest_movie = Path(fd).expanduser() if fd else None
 
-    entries = [e for e in dl_dir.iterdir() if e.name not in ('.', '..')]
-    if not entries:
-        return {"started": False, "message": "No entries found"}
+    def collect_entries(base: Path) -> list[Path]:
+        if not base.exists() or not str(base):
+            return []
+        return [e for e in base.iterdir() if e.name not in (".", "..")]
+
+    scene_entries = collect_entries(dl_dir)
+    movie_entries = collect_entries(mdl_dir)
+    if not scene_entries and not movie_entries:
+        return {"started": False, "message": "No entries found (scene or movie watch dirs missing or empty)"}
 
     def run():
-        for entry in entries:
+        for entry in scene_entries:
             try:
                 ep = entry.resolve()
                 dest_dir, derr = _dl_resolve_import_dest_dir(
@@ -6607,9 +6698,20 @@ async def process_all_downloads(background_tasks: BackgroundTasks):
                 _process_download_entry(entry, dest_dir)
             except Exception as e:
                 emit(f"  ERROR processing {entry.name}: {e}")
+        if movie_entries:
+            if not fd or not dest_movie or not dest_movie.is_dir():
+                for entry in movie_entries:
+                    emit(f"  SKIP {entry.name}: Movies Library Directory not set or not found")
+            else:
+                for entry in movie_entries:
+                    try:
+                        _process_download_entry(entry, dest_movie)
+                    except Exception as e:
+                        emit(f"  ERROR processing movie watch {entry.name}: {e}")
 
     background_tasks.add_task(run)
-    return {"started": True, "count": len(entries)}
+    total = len(scene_entries) + len(movie_entries)
+    return {"started": True, "count": total}
 
 
 @app.get("/api/scan/status")
@@ -6634,7 +6736,10 @@ async def watcher_status():
     with _download_lock:
         dl_pending = [{"path": p, "fires_in": max(0, int(t - time.time()))}
                       for p, t in _pending_downloads.items()]
+        md_pending = [{"path": p, "fires_in": max(0, int(t - time.time()))}
+                      for p, t in _pending_movie_downloads.items()]
     dl_dir = Path(s.get("download_watch_dir", ""))
+    mdl_dir = Path((s.get("movie_download_watch_dir") or "").strip())
     return {
         "enabled":             s.get("folder_watch_enabled", "true").lower() == "true",
         "watching":            observer is not None and observer.is_alive() if observer else False,
@@ -6644,8 +6749,10 @@ async def watcher_status():
         "download_watching":   download_observer is not None and download_observer.is_alive() if download_observer else False,
         "download_dir":        str(dl_dir),
         "download_dir_exists": dl_dir.exists(),
+        "movie_download_dir":        str(mdl_dir),
+        "movie_download_dir_exists": mdl_dir.exists() if str(mdl_dir) else False,
         "download_hold_secs":  int(s.get("download_watch_hold_secs", "300")),
-        "download_pending":    dl_pending,
+        "download_pending":    dl_pending + md_pending,
     }
 
 
@@ -6926,7 +7033,11 @@ async def scenes_recent(source: str, id: str, type: str = "performer", slug: str
 # TPDB Feed & Favourites Sync
 # ---------------------------------------------------------------------------
 
-_feed_cache: dict = {"scenes": [], "ts": 0, "source": "", "filter_key": None, "feed_mode": "recent"}
+_feed_cache: dict = {
+    "recent": {"scenes": [], "ts": 0, "source": "", "filter_key": None},
+    "random": {"scenes": [], "ts": 0, "source": "", "filter_key": None},
+    "favourites": {"scenes": [], "ts": 0, "source": "", "filter_key": None},
+}
 _movies_latest_cache: dict = {"results": [], "ts": 0, "filter_key": None}
 _FEED_CACHE_TTL = 3600  # 1 hour
 _MOVIES_CACHE_TTL = 3600  # 1 hour
@@ -7175,6 +7286,130 @@ def _fetch_tpdb_feed(limit: int = 24) -> list[dict]:
     return result
 
 
+def _tpdb_scene_payload_to_feed_card(s_item: dict, source: str = "api") -> dict | None:
+    """Single scene resource → feed card, or None if filtered out."""
+    genders = _extract_movie_genders(s_item)
+    if not _passes_content_filter(genders):
+        return None
+    if not _passes_tag_filter(s_item):
+        return None
+    thumb = s_item.get("poster_image") or s_item.get("image") or s_item.get("poster") or ""
+    if not thumb:
+        posters = s_item.get("posters") or []
+        if posters:
+            thumb = posters[0] if isinstance(posters[0], str) else posters[0].get("url", "")
+        bg = s_item.get("background") or {}
+        if not thumb and isinstance(bg, dict):
+            thumb = bg.get("small") or bg.get("medium") or bg.get("url") or ""
+    return {
+        "id": str(s_item.get("_id") or s_item.get("id") or ""),
+        "title": s_item.get("title", ""),
+        "date": s_item.get("date", ""),
+        "studio": (s_item.get("site") or {}).get("name", ""),
+        "thumb": thumb,
+        "link": "",
+        "source": source,
+    }
+
+
+def _tpdb_atom_feed_scene_ids(xml_text: str) -> list[str]:
+    """Parse TPDB Atom feeds; return scene UUIDs in document order."""
+    import re
+    uuid_re = re.compile(
+        r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+        re.I,
+    )
+    try:
+        root = ET.fromstring(xml_text)
+    except Exception:
+        return []
+    ns = {"atom": "http://www.w3.org/2005/Atom"}
+    entries = root.findall("atom:entry", ns) or root.findall("entry")
+    out: list[str] = []
+    for entry in entries:
+        sid = None
+        for link in list(entry.findall("atom:link", ns)) + list(entry.findall("link")):
+            href = (link.get("href") or "").strip()
+            m = uuid_re.search(href)
+            if m:
+                sid = m.group(1).lower()
+                break
+        if not sid:
+            id_el = entry.find("atom:id", ns) or entry.find("id")
+            if id_el is not None and (id_el.text or "").strip():
+                m = uuid_re.search(id_el.text)
+                if m:
+                    sid = m.group(1).lower()
+        if sid:
+            out.append(sid)
+    return out
+
+
+def _fetch_tpdb_feed_from_favorites_rss(limit: int = 24) -> list[dict]:
+    """Scenes from TPDB Atom feeds for your favourite performers/sites (same account as API key)."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    if not (db.get_settings().get("api_key_tpdb") or "").strip():
+        return []
+
+    headers = _tpdb_headers()
+    feed_urls = (
+        "https://theporndb.net/feeds/scenes/recently-added-by-favorite-performers",
+        "https://theporndb.net/feeds/scenes/recently-added-by-favorite-sites",
+    )
+    seen: set[str] = set()
+    ordered_ids: list[str] = []
+    for url in feed_urls:
+        try:
+            resp = requests.get(url, headers=headers, timeout=22)
+            if resp.status_code != 200:
+                continue
+            for sid in _tpdb_atom_feed_scene_ids(resp.text):
+                if sid not in seen:
+                    seen.add(sid)
+                    ordered_ids.append(sid)
+        except Exception as e:
+            emit(f"FEED RSS fetch error ({url}): {e}")
+
+    if not ordered_ids:
+        emit("FEED RSS: no entries (add favourite performers/sites on ThePornDB, or check API key)")
+        return []
+
+    take = ordered_ids[: max(limit * 2, limit)]
+
+    def _one(sid: str) -> tuple[str, dict | None]:
+        try:
+            resp = requests.get(
+                f"https://api.theporndb.net/scenes/{sid}",
+                headers=_tpdb_headers(),
+                timeout=14,
+            )
+            if resp.status_code != 200:
+                return sid, None
+            data = resp.json().get("data") or {}
+            card = _tpdb_scene_payload_to_feed_card(data, source="rss_favorites")
+            return sid, card
+        except Exception:
+            return sid, None
+
+    by_id: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(_one, sid) for sid in take]
+        for fut in as_completed(futures):
+            try:
+                sid, card = fut.result()
+                if card:
+                    by_id[sid] = card
+            except Exception:
+                pass
+
+    ordered = [by_id[sid] for sid in take if sid in by_id]
+    ordered.sort(key=lambda x: x.get("date", ""), reverse=True)
+    result = ordered[:limit]
+    emit(f"FEED RSS favourites: {len(result)} scenes (from {len(ordered_ids)} feed ids)")
+    return result
+
+
 def _fetch_tpdb_feed_from_api(limit: int = 24) -> list[dict]:
     """Fallback: fetch latest scenes from TPDB API (not personalised)."""
     try:
@@ -7189,51 +7424,70 @@ def _fetch_tpdb_feed_from_api(limit: int = 24) -> list[dict]:
         data = resp.json().get("data") or []
         out = []
         for s_item in data:
-            genders = _extract_movie_genders(s_item)
-            if not _passes_content_filter(genders):
-                continue
-            if not _passes_tag_filter(s_item):
-                continue
-            thumb = s_item.get("poster_image") or s_item.get("image") or s_item.get("poster") or ""
-            if not thumb:
-                posters = s_item.get("posters") or []
-                if posters:
-                    thumb = posters[0] if isinstance(posters[0], str) else posters[0].get("url", "")
-                bg = s_item.get("background") or {}
-                if not thumb and isinstance(bg, dict):
-                    thumb = bg.get("small") or bg.get("medium") or bg.get("url") or ""
-            out.append({
-                "id": str(s_item.get("_id") or s_item.get("id") or ""),
-                "title": s_item.get("title", ""),
-                "date": s_item.get("date", ""),
-                "studio": (s_item.get("site") or {}).get("name", ""),
-                "thumb": thumb,
-                "link": "",
-                "source": "api",
-            })
+            card = _tpdb_scene_payload_to_feed_card(s_item, source="api")
+            if card:
+                out.append(card)
         return out
     except Exception:
         return []
 
 
+def _fetch_tpdb_recent_feed_scenes(limit: int = 24) -> tuple[list[dict], str]:
+    """Recent tab: TPDB favourite RSS → library performer sample → global API."""
+    scenes = _fetch_tpdb_feed_from_favorites_rss(limit)
+    if scenes:
+        return scenes, "rss_favorites"
+    scenes = _fetch_tpdb_feed(limit)
+    if scenes:
+        return scenes, "feed"
+    scenes = _fetch_tpdb_feed_from_api(limit)
+    return scenes, "api"
+
+
 def _refresh_hourly_content_cache():
-    """Background refresh for scenes + movies feed cache."""
+    """Background refresh: all three TPDB scene feed modes + movies latest cache."""
     try:
-        scenes = _fetch_tpdb_feed_from_api(24)
-        source = "api"
+        fk = _content_filters_fingerprint()
+        now = time.time()
+
+        recent_scenes, recent_src = _fetch_tpdb_recent_feed_scenes(24)
+        scenes_rand = _fetch_tpdb_feed(24)
+        source_rand = "feed"
+        if not scenes_rand:
+            scenes_rand = _fetch_tpdb_feed_from_api(24)
+            source_rand = "api"
+        scenes_fav = _fetch_tpdb_starred_favourites_feed(24)
+        source_fav = "favourites" if scenes_fav else "favourites_empty"
+
         with _content_cache_lock:
-            _feed_cache["scenes"] = scenes
-            _feed_cache["ts"] = time.time()
-            _feed_cache["source"] = source
-            _feed_cache["feed_mode"] = "recent"
-            _feed_cache["filter_key"] = _content_filters_fingerprint()
+            _feed_cache["recent"] = {
+                "scenes": recent_scenes,
+                "ts": now,
+                "source": recent_src,
+                "filter_key": fk,
+            }
+            _feed_cache["random"] = {
+                "scenes": scenes_rand,
+                "ts": now,
+                "source": source_rand,
+                "filter_key": fk,
+            }
+            _feed_cache["favourites"] = {
+                "scenes": scenes_fav,
+                "ts": now,
+                "source": source_fav,
+                "filter_key": fk,
+            }
 
         movies_payload = _collect_filtered_tpdb_movies({}, page=1, page_size=20)
         with _content_cache_lock:
             _movies_latest_cache["results"] = movies_payload.get("results", [])
             _movies_latest_cache["ts"] = time.time()
             _movies_latest_cache["filter_key"] = _movies_cache_filter_key()
-        emit(f"CACHE hourly refresh complete: scenes={len(scenes)} movies={len(_movies_latest_cache['results'])}")
+        emit(
+            f"CACHE hourly refresh: recent={len(recent_scenes)} random={len(scenes_rand)} "
+            f"favourites={len(scenes_fav)} movies={len(_movies_latest_cache['results'])}"
+        )
     except Exception as e:
         emit(f"CACHE hourly refresh error: {e}")
 
@@ -7397,7 +7651,7 @@ def sync_tpdb_favourites() -> dict:
 
 @app.get("/api/scenes/feed")
 async def scenes_feed(mode: str = "recent"):
-    """TPDB scenes feed: ``recent`` (global newest), ``random`` (library folder sample + API fallback), or ``favourites`` (starred + TPDB id)."""
+    """TPDB scenes feed: ``recent`` (favourite RSS → library sample → global API), ``random`` (library folder sample + API fallback), or ``favourites`` (starred + TPDB id)."""
     fk = _content_filters_fingerprint()
     m = (mode or "recent").strip().lower()
     if m == "library":
@@ -7406,16 +7660,17 @@ async def scenes_feed(mode: str = "recent"):
         m = "recent"
 
     with _content_cache_lock:
-        age = time.time() - _feed_cache["ts"]
+        bucket = _feed_cache.get(m) or {}
+        age = time.time() - float(bucket.get("ts") or 0)
+        scenes_cached = bucket.get("scenes") or []
         if (
-            _feed_cache["scenes"]
+            scenes_cached
             and age < _FEED_CACHE_TTL
-            and _feed_cache.get("filter_key") == fk
-            and _feed_cache.get("feed_mode") == m
+            and bucket.get("filter_key") == fk
         ):
             return {
-                "scenes": _feed_cache["scenes"],
-                "source": _feed_cache.get("source", "feed"),
+                "scenes": scenes_cached,
+                "source": bucket.get("source", ""),
                 "feed_mode": m,
                 "cached": True,
                 "cache_age_s": int(age),
@@ -7427,8 +7682,7 @@ async def scenes_feed(mode: str = "recent"):
         if not scenes:
             source = "favourites_empty"
     elif m == "recent":
-        scenes = _fetch_tpdb_feed_from_api(24)
-        source = "api"
+        scenes, source = _fetch_tpdb_recent_feed_scenes(24)
     else:
         scenes = _fetch_tpdb_feed(24)
         source = "feed"
@@ -7437,11 +7691,12 @@ async def scenes_feed(mode: str = "recent"):
             source = "api"
 
     with _content_cache_lock:
-        _feed_cache["scenes"] = scenes
-        _feed_cache["ts"] = time.time()
-        _feed_cache["source"] = source
-        _feed_cache["feed_mode"] = m
-        _feed_cache["filter_key"] = fk
+        _feed_cache[m] = {
+            "scenes": scenes,
+            "ts": time.time(),
+            "source": source,
+            "filter_key": fk,
+        }
     return {
         "scenes": scenes,
         "source": source,
