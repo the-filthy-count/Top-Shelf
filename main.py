@@ -4494,30 +4494,49 @@ def _resolve_local_download_path(raw_path: Path, s: dict) -> Path | None:
     return None
 
 
-def _local_anchor_for_client_save_mirror(s: dict, dest_dir: Path) -> Path | None:
-    """Local folder that mirrors the client's torrent save_path for this import (watch vs movies)."""
+def _relative_path_under_client_root(client_abs: str, root: str) -> Path | None:
+    """
+    Path of ``client_abs`` relative to ``root`` when the client path is under that directory.
+    Uses string prefix logic (not pathlib.relative_to) so odd filenames (e.g. brackets) and
+    non-existent paths behave consistently.
+    """
+    ca = os.path.normpath((client_abs or "").strip())
+    r = os.path.normpath((root or "").strip())
+    if not r or not ca:
+        return None
+    if ca == r:
+        return Path(".")
+    sep = os.sep
+    prefix = r if r.endswith(sep) else r + sep
+    if not ca.startswith(prefix):
+        return None
+    rel = ca[len(prefix) :].strip(sep)
+    return Path(rel) if rel else Path(".")
+
+
+def _dest_dir_for_local_download_path(local: Path, s: dict) -> Path | None:
+    """
+    Scene queue (source_dir) vs movie queue (movies_source_dir) from where the file actually
+    lives on this host (watch folder vs movies download folder).
+    """
+    watch = (s.get("download_watch_dir") or "").strip()
+    ms = (s.get("movies_source_dir") or "").strip()
+    sd = (s.get("source_dir") or "").strip()
+    if not sd:
+        return None
     try:
-        d_dest = dest_dir.resolve()
+        lr = local.resolve()
     except OSError:
         return None
-    sd = (s.get("source_dir") or "").strip()
-    md = (s.get("movies_source_dir") or "").strip()
-    watch = (s.get("download_watch_dir") or "").strip()
     try:
-        if sd:
-            sd_p = Path(sd).expanduser().resolve()
-            if d_dest == sd_p:
-                if not watch:
-                    return None
-                ap = Path(watch).expanduser()
-                return ap if ap.is_dir() else None
-        if md:
-            md_p = Path(md).expanduser().resolve()
-            if d_dest == md_p:
-                if not md:
-                    return None
-                ap = Path(md).expanduser()
-                return ap if ap.is_dir() else None
+        if watch:
+            wr = Path(watch).expanduser().resolve()
+            if lr == wr or wr in lr.parents:
+                return Path(sd).expanduser()
+        if ms:
+            mr = Path(ms).expanduser().resolve()
+            if lr == mr or mr in lr.parents:
+                return Path(ms).expanduser()
     except OSError:
         return None
     return None
@@ -4532,29 +4551,42 @@ def _resolve_local_download_path_via_save_mirror(
     """
     When the client reports paths that only exist on another machine (e.g. /share/... on the
     torrent host) but the same files exist here under Download watch directory or Movies input
-    folder, resolve by relative path: local_anchor / relpath(reported, save_path).
+    folder, map by path relative to the client's save_path onto each local anchor and try both.
+
+    ``dest_dir`` is unused for picking anchors (avoids misclassification from category alone);
+    callers should set the real import destination via ``_dest_dir_for_local_download_path``.
     """
+    _ = dest_dir  # kept for call-site compatibility
     sp = (save_path or "").strip()
     if not sp:
+        try:
+            sp = str(Path(str(reported)).parent)
+        except OSError:
+            return None
+    rel = _relative_path_under_client_root(str(reported), sp)
+    if rel is None:
+        try:
+            pp = os.path.normpath(str(Path(reported).parent))
+            if pp == os.path.normpath(sp):
+                rel = Path(Path(reported).name)
+        except OSError:
+            return None
+    if rel is None:
         return None
-    anchor = _local_anchor_for_client_save_mirror(s, dest_dir)
-    if not anchor or not anchor.is_dir():
-        return None
-    try:
-        s_norm = Path(os.path.normpath(sp))
-        r_norm = Path(os.path.normpath(str(reported)))
-        if r_norm == s_norm:
-            rel = Path(".")
-        else:
-            rel = r_norm.relative_to(s_norm)
-    except (ValueError, OSError):
-        return None
-    local = anchor / rel
-    try:
-        if local.exists():
-            return local.resolve()
-    except OSError:
-        pass
+    watch = (s.get("download_watch_dir") or "").strip()
+    ms = (s.get("movies_source_dir") or "").strip()
+    for anchor_str in (watch, ms):
+        if not anchor_str:
+            continue
+        anchor = Path(anchor_str).expanduser()
+        if not anchor.is_dir():
+            continue
+        candidate = anchor / rel
+        try:
+            if candidate.exists():
+                return candidate.resolve()
+        except OSError:
+            continue
     return None
 
 
@@ -4628,12 +4660,18 @@ def _download_import_by_id(dl_id: str) -> dict:
                 return {"error": "Torrent not found in client"}
             raw_reported = str(path)
             path = _resolve_local_download_path(path, s)
+            used_mirror = False
             if not path:
                 path = _resolve_local_download_path_via_save_mirror(
                     Path(raw_reported), sp, s, dest_dir,
                 )
+                used_mirror = path is not None
             if not path:
                 return {"error": _download_path_missing_message(s, raw_reported)}
+            if used_mirror:
+                d2 = _dest_dir_for_local_download_path(path, s)
+                if d2 is not None:
+                    dest_dir = d2
             _process_download_entry(path, dest_dir)
             if remove_after:
                 sess.post(
@@ -4689,10 +4727,16 @@ def _download_import_by_id(dl_id: str) -> dict:
             raw_tr = str(Path(dd) / nm)
             path = Path(dd) / nm
             path = _resolve_local_download_path(path, s)
+            used_mirror = False
             if not path:
                 path = _resolve_local_download_path_via_save_mirror(Path(raw_tr), dd, s, dest_dir)
+                used_mirror = path is not None
             if not path:
                 return {"error": _download_path_missing_message(s, raw_tr)}
+            if used_mirror:
+                d2 = _dest_dir_for_local_download_path(path, s)
+                if d2 is not None:
+                    dest_dir = d2
             _process_download_entry(path, dest_dir)
             if remove_after:
                 tsess.post(
@@ -4760,12 +4804,18 @@ def _download_import_by_id(dl_id: str) -> dict:
             if derr or not dest_dir:
                 return {"error": derr or "Could not resolve import destination"}
             path = _resolve_local_download_path(path, s)
+            used_mirror = False
             if not path:
                 path = _resolve_local_download_path_via_save_mirror(
                     Path(raw_reported), sp, s, dest_dir,
                 )
+                used_mirror = path is not None
             if not path:
                 return {"error": _download_path_missing_message(s, raw_reported)}
+            if used_mirror:
+                d2 = _dest_dir_for_local_download_path(path, s)
+                if d2 is not None:
+                    dest_dir = d2
             _process_download_entry(path, dest_dir)
             if remove_after:
                 ds.post(
