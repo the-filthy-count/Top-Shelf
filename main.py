@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import AsyncGenerator
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, unquote
 
 import bcrypt
 import imagehash
@@ -4495,10 +4495,11 @@ def _resolve_local_download_path(raw_path: Path, s: dict) -> Path | None:
 
 
 def _normalize_import_path_str(p: str) -> str:
-    """Normalize client-reported paths for comparison (Windows backslashes, etc.)."""
+    """Normalize client-reported paths for comparison (URL decoding, Windows backslashes, etc.)."""
     x = (p or "").strip().replace("\\", "/")
     if not x:
         return ""
+    x = unquote(x)
     return os.path.normpath(x)
 
 
@@ -4601,6 +4602,9 @@ def _resolve_local_download_path_via_save_mirror(
     if not rep_s:
         return None
     roots = _candidate_client_path_roots(save_path, content_path, rep_s)
+    # Drop roots that equal the full reported path — they yield rel "." and would map to the
+    # anchor dir instead of the job subfolder (NZB/SAB storage paths).
+    roots = [r for r in roots if _normalize_import_path_str(r) != rep_s]
     if not roots:
         try:
             roots = [_normalize_import_path_str(str(Path(rep_s).parent))]
@@ -4944,13 +4948,32 @@ def _download_import_by_id(dl_id: str) -> dict:
             storage = (slot.get("storage") or "").strip()
             if not storage:
                 return {"error": "SABnzbd did not report a storage path yet"}
-            path = Path(storage)
+            storage_raw = _normalize_import_path_str(storage)
+            path = Path(storage_raw)
             path = _resolve_local_download_path(path, s)
+            used_mirror = False
+            if not path:
+                dest_dir, derr = _dl_resolve_import_dest_dir(s, sab_cat, storage_raw, storage_raw)
+                if derr or not dest_dir:
+                    return {"error": derr or "Could not resolve import destination"}
+                path = _resolve_local_download_path_via_save_mirror(
+                    Path(storage_raw),
+                    str(Path(storage_raw).parent),
+                    storage_raw,
+                    s,
+                    dest_dir,
+                )
+                used_mirror = path is not None
             if not path:
                 return {"error": f"Path not found: {storage}"}
-            dest_dir, derr = _dl_resolve_import_dest_dir(s, sab_cat, storage, str(path))
-            if derr or not dest_dir:
-                return {"error": derr or "Could not resolve import destination"}
+            if not used_mirror:
+                dest_dir, derr = _dl_resolve_import_dest_dir(s, sab_cat, storage_raw, str(path))
+                if derr or not dest_dir:
+                    return {"error": derr or "Could not resolve import destination"}
+            elif used_mirror:
+                d2 = _dest_dir_for_local_download_path(path, s)
+                if d2 is not None:
+                    dest_dir = d2
             _process_download_entry(path, dest_dir)
             if remove_after:
                 requests.get(
@@ -5000,13 +5023,32 @@ def _download_import_by_id(dl_id: str) -> dict:
             dest = (g.get("DestDir") or "").strip()
             if not dest:
                 return {"error": "NZBGet did not report DestDir"}
-            path = Path(dest)
+            dest_raw = _normalize_import_path_str(dest)
+            path = Path(dest_raw)
             path = _resolve_local_download_path(path, s)
+            used_mirror = False
+            if not path:
+                dest_dir, derr = _dl_resolve_import_dest_dir(s, ng_cat, dest_raw, dest_raw)
+                if derr or not dest_dir:
+                    return {"error": derr or "Could not resolve import destination"}
+                path = _resolve_local_download_path_via_save_mirror(
+                    Path(dest_raw),
+                    str(Path(dest_raw).parent),
+                    dest_raw,
+                    s,
+                    dest_dir,
+                )
+                used_mirror = path is not None
             if not path:
                 return {"error": f"Path not found: {dest}"}
-            dest_dir, derr = _dl_resolve_import_dest_dir(s, ng_cat, dest, str(path))
-            if derr or not dest_dir:
-                return {"error": derr or "Could not resolve import destination"}
+            if not used_mirror:
+                dest_dir, derr = _dl_resolve_import_dest_dir(s, ng_cat, dest_raw, str(path))
+                if derr or not dest_dir:
+                    return {"error": derr or "Could not resolve import destination"}
+            elif used_mirror:
+                d2 = _dest_dir_for_local_download_path(path, s)
+                if d2 is not None:
+                    dest_dir = d2
             _process_download_entry(path, dest_dir)
             if remove_after:
                 _nzbget_rpc(host, port, "editqueue", ["GroupDelete", 0, "", [tid]], user, pw)
@@ -5046,10 +5088,11 @@ def _download_import_by_id(dl_id: str) -> dict:
             name = (h.get("Name") or h.get("NZBName") or "").strip()
             if not dest:
                 return {"error": "NZBGet did not report a destination path"}
-            path = Path(dest)
+            dest_raw = _normalize_import_path_str(dest)
+            path = Path(dest_raw)
             if name:
                 sn = name.replace(".nzb", "")
-                sub = path / sn
+                sub = path / _normalize_import_path_str(sn)
                 if sub.exists():
                     path = sub
                 else:
@@ -5057,13 +5100,41 @@ def _download_import_by_id(dl_id: str) -> dict:
                     if r:
                         path = r
             path = _resolve_local_download_path(path, s)
+            used_mirror = False
+            if not path:
+                dest_for_res = (h.get("DestDir") or h.get("FinalDir") or "").strip()
+                dest_for_res = _normalize_import_path_str(dest_for_res)
+                nh_cat = str(h.get("Category") or "")
+                dest_dir, derr = _dl_resolve_import_dest_dir(s, nh_cat, dest_for_res, dest_for_res)
+                if derr or not dest_dir:
+                    return {"error": derr or "Could not resolve import destination"}
+                if name:
+                    sn_m = name.replace(".nzb", "")
+                    rep = str(Path(dest_raw) / _normalize_import_path_str(sn_m))
+                else:
+                    rep = dest_raw
+                path = _resolve_local_download_path_via_save_mirror(
+                    Path(rep),
+                    dest_raw,
+                    rep,
+                    s,
+                    dest_dir,
+                )
+                used_mirror = path is not None
             if not path:
                 return {"error": f"Path not found: {dest}"}
             nh_cat = str(h.get("Category") or "")
-            dest_for_res = (h.get("DestDir") or h.get("FinalDir") or "").strip()
-            dest_dir, derr = _dl_resolve_import_dest_dir(s, nh_cat, dest_for_res, str(path))
-            if derr or not dest_dir:
-                return {"error": derr or "Could not resolve import destination"}
+            dest_for_res = _normalize_import_path_str(
+                (h.get("DestDir") or h.get("FinalDir") or "").strip(),
+            )
+            if not used_mirror:
+                dest_dir, derr = _dl_resolve_import_dest_dir(s, nh_cat, dest_for_res, str(path))
+                if derr or not dest_dir:
+                    return {"error": derr or "Could not resolve import destination"}
+            elif used_mirror:
+                d2 = _dest_dir_for_local_download_path(path, s)
+                if d2 is not None:
+                    dest_dir = d2
             _process_download_entry(path, dest_dir)
             if remove_after:
                 try:
