@@ -4433,15 +4433,17 @@ def _resolve_local_download_path(raw_path: Path, s: dict) -> Path | None:
     """
     Map paths reported by download clients (NAS/container) to paths visible on this host.
 
-    1) Normalise and check existence.
-    2) Optional client prefix → local prefix (when client and Top-Shelf use different roots).
-    3) If the path is under download_watch_dir, source_dir, or movies_source_dir, resolve via
+    1) URL-decode, normalise, and check existence.
+    2) If the path is under download_watch_dir, source_dir, or movies_source_dir, resolve via
        that directory prefix (same paths as in Settings — no remapping needed when mounts match).
     """
+    qs = _normalize_import_path_str(str(raw_path))
+    if not qs:
+        return None
     try:
-        p = raw_path.expanduser()
+        p = Path(qs).expanduser()
     except Exception:
-        p = raw_path
+        p = Path(qs)
     try:
         pnorm = Path(os.path.normpath(str(p)))
         for cand in (pnorm, p):
@@ -4452,19 +4454,6 @@ def _resolve_local_download_path(raw_path: Path, s: dict) -> Path | None:
                 continue
     except OSError:
         pass
-
-    sp = str(p)
-    cpre = (s.get("download_client_path_prefix") or "").strip()
-    lpre = (s.get("download_local_path_prefix") or "").strip()
-    if cpre and lpre:
-        if sp == cpre or sp.startswith(cpre + "/") or sp.startswith(cpre + "\\"):
-            rel = sp[len(cpre) :].lstrip("/\\")
-            alt = Path(lpre.rstrip("/\\")) / rel
-            try:
-                if alt.exists():
-                    return alt.resolve()
-            except OSError:
-                pass
 
     def _try_anchor_prefix(anchor_str: str) -> Path | None:
         """If p is under anchor (same tree as Settings), resolve anchor / relpath — works for nested folders."""
@@ -4601,6 +4590,25 @@ def _resolve_local_download_path_via_save_mirror(
     rep_s = _normalize_import_path_str(str(reported))
     if not rep_s:
         return None
+    watch = (s.get("download_watch_dir") or "").strip()
+    ms = (s.get("movies_source_dir") or "").strip()
+    try:
+        bn_early = Path(rep_s).name
+    except OSError:
+        bn_early = ""
+    if bn_early:
+        for anchor_str in (watch, ms):
+            if not anchor_str:
+                continue
+            anchor = Path(anchor_str).expanduser()
+            if not anchor.is_dir():
+                continue
+            direct = anchor / bn_early
+            try:
+                if direct.exists():
+                    return direct.resolve()
+            except OSError:
+                continue
     roots = _candidate_client_path_roots(save_path, content_path, rep_s)
     # Drop roots that equal the full reported path — they yield rel "." and would map to the
     # anchor dir instead of the job subfolder (NZB/SAB storage paths).
@@ -4610,8 +4618,6 @@ def _resolve_local_download_path_via_save_mirror(
             roots = [_normalize_import_path_str(str(Path(rep_s).parent))]
         except OSError:
             return None
-    watch = (s.get("download_watch_dir") or "").strip()
-    ms = (s.get("movies_source_dir") or "").strip()
     for sp in roots:
         rel = _relative_path_under_client_root(rep_s, sp)
         if rel is None:
@@ -4633,24 +4639,6 @@ def _resolve_local_download_path_via_save_mirror(
             try:
                 if candidate.exists():
                     return candidate.resolve()
-            except OSError:
-                continue
-    # Last resort: same filename as a direct child of watch or movies folder
-    try:
-        bn = Path(rep_s).name
-    except OSError:
-        return None
-    if bn:
-        for anchor_str in (watch, ms):
-            if not anchor_str:
-                continue
-            anchor = Path(anchor_str).expanduser()
-            if not anchor.is_dir():
-                continue
-            direct = anchor / bn
-            try:
-                if direct.exists():
-                    return direct.resolve()
             except OSError:
                 continue
     return None
@@ -4677,8 +4665,8 @@ def _download_path_missing_message(s: dict, reported_path: str) -> str:
     return (
         f"Download path not found on this host: {reported_path}{cfg}. "
         "If the file exists under your Download watch directory (or Movies input folder) with the same path "
-        "relative to the torrent save path, import should still work; otherwise use Client path prefix / Local path prefix "
-        "when the client and this host use different roots, or align Docker bind mounts."
+        "relative to the torrent save path, import should still work; otherwise align bind mounts so that path "
+        "is visible here, or set Download watch directory to the root that matches the client’s folder layout."
     )
 
 

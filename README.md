@@ -56,7 +56,7 @@ The processing dashboard (queue UI is shared with settings on some routes):
 
 ### Downloads (`/downloads`)
 
-Unified view of NZB/torrent clients with queue/history, categories, and **Import** (and optional **Remove from client after import**). If the client reports paths that only exist on another machine (e.g. `/share/...` on the NAS while Top-Shelf sees `/downloads/...`), imports map by **path relative to the torrent save path** onto your configured **Download watch directory** (scene jobs) or **Movies input folder** (movie jobs), so the same folder layout under your bind mounts is enough. Optional **Client path prefix** / **Local path prefix** still applies when you need explicit string substitution.
+Unified view of NZB/torrent clients with queue/history, categories, and **Import** (and optional **Remove from client after import**). If the client reports paths that only exist on another machine (e.g. `/share/...` on the NAS while Top-Shelf sees `/downloads/...`), imports map by **path relative to the torrent save path** onto your configured **Download watch directory** (scene jobs) or **Movies input folder** (movie jobs), so the same folder layout under your bind mounts is enough.
 
 ### Favourites (`/favourites`)
 

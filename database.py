@@ -77,8 +77,6 @@ DEFAULTS = {
     "download_watch_enabled":  "false",
     "download_watch_dir":      "/downloads/complete" if _in_docker else "/path/to/your/downloads/complete",
     "download_watch_hold_secs": "300",
-    "download_client_path_prefix": "",
-    "download_local_path_prefix": "",
     "download_import_remove_client": "false",
     "favourites_scan_enabled": "false",
     "favourites_scan_hour":    "3",

@@ -918,15 +918,6 @@
               <label class="field-label">Download watch directory</label>
               <input class="field-input" id="cfgDownloadWatchDir" type="text" placeholder="/path/to/downloads/complete">
             </div>
-            <div class="field-row" style="grid-column:1/-1">
-              <label class="field-label">Client path prefix <span style="color:var(--dim)">(optional)</span></label>
-              <input class="field-input" id="cfgDownloadClientPrefix" type="text" placeholder="/share/Download — path as the NZB/torrent client reports it">
-            </div>
-            <div class="field-row" style="grid-column:1/-1">
-              <label class="field-label">Local path prefix <span style="color:var(--dim)">(optional)</span></label>
-              <input class="field-input" id="cfgDownloadLocalPrefix" type="text" placeholder="/downloads — same folders on this host (e.g. Docker mount)">
-            </div>
-            <div class="field-hint" style="grid-column:1/-1;margin-top:4px">If the download client and Top-Shelf already use the same paths on this host, leave both prefix fields empty. Only set them when the client reports a different root (e.g. <code>/data/…</code> in Docker) than the folder Top-Shelf can read (e.g. <code>/share/…</code> on the NAS).</div>
             <div class="field-row">
               <label class="field-label">Hold time (seconds)</label>
               <input class="field-input" id="cfgDownloadWatchHold" type="number" min="30" max="3600" placeholder="300">
@@ -1578,8 +1569,6 @@
     document.getElementById('cfgDownloadWatchEnabled').checked = dlWatchOn;
     toggleSection('downloadWatchBody', dlWatchOn);
     document.getElementById('cfgDownloadWatchDir').value  = s.download_watch_dir       || '';
-    document.getElementById('cfgDownloadClientPrefix').value = s.download_client_path_prefix || '';
-    document.getElementById('cfgDownloadLocalPrefix').value = s.download_local_path_prefix || '';
     document.getElementById('cfgDownloadWatchHold').value = s.download_watch_hold_secs || '300';
     document.getElementById('cfgDownloadAutoImport').checked = (s.download_auto_import_enabled || 'false') === 'true';
     document.getElementById('cfgDownloadImportRemove').checked = (s.download_import_remove_client || 'false') === 'true';
@@ -1788,8 +1777,6 @@
         pattern_performer: document.getElementById('cfgPatternPerformer').value.trim(),
         download_watch_enabled:  document.getElementById('cfgDownloadWatchEnabled').checked ? 'true' : 'false',
         download_watch_dir:      document.getElementById('cfgDownloadWatchDir').value.trim(),
-        download_client_path_prefix: document.getElementById('cfgDownloadClientPrefix').value.trim(),
-        download_local_path_prefix: document.getElementById('cfgDownloadLocalPrefix').value.trim(),
         download_watch_hold_secs: document.getElementById('cfgDownloadWatchHold').value.trim(),
         download_auto_import_enabled: document.getElementById('cfgDownloadAutoImport').checked ? 'true' : 'false',
         download_import_remove_client: document.getElementById('cfgDownloadImportRemove').checked ? 'true' : 'false',
