@@ -4726,6 +4726,88 @@ def _resolve_local_download_path_via_save_mirror(
     return None
 
 
+def _find_local_download_under_watch_dirs(
+    s: dict,
+    *,
+    job_name: str = "",
+    client_reported_path: str = "",
+) -> Path | None:
+    """
+    Locate the completed download under scene/movie watch dirs only.
+
+    Ignores the client-reported host prefix (e.g. /share/... vs /downloads/...).
+    Matches job name, basename, and trailing path segments under each watch root.
+    """
+    roots: list[Path] = []
+    for key in ("download_watch_dir", "movie_download_watch_dir"):
+        raw = (s.get(key) or "").strip()
+        if not raw:
+            continue
+        try:
+            p = Path(raw).expanduser()
+            if p.is_dir():
+                roots.append(p)
+        except OSError:
+            continue
+    if not roots:
+        return None
+
+    candidates: list[str] = []
+    jn = (job_name or "").strip()
+    if jn:
+        candidates.append(jn.replace(".nzb", "").strip())
+        candidates.append(jn)
+    cp = (client_reported_path or "").strip()
+    if cp:
+        try:
+            norm = _normalize_import_path_str(cp)
+            p = Path(norm)
+            candidates.append(p.name)
+            parts = p.parts
+            for k in range(1, min(8, len(parts) + 1)):
+                candidates.append(str(Path(*parts[-k:])).replace("\\", "/"))
+        except Exception:
+            pass
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for c in candidates:
+        c = (c or "").strip()
+        if not c or c in seen:
+            continue
+        seen.add(c)
+        ordered.append(c)
+
+    for root in roots:
+        for c in ordered:
+            if "/" in c:
+                try:
+                    hit = root / c.replace("\\", "/").lstrip("/")
+                    if hit.exists():
+                        return hit.resolve()
+                except OSError:
+                    continue
+            else:
+                try:
+                    hit = root / c
+                    if hit.exists():
+                        return hit.resolve()
+                except OSError:
+                    continue
+        for c in ordered:
+            if "/" in c:
+                continue
+            for depth in range(0, 8):
+                pat = ("/".join(["*"] * depth) + "/" + c) if depth else c
+                try:
+                    for hit in root.glob(pat):
+                        if hit.exists():
+                            return hit.resolve()
+                except OSError:
+                    continue
+    return None
+
+
 def _download_path_missing_message(s: dict, reported_path: str) -> str:
     """User-facing hint when a client-reported path is not visible to this process."""
     bits = []
@@ -4804,9 +4886,17 @@ def _download_import_by_id(dl_id: str) -> dict:
                     Path(raw_reported), sp, cp, s, dest_dir,
                 )
                 used_mirror = path is not None
+            found_via_watch = False
+            if not path:
+                path = _find_local_download_under_watch_dirs(
+                    s,
+                    job_name=(t0.get("name") or "").strip(),
+                    client_reported_path=raw_reported,
+                )
+                found_via_watch = path is not None
             if not path:
                 return {"error": _download_path_missing_message(s, raw_reported)}
-            if used_mirror:
+            if used_mirror or found_via_watch:
                 d2 = _dest_dir_for_local_download_path(path, s)
                 if d2 is not None:
                     dest_dir = d2
@@ -4871,9 +4961,17 @@ def _download_import_by_id(dl_id: str) -> dict:
                     Path(raw_tr), dd, raw_tr, s, dest_dir,
                 )
                 used_mirror = path is not None
+            found_via_watch = False
+            if not path:
+                path = _find_local_download_under_watch_dirs(
+                    s,
+                    job_name=nm,
+                    client_reported_path=raw_tr,
+                )
+                found_via_watch = path is not None
             if not path:
                 return {"error": _download_path_missing_message(s, raw_tr)}
-            if used_mirror:
+            if used_mirror or found_via_watch:
                 d2 = _dest_dir_for_local_download_path(path, s)
                 if d2 is not None:
                     dest_dir = d2
@@ -4950,9 +5048,17 @@ def _download_import_by_id(dl_id: str) -> dict:
                     Path(raw_reported), sp, str(raw_reported), s, dest_dir,
                 )
                 used_mirror = path is not None
+            found_via_watch = False
+            if not path:
+                path = _find_local_download_under_watch_dirs(
+                    s,
+                    job_name=(st.get("name") or "").strip(),
+                    client_reported_path=raw_reported,
+                )
+                found_via_watch = path is not None
             if not path:
                 return {"error": _download_path_missing_message(s, raw_reported)}
-            if used_mirror:
+            if used_mirror or found_via_watch:
                 d2 = _dest_dir_for_local_download_path(path, s)
                 if d2 is not None:
                     dest_dir = d2
@@ -5036,13 +5142,25 @@ def _download_import_by_id(dl_id: str) -> dict:
                     dest_dir,
                 )
                 used_mirror = path is not None
+            found_via_watch = False
+            if not path:
+                sab_nm = (
+                    (slot.get("filename") or slot.get("name") or slot.get("nzb_name") or "")
+                    .strip()
+                )
+                path = _find_local_download_under_watch_dirs(
+                    s,
+                    job_name=sab_nm,
+                    client_reported_path=storage_raw,
+                )
+                found_via_watch = path is not None
             if not path:
                 return {"error": f"Path not found: {storage}"}
             if not used_mirror:
                 dest_dir, derr = _dl_resolve_import_dest_dir(s, sab_cat, storage_raw, str(path))
                 if derr or not dest_dir:
                     return {"error": derr or "Could not resolve import destination"}
-            elif used_mirror:
+            if used_mirror or found_via_watch:
                 d2 = _dest_dir_for_local_download_path(path, s)
                 if d2 is not None:
                     dest_dir = d2
@@ -5111,13 +5229,22 @@ def _download_import_by_id(dl_id: str) -> dict:
                     dest_dir,
                 )
                 used_mirror = path is not None
+            found_via_watch = False
+            if not path:
+                ng_nm = (g.get("NZBName") or g.get("Name") or "").strip()
+                path = _find_local_download_under_watch_dirs(
+                    s,
+                    job_name=ng_nm,
+                    client_reported_path=dest_raw,
+                )
+                found_via_watch = path is not None
             if not path:
                 return {"error": f"Path not found: {dest}"}
             if not used_mirror:
                 dest_dir, derr = _dl_resolve_import_dest_dir(s, ng_cat, dest_raw, str(path))
                 if derr or not dest_dir:
                     return {"error": derr or "Could not resolve import destination"}
-            elif used_mirror:
+            if used_mirror or found_via_watch:
                 d2 = _dest_dir_for_local_download_path(path, s)
                 if d2 is not None:
                     dest_dir = d2
@@ -5193,6 +5320,14 @@ def _download_import_by_id(dl_id: str) -> dict:
                     dest_dir,
                 )
                 used_mirror = path is not None
+            found_via_watch = False
+            if not path:
+                path = _find_local_download_under_watch_dirs(
+                    s,
+                    job_name=name,
+                    client_reported_path=(h.get("DestDir") or h.get("FinalDir") or "").strip(),
+                )
+                found_via_watch = path is not None
             if not path:
                 return {"error": f"Path not found: {dest}"}
             nh_cat = str(h.get("Category") or "")
@@ -5203,7 +5338,7 @@ def _download_import_by_id(dl_id: str) -> dict:
                 dest_dir, derr = _dl_resolve_import_dest_dir(s, nh_cat, dest_for_res, str(path))
                 if derr or not dest_dir:
                     return {"error": derr or "Could not resolve import destination"}
-            elif used_mirror:
+            if used_mirror or found_via_watch:
                 d2 = _dest_dir_for_local_download_path(path, s)
                 if d2 is not None:
                     dest_dir = d2
