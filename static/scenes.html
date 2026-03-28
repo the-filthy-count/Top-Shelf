@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Scenes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="/static/app-shell.css">
+<style>
+  @font-face { font-family: 'Acidoze'; src: url('/static/Tox Typewriter.ttf') format('truetype'); }
+  @font-face { font-family: 'Seconds'; src: url('/static/Impact%20Label%20Reversed.ttf') format('truetype'); }
+  :root {
+    --bg:      #0c0c0e;
+    --surface: rgba(19,19,23,0.75);
+    --raised:  rgba(26,26,32,0.8);
+    --border:  #222228;
+    --muted:   #3a3a44;
+    --text:    #e8e8f0;
+    --dim:     #6b6b7a;
+    --accent:  #c084fc;
+    --green:   #4ade80;
+    --amber:   #fbbf24;
+    --red:     #f87171;
+    --blue:    #60a5fa;
+    --mono:    'DM Mono', monospace;
+    --sans:    'Syne', sans-serif;
+    --acid:    'Acidoze', 'Syne', sans-serif;
+    --secs:    'Seconds', 'DM Mono', monospace;
+  }
+  /* IN-LIBRARY / NOT-IN-LIBRARY (uses --font-impact-label from app-shell.css) */
+  .lib-tag {
+    font-family: var(--font-impact-label);
+    font-size: 20px;
+    letter-spacing: -0.02em;
+  }
+  .lib-tag--in { color: var(--green); }
+  .lib-tag--out { color: var(--red); }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  /* Styled scrollbars */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(192,132,252,0.25); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(192,132,252,0.45); }
+  * { scrollbar-width: thin; scrollbar-color: rgba(192,132,252,0.25) transparent; }
+  body {
+    background: var(--bg) url('/static/background.jpg') center center / cover fixed;
+    color: var(--text); font-family: var(--mono); font-size: 13px;
+    line-height: 1.6; min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before { content: ''; position: fixed; inset: 0; background: rgba(12,12,14,0.72); z-index: 0; }
+  .app { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 24px 12px; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    background: linear-gradient(160deg, rgba(36,36,48,0.88) 0%, rgba(18,18,26,0.78) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.22);
+    margin-bottom: 20px;
+  }
+  .logo img { height: 36px; object-fit: contain; }
+  .nav-links { display: flex; gap: 8px; }
+  .btn-secondary { background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--dim); width: 40px; height: 40px; border-radius: 8px; font-size: 19px; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+  .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+  .btn-primary { background: var(--accent); color: #0c0c0e; border: none; padding: 8px 14px; border-radius: 6px; font-size: 16px; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .active-nav { border-color: var(--accent) !important; color: var(--accent) !important; }
+
+  /* Layout */
+  .layout { display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start; margin-bottom: 8px; }
+  .right-col { display: flex; flex-direction: column; gap: 20px; }
+  .panel-scroll { overflow-y: auto; max-height: 420px; }
+  .search-panel-inner { overflow-y: auto; max-height: 340px; }
+
+  /* Panel */
+  .panel {
+    background: linear-gradient(160deg, rgba(36,36,48,0.88) 0%, rgba(18,18,26,0.78) 100%);
+    border: none; border-radius: 6px; overflow: hidden;
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.25);
+  }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; }
+  .panel-title { font-family: var(--acid); font-size: 28px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; color: #fff; }
+  .panel-body { padding: 16px 18px; }
+  .layout { align-items: start; }
+  .empty { padding: 32px 18px; text-align: center; color: var(--dim); font-size: 12px; }
+
+  /* Type toggle */
+  .type-toggle { display: flex; gap: 0; margin-bottom: 16px; border-radius: 5px; overflow: hidden; border: 1px solid var(--border); }
+  .type-btn { flex: 1; padding: 8px; background: rgba(255,255,255,0.04); border: none; color: var(--text); text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer; transition: all 0.15s; }
+  .type-btn:hover { background: rgba(255,255,255,0.08); }
+  .type-btn.active { background: var(--accent); color: #0c0c0e; }
+
+  /* Scene source toggle */
+  .source-toggle { display: inline-flex; gap: 0; border-radius: 6px; overflow: hidden; border: 1px solid rgba(192,132,252,0.28); background: rgba(14,14,20,0.92); }
+  .source-btn { min-height: 34px; padding: 7px 14px; background: transparent; border: none; border-right: 1px solid rgba(192,132,252,0.2); color: var(--text); letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; white-space: nowrap; width: 100%; }
+  .source-btn:last-child { border-right: none; }
+  .source-btn:hover { background: rgba(192,132,252,0.12); }
+  .source-btn.active { background: var(--accent); color: #0c0c0e; }
+  .source-btn.disabled { opacity: 0.2; cursor: default; pointer-events: none; }
+  .source-btn .src-count { font-family: var(--secs); font-size: calc(13px + 2pt); margin-left: 3px; }
+  .scenes-toolbar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 18px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .feed-mode-toggle {
+    display: inline-flex;
+    gap: 0;
+    border-radius: 5px;
+    overflow: hidden;
+    border: 1px solid rgba(192,132,252,0.35);
+    flex-shrink: 0;
+  }
+  .feed-mode-btn {
+    padding: 6px 12px;
+    background: rgba(255,255,255,0.05);
+    border: none;
+    color: var(--dim);
+    font-family: var(--font-toggle);
+    font-size: var(--font-reversed-min);
+    text-transform: none;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .feed-mode-btn:hover { color: var(--text); background: rgba(255,255,255,0.08); }
+  .feed-mode-btn.active { background: var(--accent); color: #0c0c0e; }
+  .scenes-title-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .scenes-toolbar-spacer { min-width: 0; }
+  .scenes-note {
+    font-size: 11px;
+    color: var(--dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #sceneTabs.source-toggle {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    width: min(480px, 92vw);
+  }
+
+  /* Search */
+  .search-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 12px; }
+  .field-input { background: var(--raised); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-family: var(--mono); font-size: 12px; width: 100%; outline: none; transition: border-color 0.15s; }
+  .field-input:focus { border-color: var(--accent); }
+  .field-input::placeholder { color: var(--muted); }
+  select.field-input { cursor: pointer; }
+
+  /* Results */
+  .result-item { display: flex; align-items: center; gap: 12px; padding: 10px; min-height: 76px; border-radius: 5px; cursor: pointer; transition: background 0.15s; margin-bottom: 4px; }
+  .result-item:hover { background: rgba(255,255,255,0.04); }
+  .result-item.selected { background: rgba(192,132,252,0.1); border: 1px solid rgba(192,132,252,0.3); }
+  .result-thumb { width: 40px; height: 56px; object-fit: cover; border-radius: 4px; flex-shrink: 0; background: var(--raised); }
+  .result-thumb-placeholder { width: 40px; height: 56px; border-radius: 4px; flex-shrink: 0; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); }
+  .result-name { font-size: 13px; color: var(--text); }
+  .result-source { font-family: var(--secs); font-size: calc(11px + 2pt); color: var(--dim); letter-spacing: -0.02em; }
+  /* Studio result: image fills width */
+  .result-item-studio { display: flex; flex-direction: column; padding: 0; min-height: 96px; border-radius: 5px; cursor: pointer; transition: background 0.15s; margin-bottom: 4px; overflow: hidden; }
+  .result-item-studio:hover { background: rgba(255,255,255,0.04); }
+  .result-item-studio.selected { background: rgba(192,132,252,0.1); border: 1px solid rgba(192,132,252,0.3); }
+  .result-studio-img { width: 100%; height: 72px; object-fit: contain; display: block; background: var(--raised); }
+
+  /* Detail panel */
+  .detail-poster { width: 210px; height: 100%; object-fit: cover; border-radius: 5px; flex-shrink: 0; display: block; position: relative; z-index: 1; }
+  .detail-poster-placeholder { width: 210px; height: 100%; min-height: 180px; border-radius: 5px; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 32px; flex-shrink: 0; }
+  /* Studio layout: landscape image on top, text below */
+  .detail-poster-studio { width: 100%; max-height: 240px; object-fit: contain; object-position: left; border-radius: 5px; display: block; }
+  .detail-info { flex: 1; min-width: 0; }
+  .detail-name { font-family: var(--acid); font-size: 28px; color: var(--text); margin-bottom: 8px; }
+  .detail-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 16px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .detail-title-row .detail-name {
+    margin-bottom: 0;
+    flex: 1;
+    min-width: 140px;
+    line-height: 1.15;
+  }
+  .detail-title-row .quick-add {
+    flex-shrink: 0;
+  }
+  .detail-meta { font-size: 12px; color: var(--dim); line-height: 2; position: relative; z-index: 1; }
+  .detail-meta span { color: var(--text); }
+  .detail-bio { font-size: 12px; color: var(--dim); margin-top: 12px; line-height: 1.8; overflow-y: auto; position: relative; z-index: 1; }
+  .detail-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; position: relative; z-index: 1; }
+  .detail-link { font-family: var(--secs); font-size: 14px; letter-spacing: -0.02em; color: var(--accent); background: rgba(192,132,252,0.08); border: 1px solid rgba(192,132,252,0.2); border-radius: 4px; padding: 2px 8px; text-decoration: none; transition: all 0.15s; }
+  .detail-link:hover { background: rgba(192,132,252,0.15); border-color: var(--accent); color: #fff; }
+  .detail-bg-image { position: absolute; top: 0; right: 0; width: 55%; height: 100%; object-fit: cover; object-position: top center; opacity: 0.14; mask-image: linear-gradient(to left, rgba(0,0,0,0.6) 0%, transparent 100%); -webkit-mask-image: linear-gradient(to left, rgba(0,0,0,0.6) 0%, transparent 100%); pointer-events: none; z-index: 0; }
+
+  /* Dest picker */
+  .dest-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .dest-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin-bottom: 8px; }
+  .dest-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .dest-btn { padding: 8px 12px; background: var(--raised); border: 1px solid var(--border); border-radius: 6px; color: var(--dim); font-family: var(--secs); font-size: calc(13px + 2pt); letter-spacing: -0.02em; cursor: pointer; transition: all 0.15s; text-align: left; }
+  .dest-btn:hover { border-color: var(--muted); color: var(--text); }
+  .dest-btn.selected { border-color: var(--accent); color: var(--accent); background: rgba(192,132,252,0.08); }
+  .dest-custom { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
+  .quick-add-select {
+    min-width: 240px;
+    background: linear-gradient(160deg, rgba(34,34,44,0.94) 0%, rgba(20,20,28,0.9) 100%);
+    color: var(--text);
+    border: 1px solid rgba(192,132,252,0.24);
+    border-radius: 6px;
+    padding: 8px 34px 8px 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.2;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--accent) 50%),
+      linear-gradient(135deg, var(--accent) 50%, transparent 50%),
+      linear-gradient(160deg, rgba(34,34,44,0.94) 0%, rgba(20,20,28,0.9) 100%);
+    background-position:
+      calc(100% - 18px) calc(50% - 2px),
+      calc(100% - 13px) calc(50% - 2px),
+      0 0;
+    background-size: 6px 6px, 6px 6px, 100% 100%;
+    background-repeat: no-repeat;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .quick-add-select:hover { border-color: rgba(192,132,252,0.4); }
+  .quick-add-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(192,132,252,0.15);
+  }
+  .quick-add-select option {
+    background: #171720;
+    color: var(--text);
+  }
+  .quick-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+  .quick-add-custom {
+    width: 220px;
+  }
+  .quick-add-btn {
+    white-space: nowrap;
+    padding-inline: 12px;
+  }
+  @media (max-width: 1120px) {
+    .detail-title-row .quick-add {
+      width: 100%;
+      flex-wrap: wrap;
+    }
+    .quick-add-select,
+    .quick-add-custom {
+      flex: 1;
+      min-width: 180px;
+    }
+  }
+
+  /* Image overlay */
+  .img-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 1000; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .img-overlay img { max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: 5px; box-shadow: 0 32px 80px rgba(0,0,0,0.6); }
+
+  /* Scenes panel */
+  .scene-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; padding: 16px 18px; }
+  @media (max-width: 1500px) { .scene-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 1180px) { .scene-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 860px) { .scene-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .scene-card { cursor: pointer; border-radius: 5px; overflow: hidden; background: var(--raised); transition: all 0.15s; border: 1px solid transparent; min-height: 286px; display:flex; flex-direction:column; }
+  .scene-card:hover { border-color: var(--muted); }
+  .detail-links { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; position: relative; z-index: 1; }
+  .detail-link { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.02em; color: var(--dim); background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 3px; padding: 2px 7px; text-decoration: none; transition: all 0.15s; }
+  .detail-link:hover { background: rgba(192,132,252,0.12); border-color: rgba(192,132,252,0.3); color: var(--accent); }
+  .detail-link img { width: 14px; height: 14px; border-radius: 2px; }
+  .detail-link.db-link { color: var(--accent); border-color: rgba(192,132,252,0.25); background: rgba(192,132,252,0.06); font-weight: 500; }
+  .scene-thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--raised); }
+  .scene-thumb-placeholder { width: 100%; aspect-ratio: 16/9; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); }
+  /* Loading spinners for scene thumbs / skeleton tiles */
+  .img-load { position: relative; overflow: hidden; background: var(--raised); }
+  .img-load .img-spin,
+  .skeleton-box > .img-spin {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: 22px;
+    height: 22px;
+    margin: -11px 0 0 -11px;
+    border-radius: 50%;
+    border: 2px solid rgba(192,132,252,0.25);
+    border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .img-load img { position: relative; z-index: 2; opacity: 0; transition: opacity 0.15s ease; }
+  .img-load.ready img { opacity: 1; }
+  .img-load.ready .img-spin { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .skeleton-box, .skeleton-line {
+    position: relative;
+    overflow: hidden;
+    background: rgba(255,255,255,0.06);
+  }
+  .skeleton-box::after, .skeleton-line::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
+    animation: shimmer 1.25s infinite;
+  }
+  .skeleton-line { height: 12px; border-radius: 999px; margin-bottom: 8px; }
+  .skeleton-chip {
+    display: inline-block;
+    width: 52px;
+    height: 22px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.06);
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton-chip::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
+    animation: shimmer 1.25s infinite;
+  }
+  @keyframes shimmer { 100% { transform: translateX(100%); } }
+  .scene-info { padding: 8px 8px 4px; flex:1; }
+  .scene-title { font-family: var(--secs); font-size: 17px; color: #d4cfc4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4; min-height: 2.8em; word-break: break-word; letter-spacing: -0.02em; text-align: center; }
+  .scene-date  { font-size: 10px; color: var(--dim); margin-top: 4px; }
+
+  /* Search results */
+  .search-result { display: grid; grid-template-columns: 1fr auto auto auto; gap: 12px; align-items: center; padding: 10px 18px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .search-result:last-child { border-bottom: none; }
+  .sr-title { font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sr-meta  { font-size: 11px; color: var(--dim); margin-top: 2px; }
+  .sr-indexer { font-family: var(--secs); font-size: 19px; color: var(--dim); letter-spacing: -0.02em; white-space: nowrap; }
+  .sr-size    { font-size: 11px; color: var(--dim); white-space: nowrap; }
+  .btn-grab { background: var(--green); color: #0c0c0e; border: none; padding: 5px 12px; border-radius: 5px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .btn-grab:hover { filter: brightness(1.1); }
+  .btn-grab.nzb { background: var(--blue); }
+
+  .scene-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.84);
+    z-index: 1100;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .scene-overlay.open { display: flex; }
+  .scene-overlay-card {
+    width: min(1280px, 96vw);
+    max-height: 90vh;
+    overflow-y: auto;
+    border-radius: 8px;
+    background: linear-gradient(160deg, rgba(36,36,48,0.98) 0%, rgba(18,18,26,0.95) 100%);
+    border: 1px solid var(--border);
+    box-shadow: 0 32px 80px rgba(0,0,0,0.5);
+  }
+  .scene-overlay-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .scene-overlay-body { padding: 14px; }
+  .scene-overlay-grid { display: grid; grid-template-columns: 520px 1fr; gap: 14px; }
+  .scene-overlay-thumb { width: 100%; border-radius: 6px; object-fit: cover; background: var(--raised); aspect-ratio: 16 / 9; }
+  @media (max-width: 860px) { .scene-overlay-grid { grid-template-columns: 1fr; } }
+
+  /* Result message */
+  .result-msg { margin-top: 16px; padding: 12px 16px; border-radius: 5px; font-size: 12px; display: none; }
+  .result-msg.success { background: rgba(74,222,128,0.1); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
+  .result-msg.error   { background: rgba(248,113,113,0.1); color: var(--red);   border: 1px solid rgba(248,113,113,0.2); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div style="display:flex;align-items:center;gap:16px">
+      <div class="logo"><img src="/static/logo.png" alt="Top-Shelf" style="height:36px; object-fit:contain;"></div>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.06em">v1.0.0</span>
+    </div>
+    <div class="nav-links">
+      <a href="/scenes" style="text-decoration:none"><button class="btn-secondary active-nav" title="Scenes"><i class="fa-solid fa-ticket"></i></button></a>
+      <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-clapperboard"></i></button></a>
+      <a href="/queue" style="text-decoration:none"><button class="btn-secondary" title="Queue"><i class="fa-solid fa-list"></i></button></a>
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary" title="Downloads"><i class="fa-solid fa-download"></i></button></a>
+      <a href="/favourites" style="text-decoration:none"><button class="btn-secondary" title="Favourites"><i class="fa-solid fa-heart"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Maintenance"><i class="fa-solid fa-folder-plus"></i></button></a>
+      <a href="/history" style="text-decoration:none"><button class="btn-secondary" title="History"><i class="fa-solid fa-clock-rotate-left"></i></button></a>
+      <button class="btn-secondary" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>location.href='/login')" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+      <a href="/settings" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="fa-solid fa-gear"></i></button></a>
+    </div>
+  </header>
+
+  <!-- Top row: fixed height, two equal columns -->
+  <div class="layout">
+
+    <!-- Search panel -->
+    <div class="panel" style="height:460px;display:flex;flex-direction:column">
+      <div class="panel-header" style="flex-shrink:0">
+        <span class="panel-title">Search</span>
+      </div>
+      <div class="panel-body" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+        <div class="type-toggle" style="flex-shrink:0">
+          <button class="type-btn active" id="btnPerformer" onclick="setType('performer')">Performer</button>
+          <button class="type-btn" id="btnStudio" onclick="setType('studio')">Studio</button>
+        </div>
+        <div class="search-row" style="flex-shrink:0">
+          <input class="field-input" id="searchInput" type="text" placeholder="Name..." onkeydown="if(event.key==='Enter')runSearch()">
+          <button class="btn-primary" onclick="runSearch()"><i class="fa-solid fa-magnifying-glass"></i></button>
+        </div>
+        <div id="searchResults" style="flex:1;overflow-y:auto;margin-top:4px">
+          <div class="empty">Search for a performer or studio</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail panel -->
+    <div class="panel" style="height:460px;display:flex;flex-direction:column;position:relative;overflow:hidden">
+      <div id="detailBgImage"></div>
+      <div class="panel-body" style="flex:1;overflow:hidden;position:relative;z-index:1;display:flex;flex-direction:column;padding-top:12px">
+        <div id="detailEmpty" class="empty">Select a result to preview details</div>
+        <div id="detailContent" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+          <div id="detailLayout" style="display:flex;gap:20px;flex:1;min-height:0;align-items:stretch">
+            <div id="detailPoster" style="flex-shrink:0;cursor:pointer;display:flex;height:100%;align-self:stretch" onclick="openPosterOverlay()"></div>
+            <div id="detailTextCol" style="flex:1;min-width:0;overflow-y:auto">
+              <div class="detail-title-row">
+                <div class="detail-name" id="detailName"></div>
+                <div id="quickAddBar" class="quick-add">
+                  <select id="quickDestSelect" class="quick-add-select" onchange="handleQuickDestChange()">
+                    <option value="">Choose directory…</option>
+                  </select>
+                  <input class="field-input quick-add-custom" id="quickDestCustom" type="text" placeholder="Custom path…">
+                  <button class="btn-primary quick-add-btn" id="createBtn" onclick="createTvShow()">
+                    <i class="fa-solid fa-folder-plus"></i> Add
+                  </button>
+                </div>
+              </div>
+              <div id="detailLibStatus" style="margin:2px 0 8px"></div>
+              <div class="detail-meta" id="detailMeta"></div>
+              <div class="detail-links" id="detailLinks"></div>
+              <div class="detail-bio" id="detailBio" style="margin-top:6px"></div>
+            </div>
+          </div>
+          <div class="detail-toolbar" id="detailToolbar">
+            <div class="result-msg inline" id="resultMsg"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Scenes panel - full width below -->
+<div id="scenesSection" style="width:100%;padding:0 24px 20px;position:relative;z-index:1">
+  <div class="panel">
+    <div class="scenes-toolbar">
+      <div class="scenes-title-wrap">
+        <span class="panel-title" id="scenesTitle">Your Feed</span>
+        <div class="feed-mode-toggle" id="feedModeToggle" title="TPDB scene feed source">
+          <button type="button" class="feed-mode-btn active" data-mode="recent" onclick="setScenesFeedMode('recent')">Recent</button>
+          <button type="button" class="feed-mode-btn" data-mode="random" onclick="setScenesFeedMode('random')">Random</button>
+          <button type="button" class="feed-mode-btn" data-mode="favourites" onclick="setScenesFeedMode('favourites')">favourites</button>
+        </div>
+        <span class="scenes-note" id="scenesNote"></span>
+      </div>
+      <div id="sceneTabs" style="display:none" class="source-toggle">
+        <button class="source-btn active" data-src="tpdb" onclick="switchSceneSource('tpdb')">TPDB</button>
+        <button class="source-btn" data-src="stashdb" onclick="switchSceneSource('stashdb')">StashDB</button>
+        <button class="source-btn" data-src="fansdb" onclick="switchSceneSource('fansdb')">FansDB</button>
+      </div>
+      <div class="scenes-toolbar-spacer"></div>
+    </div>
+    <div id="scenesGrid" class="scene-grid"><div class="empty">Loading...</div></div>
+  </div>
+</div>
+
+<script>
+  let currentType     = 'performer';
+  let selectedResult  = null;
+  let selectedDest    = null;
+  /** Scene objects for the current grid (index matches data-scene-i on .scene-card) */
+  let _sceneGridItems = [];
+  let _scenesFeedMode = (function() {
+    try {
+      let v = localStorage.getItem('topShelfScenesFeedMode') || 'recent';
+      if (v === 'library') v = 'random';
+      if (!['recent', 'random', 'favourites'].includes(v)) v = 'recent';
+      return v;
+    } catch (_) { return 'recent'; }
+  })();
+
+  function _applyFeedModeToggleUI() {
+    document.querySelectorAll('#feedModeToggle .feed-mode-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-mode') === _scenesFeedMode);
+    });
+  }
+
+  function setScenesFeedMode(mode) {
+    const m = ['recent', 'random', 'favourites'].includes(mode) ? mode : 'recent';
+    _scenesFeedMode = m;
+    try { localStorage.setItem('topShelfScenesFeedMode', m); } catch (_) {}
+    _applyFeedModeToggleUI();
+    loadFeed();
+  }
+
+  function esc(str) {
+    return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function _shortIndexer(name) {
+    const map = {
+      'theporndb': 'TPDB', 'the porn db': 'TPDB', 'porndb': 'TPDB',
+      'stashdb': 'StashDB', 'fansdb': 'FansDB',
+    };
+    const lower = (name || '').toLowerCase().trim();
+    return map[lower] || name;
+  }
+
+  function setDetailBg(imageUrl) {
+    const el = document.getElementById('detailBgImage');
+    if (imageUrl) {
+      el.innerHTML = `<img class="detail-bg-image" src="${esc(imageUrl)}" onerror="this.remove()">`;
+    } else {
+      el.innerHTML = '';
+    }
+  }
+
+  const _dbSources = ['TPDB', 'StashDB', 'FansDB'];
+  function detailLoadingSkeleton() {
+    return `
+      <div style="display:flex;gap:20px;flex:1;min-height:0;align-items:stretch">
+        <div class="skeleton-box" style="width:190px;min-height:240px;border-radius:5px;flex-shrink:0"></div>
+        <div style="flex:1;min-width:0">
+          <div class="skeleton-line" style="width:42%"></div>
+          <div class="skeleton-line" style="width:68%"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 16px">
+            <div class="skeleton-chip"></div><div class="skeleton-chip"></div><div class="skeleton-chip"></div>
+          </div>
+          <div class="skeleton-line" style="width:100%"></div>
+          <div class="skeleton-line" style="width:96%"></div>
+          <div class="skeleton-line" style="width:88%"></div>
+          <div class="skeleton-line" style="width:74%"></div>
+        </div>
+      </div>`;
+  }
+
+  function sceneGridSkeleton(count = 20) {
+    return Array.from({length: count}, () => `
+      <div class="scene-card">
+        <div class="skeleton-box" style="width:100%;aspect-ratio:16/9">
+          <div class="img-spin" aria-hidden="true"></div>
+        </div>
+        <div class="scene-info">
+          <div class="skeleton-line" style="width:84%"></div>
+          <div class="skeleton-line" style="width:62%"></div>
+        </div>
+        <div class="scene-actions">
+          <div class="skeleton-box" style="height:28px;border-radius:4px;flex:1"></div>
+          <div class="skeleton-box" style="height:28px;border-radius:4px;flex:1"></div>
+        </div>
+      </div>`).join('');
+  }
+
+  function renderLinks(links) {
+    if (!links || !links.length) return '';
+    return links.map(l => {
+      const isDb = _dbSources.includes(l.label);
+      const cls = isDb ? 'detail-link db-link' : 'detail-link';
+      try {
+        const domain = new URL(l.url).hostname.replace('www.', '');
+        const favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+        return `<a class="${cls}" href="${esc(l.url)}" target="_blank"><img src="${favicon}" onerror="this.remove()">${esc(l.label)}</a>`;
+      } catch {
+        return `<a class="${cls}" href="${esc(l.url)}" target="_blank">${esc(l.label)}</a>`;
+      }
+    }).join('');
+  }
+
+  function setType(type) {
+    currentType = type;
+    document.getElementById('btnPerformer').classList.toggle('active', type === 'performer');
+    document.getElementById('btnStudio').classList.toggle('active', type === 'studio');
+    document.getElementById('searchResults').innerHTML = '<div class="empty">Search for a performer or studio</div>';
+    clearDetail();
+  }
+
+  async function runSearch() {
+    const q = document.getElementById('searchInput').value.trim();
+    if (!q) return;
+    const el = document.getElementById('searchResults');
+    el.innerHTML = Array.from({length:6}, (_,i)=>`<div class="result-item"><div class="result-thumb-placeholder skeleton-box"></div><div style="flex:1;min-width:0"><div class="skeleton-line" style="width:${70 - (i%3)*10}%"></div><div class="skeleton-line" style="width:32%;margin-bottom:0"></div></div><div style="width:110px" class="skeleton-line"></div></div>`).join('');
+    try {
+      const r = await fetch(`/api/metadata/search?q=${encodeURIComponent(q)}&type=${currentType}&strict=0`);
+      const d = await r.json();
+      if (!d.results?.length) { el.innerHTML = '<div class="empty">No results found</div>'; return; }
+      window._searchResults = d.results;
+      const isStudio = currentType === 'studio';
+      el.innerHTML = d.results.map((item, i) => {
+        if (isStudio && item.image) {
+          // Studio with image: show image only, stretched full width
+          return `<div class="result-item-studio" id="ri-${i}" onclick="selectResult(${i})">
+            <img class="result-studio-img" src="${esc(item.image)}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+            <div style="display:none;padding:10px"><div class="result-name">${esc(item.name)}</div></div>
+            <div id="lib-${i}" style="display:none"></div>
+          </div>`;
+        }
+        if (isStudio) {
+          // Studio without image: show text
+          return `<div class="result-item" id="ri-${i}" onclick="selectResult(${i})">
+            <div class="result-thumb-placeholder"><i class="fa-solid fa-clapperboard"></i></div>
+            <div style="flex:1;min-width:0">
+              <div class="result-name">${esc(item.name)}</div>
+              <div class="result-source">${item.source}</div>
+            </div>
+            <div id="lib-${i}" style="flex-shrink:0;font-size:11px;color:var(--dim)">...</div>
+          </div>`;
+        }
+        // Performer: standard layout
+        return `<div class="result-item" id="ri-${i}" onclick="selectResult(${i})">
+          ${item.image
+            ? `<img class="result-thumb" src="${esc(item.image)}" onerror="this.outerHTML='<div class=result-thumb-placeholder><i class=fa-solid fa-person></i></div>'">`
+            : `<div class="result-thumb-placeholder"><i class="fa-solid fa-person"></i></div>`}
+          <div style="flex:1;min-width:0">
+            <div class="result-name">${esc(item.name)}</div>
+            <div class="result-source">${item.source}</div>
+          </div>
+          <div id="lib-${i}" style="flex-shrink:0;font-size:11px;color:var(--dim)">...</div>
+        </div>`;
+      }).join('');
+      // Check library status for each result
+      d.results.forEach((item, i) => {
+        fetch(`/api/library/check?name=${encodeURIComponent(item.name)}`)
+          .then(r => r.json())
+          .then(lib => {
+            const el = document.getElementById(`lib-${i}`);
+            if (!el) return;
+            if (lib.found) {
+              el.innerHTML = '<span class="lib-tag lib-tag--in">IN-LIBRARY</span>';
+              window._searchResults[i]._inLibrary = true;
+              window._searchResults[i]._libraryPath = lib.path;
+            } else {
+              el.innerHTML = '';
+              window._searchResults[i]._inLibrary = false;
+            }
+          }).catch(() => { const el = document.getElementById(`lib-${i}`); if (el) el.innerHTML = ''; });
+      });
+    } catch(e) {
+      el.innerHTML = `<div class="empty">Search failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function selectResult(idx) {
+    document.querySelectorAll('.result-item, .result-item-studio').forEach(el => el.classList.remove('selected'));
+    document.getElementById(`ri-${idx}`)?.classList.add('selected');
+    selectedResult = window._searchResults[idx];
+    showDetail(selectedResult);
+  }
+
+  // ── Poster overlay ───────────────────────────────────────────────────
+
+  function openPosterOverlay() {
+    const img = document.querySelector('#detailPoster img');
+    if (img) openImageOverlay(img.src);
+  }
+
+  // ── Image overlay ────────────────────────────────────────────────────
+
+  function openImageOverlay(url) {
+    if (!url) return;
+    document.getElementById('imgOverlayImg').src = url;
+    document.getElementById('imgOverlay').style.display = 'flex';
+  }
+
+  function closeImageOverlay() {
+    document.getElementById('imgOverlay').style.display = 'none';
+    document.getElementById('imgOverlayImg').src = '';
+  }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeImageOverlay(); closeSceneOverlay(); } });
+
+  // ── Scenes ───────────────────────────────────────────────────────────
+
+  let _sceneSources = {};  // cached scenes by source
+
+  async function loadScenes(item) {
+    const section = document.getElementById('scenesSection');
+    const grid    = document.getElementById('scenesGrid');
+    const title   = document.getElementById('scenesTitle');
+    const tabs    = document.getElementById('sceneTabs');
+    title.textContent = 'Recent Scenes';
+    document.getElementById('scenesNote').textContent = item.name || '';
+    tabs.style.display = 'none';
+    _sceneSources = {};
+    section.style.display = 'block';
+    grid.innerHTML = sceneGridSkeleton();
+    try {
+      const params = new URLSearchParams({
+        type: currentType,
+        source: item.source,
+        id: item.id,
+        slug: item.slug || '',
+        name: item.name || '',
+      });
+      const r = await fetch(`/api/scenes/recent?${params}`);
+      const d = await r.json();
+
+      // Always show source tabs for performer/studio lookup.
+      // Normalize older response shape that returns only d.scenes.
+      _sceneSources = d.sources || { tpdb: [], stashdb: [], fansdb: [] };
+      if (!d.sources && Array.isArray(d.scenes)) {
+        const sourceKey = (String(item.source || '').toLowerCase() === 'stashdb')
+          ? 'stashdb'
+          : (String(item.source || '').toLowerCase() === 'fansdb' ? 'fansdb' : 'tpdb');
+        _sceneSources[sourceKey] = d.scenes;
+      }
+
+      tabs.style.display = 'inline-flex';
+      const available = Object.entries(_sceneSources).filter(([k, v]) => v && v.length > 0);
+      document.querySelectorAll('.source-btn').forEach(btn => {
+        const src = btn.dataset.src;
+        const scenes = _sceneSources[src] || [];
+        const label = src === 'tpdb' ? 'TPDB' : src === 'stashdb' ? 'StashDB' : 'FansDB';
+        btn.textContent = label;
+        if (scenes.length > 0) {
+          btn.classList.remove('disabled');
+        } else {
+          btn.classList.add('disabled');
+        }
+      });
+
+      if (available.length > 0) {
+        switchSceneSource(available[0][0]);
+      } else {
+        grid.innerHTML = '<div class="empty">No recent scenes found</div>';
+      }
+      return;
+    } catch(e) {
+      grid.innerHTML = `<div class="empty">Failed to load scenes</div>`;
+    }
+  }
+
+  function switchSceneSource(src) {
+    document.querySelectorAll('.source-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.src === src);
+    });
+    const scenes = _sceneSources[src] || [];
+    if (scenes.length) {
+      renderSceneGrid(scenes, false);
+    } else {
+      document.getElementById('scenesGrid').innerHTML = '<div class="empty">No scenes from this source</div>';
+    }
+  }
+
+  function openSceneOverlay(scene) {
+    if (!scene) return;
+    window._sceneOverlay = scene;
+    document.getElementById('sceneOverlayTitle').textContent = scene.title || 'Scene';
+    document.getElementById('sceneOverlayQuery').value = [scene.performer || '', scene.title || ''].filter(Boolean).join(' ');
+    document.getElementById('sceneOverlayMain').innerHTML = `
+      <div class="scene-overlay-grid">
+        <div>
+          <img class="scene-overlay-thumb" src="${esc(scene.thumb || '/static/missing.jpg')}" onerror="this.src='/static/missing.jpg'">
+        </div>
+        <div>
+          <div style="font-size:12px;color:var(--dim);line-height:1.8">
+            ${scene.date ? `<div>Date: <span style="color:var(--text)">${esc(scene.date)}</span></div>` : ''}
+            ${scene.studio ? `<div>Studio: <span style="color:var(--text)">${esc(scene.studio)}</span></div>` : ''}
+            ${scene.performer ? `<div>Performer: <span style="color:var(--text)">${esc(scene.performer)}</span></div>` : ''}
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <button class="btn-primary" onclick="runSceneOverlaySearch()"><i class="fa-solid fa-magnifying-glass"></i> Search Prowlarr</button>
+            <button class="btn-secondary" onclick="openImageOverlay('${esc(scene.thumb || '')}')"><i class="fa-solid fa-image"></i></button>
+            <button class="btn-secondary" onclick="window.open('${esc(scene.link || ('https://theporndb.net/scenes/' + (scene.id || '')))}','_blank')"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('sceneOverlayResults').innerHTML = '<div class="empty">Click "Search Prowlarr" to find releases for this scene.</div>';
+    document.getElementById('sceneOverlay').classList.add('open');
+  }
+
+  function closeSceneOverlay() {
+    document.getElementById('sceneOverlay').classList.remove('open');
+    window._sceneOverlay = null;
+  }
+
+  // ── Prowlarr (overlay) ────────────────────────────────────────────────
+
+  async function runSceneOverlaySearch() {
+    const q = document.getElementById('sceneOverlayQuery').value.trim();
+    if (!q) return;
+    const el = document.getElementById('sceneOverlayResults');
+    el.innerHTML = Array.from({length:6}, (_,i)=>`<div class="result-item"><div class="result-thumb-placeholder skeleton-box"></div><div style="flex:1;min-width:0"><div class="skeleton-line" style="width:${70 - (i%3)*10}%"></div><div class="skeleton-line" style="width:32%;margin-bottom:0"></div></div><div style="width:110px" class="skeleton-line"></div></div>`).join('');
+    try {
+      const r = await fetch(`/api/prowlarr/search?q=${encodeURIComponent(q)}`);
+      const d = await r.json();
+      if (d.error) { el.innerHTML = `<div class="empty">${esc(d.error)}</div>`; return; }
+      if (!d.results?.length) { el.innerHTML = '<div class="empty">No results found</div>'; return; }
+      window._sceneProwlarrResults = d.results;
+      el.innerHTML = d.results.map((r, i) => `
+        <div class="search-result">
+          <div>
+            <div class="sr-title" title="${esc(r.title)}">${esc(r.title)}</div>
+            <div class="sr-meta">${r.age ? Math.round(r.age/24) + 'd ago' : ''} ${r.seeders != null && r.seeders !== undefined ? '· ' + r.seeders + ' seeders' : ''}</div>
+          </div>
+          <span class="sr-indexer">${esc(_shortIndexer(r.indexer).replace(/ /g, '-'))}</span>
+          <span class="sr-size">${r.size_mb > 1024 ? (r.size_mb/1024).toFixed(1) + ' GB' : r.size_mb + ' MB'}</span>
+          <button class="btn-grab ${r.type === 'nzb' ? 'nzb' : ''}" onclick="grabResult(${i})">
+            <i class="fa-solid fa-download"></i> ${r.type === 'nzb' ? 'NZB' : 'TORRENT'}
+          </button>
+        </div>`).join('');
+    } catch(e) {
+      el.innerHTML = `<div class="empty">Search failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  async function grabResult(idx) {
+    const result = window._sceneProwlarrResults[idx];
+    const btn = event.target.closest('button');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    try {
+      const r = await fetch('/api/prowlarr/grab', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          guid:         result.guid,
+          indexer_id:   result.indexer_id,
+          type:         result.type,
+          download_url: result.type === 'torrent' && result.magnet ? result.magnet : result.download_url,
+        }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> SENT';
+        btn.style.background = 'var(--green)';
+        btn.style.color = '#0c0c0e';
+      } else {
+        btn.innerHTML = 'Error';
+        btn.disabled = false;
+        alert(`Download failed: ${d.error}`);
+      }
+    } catch(e) {
+      btn.innerHTML = 'Error';
+      btn.disabled = false;
+    }
+  }
+
+  async function showDetail(item) {
+    document.getElementById('detailEmpty').style.display = 'none';
+    document.getElementById('detailContent').style.display = 'flex';
+    document.getElementById('detailName').textContent = item.name || '';
+    document.getElementById('detailMeta').innerHTML = `<span style="color:var(--dim);font-size:11px">${item.source}</span>`;
+    setDetailBg(item.image);
+    const libEl = document.getElementById('detailLibStatus');
+    const destEl = document.getElementById('quickAddBar');
+    libEl.innerHTML = '';
+    fetch(`/api/library/check?name=${encodeURIComponent(item.name)}`)
+      .then(r => r.json())
+      .then(lib => {
+        if (lib.found) {
+          libEl.innerHTML = `<span class="lib-tag lib-tag--in">IN-LIBRARY</span>`;
+          if (destEl) destEl.style.display = 'none';
+        } else {
+          libEl.innerHTML = `<span class="lib-tag lib-tag--out">NOT-IN-LIBRARY</span>`;
+          if (destEl) destEl.style.display = 'inline-flex';
+        }
+      }).catch(() => { libEl.innerHTML = ''; if (destEl) destEl.style.display = 'inline-flex'; });
+    document.getElementById('detailBio').textContent = '';
+    document.getElementById('resultMsg').style.display = 'none';
+    document.getElementById('detailMeta').innerHTML = detailLoadingSkeleton();
+    document.getElementById('detailLinks').innerHTML = '';
+
+    // Switch layout based on type
+    const layoutEl = document.getElementById('detailLayout');
+    const posterEl = document.getElementById('detailPoster');
+    const isStudio = currentType === 'studio';
+    const icon = isStudio ? 'clapperboard' : 'person';
+    const posterClass = isStudio ? 'detail-poster-studio' : 'detail-poster';
+
+    if (isStudio) {
+      // Studio: stacked — image on top, text below
+      layoutEl.style.flexDirection = 'column';
+      layoutEl.style.alignItems = 'stretch';
+      layoutEl.style.gap = '12px';
+      posterEl.style.flexShrink = '0';
+      posterEl.style.display = 'block';
+      posterEl.style.height = 'auto';
+    } else {
+      // Performer: side-by-side — image left, text right
+      layoutEl.style.flexDirection = 'row';
+      layoutEl.style.alignItems = 'stretch';
+      layoutEl.style.gap = '20px';
+      posterEl.style.flexShrink = '0';
+      posterEl.style.display = 'flex';
+      posterEl.style.height = '100%';
+    }
+
+    if (item.image) {
+      posterEl.innerHTML = `<img class="${posterClass}" src="${esc(item.image)}" onclick="openImageOverlay('${esc(item.image)}')" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-${icon}></i></div>'">`;
+    } else {
+      posterEl.innerHTML = `<div class="detail-poster-placeholder"><i class="fa-solid fa-${icon}"></i></div>`;
+    }
+
+    loadDirs();
+    loadScenes(item);
+
+    // Use a lightweight preview fetch
+    try {
+      const r = await fetch(`/api/metadata/preview?type=${currentType}&source=${encodeURIComponent(item.source)}&id=${encodeURIComponent(item.id)}`);
+      const d = await r.json();
+      if (d.image) {
+        posterEl.innerHTML = `<img class="${posterClass}" src="${esc(d.image)}" onclick="openImageOverlay('${esc(d.image)}')" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-${icon}></i></div>'">`;
+        setDetailBg(d.image);
+      }
+      document.getElementById('detailBio').textContent = d.bio || '';
+      if (d.meta) document.getElementById('detailMeta').innerHTML = d.meta;
+      // Render links
+      const linksEl = document.getElementById('detailLinks');
+      if (d.links && d.links.length) {
+        linksEl.innerHTML = renderLinks(d.links);
+      } else {
+        linksEl.innerHTML = '';
+      }
+      // Update slug on selected result for better scene lookups
+      if (d.slug && selectedResult) {
+        selectedResult.slug = d.slug;
+        loadScenes(selectedResult);
+      }
+    } catch {
+      document.getElementById('detailBio').textContent = '';
+    }
+  }
+
+  function clearDetail() {
+    selectedResult = null;
+    document.getElementById('detailEmpty').style.display = 'block';
+    document.getElementById('detailContent').style.display = 'none';
+    document.getElementById('detailName').textContent = '';
+    document.getElementById('detailLinks').innerHTML = '';
+    setDetailBg(null);
+    loadFeed();
+  }
+
+  async function loadDirs() {
+    try {
+      const r = await fetch('/api/metadata/dirs');
+      const d = await r.json();
+      const sel = document.getElementById('quickDestSelect');
+      if (!sel) return;
+      const options = ['<option value="">Choose directory…</option>']
+        .concat((d.dirs || []).map(dir => `<option value="${esc(dir.path)}">${esc(dir.label)}</option>`))
+        .concat(['<option value="__custom__">Custom path…</option>']);
+      sel.innerHTML = options.join('');
+      if (selectedDest) sel.value = selectedDest;
+      handleQuickDestChange();
+    } catch {}
+  }
+
+  function handleQuickDestChange() {
+    const sel = document.getElementById('quickDestSelect');
+    const custom = document.getElementById('quickDestCustom');
+    if (!sel || !custom) return;
+    if (sel.value === '__custom__') {
+      selectedDest = null;
+      custom.style.display = 'block';
+    } else {
+      selectedDest = sel.value || null;
+      custom.style.display = 'none';
+      if (sel.value !== '__custom__') custom.value = '';
+    }
+  }
+
+  function clearDest() {
+    selectedDest = null;
+    const sel = document.getElementById('quickDestSelect');
+    const custom = document.getElementById('quickDestCustom');
+    if (sel) sel.value = '';
+    if (custom) { custom.value = ''; custom.style.display = 'none'; }
+  }
+
+  async function createTvShow() {
+    if (!selectedResult) { alert('Select a result first'); return; }
+    const sel = document.getElementById('quickDestSelect');
+    const customEl = document.getElementById('quickDestCustom');
+    const dest = (sel && sel.value === '__custom__' ? customEl.value.trim() : '') || selectedDest;
+    if (!dest) { alert('Choose a destination directory'); return; }
+
+    const btn = document.getElementById('createBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating...';
+
+    try {
+      const r = await fetch('/api/metadata/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          type:     currentType,
+          source:   selectedResult.source,
+          id:       selectedResult.id,
+          dest_dir: dest,
+        }),
+      });
+      const d = await r.json();
+      const msg = document.getElementById('resultMsg');
+      if (d.success) {
+        msg.className = 'result-msg success';
+        msg.textContent = `✓ Created: ${d.folder}${d.has_poster ? ' · poster downloaded' : ''}`;
+        msg.style.display = 'block';
+        // Update library status and hide dest section
+        document.getElementById('detailLibStatus').innerHTML =
+          `<span class="lib-tag lib-tag--in">IN-LIBRARY</span>`;
+        const ds = document.getElementById('quickAddBar');
+        if (ds) ds.style.display = 'none'; clearDest();
+        // Update search result status if visible
+        if (selectedResult) {
+          window._searchResults?.forEach((item, i) => {
+            if (item.name === selectedResult.name) {
+              const el = document.getElementById(`lib-${i}`);
+              if (el) el.innerHTML = '<span class="lib-tag lib-tag--in">IN-LIBRARY</span>';
+            }
+          });
+        }
+      } else {
+        msg.className = 'result-msg error';
+        msg.textContent = `Error: ${d.error}`;
+        msg.style.display = 'block';
+      }
+    } catch(e) {
+      const msg = document.getElementById('resultMsg');
+      msg.className = 'result-msg error';
+      msg.textContent = `Error: ${e.message}`;
+      msg.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-folder-plus"></i> Add';
+    }
+  }
+
+  // ── Feed (default scenes on page load) ────────────────────────────────
+
+  async function loadFeed() {
+    const section = document.getElementById('scenesSection');
+    const grid    = document.getElementById('scenesGrid');
+    const title   = document.getElementById('scenesTitle');
+    const note    = document.getElementById('scenesNote');
+    _applyFeedModeToggleUI();
+    document.getElementById('sceneTabs').style.display = 'none';
+    _sceneSources = {};
+    section.style.display = 'block';
+    grid.innerHTML = sceneGridSkeleton();
+    try {
+      const r = await fetch('/api/scenes/feed?mode=' + encodeURIComponent(_scenesFeedMode));
+      const d = await r.json();
+      if (_scenesFeedMode === 'favourites') {
+        title.textContent = 'Your Feed';
+        note.textContent = 'TPDB scenes for hearts on Favourites';
+        if (!d.scenes?.length) {
+          grid.innerHTML = '<div class="empty">No scenes yet — open Favourites, click the heart on performers or studios you care about, and link TPDB (refresh or manual search). Only starred entries with a TPDB id appear here.</div>';
+          return;
+        }
+        renderSceneGrid(d.scenes, true);
+        return;
+      }
+      if (_scenesFeedMode === 'recent') {
+        title.textContent = 'Your Feed';
+        note.textContent = 'TPDB newest releases (global)';
+        if (!d.scenes?.length) {
+          grid.innerHTML = '<div class="empty">No feed scenes — check your TPDB API key in Settings</div>';
+          return;
+        }
+        renderSceneGrid(d.scenes, true);
+        return;
+      }
+      title.textContent = 'Your Feed';
+      note.textContent = 'Random sample from library performer folders';
+      if (!d.scenes?.length) {
+        grid.innerHTML = '<div class="empty">No feed scenes — add performer folders under Settings, or check your TPDB API key</div>';
+        return;
+      }
+      if (d.source === 'api') {
+        note.textContent = 'TPDB newest (no library folders to sample)';
+      }
+      renderSceneGrid(d.scenes, true);
+    } catch(e) {
+      grid.innerHTML = '<div class="empty">Failed to load feed</div>';
+    }
+  }
+
+  function renderSceneGrid(scenes, isFeed) {
+    const grid = document.getElementById('scenesGrid');
+    const visibleScenes = (scenes || []).slice(0, 20); // 4 rows x 5 columns
+    _sceneGridItems = visibleScenes;
+    grid.innerHTML = visibleScenes.map((s, i) => `
+      <div class="scene-card" id="sc-${esc(s.id)}" data-scene-i="${i}" role="button" tabindex="0" aria-label="Open scene details">
+        <div class="img-load">
+          <div class="img-spin" aria-hidden="true"></div>
+          ${s.thumb
+            ? `<img class="scene-thumb" src="${esc(s.thumb)}" loading="lazy" onload="this.closest('.img-load')?.classList.add('ready')" onerror="const w=this.closest('.img-load'); if(this.src.indexOf('missing.jpg')<0){this.src='/static/missing.jpg'}else{w?.classList.add('ready')}">`
+            : `<img class="scene-thumb" src="/static/missing.jpg" loading="lazy" onload="this.closest('.img-load')?.classList.add('ready')" onerror="this.closest('.img-load')?.classList.add('ready')">`}
+        </div>
+        <div class="scene-info">
+          <div class="scene-title" title="${esc(s.title)}">${esc(s.title)}</div>
+          <div class="scene-date">${s.date || ''}${s.studio ? ' · ' + esc(s.studio) : ''}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  // ── Spotlight (random performer on load) ────────────────────────────
+
+  async function loadSpotlight() {
+    try {
+      const r = await fetch('/api/metadata/spotlight');
+      const d = await r.json();
+      if (!d.found) return;
+
+      // Populate the detail panel with the spotlight performer
+      document.getElementById('detailEmpty').style.display = 'none';
+      document.getElementById('detailContent').style.display = 'flex';
+      document.getElementById('detailName').textContent = d.name || '';
+
+      const layoutEl = document.getElementById('detailLayout');
+      const posterEl = document.getElementById('detailPoster');
+      layoutEl.style.flexDirection = 'row';
+      layoutEl.style.alignItems = 'stretch';
+      layoutEl.style.gap = '20px';
+      posterEl.style.flexShrink = '0';
+      posterEl.style.display = 'flex';
+      posterEl.style.height = '100%';
+
+      if (d.image) {
+        posterEl.innerHTML = `<img class="detail-poster" src="${esc(d.image)}" onclick="openImageOverlay('${esc(d.image)}')" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-person></i></div>'">`;
+        setDetailBg(d.image);
+      } else {
+        posterEl.innerHTML = `<div class="detail-poster-placeholder"><i class="fa-solid fa-person"></i></div>`;
+      }
+
+      document.getElementById('detailMeta').innerHTML = d.meta || '';
+      document.getElementById('detailBio').textContent = d.bio || '';
+
+      // Fetch links via preview endpoint
+      fetch(`/api/metadata/preview?type=performer&source=${encodeURIComponent(d.source)}&id=${encodeURIComponent(d.id)}`)
+        .then(r => r.json())
+        .then(prev => {
+          const linksEl = document.getElementById('detailLinks');
+          if (prev.links && prev.links.length) {
+            linksEl.innerHTML = renderLinks(prev.links);
+          }
+        }).catch(() => {});
+
+      // Check library status
+      const libEl = document.getElementById('detailLibStatus');
+      const destEl = document.getElementById('quickAddBar');
+      fetch(`/api/library/check?name=${encodeURIComponent(d.name)}`)
+        .then(r => r.json())
+        .then(lib => {
+          if (lib.found) {
+            libEl.innerHTML = `<span class="lib-tag lib-tag--in">IN-LIBRARY</span>`;
+            if (destEl) destEl.style.display = 'none';
+          } else {
+            libEl.innerHTML = `<span class="lib-tag lib-tag--out">NOT-IN-LIBRARY</span>`;
+            if (destEl) destEl.style.display = 'inline-flex';
+          }
+        }).catch(() => {});
+
+      // Store as selected so scene search works if they click a scene's search button
+      selectedResult = { name: d.name, id: d.id, slug: d.slug, source: 'TPDB', image: d.image };
+      window._searchResults = window._searchResults || {};
+
+      loadDirs();
+
+      // Do NOT call loadScenes — the feed should stay as the user's personalised feed
+    } catch(e) {
+      // Spotlight is optional — just leave the empty state
+    }
+  }
+
+  document.getElementById('scenesGrid').addEventListener('click', function (e) {
+    const card = e.target.closest('.scene-card[data-scene-i]');
+    if (!card) return;
+    const i = parseInt(card.getAttribute('data-scene-i'), 10);
+    if (Number.isNaN(i) || !_sceneGridItems[i]) return;
+    openSceneOverlay(_sceneGridItems[i]);
+  });
+  document.getElementById('scenesGrid').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const card = e.target.closest('.scene-card[data-scene-i]');
+    if (!card) return;
+    e.preventDefault();
+    const i = parseInt(card.getAttribute('data-scene-i'), 10);
+    if (Number.isNaN(i) || !_sceneGridItems[i]) return;
+    openSceneOverlay(_sceneGridItems[i]);
+  });
+
+  // Load feed and spotlight on page init
+  _applyFeedModeToggleUI();
+  loadFeed();
+  loadSpotlight();
+</script>
+<div id="sceneOverlay" class="scene-overlay" onclick="if(event.target===this)closeSceneOverlay()">
+  <div class="scene-overlay-card">
+    <div class="scene-overlay-head">
+      <span class="panel-title" id="sceneOverlayTitle">Scene</span>
+      <button class="btn-secondary" onclick="closeSceneOverlay()"><i class="fa-solid fa-x"></i></button>
+    </div>
+    <div class="scene-overlay-body">
+      <div class="search-row" style="margin-bottom:10px">
+        <input id="sceneOverlayQuery" class="field-input" type="text" placeholder="Search query..." onkeydown="if(event.key==='Enter')runSceneOverlaySearch()">
+        <button class="btn-primary" onclick="runSceneOverlaySearch()"><i class="fa-solid fa-magnifying-glass"></i></button>
+      </div>
+      <div id="sceneOverlayMain" style="margin-bottom:12px"></div>
+      <div id="sceneOverlayResults"><div class="empty">Click "Search Prowlarr" to find releases for this scene.</div></div>
+    </div>
+  </div>
+</div>
+<div id="imgOverlay" class="img-overlay" style="display:none" onclick="closeImageOverlay()">
+  <img id="imgOverlayImg" src="" alt="">
+</div>
+
+<script defer src="/static/app-shell.js"></script>
+</body>
+</html>

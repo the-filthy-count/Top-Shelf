@@ -1,0 +1,20 @@
+services:
+  top-shelf:
+    image: thefilthycount/top-shelf:latest
+    container_name: top-shelf
+    restart: unless-stopped
+    ports:
+      - "8891:8891"
+    volumes:
+      # App config (settings stored in database, this is for future use)
+      - /volume4/docker/top-shelf/conf:/app/conf
+      # Persistent database
+      - /volume4/docker/top-shelf/database:/app/database
+      # Static assets - logo, background, favicon, font
+      - /volume4/docker/top-shelf/static:/app/static
+      # Media library (Series, Stars, Erotica, E-Girls live here)
+      - /volume3/Top-Shelf:/library
+      # Source/processing folder
+      - /volume4/Downloads:/downloads
+    environment:
+      - TZ=Europe/London

@@ -1,0 +1,183 @@
+@font-face {
+  font-family: "Impact Label";
+  src: url("/static/Impact%20Label.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Seconds";
+  src: url("/static/Impact%20Label%20Reversed.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --shell-radius: 10px;
+  --shell-gap: 16px;
+  --shell-border-soft: rgba(255, 255, 255, 0.08);
+  --shell-page-padding: 20px;
+  --shell-header-padding: 24px;
+  /* Sticker-style labels (scenes library tags, queue phash, history status) */
+  --font-impact-label: "Impact Label", system-ui, sans-serif;
+  /* Segmented tab toggles & settings switch row titles (Impact Label Reversed) */
+  --font-toggle: "Seconds", "DM Mono", ui-monospace, monospace;
+  /* Old UI min was ~11px; bump by 2pt without changing sizes already well above this */
+  --font-reversed-min: calc(11px + 2pt);
+}
+
+body {
+  letter-spacing: 0.01em;
+}
+
+/* Full-screen boot splash (background, logo, spinner) — dismissed by app-shell.js */
+.boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  background-color: #0c0c0e;
+  background-image: url("/static/background.jpg");
+  background-position: center center;
+  background-size: cover;
+  background-attachment: fixed;
+  transition: opacity 0.4s ease, visibility 0.4s ease;
+}
+
+.boot-splash::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 12, 14, 0.82);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.boot-splash__inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+
+.boot-splash__logo {
+  height: 48px;
+  width: auto;
+  max-width: min(200px, 70vw);
+  object-fit: contain;
+  display: block;
+}
+
+.boot-splash__spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid rgba(192, 132, 252, 0.22);
+  border-top-color: #c084fc;
+  animation: boot-splash-spin 0.75s linear infinite;
+}
+
+.boot-splash--hide {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@keyframes boot-splash-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.app {
+  width: 100%;
+  max-width: none !important;
+  margin: 0 !important;
+  padding-left: var(--shell-page-padding) !important;
+  padding-right: var(--shell-page-padding) !important;
+}
+
+header {
+  /* Full-bleed within .app padding — avoid 100vw (scrollbar makes page wider than 100%) */
+  width: calc(100% + var(--shell-page-padding) * 2);
+  margin-left: calc(-1 * var(--shell-page-padding)) !important;
+  margin-right: calc(-1 * var(--shell-page-padding)) !important;
+  max-width: none;
+  box-sizing: border-box;
+  padding-left: var(--shell-header-padding) !important;
+  padding-right: var(--shell-header-padding) !important;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-radius: 0 !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: linear-gradient(to bottom, rgba(12, 12, 14, 0.9), rgba(12, 12, 14, 0.7));
+}
+
+.panel,
+.table-panel,
+.history-panel,
+.stat-card,
+.filter-tab {
+  border-radius: var(--shell-radius);
+  border: 1px solid transparent;
+}
+
+.panel-header,
+.table-header {
+  border-bottom: 1px solid var(--shell-border-soft);
+}
+
+.nav-links {
+  gap: 10px;
+}
+
+.btn-secondary {
+  min-width: 36px;
+  min-height: 36px;
+}
+
+.btn-secondary:focus-visible,
+.btn-primary:focus-visible,
+.field-input:focus-visible,
+.filter-input:focus-visible {
+  outline: 2px solid rgba(192, 132, 252, 0.45);
+  outline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --shell-page-padding: 12px;
+    --shell-header-padding: 12px;
+  }
+
+  .app {
+    padding-left: var(--shell-page-padding) !important;
+    padding-right: var(--shell-page-padding) !important;
+  }
+
+  header {
+    position: static;
+  }
+}
+
+/* Toggles: segmented controls (Favourites, Scenes, Queue) + settings switch labels */
+.fav-seg button,
+.queue-mode-toggle button,
+.type-toggle .type-btn,
+.source-toggle .source-btn {
+  font-family: var(--font-toggle);
+  font-size: var(--font-reversed-min);
+}
+.toggle-row > span:not(.field-label) {
+  font-family: var(--font-toggle);
+  font-size: max(var(--font-reversed-min), 1em);
+}

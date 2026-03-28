@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Favourites</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="/static/app-shell.css">
+<style>
+  @font-face { font-family: 'Acidoze'; src: url('/static/Tox Typewriter.ttf') format('truetype'); }
+  @font-face { font-family: 'Seconds'; src: url('/static/Impact%20Label%20Reversed.ttf') format('truetype'); }
+  :root {
+    --bg: #0c0c0e; --surface: rgba(19,19,23,0.75); --raised: rgba(26,26,32,0.8);
+    --border: #222228; --muted: #3a3a44; --text: #e8e8f0; --dim: #6b6b7a;
+    --accent: #c084fc; --green: #22c55e; --amber: #fbbf24; --red: #ef4444; --blue: #60a5fa;
+    --mono: 'DM Mono', monospace; --sans: 'Syne', sans-serif;
+    --acid: 'Acidoze', 'Syne', sans-serif; --secs: 'Seconds', 'DM Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg) url('/static/background.jpg') center center / cover fixed;
+    color: var(--text); font-family: var(--mono); font-size: 13px; line-height: 1.5;
+    min-height: 100vh; min-height: 100dvh;
+    overflow-x: hidden;
+  }
+  body::before { content: ''; position: fixed; inset: 0; background: rgba(12,12,14,0.72); z-index: 0; }
+  .app { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 24px 28px; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    background: linear-gradient(160deg, rgba(36,36,48,0.88) 0%, rgba(18,18,26,0.78) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.22);
+    margin-bottom: 20px;
+  }
+  .logo img { height: 36px; object-fit: contain; }
+  .nav-links { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .btn-secondary {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--dim);
+    width: 40px; height: 40px; border-radius: 8px; font-size: 19px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; text-decoration: none; padding: 0;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+  .active-nav { border-color: var(--accent) !important; color: var(--accent) !important; }
+  .version { font-family: var(--acid); font-size: 14px; color: var(--muted); }
+
+  .page-title { font-family: var(--acid); font-size: 26px; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; margin-bottom: 10px; }
+
+  /* Sticky controls */
+  .fav-sticky {
+    position: sticky; top: 0; z-index: 40;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+    padding: 10px 14px; margin: 0 -4px 14px -4px;
+    background: rgba(10,10,14,0.92); backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.07); border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+  }
+  .fav-sticky-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .fav-sticky-actions { margin-left: auto; flex-shrink: 0; }
+  .fav-icon-btn {
+    width: 42px; height: 42px; border-radius: 8px; border: 1px solid var(--border);
+    background: rgba(255,255,255,0.06); color: var(--text); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 16px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .fav-icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .fav-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .fav-icon-btn--primary { background: rgba(192,132,252,0.15); border-color: rgba(192,132,252,0.35); color: var(--accent); }
+  .fav-icon-btn--primary:hover { filter: brightness(1.1); }
+
+  .fav-seg { display: flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+  .fav-seg button {
+    padding: 8px 16px; border: none; cursor: pointer;
+    background: rgba(255,255,255,0.04); color: var(--dim); transition: background 0.15s, color 0.15s;
+  }
+  .fav-seg button:hover { color: var(--text); }
+  .fav-seg button.active { background: rgba(192,132,252,0.2); color: #fff; }
+
+  .fav-filter-wrap { flex: 1; min-width: 180px; max-width: 420px; }
+  .fav-filter-wrap input {
+    width: 100%; padding: 9px 12px 9px 36px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--raised); color: var(--text); font-family: var(--mono); font-size: 12px;
+  }
+  .fav-filter-wrap input:focus { outline: none; border-color: var(--accent); }
+  .fav-filter-wrap { position: relative; }
+  .fav-filter-wrap .fa-magnifying-glass { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--dim); font-size: 13px; pointer-events: none; }
+
+  .fav-count { font-size: 16px; font-weight: 600; color: var(--text); font-family: var(--secs); white-space: nowrap; letter-spacing: -0.02em; }
+
+  details.fav-schedule { font-size: 11px; color: var(--dim); }
+  details.fav-schedule summary { cursor: pointer; user-select: none; color: var(--muted); }
+  details.fav-schedule summary:hover { color: var(--text); }
+  .fav-schedule-inner { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+  .fav-progress-wrap {
+    flex: 1 1 220px;
+    max-width: min(380px, 100%);
+    min-width: 160px;
+    display: none;
+    flex-direction: column;
+    gap: 5px;
+    justify-content: center;
+  }
+  .fav-progress-wrap.is-active { display: flex; }
+  .fav-progress-label {
+    font-size: 10px;
+    color: var(--dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: var(--mono);
+    line-height: 1.3;
+  }
+  .fav-progress-track {
+    height: 6px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+  .fav-progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--accent), rgba(192,132,252,0.65));
+    transition: width 0.2s ease;
+  }
+
+  /* Stage */
+  .fav-stage {
+    min-height: min(72vh, 900px);
+    background: linear-gradient(160deg, rgba(36,36,48,0.75) 0%, rgba(18,18,26,0.65) 100%);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px;
+    overflow: hidden;
+  }
+  .fav-grid {
+    display: grid;
+    gap: 14px;
+    max-height: min(70vh, 880px);
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .fav-grid--perf {
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+  }
+  @media (max-width: 1500px) {
+    .fav-grid--perf { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  }
+  @media (max-width: 1200px) {
+    .fav-grid--perf { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  }
+  @media (max-width: 800px) {
+    .fav-grid--perf { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  .fav-grid--studio {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  @media (max-width: 1200px) {
+    .fav-grid--studio { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  @media (max-width: 900px) {
+    .fav-grid--studio { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 600px) {
+    .fav-grid--studio { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  .fav-grid::-webkit-scrollbar { width: 6px; }
+  .fav-grid::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+
+  /* Card */
+  .fav-cell {
+    position: relative; border-radius: 10px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(0,0,0,0.25);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .fav-cell:hover { border-color: rgba(255,255,255,0.14); box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
+  .fav-cell:focus-within { outline: 2px solid rgba(192,132,252,0.35); outline-offset: 2px; }
+
+  .fav-cell-visual { display: block; text-decoration: none; color: inherit; cursor: default; }
+  .fav-perf-ph {
+    position: relative;
+    aspect-ratio: 3/4; width: 100%; background: linear-gradient(145deg, rgba(40,40,52,0.9), rgba(22,22,30,0.95));
+    display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 28px;
+  }
+  .fav-perf-ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .fav-card-heart {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    bottom: auto;
+    z-index: 1;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(0,0,0,0.5);
+    color: rgba(255,255,255,0.88);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    padding: 0;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+  }
+  .fav-card-heart:hover { filter: brightness(1.1); transform: scale(1.04); }
+  .fav-card-heart.heart-on {
+    color: #f472b6;
+    border-color: rgba(244,114,182,0.45);
+    background: rgba(0,0,0,0.55);
+  }
+
+  /* Poster: unlock only (left). Solid heart only when favourited (right). */
+  .fav-card-lock {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    bottom: auto;
+    z-index: 3;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(0,0,0,0.5);
+    color: rgba(255,255,255,0.88);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    padding: 0;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+  }
+  .fav-card-lock:hover { filter: brightness(1.1); transform: scale(1.04); }
+
+  .fav-overlay-lock {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    bottom: auto;
+    z-index: 5;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(0,0,0,0.5);
+    color: rgba(255,255,255,0.88);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    padding: 0;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+  }
+  .fav-overlay-lock:hover { filter: brightness(1.1); transform: scale(1.04); }
+  .fav-overlay-lock.lock-on {
+    color: #fbbf24;
+    border-color: rgba(251,191,36,0.45);
+    background: rgba(0,0,0,0.55);
+  }
+
+  /* Overlay: hollow heart when not favourited, solid when favourited (poster never shows hollow).
+     Same corner as .fav-card-heart (right: 8px); close button is hidden on hover — on touch it moves to the left stack. */
+  .fav-overlay-heart {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    bottom: auto;
+    z-index: 5;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(0,0,0,0.5);
+    color: rgba(255,255,255,0.88);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    padding: 0;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+  }
+  .fav-overlay-heart:hover { filter: brightness(1.1); transform: scale(1.04); }
+  .fav-overlay-heart.heart-on {
+    color: #f472b6;
+    border-color: rgba(244,114,182,0.45);
+    background: rgba(0,0,0,0.55);
+  }
+
+  .fav-studio-ph {
+    position: relative;
+    width: 100%; height: 88px;
+    background: rgba(12,12,16,0.85);
+    display: flex; align-items: center; justify-content: center;
+    padding: 8px;
+  }
+  .fav-studio-ph img {
+    max-width: 100%; max-height: 100%; width: auto; height: auto;
+    object-fit: contain; object-position: center;
+  }
+
+  /* Studio: taller logo band + purple-tinted panel so dark logo text reads on hover */
+  .fav-grid--studio .fav-studio-ph {
+    height: auto;
+    min-height: 120px;
+    padding: 14px 12px;
+    background:
+      radial-gradient(ellipse 90% 80% at 50% 40%, rgba(88, 56, 120, 0.45) 0%, rgba(42, 28, 62, 0.55) 45%, rgba(18, 14, 28, 0.96) 100%);
+    box-shadow:
+      inset 0 0 0 1px rgba(192, 132, 252, 0.12),
+      inset 0 -12px 28px rgba(0, 0, 0, 0.35);
+  }
+  .fav-grid--studio .fav-studio-ph img {
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.55)) drop-shadow(0 0 1px rgba(255,255,255,0.18));
+  }
+  .fav-grid--studio .fav-cell-title {
+    min-height: 2.3em;
+    padding-top: 7px;
+    padding-bottom: 6px;
+  }
+  .fav-grid--studio .fav-overlay {
+    padding: 62px 12px 12px;
+  }
+
+  .fav-cell-title {
+    padding: 9px 8px 8px; font-family: var(--secs); font-size: 15px; color: #e8e8f0;
+    text-align: center; line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    min-height: 2.6em;
+  }
+
+  /* Overlay */
+  .fav-overlay-x {
+    position: absolute; top: 6px; right: 6px; z-index: 6;
+    width: 30px; height: 30px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(0,0,0,0.35); color: var(--dim); cursor: pointer;
+    display: none; align-items: center; justify-content: center; font-size: 14px;
+    padding: 0;
+  }
+  .fav-overlay-x:hover { color: var(--text); border-color: var(--muted); }
+  @media (hover: none) {
+    /* Below lock so it does not overlap top-left chrome; heart stays top-right like poster */
+    .fav-overlay-x { display: flex; top: 52px; left: 8px; right: auto; }
+  }
+
+  .fav-cell-menu {
+    position: absolute; top: 6px; left: 6px; z-index: 4;
+    width: 34px; height: 34px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(0,0,0,0.5); color: var(--text); cursor: pointer;
+    display: none; align-items: center; justify-content: center; font-size: 15px;
+    padding: 0;
+  }
+  .fav-cell-menu:hover { border-color: var(--accent); color: var(--accent); }
+  @media (hover: none) {
+    .fav-cell-menu { display: flex; }
+  }
+
+  .fav-overlay {
+    position: absolute; inset: 0; z-index: 3;
+    background: linear-gradient(180deg, rgba(8,8,12,0.78) 0%, rgba(14,14,22,0.85) 100%);
+    /* Top padding clears absolute lock/heart (40px @ 8px) + gap before pills */
+    padding: 62px 10px 10px;
+    display: flex; flex-direction: column; gap: 8px;
+    opacity: 0; pointer-events: none; transition: opacity 0.18s ease;
+  }
+  .fav-overlay button { pointer-events: auto; }
+  @media (hover: hover) {
+    .fav-cell:hover .fav-overlay { opacity: 1; pointer-events: auto; }
+  }
+  @media (hover: none) {
+    .fav-cell.is-open .fav-overlay { opacity: 1; pointer-events: auto; }
+  }
+
+  .fav-ov-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--dim); }
+  .fav-ov-val { font-size: 12px; color: var(--text); font-weight: 500; margin-bottom: 2px; }
+
+  .fav-ov-pills {
+    display: flex; flex-direction: column; align-items: stretch; gap: 6px;
+    width: 100%;
+    margin: 0 0 4px;
+    flex-shrink: 0;
+  }
+  .fav-ov-library {
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .fav-ov-library .fav-ov-val { margin-bottom: 0; }
+  .fav-pill-row {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    width: 100%;
+  }
+  .fav-pill-row .fav-pill { flex: 1; min-width: 0; width: auto; }
+  button.fav-pill-x {
+    flex-shrink: 0;
+    width: 34px;
+    min-height: 34px;
+    border-radius: 8px;
+    border: 1px solid rgba(239,68,68,0.45);
+    background: rgba(239,68,68,0.14);
+    color: #f87171;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    padding: 0;
+  }
+  button.fav-pill-x:hover { filter: brightness(1.12); }
+  button.fav-pill {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 6px 12px; border-radius: 999px; border: 1px solid transparent;
+    cursor: pointer; font-family: var(--mono);
+    transition: filter 0.12s, transform 0.12s;
+    width: 100%;
+    text-align: center;
+  }
+  button.fav-pill:hover { filter: brightness(1.12); transform: translateY(-1px); }
+  button.fav-pill--ok {
+    background: rgba(34,197,94,0.2); color: var(--green); border-color: rgba(34,197,94,0.45);
+  }
+  button.fav-pill--miss {
+    background: rgba(239,68,68,0.14); color: #f87171; border-color: rgba(239,68,68,0.4);
+  }
+
+  .fav-ov-actions {
+    margin-top: auto; padding-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+  }
+  .fav-ov-actions .fav-icon-btn { width: 38px; height: 38px; font-size: 14px; }
+  .fav-ov-actions .heart-on { color: #f472b6; border-color: rgba(244,114,182,0.45); }
+
+  .fav-tap-hint {
+    display: none; font-size: 9px; color: var(--dim); text-align: center; padding: 4px;
+  }
+  @media (hover: none) {
+    .fav-tap-hint { display: block; }
+  }
+
+  .empty-tile { grid-column: 1 / -1; padding: 48px 20px; text-align: center; color: var(--muted); font-size: 13px; }
+
+  .toast { font-size: 11px; color: var(--green); }
+
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.78); z-index: 200;
+    align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: rgba(19,19,23,0.98); border: 1px solid var(--border); border-radius: 10px;
+    width: min(520px, 96vw); max-height: 85vh; overflow: hidden; display: flex; flex-direction: column;
+  }
+  .modal-box h3 { padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text); }
+  .modal-body { padding: 14px 16px; overflow-y: auto; flex: 1; min-height: 0; }
+  .modal-foot { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+  .search-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .search-row input { flex: 1; background: var(--raised); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 6px; font-family: var(--mono); font-size: 12px; }
+  .search-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .search-filters button {
+    padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border);
+    background: rgba(255,255,255,0.05); color: var(--dim); font-family: var(--mono); font-size: 10px;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .search-filters button:hover { color: var(--text); border-color: var(--muted); }
+  .search-filters button.active { background: rgba(192,132,252,0.2); border-color: rgba(192,132,252,0.4); color: #fff; }
+  .sr-item {
+    display: flex; gap: 10px; align-items: center; padding: 8px; border-radius: 6px; cursor: pointer;
+    border: 1px solid transparent; margin-bottom: 6px;
+  }
+  .sr-item:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
+  .sr-item img { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; background: var(--raised); flex-shrink: 0; }
+  .sr-name { font-size: 12px; color: var(--text); }
+  .sr-src { font-size: 10px; color: var(--accent); margin-top: 2px; }
+
+  /* Entity detail panel (card click) */
+  .entity-panel-overlay { z-index: 195; }
+  .entity-panel-box {
+    width: min(760px, 96vw); max-height: 90vh;
+    display: flex; flex-direction: column;
+  }
+  .entity-panel-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+  }
+  .entity-panel-head h3 { font-size: 15px; color: var(--text); font-weight: 600; margin: 0; line-height: 1.3; }
+  .entity-panel-meta { font-size: 11px; color: var(--dim); margin-top: 4px; }
+  .entity-panel-body { padding: 16px; overflow-y: auto; flex: 1; min-height: 0; }
+  .entity-panel-grid {
+    display: grid;
+    grid-template-columns: minmax(160px, 240px) 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 640px) {
+    .entity-panel-grid { grid-template-columns: 1fr; }
+  }
+  .entity-panel-poster {
+    position: relative;
+    width: 100%; max-width: 240px; border-radius: 10px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(0,0,0,0.3);
+  }
+  .entity-panel-heart {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 3;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(0,0,0,0.5);
+    color: rgba(255,255,255,0.88);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    padding: 0;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+  }
+  .entity-panel-heart:hover { filter: brightness(1.1); transform: scale(1.04); }
+  .entity-panel-heart.heart-on {
+    color: #f472b6;
+    border-color: rgba(244,114,182,0.45);
+    background: rgba(0,0,0,0.55);
+  }
+  .entity-panel-lock {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 3;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(0,0,0,0.5);
+    color: rgba(255,255,255,0.88);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    padding: 0;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+  }
+  .entity-panel-lock:hover { filter: brightness(1.1); transform: scale(1.04); }
+  .entity-panel-lock.lock-on {
+    color: #fbbf24;
+    border-color: rgba(251,191,36,0.45);
+    background: rgba(0,0,0,0.55);
+  }
+  .entity-panel-poster img { width: 100%; height: auto; display: block; object-fit: cover; aspect-ratio: 3/4; }
+  .entity-panel-poster--studio img { aspect-ratio: auto; max-height: 200px; object-fit: contain; }
+  .entity-panel-heart.heart-on { color: #f472b6; border-color: rgba(244,114,182,0.45); }
+  .entity-panel-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .entity-section-title {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); margin: 0 0 8px;
+  }
+  .entity-tpdb-scenes { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+  .entity-scene-row {
+    display: grid; grid-template-columns: 72px 1fr auto; gap: 10px; align-items: center;
+    padding: 8px; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
+  }
+  .entity-scene-row img { width: 72px; height: 40px; object-fit: cover; border-radius: 4px; background: var(--raised); }
+  .entity-scene-title { font-size: 12px; color: var(--text); line-height: 1.35; }
+  .entity-scene-meta { font-size: 10px; color: var(--dim); margin-top: 2px; }
+  .entity-prowlarr-wrap { margin-bottom: 18px; }
+  .entity-prowlarr-results { max-height: 220px; overflow-y: auto; margin-top: 8px; }
+  .entity-pr-row {
+    display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center;
+    padding: 8px; border-radius: 6px; margin-bottom: 6px; background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06); font-size: 11px;
+  }
+  .entity-pr-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .entity-pr-meta { font-size: 10px; color: var(--dim); }
+  .btn-grab-mini {
+    padding: 4px 10px; border-radius: 4px; border: none; cursor: pointer; font-family: var(--mono); font-size: 10px;
+    background: var(--accent); color: #0c0c0e; white-space: nowrap;
+  }
+  .btn-grab-mini:disabled { opacity: 0.5; cursor: not-allowed; }
+  .entity-match-btns { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .entity-match-btns button {
+    width: 100%; text-align: left; padding: 10px 12px; border-radius: 8px; font-family: var(--mono); font-size: 12px;
+    border: 1px solid var(--border); background: rgba(255,255,255,0.06); color: var(--text); cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .entity-match-btns button:hover { border-color: var(--accent); color: var(--accent); }
+  .entity-panel-loading { padding: 32px; text-align: center; color: var(--dim); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div style="display:flex;align-items:center;gap:12px">
+      <a href="/scenes" class="logo"><img src="/static/logo.png" alt="Top-Shelf" onerror="this.outerHTML='<span style=font-family:var(--acid);font-size:28px;color:#fff>TOP-SHELF</span>'"></a>
+      <span class="version" id="verTag">v1.0.0</span>
+    </div>
+    <div class="nav-links">
+      <a href="/scenes" style="text-decoration:none"><button class="btn-secondary" title="Scenes"><i class="fa-solid fa-ticket"></i></button></a>
+      <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-clapperboard"></i></button></a>
+      <a href="/queue" style="text-decoration:none"><button class="btn-secondary" title="Queue"><i class="fa-solid fa-list"></i></button></a>
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary" title="Downloads"><i class="fa-solid fa-download"></i></button></a>
+      <a href="/favourites" style="text-decoration:none"><button class="btn-secondary active-nav" title="Favourites"><i class="fa-solid fa-heart"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Maintenance"><i class="fa-solid fa-folder-plus"></i></button></a>
+      <a href="/history" style="text-decoration:none"><button class="btn-secondary" title="History"><i class="fa-solid fa-clock-rotate-left"></i></button></a>
+      <button class="btn-secondary" onclick="fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'}).then(()=>location.href='/login')" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+      <a href="/settings" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="fa-solid fa-gear"></i></button></a>
+    </div>
+  </header>
+
+  <div class="page-title">Favourites</div>
+
+  <div class="fav-sticky">
+    <div class="fav-seg" role="tablist">
+      <button type="button" id="segPerf" class="active" onclick="setView('performer')">Performers</button>
+      <button type="button" id="segStudio" onclick="setView('studio')">Studios</button>
+    </div>
+    <div class="fav-filter-wrap">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="search" id="favFilter" placeholder="Filter by name…" autocomplete="off" oninput="render()">
+    </div>
+    <span class="fav-count" id="favCount">—</span>
+    <div class="fav-progress-wrap" id="favProgressWrap">
+      <div class="fav-progress-label" id="favProgressLabel"></div>
+      <div class="fav-progress-track"><div class="fav-progress-fill" id="favProgressFill"></div></div>
+    </div>
+    <details class="fav-schedule">
+      <summary>Nightly index</summary>
+      <div class="fav-schedule-inner">
+        <label><input type="checkbox" id="chkNightly"> Enable</label>
+        <span>UTC hour</span>
+        <input type="number" id="nightlyHour" min="0" max="23" value="3" style="width:48px;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--raised);color:var(--text);font-family:var(--mono);font-size:11px">
+        <button type="button" class="fav-icon-btn" onclick="saveSchedule()" title="Save schedule" style="width:36px;height:36px;font-size:13px"><i class="fa-solid fa-floppy-disk"></i></button>
+        <span class="toast" id="toolMsg"></span>
+      </div>
+    </details>
+    <div class="fav-sticky-group fav-sticky-actions">
+      <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="btnSearchMissing" onclick="searchMissing()" title="Search missing links only — fills empty TPDB/Stash/Fans slots; does not overwrite existing matches"><i class="fa-solid fa-magnifying-glass"></i></button>
+      <button type="button" class="fav-icon-btn" id="btnRefreshAll" onclick="refreshAll()" title="Re-match all — full refresh; may overwrite or clear existing TPDB/Stash/Fans links"><i class="fa-solid fa-arrows-rotate"></i></button>
+      <button type="button" class="fav-icon-btn" id="btnLockAll" onclick="lockAllMatches()" title="Lock all — scans and refresh will not change matches for any folder (manual search picks still work)"><i class="fa-solid fa-lock"></i></button>
+      <button type="button" class="fav-icon-btn" id="btnUnlockAll" onclick="unlockAllMatches()" title="Unlock all — allow automatic refresh and scan to update matches again"><i class="fa-solid fa-unlock"></i></button>
+    </div>
+  </div>
+
+  <div class="fav-stage">
+    <div class="fav-grid fav-grid--perf" id="favGrid"></div>
+  </div>
+</div>
+
+<div class="modal-overlay entity-panel-overlay" id="entityPanelModal">
+  <div class="modal-box entity-panel-box">
+    <div class="entity-panel-head">
+      <div>
+        <h3 id="entityPanelTitle">—</h3>
+        <div class="entity-panel-meta" id="entityPanelMeta"></div>
+      </div>
+      <div class="entity-panel-tools">
+        <button type="button" class="fav-icon-btn" id="entityPanelRefresh" title="Refresh"><i class="fa-solid fa-arrows-rotate"></i></button>
+        <button type="button" class="fav-icon-btn" onclick="closeEntityPanel()" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+    <div class="entity-panel-body" id="entityPanelBody">
+      <div class="entity-panel-loading">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="searchModal">
+  <div class="modal-box">
+    <h3 id="searchModalTitle">Search databases</h3>
+    <div class="modal-body">
+      <div class="search-row">
+        <input type="text" id="searchInput" placeholder="Search TPDB, StashDB, FansDB…" autocomplete="off">
+        <button type="button" class="fav-icon-btn fav-icon-btn--primary" style="width:44px" onclick="runManualSearch()" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
+      </div>
+      <div class="search-filters" id="searchFilters"></div>
+      <div id="searchResults"></div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="fav-icon-btn" onclick="closeSearch()" title="Close" style="width:auto;padding:0 14px;font-size:12px">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const POSTER_FALLBACK = '/static/poster.jpg';
+  const STUDIO_POSTER_FALLBACK = '/static/missing.png';
+  let _searchRowId = null;
+  let _searchKind = 'performer';
+  let _searchSourceFilter = null;
+  let _searchGenderFilters = null;
+  let _lastSearchResults = [];
+  let _view = 'performer';
+  let _rowsPerf = [];
+  let _rowsStudio = [];
+  let _indexPollTimer = null;
+  let _entityPanelRowId = null;
+  let _favPanelProwlarrResults = [];
+
+  function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function displayFolderName(name) {
+    return String(name || '').trim();
+  }
+
+  function showMsg(t) {
+    const el = document.getElementById('toolMsg');
+    el.textContent = t || '';
+    if (t) setTimeout(() => { el.textContent = ''; }, 4000);
+  }
+
+  function setIndexBusy(busy) {
+    document.getElementById('btnSearchMissing').disabled = !!busy;
+    document.getElementById('btnRefreshAll').disabled = !!busy;
+  }
+
+  function applyIndexProgress(p) {
+    const wrap = document.getElementById('favProgressWrap');
+    const fill = document.getElementById('favProgressFill');
+    const label = document.getElementById('favProgressLabel');
+    if (!wrap || !fill || !label) return;
+    if (!p || !p.running) {
+      wrap.classList.remove('is-active');
+      fill.style.width = '0%';
+      label.textContent = '';
+      setIndexBusy(false);
+      return;
+    }
+    wrap.classList.add('is-active');
+    setIndexBusy(true);
+    const t = Math.max(0, parseInt(p.total, 10) || 0);
+    const d = Math.max(0, parseInt(p.done, 10) || 0);
+    let pct = 0;
+    if (t > 0) pct = Math.min(100, Math.round((d / t) * 100));
+    else pct = 0;
+    fill.style.width = pct + '%';
+    let nm = String(p.current_name || '').trim();
+    if (nm === 'prune') {
+      label.textContent = 'Removing stale entries…';
+    } else if (nm) {
+      label.textContent = 'indexing ' + nm;
+    } else {
+      if (p.phase === 'refresh_all') label.textContent = 'Re-matching all…';
+      else if (p.phase === 'scan_missing') label.textContent = 'Searching missing…';
+      else if (p.phase === 'scan_full') label.textContent = 'Full index scan…';
+      else label.textContent = 'Indexing…';
+    }
+  }
+
+  function stopIndexPolling() {
+    if (_indexPollTimer) {
+      clearInterval(_indexPollTimer);
+      _indexPollTimer = null;
+    }
+  }
+
+  function startIndexPolling() {
+    stopIndexPolling();
+    const tick = async () => {
+      try {
+        const r = await fetch('/api/favourites/index-progress', { credentials: 'same-origin' });
+        const p = await r.json();
+        applyIndexProgress(p);
+        if (!p.running) {
+          stopIndexPolling();
+          load();
+        }
+      } catch (_) {}
+    };
+    tick();
+    _indexPollTimer = setInterval(tick, 450);
+  }
+
+  async function checkIndexProgressOnce() {
+    try {
+      const r = await fetch('/api/favourites/index-progress', { credentials: 'same-origin' });
+      const p = await r.json();
+      applyIndexProgress(p);
+      if (p.running) startIndexPolling();
+    } catch (_) {}
+  }
+
+  function rowMatchesFilter(row, q) {
+    if (!q) return true;
+    const n = q.toLowerCase();
+    const hay = [
+      row.folder_name,
+      row.root_label,
+      row.match_tpdb_name,
+      row.match_stashdb_name,
+      row.match_fansdb_name,
+      (row.aliases || []).join(' '),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return hay.includes(n);
+  }
+
+  function setView(kind) {
+    _view = kind;
+    document.getElementById('segPerf').classList.toggle('active', kind === 'performer');
+    document.getElementById('segStudio').classList.toggle('active', kind === 'studio');
+    const grid = document.getElementById('favGrid');
+    grid.classList.remove('fav-grid--perf', 'fav-grid--studio');
+    grid.classList.add(kind === 'studio' ? 'fav-grid--studio' : 'fav-grid--perf');
+    render();
+  }
+
+  function buildExternalUrl(row, src) {
+    if (src === 'TPDB' && row.match_tpdb_id) {
+      const id = String(row.match_tpdb_id);
+      return row.kind === 'studio'
+        ? `https://theporndb.net/sites/${encodeURIComponent(id)}`
+        : `https://theporndb.net/performers/${encodeURIComponent(id)}`;
+    }
+    if (src === 'StashDB' && row.match_stashdb_id) {
+      const id = String(row.match_stashdb_id);
+      return row.kind === 'studio'
+        ? `https://stashdb.org/studios/${encodeURIComponent(id)}`
+        : `https://stashdb.org/performers/${encodeURIComponent(id)}`;
+    }
+    if (src === 'FansDB' && row.match_fansdb_id && row.kind === 'performer') {
+      return `https://fansdb.cc/performers/${encodeURIComponent(String(row.match_fansdb_id))}`;
+    }
+    return null;
+  }
+
+  function renderSearchFilterChips() {
+    const wrap = document.getElementById('searchFilters');
+    const isStudio = _searchKind === 'studio';
+    const chips = [
+      { key: null, label: 'All' },
+      { key: 'TPDB', label: 'TPDB' },
+      { key: 'StashDB', label: 'Stash' },
+      ...(isStudio ? [] : [{ key: 'FansDB', label: 'FansDB' }]),
+    ];
+    wrap.innerHTML = chips.map(c => {
+      const on = _searchSourceFilter === c.key || (c.key === null && !_searchSourceFilter);
+      return `<button type="button" class="${on ? 'active' : ''}" data-sf="${c.key === null ? '' : esc(c.key)}">${esc(c.label)}</button>`;
+    }).join('');
+    wrap.querySelectorAll('button').forEach(btn => {
+      btn.onclick = () => {
+        const v = btn.getAttribute('data-sf');
+        _searchSourceFilter = v === '' ? null : v;
+        renderSearchFilterChips();
+        renderSearchResultsList();
+      };
+    });
+  }
+
+  function favPillRow(id, label, src, ok) {
+    const x = ok
+      ? `<button type="button" class="fav-pill-x" data-act="unmatch" data-id="${id}" data-src="${src}" title="Remove ${esc(label)} link" aria-label="Remove ${esc(label)} link"><i class="fa-solid fa-xmark"></i></button>`
+      : '';
+    return `<div class="fav-pill-row">
+      <button type="button" class="fav-pill ${ok ? 'fav-pill--ok' : 'fav-pill--miss'}" data-act="pill" data-id="${id}" data-src="${src}">${label}</button>
+      ${x}
+    </div>`;
+  }
+
+  function renderSearchResultsList() {
+    const box = document.getElementById('searchResults');
+    let list = _lastSearchResults || [];
+    if (_searchSourceFilter) {
+      list = list.filter(x => (x.source || '') === _searchSourceFilter);
+    }
+    if (!list.length) {
+      box.innerHTML = '<div class="empty-tile" style="padding:20px">No results for this filter.</div>';
+      return;
+    }
+    const noSearchImg = _searchKind === 'studio' ? STUDIO_POSTER_FALLBACK : POSTER_FALLBACK;
+    box.innerHTML = list.map(x => {
+      const img = x.image
+        ? `<img src="${esc(x.image)}" alt="" referrerpolicy="no-referrer">`
+        : `<img src="${noSearchImg}" alt="" width="40" height="40">`;
+      return `<div class="sr-item" role="button" tabindex="0"
+        data-source="${esc(x.source)}"
+        data-id="${esc(String(x.id))}"
+        data-name="${esc(x.name)}"
+        data-image="${esc(x.image || '')}"
+        onclick="pickSearch(this)">
+        ${img}
+        <div><div class="sr-name">${esc(x.name)}</div><div class="sr-src">${esc(x.source)}</div></div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderCard(row) {
+    const id = row.id;
+    const kind = row.kind;
+    const locked = !!row.matches_locked;
+    const lockCls = locked ? 'lock-on' : '';
+    const lockTitleLocked = 'Matches locked — scans and refresh will not change links';
+    const lockTitleUnlock = 'Lock matches — scans and refresh will not change links';
+    const posterUnlockBtn = !locked
+      ? `<button type="button" class="fav-card-lock" title="${esc(lockTitleUnlock)}" data-act="matches-lock" data-id="${id}" data-locked="0"><i class="fa-solid fa-unlock"></i></button>`
+      : '';
+    const overlayLockBtn = `<button type="button" class="fav-overlay-lock ${lockCls}" title="${esc(locked ? lockTitleLocked : lockTitleUnlock)}" data-act="matches-lock" data-id="${id}" data-locked="${locked ? '1' : '0'}">${locked ? '<i class="fa-solid fa-lock"></i>' : '<i class="fa-solid fa-unlock"></i>'}</button>`;
+    const isFav = Number(row.is_favourite) === 1;
+    const heartCls = isFav ? 'heart-on' : '';
+    const posterSolidHeartBtn = isFav
+      ? `<button type="button" class="fav-card-heart heart-on" title="Favourite" data-act="star" data-id="${id}" data-on="0"><i class="fa-solid fa-heart"></i></button>`
+      : '';
+    const overlayHeartBtn = `<button type="button" class="fav-overlay-heart ${heartCls}" title="Favourite" data-act="star" data-id="${id}" data-on="${isFav ? '0' : '1'}">${isFav ? '<i class="fa-solid fa-heart"></i>' : '<i class="fa-regular fa-heart"></i>'}</button>`;
+    const imgUrl = row.image_url;
+    const posterFallback = kind === 'studio' ? STUDIO_POSTER_FALLBACK : POSTER_FALLBACK;
+    const posterSrc = imgUrl ? esc(imgUrl) : posterFallback;
+    const imgErr = imgUrl ? `this.onerror=null;this.src='${posterFallback}'` : '';
+    const errAttr = imgErr ? ` onerror="${imgErr}"` : '';
+    const visual = kind === 'studio'
+      ? `<div class="fav-studio-ph"><img src="${posterSrc}" alt="" loading="lazy" referrerpolicy="no-referrer"${errAttr}>${posterUnlockBtn}${posterSolidHeartBtn}</div>`
+      : `<div class="fav-perf-ph"><img src="${posterSrc}" alt="" loading="lazy" referrerpolicy="no-referrer"${errAttr}>${posterUnlockBtn}${posterSolidHeartBtn}</div>`;
+
+    const tpOk = !!(row.match_tpdb_id);
+    const stOk = !!(row.match_stashdb_id);
+    const fnOk = kind === 'performer' && !!(row.match_fansdb_id);
+
+    const pills = kind === 'studio'
+      ? `<div class="fav-ov-pills">
+          ${favPillRow(id, 'TPDB', 'TPDB', tpOk)}
+          ${favPillRow(id, 'Stash', 'StashDB', stOk)}
+        </div>`
+      : `<div class="fav-ov-pills">
+          ${favPillRow(id, 'TPDB', 'TPDB', tpOk)}
+          ${favPillRow(id, 'Stash', 'StashDB', stOk)}
+          ${favPillRow(id, 'FansDB', 'FansDB', fnOk)}
+        </div>`;
+
+    const libraryBlock = `<div class="fav-ov-library">
+        <div class="fav-ov-label">Library</div>
+        <div class="fav-ov-val">${esc(row.root_label || '—')}</div>
+      </div>`;
+
+    const overlay = `
+      <div class="fav-overlay">
+        <button type="button" class="fav-overlay-x" title="Close" aria-label="Close menu" data-act="menu-close" data-stop="1"><i class="fa-solid fa-xmark"></i></button>
+        ${overlayLockBtn}
+        ${overlayHeartBtn}
+        ${pills}
+        ${libraryBlock}
+        <div class="fav-ov-actions">
+          <button type="button" class="fav-icon-btn" title="Clear all database links" data-act="clear-matches" data-id="${id}"><i class="fa-solid fa-link-slash"></i></button>
+          <button type="button" class="fav-icon-btn" title="Search missing links only" data-act="refresh-missing" data-id="${id}"><i class="fa-solid fa-magnifying-glass"></i></button>
+          <button type="button" class="fav-icon-btn" title="Refresh all matches" data-act="refresh" data-id="${id}"><i class="fa-solid fa-arrows-rotate"></i></button>
+        </div>
+      </div>`;
+
+    return `<div class="fav-cell" data-id="${id}" tabindex="0">
+      <button type="button" class="fav-cell-menu" title="Actions" aria-label="Open actions menu" data-act="menu" data-stop="1"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+      <div class="fav-cell-visual">${visual}
+        <div class="fav-cell-title">${esc(displayFolderName(row.folder_name))}</div>
+      </div>
+      ${overlay}
+      <div class="fav-tap-hint">Tap to open details</div>
+    </div>`;
+  }
+
+  function closeEntityPanel() {
+    document.getElementById('entityPanelModal').classList.remove('open');
+    _entityPanelRowId = null;
+  }
+
+  async function openEntityDetail(rowId) {
+    _entityPanelRowId = rowId;
+    const modal = document.getElementById('entityPanelModal');
+    const body = document.getElementById('entityPanelBody');
+    modal.classList.add('open');
+    body.innerHTML = '<div class="entity-panel-loading">Loading…</div>';
+    try {
+      const r = await fetch('/api/favourites/entity-panel?row_id=' + encodeURIComponent(rowId), { credentials: 'same-origin' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Failed to load');
+      renderEntityPanelContent(d);
+    } catch (e) {
+      body.innerHTML = `<div class="entity-panel-loading" style="color:var(--red)">${esc(e.message || 'Error')}</div>`;
+    }
+  }
+
+  function renderEntityPanelContent(d) {
+    const row = d.row;
+    const scenes = d.tpdb_scenes || [];
+    const kind = row.kind;
+    const panelPosterFallback = kind === 'studio' ? STUDIO_POSTER_FALLBACK : POSTER_FALLBACK;
+    const imgUrl = row.image_url || panelPosterFallback;
+    const title = displayFolderName(row.folder_name);
+    document.getElementById('entityPanelTitle').textContent = title;
+    document.getElementById('entityPanelMeta').textContent =
+      (row.root_label || '—') + ' · ' + (kind === 'studio' ? 'Studio' : 'Performer') +
+      (row.match_tpdb_id ? '' : ' · No TPDB link — scenes unavailable');
+
+    const starBtn = document.getElementById('entityPanelStar');
+    const panelFav = Number(row.is_favourite) === 1;
+    starBtn.classList.toggle('heart-on', panelFav);
+    starBtn.innerHTML = panelFav
+      ? '<i class="fa-solid fa-heart"></i>'
+      : '<i class="fa-regular fa-heart"></i>';
+    starBtn.onclick = () => toggleStar(row.id, !panelFav);
+    document.getElementById('entityPanelRefresh').onclick = () => refreshOneFromPanel(row.id);
+
+    const scenesBlock = scenes.length
+      ? scenes.map(s => {
+          const sid = esc(String(s.id || ''));
+          const thumb = s.thumb || POSTER_FALLBACK;
+          const link = `https://theporndb.net/scenes/${encodeURIComponent(sid)}`;
+          return `<div class="entity-scene-row">
+            <img src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${POSTER_FALLBACK}'">
+            <div>
+              <div class="entity-scene-title">${esc(s.title || '—')}</div>
+              <div class="entity-scene-meta">${esc(s.date || '')}${s.studio ? ' · ' + esc(s.studio) : ''}</div>
+            </div>
+            <a href="${link}" target="_blank" rel="noopener noreferrer" class="fav-icon-btn" style="width:36px;height:36px" title="Open on TPDB"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+          </div>`;
+        }).join('')
+      : `<div class="entity-panel-meta" style="margin-bottom:16px">${row.match_tpdb_id ? 'No recent scenes returned.' : 'Link a TPDB profile to see recent scenes.'}</div>`;
+
+    const matchBtns = kind === 'studio'
+      ? `<div class="entity-match-btns">
+          <button type="button" onclick="openSearchForRow(${row.id}, 'TPDB')">Search TPDB for a better studio match…</button>
+          <button type="button" onclick="openSearchForRow(${row.id}, 'StashDB')">Search StashDB for a better studio match…</button>
+        </div>`
+      : `<div class="entity-match-btns">
+          <button type="button" onclick="openSearchForRow(${row.id}, 'TPDB')">Search TPDB for a better performer match…</button>
+          <button type="button" onclick="openSearchForRow(${row.id}, 'StashDB')">Search StashDB for a better performer match…</button>
+          <button type="button" onclick="openSearchForRow(${row.id}, 'FansDB')">Search FansDB for a better performer match…</button>
+        </div>`;
+
+    const plocked = !!row.matches_locked;
+    const panelLockTitle = plocked
+      ? 'Matches locked — scans and refresh will not change links'
+      : 'Lock matches — scans and refresh will not change links';
+    const panelLockBtn = `<button type="button" class="entity-panel-lock${plocked ? ' lock-on' : ''}" title="${esc(panelLockTitle)}" onclick="event.stopPropagation(); toggleMatchesLock(${row.id}, ${!plocked});"><i class="fa-solid fa-${plocked ? 'lock' : 'unlock'}"></i></button>`;
+    const posterWrapClass = 'entity-panel-poster' + (kind === 'studio' ? ' entity-panel-poster--studio' : '');
+    body.innerHTML = `
+      <div class="entity-panel-grid">
+        <div class="${posterWrapClass}">
+          ${panelLockBtn}
+          <button type="button" class="entity-panel-heart" id="entityPanelStar" title="Favourite"><i class="fa-regular fa-heart"></i></button>
+          <img src="${esc(imgUrl)}" alt="" loading="eager" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${panelPosterFallback}'">
+        </div>
+        <div>
+          <div class="entity-section-title">Recent on TPDB</div>
+          <div class="entity-tpdb-scenes">${scenesBlock}</div>
+          <div class="entity-section-title">Download via Prowlarr</div>
+          <div class="entity-prowlarr-wrap">
+            <div class="search-row">
+              <input type="text" id="entityProwlarrQuery" placeholder="Search indexers…" value="">
+              <button type="button" class="fav-icon-btn fav-icon-btn--primary" style="width:44px" onclick="runEntityPanelProwlarrSearch()" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
+            </div>
+            <div class="entity-prowlarr-results" id="entityProwlarrResults"></div>
+          </div>
+          <div class="entity-section-title">Database match</div>
+          ${matchBtns}
+        </div>
+      </div>`;
+
+    const pq = document.getElementById('entityProwlarrQuery');
+    if (pq) {
+      pq.value = row.folder_name || '';
+      pq.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') runEntityPanelProwlarrSearch(); });
+    }
+  }
+
+  async function refreshOneFromPanel(id) {
+    showMsg('Refreshing…');
+    const r = await fetch('/api/favourites/refresh', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, scrape_aliases: true }),
+    });
+    const d = await r.json();
+    if (!r.ok) alert(d.error || 'Refresh failed');
+    else if (d.skipped) showMsg('Matches are locked');
+    else showMsg('Updated');
+    await load();
+    if (_entityPanelRowId === id) await openEntityDetail(id);
+  }
+
+  async function runEntityPanelProwlarrSearch() {
+    const q = (document.getElementById('entityProwlarrQuery') || {}).value?.trim() || '';
+    const el = document.getElementById('entityProwlarrResults');
+    if (!q || !el) return;
+    el.innerHTML = '<div class="entity-panel-meta">Searching…</div>';
+    try {
+      const r = await fetch('/api/prowlarr/search?q=' + encodeURIComponent(q), { credentials: 'same-origin' });
+      const d = await r.json();
+      if (d.error) {
+        el.innerHTML = `<div style="color:var(--red);font-size:11px">${esc(d.error)}</div>`;
+        return;
+      }
+      _favPanelProwlarrResults = d.results || [];
+      if (!_favPanelProwlarrResults.length) {
+        el.innerHTML = '<div class="entity-panel-meta">No results</div>';
+        return;
+      }
+      el.innerHTML = _favPanelProwlarrResults.map((res, i) => {
+        const isTor = res.type === 'torrent';
+        const dl = isTor && res.magnet ? res.magnet : (res.download_url || '');
+        const meta = `${res.age != null ? Math.round(res.age / 24) + 'd' : ''}${res.seeders != null ? ' · ' + res.seeders + ' seed' : ''} · ${Math.round(res.size_mb || 0)} MB`;
+        return `<div class="entity-pr-row">
+          <div style="min-width:0">
+            <div class="entity-pr-title" title="${esc(res.title)}">${esc(res.title)}</div>
+            <div class="entity-pr-meta">${esc(meta)} · ${esc(res.indexer || '')}</div>
+          </div>
+          <span style="font-size:10px;color:var(--dim)">${esc(isTor ? 'TOR' : 'NZB')}</span>
+          <button type="button" class="btn-grab-mini" onclick="grabEntityPanelProwlarr(event,${i})">Grab</button>
+        </div>`;
+      }).join('');
+    } catch (e) {
+      el.innerHTML = `<div style="color:var(--red);font-size:11px">${esc(e.message)}</div>`;
+    }
+  }
+
+  async function grabEntityPanelProwlarr(ev, idx) {
+    const result = _favPanelProwlarrResults[idx];
+    if (!result) return;
+    const btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    try {
+      const isTor = result.type === 'torrent';
+      const downloadUrl = isTor && result.magnet ? result.magnet : (result.download_url || '');
+      const r = await fetch('/api/prowlarr/grab', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guid: result.guid,
+          indexer_id: result.indexer_id,
+          type: result.type,
+          download_url: downloadUrl,
+          kind: 'scene',
+        }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        if (btn) { btn.textContent = 'Sent'; btn.style.background = 'var(--green)'; }
+      } else {
+        alert(d.error || 'Grab failed');
+        if (btn) { btn.disabled = false; btn.textContent = 'Grab'; }
+      }
+    } catch (e) {
+      alert(e.message || 'Grab failed');
+      if (btn) { btn.disabled = false; btn.textContent = 'Grab'; }
+    }
+  }
+
+  function closeAllFavMenus() {
+    document.querySelectorAll('.fav-cell.is-open').forEach(c => c.classList.remove('is-open'));
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.fav-cell')) closeAllFavMenus();
+  });
+
+  document.getElementById('favGrid').addEventListener('click', (e) => {
+    const menuBtn = e.target.closest('[data-act="menu"]');
+    if (menuBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const cell = menuBtn.closest('.fav-cell');
+      if (!cell) return;
+      const opening = !cell.classList.contains('is-open');
+      document.querySelectorAll('.fav-cell.is-open').forEach(c => { if (c !== cell) c.classList.remove('is-open'); });
+      cell.classList.toggle('is-open', opening);
+      return;
+    }
+    const menuClose = e.target.closest('[data-act="menu-close"]');
+    if (menuClose) {
+      e.preventDefault();
+      e.stopPropagation();
+      menuClose.closest('.fav-cell')?.classList.remove('is-open');
+      return;
+    }
+    const unmatchBtn = e.target.closest('[data-act="unmatch"]');
+    if (unmatchBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = parseInt(unmatchBtn.getAttribute('data-id'), 10);
+      const src = unmatchBtn.getAttribute('data-src') || '';
+      unmatchOne(id, src);
+      return;
+    }
+    const clearBtn = e.target.closest('[data-act="clear-matches"]');
+    if (clearBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      clearMatchesOne(parseInt(clearBtn.getAttribute('data-id'), 10));
+      return;
+    }
+    const refMiss = e.target.closest('[data-act="refresh-missing"]');
+    if (refMiss) {
+      e.stopPropagation();
+      refreshOne(parseInt(refMiss.getAttribute('data-id'), 10), true);
+      return;
+    }
+    const pill = e.target.closest('[data-act="pill"]');
+    if (pill) {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = parseInt(pill.getAttribute('data-id'), 10);
+      const src = pill.getAttribute('data-src');
+      const row = [..._rowsPerf, ..._rowsStudio].find(r => r.id === id);
+      if (!row) return;
+      const url = buildExternalUrl(row, src);
+      if (url) window.open(url, '_blank', 'noopener,noreferrer');
+      else openSearchForRow(id, src);
+      return;
+    }
+    const mlock = e.target.closest('[data-act="matches-lock"]');
+    if (mlock) {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = parseInt(mlock.getAttribute('data-id'), 10);
+      const cur = mlock.getAttribute('data-locked') === '1';
+      toggleMatchesLock(id, !cur);
+      return;
+    }
+    const star = e.target.closest('[data-act="star"]');
+    if (star) {
+      e.stopPropagation();
+      const id = parseInt(star.getAttribute('data-id'), 10);
+      const on = star.getAttribute('data-on') === '1';
+      toggleStar(id, on);
+      return;
+    }
+    const ref = e.target.closest('[data-act="refresh"]');
+    if (ref) {
+      e.stopPropagation();
+      refreshOne(parseInt(ref.getAttribute('data-id'), 10), false);
+      return;
+    }
+    if (e.target.closest('button')) return;
+    const cell = e.target.closest('.fav-cell');
+    if (!cell) return;
+    /* Poster/title (or tap hint on touch only). Clicks on .fav-overlay must bubble here for pills/heart/refresh, so do not use stopPropagation on the overlay. */
+    if (!e.target.closest('.fav-cell-visual') && !e.target.closest('.fav-tap-hint')) return;
+    closeAllFavMenus();
+    const id = parseInt(cell.getAttribute('data-id'), 10);
+    if (id) openEntityDetail(id);
+  });
+
+  document.getElementById('entityPanelModal').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeEntityPanel();
+  });
+
+  function render() {
+    const q = document.getElementById('favFilter').value.trim();
+    const list = _view === 'studio' ? _rowsStudio : _rowsPerf;
+    const filtered = list.filter(r => rowMatchesFilter(r, q));
+    const grid = document.getElementById('favGrid');
+    const total = list.length;
+    document.getElementById('favCount').textContent = q
+      ? `${filtered.length} / ${total}`
+      : `${total} ${_view === 'studio' ? 'studios' : 'performers'}`;
+
+    if (!list.length) {
+      grid.innerHTML = `<div class="empty-tile">${_view === 'studio'
+        ? 'No studio folders. Set <strong>Series Directory</strong> in Settings, then Scan.'
+        : 'No performer folders. Add <strong>Performer Directories</strong> in Settings, then Scan.'}</div>`;
+      return;
+    }
+    if (!filtered.length) {
+      grid.innerHTML = '<div class="empty-tile">No names match this filter.</div>';
+      return;
+    }
+    grid.innerHTML = filtered.map(renderCard).join('');
+  }
+
+  async function load() {
+    try {
+      const r = await fetch('/api/favourites', { credentials: 'same-origin' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Failed to load');
+      document.getElementById('chkNightly').checked = d.settings && d.settings.favourites_scan_enabled === 'true';
+      document.getElementById('nightlyHour').value = (d.settings && d.settings.favourites_scan_hour) || '3';
+      _rowsStudio = d.studios || [];
+      _rowsPerf = d.performers || [];
+      render();
+      checkIndexProgressOnce();
+    } catch (e) {
+      showMsg(e.message || 'Error');
+    }
+  }
+
+  async function toggleStar(id, on) {
+    await fetch('/api/favourites/star', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, is_favourite: !!on }),
+    });
+    load();
+  }
+
+  async function toggleMatchesLock(id, locked) {
+    await fetch('/api/favourites/lock', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, matches_locked: !!locked }),
+    });
+    await load();
+    if (_entityPanelRowId === id) await openEntityDetail(id);
+  }
+
+  async function clearMatchesOne(id) {
+    if (!confirm('Clear all TPDB / Stash / Fans links for this folder?')) return;
+    showMsg('Clearing…');
+    const r = await fetch('/api/favourites/clear-matches', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { alert(d.error || 'Clear failed'); return; }
+    showMsg('Cleared');
+    load();
+  }
+
+  async function unmatchOne(id, source) {
+    showMsg('Removing…');
+    const r = await fetch('/api/favourites/unmatch', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, source }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { alert(d.error || 'Failed'); return; }
+    showMsg('Updated');
+    load();
+  }
+
+  async function refreshOne(id, onlyMissing) {
+    const miss = !!onlyMissing;
+    showMsg(miss ? 'Searching missing…' : 'Refreshing…');
+    const r = await fetch('/api/favourites/refresh', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        scrape_aliases: !miss,
+        only_missing: miss,
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok) alert(d.error || 'Refresh failed');
+    else if (d.skipped) showMsg('Matches are locked');
+    else showMsg('Updated');
+    load();
+  }
+
+  async function searchMissing() {
+    setIndexBusy(true);
+    showMsg('Search missing started');
+    await fetch('/api/favourites/scan?prune_missing=false&only_missing=true', { method: 'POST', credentials: 'same-origin' });
+    startIndexPolling();
+  }
+
+  async function refreshAll() {
+    setIndexBusy(true);
+    showMsg('Re-matching all…');
+    await fetch('/api/favourites/refresh-all', { method: 'POST', credentials: 'same-origin' });
+    startIndexPolling();
+  }
+
+  async function lockAllMatches() {
+    showMsg('Locking all…');
+    try {
+      const r = await fetch('/api/favourites/lock-all', { method: 'POST', credentials: 'same-origin' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { alert(d.error || 'Failed'); return; }
+      showMsg(typeof d.updated === 'number' ? `Locked ${d.updated} folders` : 'Locked');
+      await load();
+      if (_entityPanelRowId != null) await openEntityDetail(_entityPanelRowId);
+    } catch (e) {
+      alert(e.message || 'Failed');
+    }
+  }
+
+  async function unlockAllMatches() {
+    showMsg('Unlocking all…');
+    try {
+      const r = await fetch('/api/favourites/unlock-all', { method: 'POST', credentials: 'same-origin' });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { alert(d.error || 'Failed'); return; }
+      showMsg(typeof d.updated === 'number' ? `Unlocked ${d.updated} folders` : 'Unlocked');
+      await load();
+      if (_entityPanelRowId != null) await openEntityDetail(_entityPanelRowId);
+    } catch (e) {
+      alert(e.message || 'Failed');
+    }
+  }
+
+  async function saveSchedule() {
+    const r0 = await fetch('/api/settings');
+    const cfg = await r0.json();
+    const s = Object.assign({}, cfg.settings || {});
+    s.favourites_scan_enabled = document.getElementById('chkNightly').checked ? 'true' : 'false';
+    s.favourites_scan_hour = String(parseInt(document.getElementById('nightlyHour').value, 10) || 3);
+    await fetch('/api/settings', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: s, directories: cfg.directories || [] }),
+    });
+    showMsg('Saved');
+  }
+
+  function openSearchForRow(rowId, focusSource) {
+    const row = [..._rowsPerf, ..._rowsStudio].find(r => r.id === rowId);
+    if (!row) return;
+    closeAllFavMenus();
+    _searchRowId = rowId;
+    _searchKind = row.kind;
+    _searchSourceFilter = focusSource || null;
+    _searchGenderFilters = (row.kind === 'performer' && Array.isArray(row.gender_filters) && row.gender_filters.length)
+      ? row.gender_filters.slice()
+      : null;
+    _lastSearchResults = [];
+    document.getElementById('searchModalTitle').textContent = row.kind === 'studio' ? 'Link studio' : 'Link performer';
+    document.getElementById('searchInput').value = row.folder_name || '';
+    document.getElementById('searchResults').innerHTML = '';
+    renderSearchFilterChips();
+    document.getElementById('searchModal').classList.add('open');
+    setTimeout(() => document.getElementById('searchInput').focus(), 80);
+    runManualSearch();
+  }
+
+  function closeSearch() {
+    document.getElementById('searchModal').classList.remove('open');
+    _searchRowId = null;
+    _lastSearchResults = [];
+  }
+
+  async function runManualSearch() {
+    const q = document.getElementById('searchInput').value.trim();
+    const box = document.getElementById('searchResults');
+    if (!q) {
+      box.innerHTML = '<div class="empty-tile" style="padding:20px">Enter a search term.</div>';
+      _lastSearchResults = [];
+      return;
+    }
+    box.innerHTML = '<div class="empty-tile" style="padding:20px">Searching…</div>';
+    const type = _searchKind === 'studio' ? 'studio' : 'performer';
+    let searchUrl = '/api/metadata/search?q=' + encodeURIComponent(q) + '&type=' + encodeURIComponent(type);
+    if (type === 'performer') {
+      searchUrl += '&strict=true';
+      if (_searchGenderFilters && _searchGenderFilters.length) {
+        searchUrl += '&genders=' + encodeURIComponent(_searchGenderFilters.join(','));
+      }
+    }
+    try {
+      const r = await fetch(searchUrl, { credentials: 'same-origin' });
+      const raw = await r.text();
+      let d;
+      try { d = JSON.parse(raw); } catch (_) {
+        box.innerHTML = `<div class="empty-tile" style="padding:20px">Invalid response</div>`;
+        return;
+      }
+      if (!r.ok) {
+        const err = d.error || d.detail || ('HTTP ' + r.status);
+        box.innerHTML = `<div class="empty-tile" style="padding:20px;color:var(--red)">${esc(typeof err === 'string' ? err : JSON.stringify(err))}</div>`;
+        return;
+      }
+      _lastSearchResults = d.results || [];
+      renderSearchFilterChips();
+      renderSearchResultsList();
+    } catch (e) {
+      box.innerHTML = `<div class="empty-tile" style="padding:20px;color:var(--red)">${esc(e.message)}</div>`;
+    }
+  }
+
+  async function pickSearch(el) {
+    if (!_searchRowId) return;
+    const source = el.getAttribute('data-source');
+    const id = el.getAttribute('data-id');
+    const name = el.getAttribute('data-name');
+    const image = el.getAttribute('data-image');
+    const body = { row_id: _searchRowId, source, external_id: id, name };
+    if (image) body.image = image;
+    const r = await fetch('/api/favourites/match', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      alert(d.error || 'Could not save match');
+      return;
+    }
+    const reopenId = document.getElementById('entityPanelModal').classList.contains('open') ? _entityPanelRowId : null;
+    closeSearch();
+    await load();
+    if (reopenId) await openEntityDetail(reopenId);
+  }
+
+  document.getElementById('searchModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeSearch();
+  });
+  document.getElementById('searchInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') runManualSearch();
+  });
+  document.getElementById('searchResults').addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const row = e.target.closest('.sr-item');
+    if (!row) return;
+    e.preventDefault();
+    pickSearch(row);
+  });
+
+  load();
+</script>
+<script defer src="/static/app-shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Downloads</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="/static/app-shell.css">
+<style>
+  @font-face { font-family: 'Acidoze'; src: url('/static/Tox Typewriter.ttf') format('truetype'); }
+  @font-face { font-family: 'Seconds'; src: url('/static/Impact%20Label%20Reversed.ttf') format('truetype'); }
+  :root {
+    --bg: #0c0c0e; --surface: rgba(19,19,23,0.75); --raised: rgba(26,26,32,0.8);
+    --border: #222228; --muted: #3a3a44; --text: #e8e8f0; --dim: #6b6b7a;
+    --accent: #c084fc; --green: #4ade80; --amber: #fbbf24; --red: #f87171; --blue: #60a5fa;
+    --mono: 'DM Mono', monospace; --sans: 'Syne', sans-serif;
+    --acid: 'Acidoze', 'Syne', sans-serif; --secs: 'Seconds', 'DM Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { height: 100%; }
+  body {
+    background: var(--bg) url('/static/background.jpg') center center / cover fixed;
+    color: var(--text); font-family: var(--mono); font-size: 13px; line-height: 1.6;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  body::before { content: ''; position: fixed; inset: 0; background: rgba(12,12,14,0.72); z-index: 0; }
+  .app {
+    position: relative; z-index: 1;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 20px 24px;
+  }
+
+  header {
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    background: linear-gradient(160deg, rgba(36,36,48,0.88) 0%, rgba(18,18,26,0.78) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.22);
+    margin-bottom: 20px;
+  }
+  .logo img { height: 36px; object-fit: contain; }
+  .nav-links { display: flex; gap: 10px; align-items: center; }
+  .btn-secondary {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 5px;
+    color: var(--dim); font-size: 19px; width: 40px; height: 40px; cursor: pointer; transition: all 0.15s;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+  .active-nav { border-color: var(--accent); color: var(--accent); }
+  .btn-primary { background: var(--accent); border: none; color: #0c0c0e; border-radius: 5px; padding: 8px 16px; font-family: var(--mono); cursor: pointer; font-size: 13px; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .version { font-family: var(--acid); font-size: 14px; color: var(--muted); }
+
+  .panel.downloads-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: linear-gradient(160deg, rgba(36,36,48,0.88) 0%, rgba(18,18,26,0.78) 100%);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden;
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.25);
+  }
+  .panel-header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .panel-title { font-family: var(--acid); font-size: 26px; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .field-input {
+    background: var(--raised); border: 1px solid var(--border); border-radius: 4px; color: var(--text);
+    padding: 8px 12px; font-family: var(--mono); font-size: 12px; min-width: 180px;
+  }
+  .field-input:focus { outline: none; border-color: var(--accent); }
+
+  .meta { font-size: 11px; color: var(--dim); }
+  .downloads-submeta {
+    font-family: 'Seconds', var(--mono);
+    font-size: calc(13px + 2pt);
+    letter-spacing: -0.02em;
+    color: var(--dim);
+    margin-top: 4px;
+  }
+  .note { font-size: 11px; color: var(--amber); margin: 8px 18px 0; line-height: 1.5; flex-shrink: 0; }
+  .err { font-size: 11px; color: var(--red); margin: 6px 18px 0; flex-shrink: 0; }
+
+  .downloads-panel .table-wrap {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 0 18px 18px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    text-align: left; padding: 10px 12px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--dim); border-bottom: 1px solid var(--border); background: rgba(22,22,30,0.95); white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.06);
+  }
+  td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .td-name { color: var(--text); max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dl-type {
+    font-family: var(--font-impact-label), var(--mono);
+    font-size: calc(17px + 2pt);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--blue);
+  }
+  .dl-queue {
+    font-family: var(--font-impact-label), var(--mono);
+    font-size: calc(15px + 2pt);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .dl-queue.pill-active { color: var(--green); }
+  .dl-queue.pill-hist { color: var(--dim); }
+  .downloads-autoimport-label {
+    font-family: var(--secs);
+    font-size: calc(13px + 2pt);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .pct { font-variant-numeric: tabular-nums; }
+  .empty { text-align: center; color: var(--dim); padding: 32px 18px; font-size: 12px; }
+  .progress-cell { min-width: 120px; }
+  .progress-track {
+    height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 4px; max-width: 140px;
+  }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), rgba(192,132,252,0.65)); border-radius: 3px; transition: width 0.2s ease; }
+  .progress-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .progress-num { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--dim); min-width: 3.2em; }
+  .dl-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .btn-dl { font-size: 11px; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-family: var(--mono); white-space: nowrap; }
+  .btn-dl-import { background: var(--accent); color: #0c0c0e; border: none; }
+  .btn-dl-import:hover { filter: brightness(1.08); }
+  .btn-dl-import:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+  .btn-dl-remove { background: rgba(255,255,255,0.06); color: var(--dim); border: 1px solid var(--border); }
+  .btn-dl-remove:hover { border-color: var(--muted); color: var(--text); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div style="display:flex;align-items:center;gap:12px">
+      <a href="/scenes" class="logo"><img src="/static/logo.png" alt="Top-Shelf" onerror="this.outerHTML='<span style=font-family:var(--acid);font-size:28px;color:#fff>TOP-SHELF</span>'"></a>
+      <span class="version" id="verTag">v1.0.0</span>
+    </div>
+    <div class="nav-links">
+      <a href="/scenes" style="text-decoration:none"><button class="btn-secondary" title="Scenes"><i class="fa-solid fa-ticket"></i></button></a>
+      <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-clapperboard"></i></button></a>
+      <a href="/queue" style="text-decoration:none"><button class="btn-secondary" title="Queue"><i class="fa-solid fa-list"></i></button></a>
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary active-nav" title="Downloads"><i class="fa-solid fa-download"></i></button></a>
+      <a href="/favourites" style="text-decoration:none"><button class="btn-secondary" title="Favourites"><i class="fa-solid fa-heart"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Maintenance"><i class="fa-solid fa-folder-plus"></i></button></a>
+      <a href="/history" style="text-decoration:none"><button class="btn-secondary" title="History"><i class="fa-solid fa-clock-rotate-left"></i></button></a>
+      <button class="btn-secondary" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>location.href='/login')" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+      <a href="/settings" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="fa-solid fa-gear"></i></button></a>
+    </div>
+  </header>
+
+  <div class="panel downloads-panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Downloads</div>
+        <div class="meta downloads-submeta" id="subMeta">—</div>
+      </div>
+      <div class="toolbar">
+        <input type="hidden" id="catInput" value="">
+        <span id="autoImportLabel" class="downloads-autoimport-label" hidden aria-live="polite">Auto-Import</span>
+        <button class="btn-primary" onclick="loadDownloads()"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+      </div>
+    </div>
+    <div id="notes"></div>
+    <div id="errors"></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Progress</th>
+            <th>Size (MB)</th>
+            <th>Status</th>
+            <th>Queue</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="8" class="empty">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+<script>
+  const DOWNLOADS_AUTO_REFRESH_MS = 20000;
+  let _downloadsFetchGen = 0;
+  let _downloadsRefreshTimer = null;
+
+  function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  async function loadDownloads() {
+    const fid = ++_downloadsFetchGen;
+    const cat = document.getElementById('catInput').value.trim();
+    const params = new URLSearchParams();
+    if (cat !== '') params.set('category', cat);
+    const tbody = document.getElementById('rows');
+    const notesEl = document.getElementById('notes');
+    const errEl = document.getElementById('errors');
+    const autoImportEl = document.getElementById('autoImportLabel');
+    notesEl.innerHTML = '';
+    errEl.innerHTML = '';
+    try {
+      const r = await fetch('/api/downloads?' + params.toString(), { credentials: 'same-origin' });
+      const d = await r.json();
+      if (fid !== _downloadsFetchGen) return;
+      const nzbApp = (d.configured && d.configured.nzb) ? String(d.configured.nzb) : '—';
+      const torApp = (d.configured && d.configured.torrent) ? String(d.configured.torrent) : '—';
+      const movieCat = ((d.movie_category || '').trim()) || '—';
+      const scenesCat = ((d.default_category || '').trim()) || '—';
+      document.getElementById('subMeta').textContent =
+        `[${nzbApp}] [${torApp}]  -  [${movieCat}] [${scenesCat}]`;
+
+      (d.notes || []).forEach(n => {
+        notesEl.innerHTML += `<div class="note">${esc(n)}</div>`;
+      });
+      (d.errors || []).forEach(e => {
+        errEl.innerHTML += `<div class="err">${esc(e)}</div>`;
+      });
+      if (autoImportEl) {
+        autoImportEl.hidden = !d.auto_import_enabled;
+      }
+
+      const items = d.items || [];
+      if (!items.length) {
+        if (fid !== _downloadsFetchGen) return;
+        tbody.innerHTML = `<tr><td colspan="8" class="empty">No items match this filter (or clients not configured).</td></tr>`;
+        return;
+      }
+      if (fid !== _downloadsFetchGen) return;
+      tbody.innerHTML = items.map(it => {
+        const typ = it.source === 'torrent'
+          ? '<span class="dl-type">Torrent</span>'
+          : '<span class="dl-type">NZB</span>';
+        const qc = it.queue === 'active' ? 'pill-active' : 'pill-hist';
+        const q = it.queue === 'active' ? 'active' : 'history';
+        const sz = it.size_mb != null ? esc(String(it.size_mb)) : '—';
+        let pctNum = null;
+        if (it.progress_pct != null && it.progress_pct !== '') {
+          const n = Number(it.progress_pct);
+          if (!Number.isNaN(n)) pctNum = Math.min(100, Math.max(0, n));
+        }
+        const pctBar = pctNum != null
+          ? `<div class="progress-cell"><div class="progress-track"><div class="progress-fill" style="width:${pctNum}%"></div></div><div class="progress-row"><span class="progress-num">${pctNum.toFixed(1)}%</span></div></div>`
+          : '<span class="meta">—</span>';
+        const canImport = !!it.import_ready;
+        const idAttr = esc(it.id || '');
+        const importBtn = canImport
+          ? `<button type="button" class="btn-dl btn-dl-import" data-dl-id="${idAttr}">Import</button>`
+          : `<button type="button" class="btn-dl btn-dl-import" disabled title="Not complete yet">Import</button>`;
+        const removeBtn = `<button type="button" class="btn-dl btn-dl-remove" data-dl-id="${idAttr}">Remove</button>`;
+        return `<tr>
+          <td>${typ}</td>
+          <td class="td-name" title="${esc(it.name)}">${esc(it.name)}</td>
+          <td>${esc(it.category)}</td>
+          <td class="pct">${pctBar}</td>
+          <td class="pct">${sz}</td>
+          <td>${esc(it.status)}</td>
+          <td><span class="dl-queue ${qc}">${q}</span></td>
+          <td class="dl-actions">${importBtn}${removeBtn}</td>
+        </tr>`;
+      }).join('');
+    } catch (e) {
+      if (fid !== _downloadsFetchGen) return;
+      tbody.innerHTML = `<tr><td colspan="8" class="empty">Error: ${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  function startDownloadsAutoRefresh() {
+    if (_downloadsRefreshTimer) clearInterval(_downloadsRefreshTimer);
+    _downloadsRefreshTimer = setInterval(() => {
+      if (document.visibilityState === 'visible') loadDownloads();
+    }, DOWNLOADS_AUTO_REFRESH_MS);
+  }
+
+  function _parseApiJson(text) {
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function _apiErrorMessage(d, fallback) {
+    if (!d || typeof d !== 'object') return fallback;
+    if (d.error) return String(d.error);
+    const det = d.detail;
+    if (typeof det === 'string') return det;
+    if (Array.isArray(det) && det[0] && det[0].msg) return det.map(x => x.msg).join('; ');
+    return fallback;
+  }
+
+  async function importDownload(id) {
+    if (!id) return;
+    try {
+      const r = await fetch('/api/downloads/import', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const text = await r.text();
+      const d = _parseApiJson(text);
+      if (!r.ok) {
+        alert(_apiErrorMessage(d, text.slice(0, 400) || 'Import failed'));
+        return;
+      }
+      await loadDownloads();
+    } catch (e) {
+      alert(e.message || 'Import failed');
+    }
+  }
+
+  document.getElementById('rows').addEventListener('click', (e) => {
+    const t = e.target;
+    if (!t || !t.closest) return;
+    const importBtn = t.closest('.btn-dl-import');
+    if (importBtn && !importBtn.disabled) {
+      const id = importBtn.getAttribute('data-dl-id');
+      if (id) importDownload(id);
+      return;
+    }
+    const removeBtn = t.closest('.btn-dl-remove');
+    if (removeBtn) {
+      const id = removeBtn.getAttribute('data-dl-id');
+      if (id) removeDownload(id);
+    }
+  });
+
+  async function removeDownload(id) {
+    if (!id) return;
+    if (!confirm('Remove this job from the download client? Torrents: files on disk are deleted.')) return;
+    try {
+      const r = await fetch('/api/downloads/remove', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const text = await r.text();
+      const d = _parseApiJson(text);
+      if (!r.ok) {
+        alert(_apiErrorMessage(d, text.slice(0, 400) || 'Remove failed'));
+        return;
+      }
+      await loadDownloads();
+    } catch (e) {
+      alert(e.message || 'Remove failed');
+    }
+  }
+  (async () => {
+    try {
+      const r = await fetch('/api/auth/status');
+      const s = await r.json();
+      const def = new URLSearchParams(location.search).get('category');
+      if (def != null) document.getElementById('catInput').value = def;
+      else {
+        const rs = await fetch('/api/settings');
+        const cfg = await rs.json();
+        document.getElementById('catInput').value = (cfg.settings && cfg.settings.prowlarr_category) || 'Top-Shelf';
+      }
+    } catch (_) {}
+    await loadDownloads();
+    startDownloadsAutoRefresh();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') loadDownloads();
+    });
+  })();
+</script>
+<script defer src="/static/app-shell.js"></script>
+</body>
+</html>

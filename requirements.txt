@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+imagehash
+Pillow
+requests
+python-multipart
+APScheduler
+watchdog
+bcrypt

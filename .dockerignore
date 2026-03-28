@@ -1,0 +1,6 @@
+__pycache__
+*.pyc
+*.pyo
+phash_filer.db
+*.phash
+.env

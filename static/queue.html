@@ -1,0 +1,2645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Queue</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="/static/app-shell.css">
+<style>
+  @font-face {
+    font-family: 'Acidoze';
+    src: url('/static/Tox Typewriter.ttf') format('truetype');
+    font-weight: normal; font-style: normal;
+  }
+  @font-face {
+    font-family: 'Seconds';
+    src: url('/static/Impact%20Label%20Reversed.ttf') format('truetype');
+    font-weight: normal; font-style: normal;
+  }
+  :root {
+    --bg:      #0c0c0e;
+    --surface: rgba(19, 19, 23, 0.75);
+    --raised:  rgba(26, 26, 32, 0.8);
+    --border:  #222228;
+    --muted:   #3a3a44;
+    --text:    #e8e8f0;
+    --dim:     #6b6b7a;
+    --accent:  #c084fc;
+    --green:   #4ade80;
+    --amber:   #fbbf24;
+    --red:     #f87171;
+    --blue:    #60a5fa;
+    --mono:    'DM Mono', monospace;
+    --sans:    'Syne', sans-serif;
+    --acid:    'Acidoze', 'Syne', sans-serif;
+    --secs:    'Seconds', 'DM Mono', monospace;
+    /* Frosted glass tiles (stats, panels, scene search) */
+    --glass-panel-bg: linear-gradient(160deg, rgba(36, 36, 48, 0.48) 0%, rgba(18, 18, 26, 0.36) 100%);
+    --glass-stat-bg: linear-gradient(145deg, rgba(40, 40, 52, 0.44) 0%, rgba(22, 22, 30, 0.36) 100%);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-blur: 20px;
+    --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    --glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.28);
+    --glass-header-bg: linear-gradient(160deg, rgba(36, 36, 48, 0.52) 0%, rgba(18, 18, 26, 0.4) 100%);
+    --glass-th-bg: linear-gradient(180deg, rgba(28, 28, 38, 0.65) 0%, rgba(20, 20, 28, 0.52) 100%);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg) url('/static/background.jpg') center center / cover fixed;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+    min-height: 100dvh;
+    margin: 0;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(12, 12, 14, 0.72);
+    z-index: 0;
+  }
+  .app {
+    position: relative; z-index: 1; max-width: 1600px; margin: 0 auto;
+    padding: 0 24px 24px;
+    display: flex; flex-direction: column;
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    box-sizing: border-box;
+  }
+
+  /* ── Header ── */
+  header {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    background: var(--glass-header-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-inset), var(--glass-shadow);
+    margin-bottom: 20px;
+  }
+  .logo { display: flex; align-items: baseline; gap: 12px; }
+  .logo-title { font-family: var(--sans); font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+  .logo-sub { font-size: 11px; color: var(--dim); letter-spacing: 0.05em; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .header-right .btn-secondary {
+    background: rgba(255,255,255,0.04);
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    font-size: 19px;
+    padding: 0;
+  }
+  .active-nav { border-color: var(--accent) !important; color: var(--accent) !important; }
+  .status-pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border);
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--dim); background: var(--surface); transition: all 0.3s;
+  }
+  .status-pill.running { border-color: var(--accent); color: var(--accent); }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); transition: background 0.3s; }
+  .status-pill.running .status-dot { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── Stats ── */
+  .stats-bar { display: contents; }
+  .stat-card { background: var(--glass-stat-bg); border: 1px solid var(--glass-border); border-radius: 10px; padding: 20px 16px; backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 132px; box-shadow: var(--glass-inset), var(--glass-shadow); }
+  .stat-value { font-family: var(--acid); font-size: clamp(44px, 5vw, 64px); font-weight: 400; line-height: 1; display: block; letter-spacing: 0.02em; text-align: center; }
+  .stat-label { font-family: var(--secs); font-size: 18px; text-transform: uppercase; letter-spacing: -0.02em; color: #d4cfc4; display: block; margin-top: 8px; text-align: center; }
+  .stat-filed .stat-value     { color: var(--green); }
+  .stat-unmatched .stat-value { color: var(--amber); }
+  .stat-no_dir .stat-value    { color: var(--blue); }
+  .stat-errors .stat-value    { color: var(--red); }
+
+  /* ── Unified layout grid ── */
+  .layout-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: minmax(120px, auto) minmax(200px, 1fr);
+    gap: 14px;
+    margin-bottom: 14px;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+    align-items: stretch;
+  }
+  .layout-grid .stat-card { height: auto; }
+  .layout-grid .panel-queue { grid-column: 1 / 4; }
+  .layout-grid .panel-log   { grid-column: 4 / 5; }
+
+  /* ── Main grid ── */
+  .main-grid { display: contents; }
+
+  /* ── Panels ── */
+  .panel { background: var(--glass-panel-bg); border: 1px solid var(--glass-border); border-radius: 10px; overflow: hidden; backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); box-shadow: var(--glass-inset), var(--glass-shadow); }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.09); gap: 10px; flex-shrink: 0; }
+  .panel-title { font-family: var(--acid); font-size: clamp(22px, 2vw, 30px); font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; color: #ffffff; }
+  .panel-queue,
+  .panel-log {
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .panel-queue .panel-body {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  }
+  .panel-body::-webkit-scrollbar { width: 4px; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+
+  /* ── Queue ── */
+  .queue-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.035); gap: 12px; transition: background 0.15s; }
+
+  .queue-item:hover { background: rgba(255,255,255,0.02); }
+  .queue-item.active { background: rgba(192,132,252,0.06); border-left: 2px solid var(--accent); }
+  .queue-filename { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status-dot-queue { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-right: 2px; }
+  .status-dot-queue.filed      { background: var(--green); }
+  .status-dot-queue.unmatched  { background: var(--amber); }
+  .status-dot-queue.no_dir     { background: var(--blue); }
+  .status-dot-queue.error      { background: var(--red); }
+  .status-dot-queue.none       { background: transparent; }
+  .queue-filename.status-filed      { color: var(--green); }
+  .queue-filename.status-unmatched  { color: var(--amber); }
+  .queue-filename.status-no_dir     { color: var(--blue); }
+  .queue-filename.status-error      { color: var(--red); }
+  .queue-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .badge { font-family: var(--secs); font-size: calc(11px + 2pt); padding: 2px 7px; border-radius: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
+  .badge-cached { background: none; border: none; color: var(--blue); font-family: var(--font-impact-label); font-size: 16px; padding: 0 4px; letter-spacing: -0.02em; }
+  .badge-size   { background: none; border: none; color: var(--green); font-family: var(--mono); font-size: 12px; padding: 0 4px; }
+  .empty { padding: 32px 18px; text-align: center; color: var(--dim); font-size: 12px; }
+
+  .queue-mode-toggle {
+    display: flex; gap: 8px; align-items: center; margin-right: 8px;
+  }
+  .queue-mode-toggle button {
+    padding: 12px 22px; border-radius: 8px; border: 1px solid var(--border);
+    background: rgba(255,255,255,0.04); color: var(--dim);
+    font-size: calc(14px + 2pt);
+    min-height: 44px;
+    min-width: 7.5em;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .queue-mode-toggle button:hover { border-color: var(--muted); color: var(--text); }
+  .queue-mode-toggle button.active {
+    border-color: var(--accent); color: var(--accent); background: rgba(192,132,252,0.12);
+  }
+
+  /* ── Log ── */
+  .panel-log .log-body {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    padding: 14px 18px; font-size: 12px; line-height: 1.8;
+  }
+  .log-body::-webkit-scrollbar { width: 4px; }
+  .log-body::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+  .log-line { display: block; }
+  .log-line.file     { color: var(--accent); font-weight: 500; margin-top: 6px; }
+  .log-line.done     { color: var(--green); }
+  .log-line.warning  { color: var(--amber); }
+  .log-line.error    { color: var(--red); }
+  .log-line.sep      { color: var(--muted); }
+  .log-line.pipeline { color: var(--blue); font-family: var(--sans); font-weight: 600; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .log-line.default  { color: var(--dim); }
+
+  /* ── History ── */
+  .history-panel { background: var(--glass-panel-bg); border: 1px solid var(--glass-border); border-radius: 10px; overflow: hidden; margin-top: 14px; backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); box-shadow: var(--glass-inset), var(--glass-shadow); }
+  .search-panel-filters { padding: 16px 18px; border-bottom: 1px solid rgba(255,255,255,0.09); }
+  .history-body { max-height: 380px; overflow-y: auto; }
+  .history-body::-webkit-scrollbar { width: 4px; }
+  .history-body::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  col.col-filename   { width: 22%; }
+  col.col-status     { width: 9%; }
+  col.col-title      { width: 16%; }
+  col.col-studio     { width: 12%; }
+  col.col-performers { width: 14%; }
+  col.col-date       { width: 8%; }
+  col.col-source     { width: 8%; }
+  col.col-processed  { width: 11%; }
+  th { padding: 10px 12px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); border-bottom: 1px solid rgba(255,255,255,0.08); background: var(--glass-th-bg); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); position: sticky; top: 0; z-index: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td { padding: 9px 12px; border-bottom: 1px solid rgba(255,255,255,0.03); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.015); }
+  .td-filename { color: var(--text); }
+  .td-title, .td-performers, .td-date { color: var(--dim); }
+  .status-tag { font-family: var(--font-impact-label); display: inline-block; padding: 0 4px; font-size: 16px; text-transform: uppercase; letter-spacing: -0.02em; background: none; border: none; }
+  .status-filed      { color: var(--green); }
+  .status-unmatched  { color: var(--amber); }
+  .status-no_dir     { color: var(--blue); }
+  .status-error      { color: var(--red); }
+  .status-processing { color: var(--accent); }
+  .status-removed    { color: var(--muted); }
+  .source-tag { font-family: var(--secs); font-size: 16px; color: var(--dim); padding: 0 4px; background: none; }
+
+  /* ── Buttons ── */
+  .btn-primary { background: var(--accent); color: #0c0c0e; border: none; padding: 8px 14px; border-radius: 6px; font-size: 18px; line-height: 1; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
+  .btn-secondary { background: none; border: 1px solid var(--border); color: var(--dim); padding: 8px 12px; border-radius: 6px; font-size: 16px; line-height: 1; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; }
+  .btn-secondary:hover { border-color: var(--muted); color: var(--text); }
+  .btn-icon { background: none; border: none; color: var(--dim); cursor: pointer; padding: 4px 6px; border-radius: 4px; font-size: 14px; transition: color 0.15s; line-height: 1; }
+  .btn-icon:hover { color: var(--text); }
+  .btn-icon.danger:hover { color: var(--red); }
+  .btn-run-file { background: none; border: 1px solid var(--muted); color: #ffffff; padding: 3px 10px; border-radius: 4px; font-family: Acidoze, var(--sans); font-size: 17px; cursor: pointer; letter-spacing: 0.05em; transition: all 0.15s; text-transform: uppercase; }
+  .btn-run-file:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-run-file:disabled { opacity: 0.3; cursor: not-allowed; }
+  .header-actions { display: flex; gap: 8px; align-items: center; flex: 1; }
+  .header-actions .queue-filter { flex: 1; }
+  .queue-filter {
+    background: var(--raised);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 12px;
+    outline: none;
+    min-width: 120px;
+  }
+  .queue-filter:focus { border-color: var(--accent); }
+
+  /* ── Collapsible sections ── */
+  .collapsible-header {
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer; user-select: none;
+  }
+  .collapsible-header:hover .settings-section-title { color: var(--text); }
+  .collapsible-arrow { font-size: 11px; color: var(--dim); transition: transform 0.2s; }
+  .collapsible-arrow.open { transform: rotate(90deg); }
+  .collapsible-body { display: none; margin-top: 12px; }
+  .collapsible-body.open { display: block; }
+
+  /* ── Toggle switch ── */
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; }
+  .toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; inset: 0; background: var(--muted);
+    border-radius: 22px; cursor: pointer; transition: 0.2s;
+  }
+  .toggle-slider:before {
+    content: ''; position: absolute;
+    width: 16px; height: 16px; left: 3px; bottom: 3px;
+    background: white; border-radius: 50%; transition: 0.2s;
+  }
+  .toggle input:checked + .toggle-slider { background: var(--accent); }
+  .toggle input:checked + .toggle-slider:before { transform: translateX(18px); }
+
+  /* ── Settings modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .settings-saved-toast {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 400;
+    padding: 16px 28px;
+    border-radius: 10px;
+    background: linear-gradient(160deg, rgba(36,36,48,0.98) 0%, rgba(18,18,26,0.95) 100%);
+    border: 1px solid rgba(192,132,252,0.35);
+    box-shadow: 0 16px 48px rgba(0,0,0,0.45);
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s;
+  }
+  .settings-saved-toast.visible {
+    opacity: 1;
+    visibility: visible;
+  }
+  .modal {
+    background: rgba(19, 19, 23, 0.97);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 760px;
+    max-width: 96vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+  }
+  .modal::-webkit-scrollbar { width: 4px; }
+  .modal::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 2px; }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 24px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--surface); z-index: 1;
+  }
+  .modal-title { font-family: var(--sans); font-size: 16px; font-weight: 700; }
+  .modal-body { padding: 24px; display: flex; flex-direction: column; gap: 28px; }
+  .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+  /* Settings sections */
+  .settings-section { display: flex; flex-direction: column; gap: 12px; }
+  .settings-section-title { font-family: var(--acid); font-size: 28px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; color: #d4cfc4; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .field-row { display: flex; flex-direction: column; gap: 6px; }
+  .field-label { font-size: 11px; color: var(--dim); letter-spacing: 0.05em; }
+  .field-input {
+    background: var(--raised); border: 1px solid var(--border); color: var(--text);
+    padding: 9px 12px; border-radius: 6px; font-family: var(--mono); font-size: 12px;
+    width: 100%; transition: border-color 0.15s; outline: none;
+  }
+  .field-input:focus { border-color: var(--accent); }
+  .field-hint { font-size: 10px; color: var(--muted); line-height: 1.5; }
+
+  /* Pattern tokens */
+  .token-guide { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .token { font-size: 10px; padding: 2px 8px; border-radius: 4px; background: rgba(192,132,252,0.1); color: var(--accent); border: 1px solid rgba(192,132,252,0.2); cursor: default; }
+  .token span { color: var(--dim); }
+
+  /* Directory list */
+  .dir-list { display: flex; flex-direction: column; gap: 8px; }
+  .dir-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 8px 10px;
+  }
+  .dir-row-main {
+    display: grid;
+    grid-template-columns: 36px 110px 1fr auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .dir-gender-filters {
+    margin-top: 4px;
+    padding: 12px 14px 14px;
+    background: linear-gradient(165deg, rgba(42,38,58,0.5) 0%, rgba(16,16,24,0.55) 100%);
+    border: 1px solid rgba(192,132,252,0.14);
+    border-radius: 10px;
+    border-left: 3px solid rgba(192,132,252,0.45);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .dir-gender-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--dim);
+    margin-bottom: 10px;
+  }
+  .dir-gender-label i { color: var(--accent); font-size: 12px; opacity: 0.9; }
+  .dir-gender-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .dir-gender-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(0,0,0,0.22);
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+  .dir-gender-chip input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    margin: 0;
+  }
+  .dir-gender-chip-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: var(--dim);
+    user-select: none;
+  }
+  .dir-gender-chip-inner i { font-size: 12px; opacity: 0.85; }
+  .dir-gender-chip:hover,
+  .dir-gender-chip:focus-within {
+    border-color: rgba(192,132,252,0.35);
+    background: rgba(192,132,252,0.06);
+  }
+  .dir-gender-chip--on {
+    border-color: rgba(192,132,252,0.6);
+    background: linear-gradient(180deg, rgba(192,132,252,0.2) 0%, rgba(192,132,252,0.1) 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 8px rgba(0,0,0,0.2);
+  }
+  .dir-gender-chip--on .dir-gender-chip-inner { color: #e9d5ff; }
+  .dir-gender-chip--on .dir-gender-chip-inner i { color: var(--accent); opacity: 1; }
+  .dir-gender-hint {
+    margin-top: 10px;
+    font-size: 10px;
+    line-height: 1.45;
+    color: var(--dim);
+    letter-spacing: 0.02em;
+  }
+  .dir-rank { font-size: 11px; color: var(--dim); text-align: center; }
+  .dir-type-tag { font-size: 10px; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.06em; text-align: center; }
+  .dir-type-series   { background: rgba(74,222,128,0.1);  color: var(--green); }
+  .dir-type-performer { background: rgba(192,132,252,0.1); color: var(--accent); }
+  .dir-path { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dir-reorder { display: flex; flex-direction: column; gap: 1px; }
+  .dir-controls { display: flex; gap: 4px; align-items: center; }
+
+  /* Add directory row */
+  .add-dir-row { display: grid; grid-template-columns: 120px 1fr 120px 80px; gap: 8px; align-items: end; }
+  .select-input {
+    background: var(--raised); border: 1px solid var(--border); color: var(--text);
+    padding: 9px 12px; border-radius: 6px; font-family: var(--mono); font-size: 12px;
+    outline: none; cursor: pointer;
+  }
+  .select-input:focus { border-color: var(--accent); }
+
+  /* Dedicated settings page mode */
+  body.settings-page .layout-grid,
+  body.settings-page #searchPanel {
+    display: none !important;
+  }
+  /* Without this, .app stays 100dvh tall while the main grid is hidden — huge blank gap above Settings */
+  body.settings-page .app {
+    height: auto;
+    max-height: none;
+    min-height: 0;
+  }
+  body.settings-page #settingsModal {
+    display: flex !important;
+    position: relative;
+    inset: auto;
+    background: transparent;
+    backdrop-filter: none;
+    padding: 0;
+    margin-top: 16px;
+  }
+  body.settings-page #settingsModal .modal {
+    width: min(1100px, 96vw);
+    max-height: none;
+  }
+
+  @media (max-width: 1280px) {
+    .layout-grid {
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: auto auto minmax(200px, 1fr);
+    }
+    .layout-grid .panel-queue { grid-column: 1 / 3; }
+    .layout-grid .panel-log { grid-column: 3 / 4; }
+  }
+
+  @media (max-width: 980px) {
+    .app { padding: 0 14px 20px; }
+    header { flex-direction: column; align-items: stretch; gap: 12px; }
+    .header-right { flex-wrap: wrap; justify-content: flex-start; }
+    .layout-grid {
+      grid-template-columns: 1fr;
+      grid-template-rows: repeat(4, auto) minmax(200px, 1fr) minmax(200px, 1fr);
+    }
+    .layout-grid .panel-queue,
+    .layout-grid .panel-log { grid-column: 1 / 2; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div style="display:flex;align-items:center;gap:16px">
+      <div class="logo">
+        <img src="/static/logo.png" alt="Top-Shelf" style="height:36px; object-fit:contain;">
+      </div>
+      <span id="appVersion" style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.06em">v1.0.0</span>
+      <div id="statusPill" class="status-pill">
+        <span class="status-dot"></span>
+        <span id="statusText">Idle</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div id="retryPill" style="display:none;font-size:11px;color:var(--dim);padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);letter-spacing:0.06em"></div>
+      <div id="watcherPill" style="display:none;font-size:11px;color:var(--amber);padding:6px 14px;border-radius:20px;border:1px solid var(--amber);background:var(--surface);letter-spacing:0.06em"></div>
+      <div id="scanPill" style="display:none;font-size:11px;color:var(--blue);padding:6px 14px;border-radius:20px;border:1px solid var(--blue);background:var(--surface);letter-spacing:0.06em"></div>
+      <button class="btn-secondary" id="btnRetryNow" onclick="retryNow()" title="Retry failed files"><i class="fa-solid fa-arrows-rotate"></i></button>
+      <a href="/scenes" style="text-decoration:none"><button class="btn-secondary" title="Scenes"><i class="fa-solid fa-ticket"></i></button></a>
+      <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-clapperboard"></i></button></a>
+      <a href="/queue" style="text-decoration:none"><button id="navQueueBtn" class="btn-secondary active-nav" title="Queue"><i class="fa-solid fa-list"></i></button></a>
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary" title="Downloads"><i class="fa-solid fa-download"></i></button></a>
+      <a href="/favourites" style="text-decoration:none"><button class="btn-secondary" title="Favourites"><i class="fa-solid fa-heart"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Maintenance"><i class="fa-solid fa-folder-plus"></i></button></a>
+      <a href="/history" style="text-decoration:none"><button class="btn-secondary" title="History"><i class="fa-solid fa-clock-rotate-left"></i></button></a>
+      <button class="btn-secondary" onclick="logout()" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+      <a href="/settings" style="text-decoration:none"><button id="navSettingsBtn" class="btn-secondary" title="Settings"><i class="fa-solid fa-gear"></i></button></a>
+    </div>
+  </header>
+
+  <div class="layout-grid">
+    <a class="stat-card stat-filed" href="/history?status=filed" style="text-decoration:none;cursor:pointer">
+      <span class="stat-value" id="statFiled">0</span>
+      <span class="stat-label">Filed</span>
+    </a>
+    <a class="stat-card stat-unmatched" href="/history?status=unmatched" style="text-decoration:none;cursor:pointer">
+      <span class="stat-value" id="statUnmatched">0</span>
+      <span class="stat-label">Unmatched</span>
+    </a>
+    <a class="stat-card stat-no_dir" id="statCardNoDir" href="/history?status=no_dir" style="text-decoration:none;cursor:pointer">
+      <span class="stat-value" id="statNoDir">0</span>
+      <span class="stat-label" id="statLabelNoDir">NO-DIRECTORY</span>
+    </a>
+    <a class="stat-card stat-errors" href="/history?status=error" style="text-decoration:none;cursor:pointer">
+      <span class="stat-value" id="statErrors">0</span>
+      <span class="stat-label">Errors</span>
+    </a>
+
+    <div class="panel panel-queue">
+      <div class="panel-header">
+        <span class="panel-title" id="queuePanelTitle">Scene queue <span id="queueCount" style="font-family:var(--secs);font-size:calc(12px + 2pt);letter-spacing:-0.02em;color:var(--dim)"></span></span>
+        <div class="header-actions">
+          <div class="queue-mode-toggle">
+            <button type="button" id="btnQueueScenes" onclick="setQueueMode('scenes')" title="Scene processing queue">Scenes</button>
+            <button type="button" id="btnQueueMovies" onclick="setQueueMode('movies')" title="Movie processing queue">Movies</button>
+          </div>
+          <input id="queueFilter" class="queue-filter" type="text" placeholder="Filter queue..." oninput="filterQueue()" spellcheck="false">
+          <button class="btn-secondary" onclick="loadQueue()" title="Refresh queue"><i class="fa-solid fa-arrows-rotate"></i></button>
+          <button id="btnRunAll" class="btn-primary" onclick="runAll()" title="Run All"><i class="fa-solid fa-play"></i></button>
+        </div>
+      </div>
+      <div class="panel-body" id="queueList"><div class="empty">Loading...</div></div>
+    </div>
+
+    <div class="panel panel-log">
+      <div class="panel-header">
+        <span class="panel-title">Log</span>
+        <button class="btn-secondary" onclick="clearLog()" title="Clear log"><i class="fa-solid fa-x"></i></button>
+      </div>
+      <div class="log-body" id="logBody">
+        <span class="log-line default">Waiting for pipeline...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <div class="history-panel" id="searchPanel" style="margin-top:20px;display:none">
+    <div class="panel-header">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="panel-title">Scene Search</span>
+        <span id="searchFileLabel" style="display:none;font-size:11px;color:var(--accent);padding:3px 10px;background:rgba(192,132,252,0.1);border-radius:4px;border:1px solid rgba(192,132,252,0.25);cursor:pointer" onclick="clearSelectedFile()" title="Click to deselect"></span>
+      </div>
+      <div class="header-actions">
+        <button class="btn-secondary" onclick="clearSearch()" title="Clear search"><i class="fa-solid fa-x"></i></button>
+        <button class="btn-primary" onclick="runSearch()">Search</button>
+      </div>
+    </div>
+    <div class="search-panel-filters">
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr 140px 140px; gap:10px; align-items:end">
+        <div class="field-row">
+          <label class="field-label">Free text</label>
+          <input class="field-input" id="srchTerm" type="text" placeholder="Any term..." onkeydown="if(event.key==='Enter')runSearch()">
+        </div>
+        <div class="field-row">
+          <label class="field-label">Title</label>
+          <input class="field-input" id="srchTitle" type="text" placeholder="Scene title" onkeydown="if(event.key==='Enter')runSearch()">
+        </div>
+        <div class="field-row">
+          <label class="field-label">Performer</label>
+          <input class="field-input" id="srchPerformer" type="text" placeholder="Performer name" onkeydown="if(event.key==='Enter')runSearch()">
+        </div>
+        <div class="field-row">
+          <label class="field-label">Studio</label>
+          <input class="field-input" id="srchStudio" type="text" placeholder="Studio name" onkeydown="if(event.key==='Enter')runSearch()">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div class="field-row">
+            <label class="field-label">Date from</label>
+            <input class="field-input" id="srchDateFrom" type="text" placeholder="YYYY-MM-DD" onkeydown="if(event.key==='Enter')runSearch()">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Date to</label>
+            <input class="field-input" id="srchDateTo" type="text" placeholder="YYYY-MM-DD" onkeydown="if(event.key==='Enter')runSearch()">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="history-body" id="searchResults">
+      <div class="empty">Enter search terms above and press Search</div>
+    </div>
+  </div>
+
+  <!-- Movie queue: TMDB + TPDB manual pick -->
+  <div class="history-panel" id="movieSearchPanel" style="margin-top:20px;display:none">
+    <div class="panel-header">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span class="panel-title">Movie match</span>
+        <span id="movieSearchFileLabel" style="display:none;font-size:11px;color:var(--accent);padding:3px 10px;background:rgba(192,132,252,0.1);border-radius:4px;border:1px solid rgba(192,132,252,0.25);cursor:pointer" onclick="clearMovieSearchPick()" title="Clear selection"></span>
+      </div>
+      <div class="header-actions" style="flex-wrap:wrap">
+        <input id="movieSrchQ" class="field-input" style="width:200px;max-width:42vw" type="text" placeholder="Title" onkeydown="if(event.key==='Enter')runMovieSearch()">
+        <input id="movieSrchYear" class="field-input" style="width:72px" type="text" placeholder="Year" onkeydown="if(event.key==='Enter')runMovieSearch()">
+        <button type="button" class="btn-secondary" onclick="closeMovieSearchPanel()" title="Close"><i class="fa-solid fa-x"></i></button>
+        <button type="button" class="btn-primary" onclick="runMovieSearch()">Search</button>
+      </div>
+    </div>
+    <div class="history-body" id="movieSearchResults" style="padding:14px">
+      <div class="empty">TMDB first, then TPDB — search or use Run on a file for auto-match</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Image overlay -->
+<div id="imageOverlay" onclick="closeImageOverlay()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:200;align-items:center;justify-content:center;cursor:zoom-out;backdrop-filter:blur(8px)">
+  <img id="overlayImg" src="" style="max-width:90vw;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 24px 80px rgba(0,0,0,0.8)">
+</div>
+
+<!-- Manual Metadata Modal -->
+<div class="modal-overlay" id="manualModal">
+  <div class="modal" style="width:600px">
+    <div class="modal-header">
+      <span class="modal-title" id="manualModalTitle">Manual Filing</span>
+      <button class="btn-icon" onclick="closeManual()"><i class="fa-solid fa-x"></i></button>
+    </div>
+    <div class="modal-body" style="gap:16px">
+      <div style="font-size:11px;color:var(--dim)" id="manualFilename"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field-row">
+          <label class="field-label">Title *</label>
+          <input class="field-input" id="mTitle" type="text" placeholder="Scene title">
+        </div>
+        <div class="field-row">
+          <label class="field-label">Studio *</label>
+          <input class="field-input" id="mStudio" type="text" placeholder="Studio name">
+        </div>
+        <div class="field-row">
+          <label class="field-label">Date * (YYYY-MM-DD)</label>
+          <input class="field-input" id="mDate" type="text" placeholder="2024-01-15">
+        </div>
+        <div class="field-row">
+          <label class="field-label">Performers</label>
+          <input class="field-input" id="mPerformers" type="text" placeholder="Name, Name">
+        </div>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Plot / Description</label>
+        <textarea class="field-input" id="mPlot" rows="3" placeholder="Optional description..." style="resize:vertical"></textarea>
+      </div>
+      <!-- Thumbnail -->
+      <div class="field-row">
+        <label class="field-label">Thumbnail <span style="color:var(--muted);font-size:10px">(saved locally only — StashDB does not permit image uploads via API)</span></label>
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <div style="flex:1">
+            <input class="field-input" id="mImageUrl" type="text" placeholder="Paste image URL..." oninput="mThumbMode='url';mThumbPreview(this.value)">
+          </div>
+          <button class="btn-secondary" onclick="generateThumb()" title="Random frame from video" style="flex-shrink:0;white-space:nowrap">
+            <i class="fa-solid fa-dice"></i>
+          </button>
+          <button class="btn-secondary" id="mRegenBtn" onclick="generateThumb()" title="Regenerate" style="display:none;flex-shrink:0">
+            <i class="fa-solid fa-arrows-rotate"></i>
+          </button>
+        </div>
+        <div id="mThumbPreview" style="display:none;margin-top:8px">
+          <img id="mThumbImg" style="max-width:200px;border-radius:4px;cursor:pointer" onclick="this.parentElement.style.display='none'">
+          <div id="mThumbPercent" style="font-size:10px;color:var(--dim);margin-top:2px"></div>
+        </div>
+      </div>
+
+      <!-- StashDB submission toggle -->
+      <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+        <div class="toggle-row">
+          <span style="font-size:calc(12px + 2pt);color:var(--dim);letter-spacing:0.04em;text-transform:uppercase">Submit to StashDB</span>
+          <label class="toggle">
+            <input type="checkbox" id="mSubmitStashdb" onchange="toggleStashdbFields(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div id="mStashdbFields" style="display:none;margin-top:12px">
+          <div class="field-hint" style="margin-bottom:10px">Studio and performer names will be looked up on StashDB. Close matches will ask for confirmation before submitting.</div>
+          <div style="font-size:11px;color:var(--dim)" id="mResolveStatus"></div>
+          <!-- Resolve results appear here -->
+          <div id="mResolveResults"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeManual()">Cancel</button>
+      <button class="btn-primary" id="mSubmitBtn" onclick="submitManual()"><i class="fa-solid fa-play"></i></button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Settings</span>
+      <button class="btn-icon" onclick="closeSettings()"><i class="fa-solid fa-x"></i></button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Password -->
+      <div class="settings-section">
+        <div class="settings-section-title">Password Protection</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-row">
+            <label class="field-label">New password</label>
+            <input class="field-input" id="cfgNewPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Session duration (hours)</label>
+            <input class="field-input" id="cfgSessionHours" type="number" min="1" max="8760" placeholder="24">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn-secondary" onclick="setPassword()" style="font-size:12px;padding:6px 12px">Set Password</button>
+          <button class="btn-secondary" onclick="removePassword()" style="font-size:12px;padding:6px 12px;color:var(--red);border-color:var(--red)">Remove Password</button>
+        </div>
+        <div id="pwMsg" style="font-size:11px;margin-top:8px;display:none"></div>
+      </div>
+
+      <!-- Directories -->
+      <div class="settings-section">
+        <div class="settings-section-title">Scenes Download Directory</div>
+        <div class="field-row">
+          <label class="field-label">Input folder (files to process)</label>
+          <input class="field-input" id="cfgSourceDir" type="text" placeholder="/path/to/folder">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Movies Source Directory</div>
+        <div class="field-row">
+          <label class="field-label">Input folder for movie files</label>
+          <input class="field-input" id="cfgMoviesSourceDir" type="text" placeholder="/path/to/movies/folder">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Series Directory</div>
+        <div class="field-row">
+          <label class="field-label">Root folder containing studio subdirectories</label>
+          <input class="field-input" id="cfgSeriesDir" type="text" placeholder="/path/to/Series">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Movies Directory</div>
+        <div class="field-row">
+          <label class="field-label">Root folder for movies (one subfolder per film)</label>
+          <input class="field-input" id="cfgFeaturesDir" type="text" placeholder="/path/to/Movies">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Performer Directories</div>
+        <div class="field-hint" style="margin-bottom:8px">Matched in rank order. Files route to the first directory that contains a matching performer folder.</div>
+        <div class="dir-list" id="dirList"></div>
+        <div style="margin-top:12px">
+          <div class="settings-section-title" style="margin-bottom:10px;font-size:10px">Add Directory</div>
+          <div class="add-dir-row">
+            <div class="field-row">
+              <label class="field-label">Label</label>
+              <input class="field-input" id="newDirLabel" type="text" placeholder="Stars">
+            </div>
+            <div class="field-row">
+              <label class="field-label">Path</label>
+              <input class="field-input" id="newDirPath" type="text" placeholder="/path/to/folder">
+            </div>
+            <div class="field-row">
+              <label class="field-label">Type</label>
+              <select class="select-input" id="newDirType">
+                <option value="performer">Performer</option>
+                <option value="series">Series</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <label class="field-label">&nbsp;</label>
+              <button class="btn-secondary" onclick="addDir()" style="width:100%">Add</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Naming patterns -->
+      <div class="settings-section">
+        <div class="settings-section-title">Naming Patterns</div>
+
+        <div class="field-hint" style="margin-bottom:12px">Available tokens:</div>
+        <div class="token-guide">
+          <span class="token">{title} <span>scene title</span></span>
+          <span class="token">{studio} <span>studio name</span></span>
+          <span class="token">{performer} <span>first matched performer</span></span>
+          <span class="token">{performers} <span>all performers</span></span>
+          <span class="token">{year} <span>YYYY</span></span>
+          <span class="token">{month} <span>MM</span></span>
+          <span class="token">{day} <span>DD</span></span>
+          <span class="token">{date} <span>YYYY-MM-DD</span></span>
+          <span class="token">{source} <span>database source</span></span>
+        </div>
+
+        <div class="field-row" style="margin-top:16px">
+          <label class="field-label">Series pattern <span style="color:var(--muted)">(studio match)</span></label>
+          <input class="field-input" id="cfgPatternSeries" type="text">
+          <div class="field-hint">Season folder is added automatically. Example output: <em>Season 2024 / ATK Girlfriends - S2024E0228 - Paradise Cove 2.mkv</em></div>
+        </div>
+
+        <div class="field-row">
+          <label class="field-label">Performer pattern <span style="color:var(--muted)">(performer match)</span></label>
+          <input class="field-input" id="cfgPatternPerformer" type="text">
+          <div class="field-hint">Season folder is added automatically. Example output: <em>Season 2024 / Juniper Ren - S2024E0228 - ATK Girlfriends - Paradise Cove 2.mkv</em></div>
+        </div>
+      </div>
+
+      <!-- Automatic Retry -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title">Automatic Retry</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgRetryEnabled" onchange="toggleSection('retryBody', this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="collapsible-body" id="retryBody" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="field-row">
+              <label class="field-label">Run at hour (0–23)</label>
+              <input class="field-input" id="cfgRetryHour" type="number" min="0" max="23" placeholder="1">
+            </div>
+            <div class="field-row">
+              <label class="field-label">Frequency (hours)</label>
+              <select class="select-input" id="cfgRetryFreq" style="width:100%">
+                <option value="1">Every hour</option>
+                <option value="2">Every 2 hours</option>
+                <option value="4">Every 4 hours</option>
+                <option value="6">Every 6 hours</option>
+                <option value="12">Every 12 hours</option>
+                <option value="24">Every 24 hours</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-hint" id="retryNextRun" style="margin-top:8px"></div>
+        </div>
+      </div>
+
+      <!-- Download Watch -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title">Download Folder Watch</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgDownloadWatchEnabled" onchange="toggleSection('downloadWatchBody', this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="field-hint" style="margin-top:6px">Watches a folder for completed NZB/torrent downloads, cleans up junk, renames gibberish filenames using the folder name, and moves videos to your scene input folder.</div>
+        <div class="collapsible-body" id="downloadWatchBody" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="field-row" style="grid-column:1/-1">
+              <label class="field-label">Download watch directory</label>
+              <input class="field-input" id="cfgDownloadWatchDir" type="text" placeholder="/path/to/downloads/complete">
+            </div>
+            <div class="field-row" style="grid-column:1/-1">
+              <label class="field-label">Client path prefix <span style="color:var(--dim)">(optional)</span></label>
+              <input class="field-input" id="cfgDownloadClientPrefix" type="text" placeholder="/share/Download — path as the NZB/torrent client reports it">
+            </div>
+            <div class="field-row" style="grid-column:1/-1">
+              <label class="field-label">Local path prefix <span style="color:var(--dim)">(optional)</span></label>
+              <input class="field-input" id="cfgDownloadLocalPrefix" type="text" placeholder="/downloads — same folders on this host (e.g. Docker mount)">
+            </div>
+            <div class="field-hint" style="grid-column:1/-1;margin-top:4px">If the download client and Top-Shelf already use the same paths on this host, leave both prefix fields empty. Only set them when the client reports a different root (e.g. <code>/data/…</code> in Docker) than the folder Top-Shelf can read (e.g. <code>/share/…</code> on the NAS).</div>
+            <div class="field-row">
+              <label class="field-label">Hold time (seconds)</label>
+              <input class="field-input" id="cfgDownloadWatchHold" type="number" min="30" max="3600" placeholder="300">
+            </div>
+            <div class="field-row" style="grid-column:1/-1">
+              <label class="field-label">Process existing files now</label>
+              <button class="btn-secondary" onclick="processAllDownloads()" style="margin-top:4px"><i class="fa-solid fa-play"></i> Process download folder now</button>
+            </div>
+            <div class="field-row" style="grid-column:1/-1">
+              <label class="field-label"><input type="checkbox" id="cfgDownloadAutoImport" style="margin-right:8px">Automatically <strong>import</strong> when a download reaches 100% — moves video into the same <strong>Input folder (files to process)</strong> as manual Import / download watch (the queue folder), using identical rules (~every 45s)</label>
+            </div>
+            <div class="field-row" style="grid-column:1/-1">
+              <label class="field-label"><input type="checkbox" id="cfgDownloadImportRemove" style="margin-right:8px">After <strong>Import</strong> (manual or automatic), remove the job from the client (torrents: delete data on disk too)</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Folder Watch -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title">Folder Watch</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgWatchEnabled" onchange="toggleSection('watchBody', this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="collapsible-body" id="watchBody" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="field-row">
+              <label class="field-label">Hold time (seconds)</label>
+              <input class="field-input" id="cfgWatchHold" type="number" min="10" max="600" placeholder="60">
+            </div>
+            <div class="field-row">
+              <label class="field-label">Status</label>
+              <div id="watcherStatus" style="font-size:11px;color:var(--dim);padding:9px 0">Checking...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filename Parsing -->
+      <div class="settings-section">
+        <div class="collapsible-header" onclick="toggleCollapsible('filenameBody', 'filenameArrow')">
+          <div class="settings-section-title">Filename Parsing</div>
+          <span class="collapsible-arrow" id="filenameArrow">▶</span>
+        </div>
+        <div class="collapsible-body" id="filenameBody">
+          <div class="field-row" style="margin-top:12px">
+            <label class="field-label">Pattern order <span style="color:var(--muted)">(pipe-separated, tried in order)</span></label>
+            <input class="field-input" id="cfgFilenamePatterns" type="text" placeholder="pipe|dot_date|dot_date_short|bracket_site|dash_date">
+            <div class="field-hint" style="margin-top:4px">
+              Available: <code>pipe</code> (site|date|performers|title),
+              <code>dot_date</code> (site.YYYY.MM.DD.title),
+              <code>dot_date_short</code> (site.YY.MM.DD.title),
+              <code>bracket_site</code> ([Site] Title),
+              <code>dash_date</code> (site - YYYY-MM-DD - title)
+            </div>
+          </div>
+          <div class="field-row" style="margin-top:10px">
+            <label class="field-label">Min file size (MB) — smaller files are skipped</label>
+            <input class="field-input" id="cfgMinFileSize" type="number" min="0" placeholder="10" style="width:120px">
+          </div>
+          <div class="field-row" style="margin-top:10px">
+            <label class="field-label">Strip words <span style="color:var(--muted)">(comma-separated — removed from filenames before parsing)</span></label>
+            <input class="field-input" id="cfgStripWords" type="text" placeholder="fuckingsession.com,lulustream.com">
+          </div>
+        </div>
+      </div>
+
+      <!-- Site Abbreviations -->
+      <div class="settings-section">
+        <div class="collapsible-header" onclick="toggleCollapsible('abbrevBody', 'abbrevArrow')">
+          <div class="settings-section-title">Site Abbreviations</div>
+          <span class="collapsible-arrow" id="abbrevArrow">▶</span>
+        </div>
+        <div class="collapsible-body" id="abbrevBody">
+          <div class="field-row" style="margin-top:12px">
+            <label class="field-label">Abbreviations — JSON map of short name → full name</label>
+            <textarea class="field-input" id="cfgSiteAbbrevs" rows="5" style="font-size:11px;resize:vertical" placeholder='{"brcc": "Backroom Casting Couch", "nvg": "Net Video Girls"}'></textarea>
+            <div class="field-hint" style="margin-top:4px">Expands short site names found in filenames during parsing</div>
+          </div>
+          <div class="field-row" style="margin-top:10px">
+            <label class="field-label">Rename map — JSON map of wrong name → correct name</label>
+            <textarea class="field-input" id="cfgSiteRenameMap" rows="4" style="font-size:11px;resize:vertical" placeholder='{"Tonights Girlfriend": "Tonights Girlfriend"}'></textarea>
+            <div class="field-hint" style="margin-top:4px">Corrects known bad site names returned by databases (e.g. "BANG! Casting" → "Bang! Casting")</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alias Lookup -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title">Performer Alias Lookup</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgAliasLookup">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="field-hint" style="margin-top:6px">When a performer's name doesn't match any folder, search StashDB, ThePornDB, and FansDB for their aliases and try matching those instead. Adds a small delay per unmatched performer (one API call per source).</div>
+      </div>
+
+      <!-- Library index → queue filing -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title">Queue: use library ID index</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgLibraryIndexQueue" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="field-hint" style="margin-top:6px">Your performer and studio <strong>library folders</strong> are listed on the Favourites screen with linked TPDB / StashDB / FansDB IDs (from scan or manual linking). When this is on, the queue uses those folder↔ID links to decide where a scene goes <strong>before</strong> matching by folder name or alias lookup. The heart “favourite” flag does not matter—every indexed folder with links can match.</div>
+      </div>
+
+      <!-- Content Filters -->
+      <div class="settings-section">
+        <div class="settings-section-title">Content Filters</div>
+        <div class="field-hint" style="margin-bottom:12px">Select which content categories to include in results across all pages.</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <label class="toggle-row" style="cursor:pointer">
+            <span class="field-label" style="flex:1"><i class="fa-solid fa-venus-mars" style="width:20px;text-align:center;color:var(--accent)"></i> Straight (male + female)</span>
+            <label class="toggle"><input type="checkbox" id="cfgCatStraight" checked><span class="toggle-slider"></span></label>
+          </label>
+          <label class="toggle-row" style="cursor:pointer">
+            <span class="field-label" style="flex:1"><i class="fa-solid fa-venus-double" style="width:20px;text-align:center;color:var(--accent)"></i> Lesbian (women only)</span>
+            <label class="toggle"><input type="checkbox" id="cfgCatLesbian" checked><span class="toggle-slider"></span></label>
+          </label>
+          <label class="toggle-row" style="cursor:pointer">
+            <span class="field-label" style="flex:1"><i class="fa-solid fa-mars-double" style="width:20px;text-align:center;color:var(--accent)"></i> Gay (men only)</span>
+            <label class="toggle"><input type="checkbox" id="cfgCatGay" checked><span class="toggle-slider"></span></label>
+          </label>
+          <label class="toggle-row" style="cursor:pointer">
+            <span class="field-label" style="flex:1"><i class="fa-solid fa-venus" style="width:20px;text-align:center;color:var(--accent)"></i> Solo female</span>
+            <label class="toggle"><input type="checkbox" id="cfgCatSoloFemale" checked><span class="toggle-slider"></span></label>
+          </label>
+          <label class="toggle-row" style="cursor:pointer">
+            <span class="field-label" style="flex:1"><i class="fa-solid fa-transgender" style="width:20px;text-align:center;color:var(--accent)"></i> Trans (includes trans or non-binary performers)</span>
+            <label class="toggle"><input type="checkbox" id="cfgCatTrans" checked><span class="toggle-slider"></span></label>
+          </label>
+        </div>
+        <div style="margin-top:14px">
+          <label class="field-label">Blacklisted tags (comma-separated)</label>
+          <input class="field-input" id="cfgTagBlacklist" type="text" placeholder="e.g. Watersports, Fisting" style="margin-top:6px;width:100%;max-width:520px">
+          <div class="field-hint" style="margin-top:6px">Exclude scenes/movies that carry any of these ThePornDB tags (exact name match, case-insensitive). Entries with no tags in the API response are not excluded. Used with scenes feed, recent scenes (TPDB), and movies latest/search.</div>
+        </div>
+      </div>
+
+      <!-- Media Server Integration -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title">Media Server Scans</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgMediaScanEnabled">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="field-hint" style="margin-top:6px">Trigger library scans after filing. Scans are debounced — multiple files filing in quick succession fire only one scan.</div>
+        <div style="margin-top:10px">
+          <label class="field-label">Debounce delay (minutes)</label>
+          <input class="field-input" id="cfgScanDebounce" type="number" min="1" max="60" placeholder="5" style="width:100px;margin-top:4px">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Media Servers</div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <!-- Stash -->
+          <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div class="toggle-row" style="margin-bottom:10px">
+              <span style="font-size:12px;font-weight:600;color:var(--text)">Stash</span>
+              <label class="toggle"><input type="checkbox" id="cfgStashEnabled"><span class="toggle-slider"></span></label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field-row"><label class="field-label">URL</label><input class="field-input" id="cfgStashUrl" type="text" placeholder="http://192.168.1.x:9999"></div>
+              <div class="field-row"><label class="field-label">API Key</label><input class="field-input" id="cfgStashKey" type="password" autocomplete="off"></div>
+            </div>
+          </div>
+          <!-- Jellyfin -->
+          <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div class="toggle-row" style="margin-bottom:10px">
+              <span style="font-size:12px;font-weight:600;color:var(--text)">Jellyfin</span>
+              <label class="toggle"><input type="checkbox" id="cfgJellyfinEnabled"><span class="toggle-slider"></span></label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field-row"><label class="field-label">URL</label><input class="field-input" id="cfgJellyfinUrl" type="text" placeholder="http://192.168.1.x:8096"></div>
+              <div class="field-row"><label class="field-label">API Key</label><input class="field-input" id="cfgJellyfinKey" type="password" autocomplete="off"></div>
+            </div>
+          </div>
+          <!-- Plex -->
+          <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div class="toggle-row" style="margin-bottom:10px">
+              <span style="font-size:12px;font-weight:600;color:var(--text)">Plex</span>
+              <label class="toggle"><input type="checkbox" id="cfgPlexEnabled"><span class="toggle-slider"></span></label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field-row"><label class="field-label">URL</label><input class="field-input" id="cfgPlexUrl" type="text" placeholder="http://192.168.1.x:32400"></div>
+              <div class="field-row"><label class="field-label">Token</label><input class="field-input" id="cfgPlexToken" type="password" autocomplete="off"></div>
+            </div>
+          </div>
+          <!-- Emby -->
+          <div style="border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div class="toggle-row" style="margin-bottom:10px">
+              <span style="font-size:12px;font-weight:600;color:var(--text)">Emby</span>
+              <label class="toggle"><input type="checkbox" id="cfgEmbyEnabled"><span class="toggle-slider"></span></label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field-row"><label class="field-label">URL</label><input class="field-input" id="cfgEmbyUrl" type="text" placeholder="http://192.168.1.x:8096"></div>
+              <div class="field-row"><label class="field-label">API Key</label><input class="field-input" id="cfgEmbyKey" type="password" autocomplete="off"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- StashDB Submission -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title">Submit Phashes to StashDB</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgSubmitPhash">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="field-hint" style="margin-top:6px">Automatically submits phashes to StashDB after a successful match, helping improve the database for everyone</div>
+      </div>
+
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title">Submit Manual Entries to StashDB</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgManualSubmitDefault">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="field-hint" style="margin-top:6px">Sets the default state of the StashDB submission toggle on the manual filing form</div>
+      </div>
+
+      <!-- Download Clients -->
+      <div class="settings-section">
+        <div class="settings-section-title">Download Clients</div>
+        <div class="field-hint" style="margin-top:4px;margin-bottom:10px">Configure your NZB and torrent clients directly — Top-Shelf will send downloads to them</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="grid-column:1/-1;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:4px">NZB Client</div>
+          <div class="field-row">
+            <label class="field-label">Client</label>
+            <select class="field-input" id="cfgDlNzbClient" onchange="toggleNzbFields()">
+              <option value="">None</option>
+              <option value="nzbget">NZBGet</option>
+              <option value="sabnzbd">SABnzbd</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label class="field-label">Host</label>
+            <input class="field-input" id="cfgDlNzbHost" type="text" placeholder="192.168.1.x">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Port</label>
+            <input class="field-input" id="cfgDlNzbPort" type="text" placeholder="6789">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Username</label>
+            <input class="field-input" id="cfgDlNzbUser" type="text" placeholder="nzbget">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Password</label>
+            <input class="field-input" id="cfgDlNzbPass" type="password" autocomplete="off">
+          </div>
+          <div class="field-row" id="nzbApiKeyRow">
+            <label class="field-label">API Key <span style="color:var(--dim)">(SABnzbd only)</span></label>
+            <input class="field-input" id="cfgDlNzbApiKey" type="password" autocomplete="off">
+          </div>
+
+          <div style="grid-column:1/-1;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:12px;border-top:1px solid var(--border);margin-top:4px">Torrent Client</div>
+          <div class="field-row">
+            <label class="field-label">Client</label>
+            <select class="field-input" id="cfgDlTorrentClient">
+              <option value="">None</option>
+              <option value="qbittorrent">qBittorrent</option>
+              <option value="transmission">Transmission</option>
+              <option value="deluge">Deluge</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label class="field-label">Host</label>
+            <input class="field-input" id="cfgDlTorrentHost" type="text" placeholder="192.168.1.x">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Port</label>
+            <input class="field-input" id="cfgDlTorrentPort" type="text" placeholder="8080">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Username</label>
+            <input class="field-input" id="cfgDlTorrentUser" type="text" placeholder="admin">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Password</label>
+            <input class="field-input" id="cfgDlTorrentPass" type="password" autocomplete="off">
+          </div>
+
+          <div style="grid-column:1/-1;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:12px;border-top:1px solid var(--border);margin-top:4px">Download Category</div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label">Category <span style="color:var(--dim)">(scenes, queue, default)</span></label>
+            <input class="field-input" id="cfgProwlarrCategory" type="text" placeholder="Top-Shelf">
+          </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label">Movies category <span style="color:var(--dim)">(Prowlarr grabs from Movies page; blank = same as above)</span></label>
+            <input class="field-input" id="cfgProwlarrCategoryMovies" type="text" placeholder="">
+          </div>
+        </div>
+      </div>
+
+      <!-- Prowlarr -->
+      <div class="settings-section">
+        <div class="settings-section-title">Prowlarr</div>
+        <div class="field-hint" style="margin-top:4px;margin-bottom:10px">Prowlarr is used to search indexers — download clients are configured above</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-row">
+            <label class="field-label">Prowlarr URL</label>
+            <input class="field-input" id="cfgProwlarrUrl" type="text" placeholder="http://192.168.1.x:9696">
+          </div>
+          <div class="field-row">
+            <label class="field-label">API Key</label>
+            <input class="field-input" id="cfgProwlarrKey" type="password" autocomplete="off">
+          </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label">Status</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div id="prowlarrStatus" style="font-size:11px;color:var(--dim);padding:9px 0">Not checked</div>
+              <button class="btn-secondary" onclick="refreshIndexers()" style="font-size:11px;padding:4px 8px">Refresh indexers</button>
+              <span id="indexerCount" style="font-size:11px;color:var(--dim)"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Keys -->
+      <div class="settings-section">
+        <div class="settings-section-title">API Keys</div>
+        <div class="field-row">
+          <label class="field-label">TMDB</label>
+          <input class="field-input" id="cfgKeyTmdb" type="password" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <label class="field-label">StashDB</label>
+          <input class="field-input" id="cfgKeyStashdb" type="password" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <label class="field-label">ThePornDB</label>
+          <input class="field-input" id="cfgKeyTpdb" type="password" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <label class="field-label">FansDB</label>
+          <input class="field-input" id="cfgKeyFansdb" type="password" autocomplete="off">
+        </div>
+      </div>
+
+      <!-- TPDB Favourites Sync -->
+      <div class="settings-section">
+        <div class="settings-section-title">TPDB Favourites Sync</div>
+        <div class="field-hint" style="margin-top:4px;margin-bottom:10px">Sync between your library and TPDB favourites</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label"><input type="checkbox" id="cfgTpdbSyncEnabled" style="margin-right:6px"> Enable scheduled sync</label>
+          </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label"><input type="checkbox" id="cfgTpdbSyncToFavs" style="margin-right:6px"> Sync library performers + studios → TPDB favourites</label>
+          </div>
+          <div class="field-row">
+            <label class="field-label">Sync Hour</label>
+            <input class="field-input" id="cfgTpdbSyncHour" type="number" min="0" max="23" placeholder="2">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Frequency (hours)</label>
+            <input class="field-input" id="cfgTpdbSyncFreq" type="number" min="1" max="168" placeholder="24">
+          </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label">Performer directory <span style="color:var(--dim)">(create folders here)</span></label>
+            <input class="field-input" id="cfgTpdbSyncPerformerDir" type="text" placeholder="/library/Stars">
+          </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label">Studio directory <span style="color:var(--dim)">(optional)</span></label>
+            <input class="field-input" id="cfgTpdbSyncStudioDir" type="text" placeholder="/library/Series">
+          </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <button class="btn-secondary" onclick="runTpdbSync()" style="font-size:12px;padding:6px 14px"><i class="fa-solid fa-arrows-rotate"></i> Run sync now</button>
+            <span id="tpdbSyncStatus" style="font-size:11px;color:var(--dim);margin-left:8px"></span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+      <button class="btn-secondary" onclick="closeSettings()">Cancel</button>
+      <button class="btn-primary" onclick="saveSettings()">Save Settings</button>
+    </div>
+  </div>
+</div>
+
+<div id="settingsSavedToast" class="settings-saved-toast" role="status" aria-live="polite"></div>
+
+<script>
+  function esc(str) {
+    return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  let _settingsSaveToastTimer = null;
+  function showSettingsSavedToast(message) {
+    const el = document.getElementById('settingsSavedToast');
+    if (!el) return;
+    el.textContent = message || 'Settings saved';
+    el.classList.add('visible');
+    clearTimeout(_settingsSaveToastTimer);
+    _settingsSaveToastTimer = setTimeout(function () {
+      el.classList.remove('visible');
+    }, 2200);
+  }
+
+  let isRunning = false;
+  let eventSource = null;
+  let dirs = [];
+  let selectedFile = null;
+  let queueMode = localStorage.getItem('ts_queue_mode') || 'scenes';
+  let selectedMovieFile = null;
+
+  // ── Log ──────────────────────────────────────────────────────────────
+
+  function classifyLine(line) {
+    if (line.startsWith('FILE '))                          return 'file';
+    if (line.includes('DONE'))                             return 'done';
+    if (line.includes('PIPELINE'))                        return 'pipeline';
+    if (line.startsWith('---'))                           return 'sep';
+    if (line.includes('WARNING'))                         return 'warning';
+    if (line.includes('ERROR') || line.includes('FAILED')) return 'error';
+    return 'default';
+  }
+
+  function appendLog(text) {
+    const body = document.getElementById('logBody');
+    const span = document.createElement('span');
+    span.className = `log-line ${classifyLine(text)}`;
+    span.textContent = text;
+    body.appendChild(span);
+    body.appendChild(document.createTextNode('\n'));
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function clearLog() { document.getElementById('logBody').innerHTML = ''; }
+
+  function startSSE() {
+    if (eventSource) eventSource.close();
+    eventSource = new EventSource('/api/log/stream');
+    eventSource.onmessage = e => {
+      try {
+        const d = JSON.parse(e.data);
+        if (d.ping) return;
+        appendLog(d);
+      } catch {}
+    };
+  }
+
+  // ── Status ───────────────────────────────────────────────────────────
+
+  async function pollStatus() {
+    try {
+      const r = await fetch('/api/status');
+      const d = await r.json();
+      const pill = document.getElementById('statusPill');
+      const btn  = document.getElementById('btnRunAll');
+      if (d.running) {
+        pill.classList.add('running');
+        document.getElementById('statusText').textContent = 'Running';
+        btn.disabled = true;
+        document.querySelectorAll('.btn-run-file').forEach(b => b.disabled = true);
+        isRunning = true;
+      } else {
+        if (isRunning) { loadQueue(); loadStats(); loadRetryStatus(); }
+        pill.classList.remove('running');
+        document.getElementById('statusText').textContent = 'Idle';
+        btn.disabled = false;
+        document.getElementById('btnRetryNow').disabled = false;
+        document.querySelectorAll('.btn-run-file').forEach(b => b.disabled = false);
+        isRunning = false;
+      }
+    } catch {}
+  }
+
+  // ── Queue ─────────────────────────────────────────────────────────────
+
+  function setQueueMode(mode) {
+    queueMode = mode === 'movies' ? 'movies' : 'scenes';
+    localStorage.setItem('ts_queue_mode', queueMode);
+    const btnScenes = document.getElementById('btnQueueScenes');
+    const btnMovies = document.getElementById('btnQueueMovies');
+    if (btnScenes) btnScenes.classList.toggle('active', queueMode === 'scenes');
+    if (btnMovies) btnMovies.classList.toggle('active', queueMode === 'movies');
+    const qpt = document.getElementById('queuePanelTitle');
+    if (qpt) {
+      qpt.innerHTML =
+        (queueMode === 'movies' ? 'Movie queue ' : 'Scene queue ') +
+        '<span id="queueCount" style="font-family:var(--secs);font-size:calc(12px + 2pt);letter-spacing:-0.02em;color:var(--dim)"></span>';
+    }
+    const retryBtn = document.getElementById('btnRetryNow');
+    if (retryBtn) retryBtn.style.display = queueMode === 'movies' ? 'none' : '';
+
+    const statFiled = document.querySelector('.stat-card.stat-filed');
+    const statUn = document.querySelector('.stat-card.stat-unmatched');
+    const statNd = document.getElementById('statCardNoDir');
+    const statErr = document.querySelector('.stat-card.stat-errors');
+    if (queueMode === 'movies') {
+      if (statFiled) { statFiled.setAttribute('href', '#'); statFiled.style.opacity = '0.85'; }
+      if (statUn) { statUn.setAttribute('href', '#'); statUn.style.opacity = '0.85'; }
+      if (statNd) { statNd.setAttribute('href', '#'); statNd.style.opacity = '0.85'; }
+      if (statErr) { statErr.setAttribute('href', '#'); statErr.style.opacity = '0.85'; }
+      document.getElementById('statLabelNoDir').textContent = 'No dest';
+    } else {
+      if (statFiled) { statFiled.setAttribute('href', '/history?status=filed'); statFiled.style.opacity = ''; }
+      if (statUn) { statUn.setAttribute('href', '/history?status=unmatched'); statUn.style.opacity = ''; }
+      if (statNd) { statNd.setAttribute('href', '/history?status=no_dir'); statNd.style.opacity = ''; }
+      if (statErr) { statErr.setAttribute('href', '/history?status=error'); statErr.style.opacity = ''; }
+      document.getElementById('statLabelNoDir').textContent = 'NO-DIRECTORY';
+    }
+
+    document.getElementById('searchPanel').style.display = 'none';
+    document.getElementById('movieSearchPanel').style.display = 'none';
+    selectedMovieFile = null;
+    clearSelectedFile();
+
+    loadQueue();
+    loadStats();
+  }
+
+  async function loadMovieQueue() {
+    try {
+      const r = await fetch('/api/movies/queue');
+      const d = await r.json();
+      const list = document.getElementById('queueList');
+      const qc = document.getElementById('queueCount');
+      qc.textContent = d.files?.length ? `-${d.files.length}-` : '';
+      qc.style.color = '#d4cfc4';
+
+      if (d.error) { list.innerHTML = `<div class="empty">${esc(d.error)}</div>`; return; }
+      if (!d.files.length) { list.innerHTML = '<div class="empty">No video files in movies folder — set Movies download directory in Settings</div>'; return; }
+      window._queueFiles = d.files;
+      list.innerHTML = d.files.map((f, i) => {
+        const st = f.prev_status || 'none';
+        const hintTxt = f.match_title ? `${esc(f.match_title)}${f.match_source ? ' · ' + esc(f.match_source) : ''}` : '';
+        return `
+        <div class="queue-item" id="qi-${i}">
+          <span class="status-dot-queue ${st}"></span>
+          <span class="queue-filename" title="${f.filename.replace(/"/g,'&quot;')}">${esc(f.filename)}${hintTxt ? ` <span style="color:var(--dim);font-size:11px">— ${hintTxt}</span>` : ''}</span>
+          <div class="queue-meta">
+            <span class="badge badge-size">${f.size_mb} MB</span>
+            <button type="button" class="btn-icon" onclick="openMovieManualSearch(window._queueFiles[${i}].filename)" title="Search TMDB / TPDB"><i class="fa-solid fa-magnifying-glass"></i></button>
+            <button type="button" class="btn-run-file" onclick="runFile(window._queueFiles[${i}].filename)" title="Auto-match (TMDB then TPDB) and file"><i class="fa-solid fa-play"></i></button>
+          </div>
+        </div>`;
+      }).join('');
+    } catch {
+      document.getElementById('queueList').innerHTML = '<div class="empty">Error loading movie queue</div>';
+    }
+  }
+
+  async function loadQueue() {
+    if (queueMode === 'movies') {
+      await loadMovieQueue();
+      return;
+    }
+    try {
+      const r = await fetch('/api/queue');
+      const d = await r.json();
+      const list = document.getElementById('queueList');
+      const qc = document.getElementById('queueCount'); qc.textContent = d.files?.length ? `-${d.files.length}-` : ''; qc.style.color = '#d4cfc4';
+      if (d.error) { list.innerHTML = `<div class="empty">${d.error}</div>`; return; }
+      if (!d.files.length) { list.innerHTML = '<div class="empty">No files in queue</div>'; return; }
+      // Store files array for index-based access from onclick handlers
+      window._queueFiles = d.files;
+      list.innerHTML = d.files.map((f, i) => `
+        <div class="queue-item" id="qi-${i}">
+          <span class="status-dot-queue ${f.prev_status || 'none'}"></span>
+          <span class="queue-filename" title="${f.filename.replace(/"/g,'&quot;')}">${f.filename}</span>
+          <div class="queue-meta">
+            <span class="badge badge-size">${f.size_mb} MB</span>
+            ${f.has_phash ? '<span class="badge badge-cached">phash</span>' : ''}
+            <button type="button" class="btn-icon" onclick="openManualSearch(window._queueFiles[${i}].filename)" title="Search manually"><i class="fa-solid fa-magnifying-glass"></i></button>
+            <button type="button" class="btn-icon" onclick="openManual(window._queueFiles[${i}].filename)" title="Manual metadata"><i class="fa-solid fa-pen"></i></button>
+            <button type="button" class="btn-run-file" onclick="runFile(window._queueFiles[${i}].filename)" title="Run"><i class="fa-solid fa-play"></i></button>
+          </div>
+        </div>`).join('');
+    } catch { document.getElementById('queueList').innerHTML = '<div class="empty">Error loading queue</div>'; }
+  }
+
+  // ── Run ───────────────────────────────────────────────────────────────
+
+  async function runAll() {
+    clearLog();
+    const url = queueMode === 'movies' ? '/api/movies/run/all' : '/api/run/all';
+    const r = await fetch(url, {method:'POST'});
+    if (r.ok) { isRunning = true; document.getElementById('btnRunAll').disabled = true; }
+  }
+
+  async function runFile(filename) {
+    clearLog();
+    const base = queueMode === 'movies' ? '/api/movies/run/file/' : '/api/run/file/';
+    const r = await fetch(base + encodeURIComponent(filename), {method:'POST'});
+    if (r.ok) { isRunning = true; document.getElementById('btnRunAll').disabled = true; }
+  }
+
+
+  // ── Stats ─────────────────────────────────────────────────────────────
+
+  async function loadStats() {
+    try {
+      if (queueMode === 'movies') {
+        const r = await fetch('/api/movies/stats');
+        const d = await r.json();
+        document.getElementById('statFiled').textContent     = d.filed       || 0;
+        document.getElementById('statUnmatched').textContent = d.unmatched   || 0;
+        document.getElementById('statNoDir').textContent     = d.no_dir      || 0;
+        document.getElementById('statErrors').textContent    = d.errors      || 0;
+        return;
+      }
+      const r = await fetch('/api/stats');
+      const d = await r.json();
+      document.getElementById('statFiled').textContent     = d.filed     || 0;
+      document.getElementById('statUnmatched').textContent = d.unmatched || 0;
+      document.getElementById('statNoDir').textContent     = d.no_dir    || 0;
+      document.getElementById('statErrors').textContent    = d.errors    || 0;
+    } catch {}
+  }
+
+  // ── Settings ──────────────────────────────────────────────────────────
+
+  async function openSettings() {
+    const r = await fetch('/api/settings');
+    const d = await r.json();
+    const s = d.settings;
+    dirs = d.directories.filter(x => x.type === 'performer').map(x => {
+      let gf = x.gender_filters;
+      if (!Array.isArray(gf) || gf.length === 0) gf = ['female', 'male', 'trans', 'other'];
+      return Object.assign({}, x, { gender_filters: gf });
+    });
+
+    document.getElementById('cfgSourceDir').value        = s.source_dir        || '';
+    document.getElementById('cfgMoviesSourceDir').value  = s.movies_source_dir  || '';
+    document.getElementById('cfgSeriesDir').value        = s.series_dir        || '';
+    document.getElementById('cfgFeaturesDir').value      = s.features_dir      || '';
+    document.getElementById('cfgPatternSeries').value    = s.pattern_series    || '';
+    document.getElementById('cfgPatternPerformer').value = s.pattern_performer || '';
+    const watchOn = (s.folder_watch_enabled || 'true') === 'true';
+    const dlWatchOn = (s.download_watch_enabled || 'false') === 'true';
+    document.getElementById('cfgDownloadWatchEnabled').checked = dlWatchOn;
+    toggleSection('downloadWatchBody', dlWatchOn);
+    document.getElementById('cfgDownloadWatchDir').value  = s.download_watch_dir       || '';
+    document.getElementById('cfgDownloadClientPrefix').value = s.download_client_path_prefix || '';
+    document.getElementById('cfgDownloadLocalPrefix').value = s.download_local_path_prefix || '';
+    document.getElementById('cfgDownloadWatchHold').value = s.download_watch_hold_secs || '300';
+    document.getElementById('cfgDownloadAutoImport').checked = (s.download_auto_import_enabled || 'false') === 'true';
+    document.getElementById('cfgDownloadImportRemove').checked = (s.download_import_remove_client || 'false') === 'true';
+    document.getElementById('cfgWatchEnabled').checked = watchOn;
+    toggleSection('watchBody', watchOn);
+    document.getElementById('cfgWatchHold').value = s.folder_watch_hold_secs || '60';
+    fetch('/api/watcher/status').then(r=>r.json()).then(d=>{
+      const el = document.getElementById('watcherStatus');
+      el.textContent = d.watching ? `Watching${d.pending.length ? ` · ${d.pending.length} pending` : ''}` : 'Not watching';
+      el.style.color = d.watching ? 'var(--green)' : 'var(--red)';
+    });
+    const retryOn = (s.retry_enabled || 'true') === 'true';
+    document.getElementById('cfgRetryEnabled').checked = retryOn;
+    toggleSection('retryBody', retryOn);
+    document.getElementById('cfgFilenamePatterns').value = s.filename_patterns  || 'pipe|dot_date|dot_date_short|bracket_site|dash_date';
+    document.getElementById('cfgStripWords').value         = s.filename_strip_words || '';
+    document.getElementById('cfgMinFileSize').value      = s.min_file_size_mb  || '10';
+    try { document.getElementById('cfgSiteAbbrevs').value = JSON.stringify(JSON.parse(s.site_abbreviations || '{}'), null, 2); } catch { document.getElementById('cfgSiteAbbrevs').value = s.site_abbreviations || ''; }
+    try { document.getElementById('cfgSiteRenameMap').value = JSON.stringify(JSON.parse(s.site_rename_map || '{}'), null, 2); } catch { document.getElementById('cfgSiteRenameMap').value = s.site_rename_map || ''; }
+    document.getElementById('cfgRetryHour').value    = s.retry_hour         || '1';
+    document.getElementById('cfgRetryFreq').value    = s.retry_frequency_h  || '24';
+    // Show next run time
+    fetch('/api/retry/status').then(r=>r.json()).then(d=>{
+      const el = document.getElementById('retryNextRun');
+      if (d.next_run) el.textContent = `Next run: ${d.next_run.slice(0,16)} — ${d.pending} file(s) queued for retry`;
+      else el.textContent = d.enabled ? 'Scheduler active, no job scheduled yet' : 'Retries disabled';
+    });
+    document.getElementById('cfgSubmitPhash').checked          = (s.submit_phash_enabled              || 'true')  === 'true';
+    document.getElementById('cfgManualSubmitDefault').checked  = (s.manual_submit_stashdb_default || 'false') === 'true';
+    document.getElementById('cfgAliasLookup').checked          = (s.alias_lookup_enabled || 'false') === 'true';
+    document.getElementById('cfgLibraryIndexQueue').checked = (String(s.library_index_queue_matching_enabled ?? s.favourites_crosswalk_queue_enabled ?? 'true') === 'true');
+    document.getElementById('cfgCatStraight').checked           = (s.cat_straight    || 'true') === 'true';
+    document.getElementById('cfgCatLesbian').checked            = (s.cat_lesbian     || 'true') === 'true';
+    document.getElementById('cfgCatGay').checked                = (s.cat_gay         || 'true') === 'true';
+    document.getElementById('cfgCatSoloFemale').checked         = (s.cat_solo_female || 'true') === 'true';
+    document.getElementById('cfgCatTrans').checked              = (s.cat_trans       || 'true') === 'true';
+    document.getElementById('cfgTagBlacklist').value            = s.tag_blacklist || '';
+    document.getElementById('cfgDlNzbClient').value    = s.dl_nzb_client     || '';
+    document.getElementById('cfgDlNzbHost').value      = s.dl_nzb_host       || '';
+    document.getElementById('cfgDlNzbPort').value      = s.dl_nzb_port       || '';
+    document.getElementById('cfgDlNzbUser').value      = s.dl_nzb_user       || '';
+    document.getElementById('cfgDlNzbPass').value      = s.dl_nzb_pass       || '';
+    document.getElementById('cfgDlNzbApiKey').value    = s.dl_nzb_api_key    || '';
+    document.getElementById('cfgDlTorrentClient').value = s.dl_torrent_client || '';
+    document.getElementById('cfgDlTorrentHost').value  = s.dl_torrent_host   || '';
+    document.getElementById('cfgDlTorrentPort').value  = s.dl_torrent_port   || '';
+    document.getElementById('cfgDlTorrentUser').value  = s.dl_torrent_user   || '';
+    document.getElementById('cfgDlTorrentPass').value  = s.dl_torrent_pass   || '';
+    document.getElementById('cfgProwlarrUrl').value      = s.prowlarr_url       || '';
+    document.getElementById('cfgProwlarrKey').value      = s.prowlarr_api_key   || '';
+    document.getElementById('cfgProwlarrCategory').value = s.prowlarr_category  || 'Top-Shelf';
+    document.getElementById('cfgProwlarrCategoryMovies').value = s.prowlarr_category_movies || '';
+    toggleNzbFields();
+    fetch('/api/prowlarr/indexers').then(r=>r.json()).then(d=>{
+      if (d.count) document.getElementById('indexerCount').textContent = `${d.count} indexers cached`;
+    });
+    fetch('/api/prowlarr/status').then(r=>r.json()).then(d=>{
+      const el = document.getElementById('prowlarrStatus');
+      el.textContent = d.connected ? `Connected v${d.version}` : (d.error || 'Not connected');
+      el.style.color = d.connected ? 'var(--green)' : 'var(--red)';
+    });
+    document.getElementById('cfgKeyTmdb').value          = s.api_key_tmdb      || '';
+    document.getElementById('cfgMediaScanEnabled').checked = (s.media_scan_enabled || 'true') === 'true';
+    document.getElementById('cfgScanDebounce').value        = s.media_scan_debounce_mins || '5';
+    document.getElementById('cfgStashEnabled').checked    = (s.stash_enabled    || 'true') === 'true';
+    document.getElementById('cfgJellyfinEnabled').checked = (s.jellyfin_enabled || 'true') === 'true';
+    document.getElementById('cfgPlexEnabled').checked     = (s.plex_enabled     || 'true') === 'true';
+    document.getElementById('cfgEmbyEnabled').checked     = (s.emby_enabled     || 'true') === 'true';
+    document.getElementById('cfgStashUrl').value          = s.stash_url          || '';
+    document.getElementById('cfgStashKey').value          = s.stash_api_key      || '';
+    document.getElementById('cfgJellyfinUrl').value       = s.jellyfin_url       || '';
+    document.getElementById('cfgJellyfinKey').value       = s.jellyfin_api_key   || '';
+    document.getElementById('cfgPlexUrl').value           = s.plex_url           || '';
+    document.getElementById('cfgPlexToken').value         = s.plex_token         || '';
+    document.getElementById('cfgEmbyUrl').value           = s.emby_url           || '';
+    document.getElementById('cfgEmbyKey').value           = s.emby_api_key       || '';
+    document.getElementById('cfgKeyStashdb').value        = s.api_key_stashdb    || '';
+    document.getElementById('cfgKeyTpdb').value          = s.api_key_tpdb      || '';
+    document.getElementById('cfgKeyFansdb').value        = s.api_key_fansdb    || '';
+    document.getElementById('cfgTpdbSyncEnabled').checked = (s.tpdb_sync_enabled || 'false') === 'true';
+    document.getElementById('cfgTpdbSyncToFavs').checked  = (s.tpdb_sync_to_favs || 'false') === 'true';
+    document.getElementById('cfgTpdbSyncHour').value     = s.tpdb_sync_hour         || '2';
+    document.getElementById('cfgTpdbSyncFreq').value     = s.tpdb_sync_frequency_h  || '24';
+    document.getElementById('cfgTpdbSyncPerformerDir').value = s.tpdb_sync_performer_dir || '';
+    document.getElementById('cfgTpdbSyncStudioDir').value   = s.tpdb_sync_studio_dir   || '';
+
+    renderDirList();
+    // Load auth status
+    try {
+      const ra = await fetch('/api/auth/status');
+      const da = await ra.json();
+      document.getElementById('cfgSessionHours').value = da.session_hours || 24;
+    } catch {}
+    document.getElementById('settingsModal').classList.add('open');
+  }
+
+  function closeSettings() {
+    if (window.location.pathname === '/settings') {
+      window.location.href = '/queue';
+      return;
+    }
+    document.getElementById('settingsModal').classList.remove('open');
+  }
+
+  const ALL_PERF_GENDERS = ['female', 'male', 'trans', 'other'];
+  const DIR_GENDER_ICONS = { female: 'fa-venus', male: 'fa-mars', trans: 'fa-transgender', other: 'fa-venus-mars' };
+  function dirGenderRowHtml(d, i) {
+    if (d.type !== 'performer') return '';
+    const gf = (!d.gender_filters || !d.gender_filters.length) ? ALL_PERF_GENDERS.slice() : d.gender_filters;
+    const L = { female: 'Female', male: 'Male', trans: 'Trans', other: 'Other' };
+    return `<div class="dir-gender-filters">
+      <span class="dir-gender-label"><i class="fa-solid fa-filter" aria-hidden="true"></i> Favourites matching</span>
+      <div class="dir-gender-chips">
+      ${ALL_PERF_GENDERS.map(g => {
+    const on = gf.includes(g);
+    return `<label class="dir-gender-chip${on ? ' dir-gender-chip--on' : ''}">
+      <input type="checkbox" ${on ? 'checked' : ''} onchange="setDirGenderFilter(${i},'${g}',this.checked)">
+      <span class="dir-gender-chip-inner"><i class="fa-solid ${DIR_GENDER_ICONS[g]}"></i> ${L[g]}</span>
+    </label>`;
+  }).join('')}
+      </div>
+      <p class="dir-gender-hint">Only checked genders are used when auto-linking folders to TPDB / StashDB / FansDB. All four = no restriction.</p>
+    </div>`;
+  }
+  function setDirGenderFilter(idx, g, checked) {
+    let gf = dirs[idx].gender_filters;
+    if (!gf || gf.length === 0) gf = ALL_PERF_GENDERS.slice();
+    if (checked) {
+      if (!gf.includes(g)) gf = [...gf, g];
+    } else {
+      gf = gf.filter(x => x !== g);
+    }
+    if (gf.length === 0) gf = ALL_PERF_GENDERS.slice();
+    dirs[idx].gender_filters = gf;
+    renderDirList();
+  }
+  function serializeGenderFiltersForSave(gf) {
+    if (!gf || !gf.length) return [];
+    if (gf.length === ALL_PERF_GENDERS.length) return [];
+    return gf;
+  }
+
+  function renderDirList() {
+    const sorted = [...dirs].sort((a,b) => a.rank - b.rank);
+    document.getElementById('dirList').innerHTML = sorted.length === 0
+      ? '<div class="empty" style="padding:16px">No performer directories configured</div>'
+      : sorted.map((d, i) => `
+        <div class="dir-row" data-id="${d.id||''}" data-idx="${i}">
+          <div class="dir-row-main">
+            <div class="dir-rank">${d.rank}</div>
+            <div class="dir-type-tag dir-type-${d.type}">${d.label}</div>
+            <div class="dir-path" title="${d.path}">${d.path}</div>
+            <div class="dir-controls">
+              <button class="btn-icon" onclick="moveDirUp(${i})" title="Move up">↑</button>
+              <button class="btn-icon" onclick="moveDirDown(${i})" title="Move down">↓</button>
+              <button class="btn-icon danger" onclick="removeDir(${i})" title="Remove"><i class="fa-solid fa-x"></i></button>
+            </div>
+          </div>
+          ${dirGenderRowHtml(d, i)}
+        </div>`).join('');
+  }
+
+  function moveDirUp(idx) {
+    if (idx === 0) return;
+    [dirs[idx-1], dirs[idx]] = [dirs[idx], dirs[idx-1]];
+    rerank();
+    renderDirList();
+  }
+
+  function moveDirDown(idx) {
+    if (idx >= dirs.length - 1) return;
+    [dirs[idx], dirs[idx+1]] = [dirs[idx+1], dirs[idx]];
+    rerank();
+    renderDirList();
+  }
+
+  function removeDir(idx) {
+    dirs.splice(idx, 1);
+    rerank();
+    renderDirList();
+  }
+
+  function rerank() {
+    dirs.forEach((d, i) => d.rank = i + 1);
+  }
+
+  function addDir() {
+    const label = document.getElementById('newDirLabel').value.trim();
+    const path  = document.getElementById('newDirPath').value.trim();
+    const type  = document.getElementById('newDirType').value;
+    if (!label || !path) return;
+    dirs.push({ type, path, label, rank: dirs.length + 1, gender_filters: ['female', 'male', 'trans', 'other'] });
+    document.getElementById('newDirLabel').value = '';
+    document.getElementById('newDirPath').value  = '';
+    renderDirList();
+  }
+
+  async function saveSettings() {
+    const payload = {
+      settings: {
+        source_dir:        document.getElementById('cfgSourceDir').value.trim(),
+        movies_source_dir: document.getElementById('cfgMoviesSourceDir').value.trim(),
+        series_dir:        document.getElementById('cfgSeriesDir').value.trim(),
+        features_dir:      document.getElementById('cfgFeaturesDir').value.trim(),
+        pattern_series:    document.getElementById('cfgPatternSeries').value.trim(),
+        pattern_performer: document.getElementById('cfgPatternPerformer').value.trim(),
+        download_watch_enabled:  document.getElementById('cfgDownloadWatchEnabled').checked ? 'true' : 'false',
+        download_watch_dir:      document.getElementById('cfgDownloadWatchDir').value.trim(),
+        download_client_path_prefix: document.getElementById('cfgDownloadClientPrefix').value.trim(),
+        download_local_path_prefix: document.getElementById('cfgDownloadLocalPrefix').value.trim(),
+        download_watch_hold_secs: document.getElementById('cfgDownloadWatchHold').value.trim(),
+        download_auto_import_enabled: document.getElementById('cfgDownloadAutoImport').checked ? 'true' : 'false',
+        download_import_remove_client: document.getElementById('cfgDownloadImportRemove').checked ? 'true' : 'false',
+        folder_watch_enabled:   document.getElementById('cfgWatchEnabled').checked ? 'true' : 'false',
+        folder_watch_hold_secs: document.getElementById('cfgWatchHold').value.trim(),
+        retry_enabled:     document.getElementById('cfgRetryEnabled').checked ? 'true' : 'false',
+        filename_patterns:     document.getElementById('cfgFilenamePatterns').value.trim(),
+        filename_strip_words: document.getElementById('cfgStripWords').value.trim(),
+        min_file_size_mb:  document.getElementById('cfgMinFileSize').value.trim(),
+        site_abbreviations: (() => { try { return JSON.stringify(JSON.parse(document.getElementById('cfgSiteAbbrevs').value)); } catch { return document.getElementById('cfgSiteAbbrevs').value; } })(),
+        site_rename_map:    (() => { try { return JSON.stringify(JSON.parse(document.getElementById('cfgSiteRenameMap').value)); } catch { return document.getElementById('cfgSiteRenameMap').value; } })(),
+        retry_hour:        document.getElementById('cfgRetryHour').value.trim(),
+        retry_frequency_h: document.getElementById('cfgRetryFreq').value,
+        submit_phash_enabled:           document.getElementById('cfgSubmitPhash').checked         ? 'true' : 'false',
+        manual_submit_stashdb_default: document.getElementById('cfgManualSubmitDefault').checked ? 'true' : 'false',
+        alias_lookup_enabled:          document.getElementById('cfgAliasLookup').checked ? 'true' : 'false',
+        library_index_queue_matching_enabled: document.getElementById('cfgLibraryIndexQueue').checked ? 'true' : 'false',
+        cat_straight:                  document.getElementById('cfgCatStraight').checked ? 'true' : 'false',
+        cat_lesbian:                   document.getElementById('cfgCatLesbian').checked ? 'true' : 'false',
+        cat_gay:                       document.getElementById('cfgCatGay').checked ? 'true' : 'false',
+        cat_solo_female:               document.getElementById('cfgCatSoloFemale').checked ? 'true' : 'false',
+        cat_trans:                     document.getElementById('cfgCatTrans').checked ? 'true' : 'false',
+        tag_blacklist:                  document.getElementById('cfgTagBlacklist').value.trim(),
+        api_key_tmdb:      document.getElementById('cfgKeyTmdb').value.trim(),
+        dl_nzb_client:       document.getElementById('cfgDlNzbClient').value.trim(),
+        dl_nzb_host:         document.getElementById('cfgDlNzbHost').value.trim(),
+        dl_nzb_port:         document.getElementById('cfgDlNzbPort').value.trim(),
+        dl_nzb_user:         document.getElementById('cfgDlNzbUser').value.trim(),
+        dl_nzb_pass:         document.getElementById('cfgDlNzbPass').value,
+        dl_nzb_api_key:      document.getElementById('cfgDlNzbApiKey').value.trim(),
+        dl_torrent_client:   document.getElementById('cfgDlTorrentClient').value.trim(),
+        dl_torrent_host:     document.getElementById('cfgDlTorrentHost').value.trim(),
+        dl_torrent_port:     document.getElementById('cfgDlTorrentPort').value.trim(),
+        dl_torrent_user:     document.getElementById('cfgDlTorrentUser').value.trim(),
+        dl_torrent_pass:     document.getElementById('cfgDlTorrentPass').value,
+        prowlarr_url:          document.getElementById('cfgProwlarrUrl').value.trim(),
+        prowlarr_api_key:      document.getElementById('cfgProwlarrKey').value.trim(),
+        prowlarr_category:     document.getElementById('cfgProwlarrCategory').value.trim(),
+        prowlarr_category_movies: document.getElementById('cfgProwlarrCategoryMovies').value.trim(),
+        media_scan_enabled:        document.getElementById('cfgMediaScanEnabled').checked ? 'true' : 'false',
+        media_scan_debounce_mins:  document.getElementById('cfgScanDebounce').value.trim(),
+        stash_enabled:     document.getElementById('cfgStashEnabled').checked     ? 'true' : 'false',
+        jellyfin_enabled:  document.getElementById('cfgJellyfinEnabled').checked  ? 'true' : 'false',
+        plex_enabled:      document.getElementById('cfgPlexEnabled').checked      ? 'true' : 'false',
+        emby_enabled:      document.getElementById('cfgEmbyEnabled').checked      ? 'true' : 'false',
+        stash_url:         document.getElementById('cfgStashUrl').value.trim(),
+        stash_api_key:     document.getElementById('cfgStashKey').value.trim(),
+        jellyfin_url:      document.getElementById('cfgJellyfinUrl').value.trim(),
+        jellyfin_api_key:  document.getElementById('cfgJellyfinKey').value.trim(),
+        plex_url:          document.getElementById('cfgPlexUrl').value.trim(),
+        plex_token:        document.getElementById('cfgPlexToken').value.trim(),
+        emby_url:          document.getElementById('cfgEmbyUrl').value.trim(),
+        emby_api_key:      document.getElementById('cfgEmbyKey').value.trim(),
+        api_key_stashdb:   document.getElementById('cfgKeyStashdb').value.trim(),
+        api_key_tpdb:      document.getElementById('cfgKeyTpdb').value.trim(),
+        api_key_fansdb:    document.getElementById('cfgKeyFansdb').value.trim(),
+        tpdb_sync_enabled:       document.getElementById('cfgTpdbSyncEnabled').checked ? 'true' : 'false',
+        tpdb_sync_to_favs:       document.getElementById('cfgTpdbSyncToFavs').checked ? 'true' : 'false',
+        tpdb_sync_hour:          document.getElementById('cfgTpdbSyncHour').value.trim(),
+        tpdb_sync_frequency_h:   document.getElementById('cfgTpdbSyncFreq').value.trim(),
+        tpdb_sync_performer_dir: document.getElementById('cfgTpdbSyncPerformerDir').value.trim(),
+        tpdb_sync_studio_dir:    document.getElementById('cfgTpdbSyncStudioDir').value.trim(),
+      },
+      directories: dirs.map(d => ({
+        type: d.type,
+        path: d.path,
+        label: d.label,
+        rank: d.rank,
+        gender_filters: serializeGenderFiltersForSave(d.gender_filters),
+      })),
+    };
+    const r = await fetch('/api/settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (r.ok) {
+      showSettingsSavedToast('Settings saved');
+      if (window.location.pathname !== '/settings') {
+        closeSettings();
+      }
+      loadQueue();
+    } else {
+      showSettingsSavedToast('Save failed');
+    }
+  }
+
+  // Close modal on overlay click
+  document.getElementById('settingsModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeSettings();
+  });
+
+  // ── Image overlay ─────────────────────────────────────────────────────
+
+  function openImageOverlay(src) {
+    document.getElementById('overlayImg').src = src;
+    const el = document.getElementById('imageOverlay');
+    el.style.display = 'flex';
+  }
+
+  function closeImageOverlay() {
+    document.getElementById('imageOverlay').style.display = 'none';
+    document.getElementById('overlayImg').src = '';
+  }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeImageOverlay(); });
+
+  // ── Movie queue manual TMDB / TPDB pick ───────────────────────────────
+
+  function closeMovieSearchPanel() {
+    document.getElementById('movieSearchPanel').style.display = 'none';
+    selectedMovieFile = null;
+    document.getElementById('movieSearchFileLabel').style.display = 'none';
+    document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('active'));
+  }
+
+  function clearMovieSearchPick() {
+    closeMovieSearchPanel();
+  }
+
+  async function openMovieManualSearch(filename) {
+    selectedMovieFile = filename;
+    document.getElementById('movieSearchFileLabel').textContent = 'Filing: ' + filename;
+    document.getElementById('movieSearchFileLabel').style.display = 'inline-block';
+    document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('active'));
+    if (window._queueFiles) {
+      const idx = window._queueFiles.findIndex(f => f.filename === filename);
+      if (idx !== -1) document.getElementById('qi-' + idx)?.classList.add('active');
+    }
+    const stem = filename.replace(/\.[^.]+$/, '').replace(/[._]/g, ' ');
+    document.getElementById('movieSrchQ').value = stem;
+    document.getElementById('movieSrchYear').value = '';
+    const y = filename.match(/\b(19\d{2}|20\d{2})\b/);
+    if (y) document.getElementById('movieSrchYear').value = y[1];
+    document.getElementById('movieSearchPanel').style.display = 'block';
+    document.getElementById('movieSearchPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    runMovieSearch();
+  }
+
+  async function runMovieSearch() {
+    const q = document.getElementById('movieSrchQ').value.trim();
+    const year = document.getElementById('movieSrchYear').value.trim();
+    const el = document.getElementById('movieSearchResults');
+    if (!q) {
+      el.innerHTML = '<div class="empty">Enter a title</div>';
+      return;
+    }
+    el.innerHTML = '<div class="empty">Searching…</div>';
+    let tmdb = [];
+    let tpdbRes = [];
+    try {
+      const [rt, rp] = await Promise.all([
+        fetch('/api/movies/tmdb-search?q=' + encodeURIComponent(q) + (year ? '&year=' + encodeURIComponent(year) : '')).then(r => r.json()),
+        fetch('/api/movies/search?q=' + encodeURIComponent(q) + (year ? '&year=' + encodeURIComponent(year) : '')).then(r => r.json()),
+      ]);
+      if (rt.results) tmdb = rt.results;
+      if (rp.results) tpdbRes = rp.results;
+    } catch (e) {
+      el.innerHTML = '<div class="empty">Search failed</div>';
+      return;
+    }
+    const sel = !!selectedMovieFile;
+    const rowsTmdb = (tmdb || []).slice(0, 12).map(m => `
+      <tr><td style="padding:6px;width:56px">${m.poster_url ? `<img src="${esc(m.poster_url)}" alt="" style="width:48px;border-radius:4px" onerror="this.style.visibility='hidden'">` : ''}</td>
+      <td style="padding:6px">${esc(m.title)} <span style="color:var(--dim)">${esc(m.year || '')}</span></td>
+      <td style="padding:6px"><button type="button" class="btn-run-file" ${sel ? '' : 'disabled'} data-tmdb-id="${esc(m.id)}" onclick="pickMovieTmdb(this)">Use TMDB</button></td></tr>`).join('');
+    const rowsTpdb = (tpdbRes || []).slice(0, 12).map(m => `
+      <tr><td style="padding:6px;width:56px">${m.poster ? `<img src="${esc(m.poster)}" alt="" style="width:48px;border-radius:4px" onerror="this.style.visibility='hidden'">` : ''}</td>
+      <td style="padding:6px">${esc(m.title)} <span style="color:var(--dim)">${esc(m.date || '')}</span></td>
+      <td style="padding:6px"><button type="button" class="btn-run-file" ${sel ? '' : 'disabled'} data-tpdb-id="${esc(m.id)}" onclick="pickMovieTpdb(this)">Use TPDB</button></td></tr>`).join('');
+    el.innerHTML = `
+      <div style="font-size:10px;color:var(--dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em">TMDB (priority)</div>
+      <table style="width:100%;margin-bottom:20px">${rowsTmdb || '<tr><td class="empty" style="padding:10px">No TMDB results</td></tr>'}</table>
+      <div style="font-size:10px;color:var(--dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em">ThePornDB</div>
+      <table style="width:100%">${rowsTpdb || '<tr><td class="empty" style="padding:10px">No TPDB results</td></tr>'}</table>`;
+  }
+
+  async function pickMovieTmdb(btn) {
+    const tmdbId = btn.getAttribute('data-tmdb-id');
+    if (!selectedMovieFile) { alert('No file selected'); return; }
+    clearLog();
+    const r = await fetch('/api/movies/file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: selectedMovieFile, tmdb_id: tmdbId }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (d.error) { alert(d.error); return; }
+    isRunning = true;
+    document.getElementById('btnRunAll').disabled = true;
+    closeMovieSearchPanel();
+  }
+
+  async function pickMovieTpdb(btn) {
+    const tpdbId = btn.getAttribute('data-tpdb-id');
+    if (!selectedMovieFile) { alert('No file selected'); return; }
+    clearLog();
+    const r = await fetch('/api/movies/file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: selectedMovieFile, tpdb_id: tpdbId }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (d.error) { alert(d.error); return; }
+    isRunning = true;
+    document.getElementById('btnRunAll').disabled = true;
+    closeMovieSearchPanel();
+  }
+
+  // ── Manual search & filing ────────────────────────────────────────────
+
+  async function openManualSearch(filename) {
+    selectedFile = filename;
+
+    // Show file label in search panel
+    document.getElementById('searchFileLabel').textContent = `Filing: ${filename}`;
+    document.getElementById('searchFileLabel').style.display = 'inline-block';
+
+    // Highlight queue item
+    document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('active'));
+    if (window._queueFiles) {
+      const idx = window._queueFiles.findIndex(f => f.filename === filename);
+      if (idx !== -1) document.getElementById(`qi-${idx}`)?.classList.add('active');
+    }
+
+    // Pre-populate search from filename using parser API
+    document.getElementById('srchTerm').value = '';
+    document.getElementById('srchTitle').value = '';
+    document.getElementById('srchPerformer').value = '';
+    document.getElementById('srchStudio').value = '';
+    document.getElementById('srchDateFrom').value = '';
+    document.getElementById('srchDateTo').value = '';
+    try {
+      const r = await fetch(`/api/parse/filename?filename=${encodeURIComponent(filename)}`);
+      const d = await r.json();
+      if (d.title)      document.getElementById('srchTitle').value     = d.title;
+      if (d.site)       document.getElementById('srchStudio').value    = d.site;
+      if (d.performers) document.getElementById('srchPerformer').value = d.performers;
+      if (d.date)       document.getElementById('srchDateFrom').value  = d.date;
+      // Only fall back to free text if parsing found nothing at all
+      if (!d.title && !d.site && !d.performers) {
+        const stem = filename.replace(/\.[^.]+$/, '').replace(/[._]/g, ' ');
+        document.getElementById('srchTerm').value = stem;
+      }
+    } catch {
+      const stem = filename.replace(/\.[^.]+$/, '').replace(/[._]/g, ' ');
+      document.getElementById('srchTerm').value = stem;
+    }
+
+    // Show and scroll to search panel
+    document.getElementById('searchPanel').style.display = 'block';
+    document.getElementById('searchPanel')
+      .scrollIntoView({behavior: 'smooth', block: 'start'});
+
+    // Auto-run search
+    runSearch();
+  }
+
+  function clearSelectedFile() {
+    selectedFile = null;
+    document.getElementById('searchFileLabel').style.display = 'none';
+    document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('searchPanel').style.display = 'none';
+    window._searchResults = null;
+  }
+
+  async function useThisScene(idx) {
+    if (!selectedFile) { alert('No file selected'); return; }
+    const scene = window._searchResults[idx]?._raw;
+    if (!scene) return;
+
+    const r = await fetch('/api/file/manual', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ filename: selectedFile, scene }),
+    });
+    const d = await r.json();
+    if (d.error) { alert(`Error: ${d.error}`); return; }
+
+    clearSelectedFile();
+    clearSearch();
+    isRunning = true;
+    document.getElementById('btnRunAll').disabled = true;
+  }
+
+  // ── Search ────────────────────────────────────────────────────────────
+
+  async function runSearch() {
+    const title     = document.getElementById('srchTitle').value.trim();
+    const performer = document.getElementById('srchPerformer').value.trim();
+    const studio    = document.getElementById('srchStudio').value.trim();
+    // Only use free text term if none of the structured fields are filled
+    const termRaw   = document.getElementById('srchTerm').value.trim();
+    const term      = (title || performer || studio) ? '' : termRaw;
+    const payload = {
+      term,
+      title,
+      performer,
+      studio,
+      date_from: document.getElementById('srchDateFrom').value.trim(),
+      date_to:   document.getElementById('srchDateTo').value.trim(),
+    };
+    const resultsEl = document.getElementById('searchResults');
+    resultsEl.innerHTML = '<div class="empty">Searching...</div>';
+    try {
+      const r = await fetch('/api/search', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json();
+      if (d.error) { resultsEl.innerHTML = `<div class="empty">${d.error}</div>`; return; }
+      if (!d.results.length) { resultsEl.innerHTML = '<div class="empty">No results found</div>'; return; }
+      window._searchResults = d.results;
+      resultsEl.innerHTML = `
+        <table style="table-layout:fixed">
+          <colgroup>
+            <col style="width:76px">
+            <col style="width:22%"><col style="width:7%"><col style="width:14%">
+            <col style="width:14%"><col style="width:8%"><col style="width:8%"><col style="width:11%">
+          </colgroup>
+          <thead><tr>
+            <th></th>
+            <th>Title</th><th>Source</th><th>Studio</th>
+            <th>Performers</th><th>Date</th><th>Link</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${d.results.map((row, idx) => `
+              <tr>
+                <td style="padding:6px 8px;vertical-align:middle">
+                  ${row.image
+                    ? `<img src="${row.image}" onclick="openImageOverlay(this.src)"
+                           style="height:64px;width:64px;object-fit:cover;border-radius:4px;cursor:zoom-in;display:block"
+                           onerror="this.style.display='none'">`
+                    : `<div style="width:64px;height:64px;background:rgba(255,255,255,0.04);border-radius:4px;border:1px solid var(--border)"></div>`}
+                </td>
+                <td class="td-filename" title="${row.title}" style="vertical-align:middle">${row.title}</td>
+                <td style="vertical-align:middle"><span class="source-tag">${row.source}</span></td>
+                <td class="td-title" title="${row.studio}" style="vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${row.studio}</td>
+                <td class="td-performers" title="${row.performers}" style="vertical-align:middle;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${row.performers||'-'}</td>
+                <td class="td-date" style="vertical-align:middle">${row.date||'-'}</td>
+                <td style="vertical-align:middle">${row.id && row.source ? `<a href="${
+  row.source === 'ThePornDB' ? 'https://theporndb.net/scenes/' + row.id :
+  row.source === 'FansDB'    ? 'https://fansdb.cc/scenes/'    + row.id :
+                               'https://stashdb.org/scenes/'  + row.id
+}" target="_blank" style="color:var(--accent);font-size:10px">View ↗</a>` : '-'}</td>
+                <td style="vertical-align:middle">
+                  ${selectedFile
+                    ? `<button class="btn-run-file" style="border-color:var(--green);color:var(--green);white-space:nowrap" onclick="useThisScene(${idx})">Use this</button>`
+                    : `<span style="font-size:10px;color:var(--muted)">No file selected</span>`}
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+    } catch(e) {
+      resultsEl.innerHTML = `<div class="empty">Search failed: ${e.message}</div>`;
+    }
+  }
+
+  function clearSearch() {
+    ['srchTerm','srchTitle','srchPerformer','srchStudio','srchDateFrom','srchDateTo']
+      .forEach(id => document.getElementById(id).value = '');
+    document.getElementById('searchResults').innerHTML = '<div class="empty">Enter search terms above and press Search</div>';
+    selectedFile = null;
+    document.getElementById('searchFileLabel').style.display = 'none';
+    document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('searchPanel').style.display = 'none';
+  }
+
+  // ── Retry ─────────────────────────────────────────────────────────────
+
+  async function loadRetryStatus() {
+    try {
+      const r = await fetch('/api/retry/status');
+      const d = await r.json();
+      const pill = document.getElementById('retryPill');
+      if (d.pending > 0) {
+        pill.style.display = 'inline-block';
+        pill.textContent = d.enabled
+          ? `⟳ ${d.pending} queued — next ${d.next_run ? d.next_run.slice(11,16) : '?'}`
+          : `⟳ ${d.pending} waiting (retries off)`;
+      } else {
+        pill.style.display = 'none';
+      }
+    } catch {}
+  }
+
+  async function retryNow() {
+    const btn = document.getElementById('btnRetryNow');
+    btn.disabled = true;
+    clearLog();
+    const r = await fetch('/api/retry/now', {method:'POST'});
+    const d = await r.json();
+    if (d.error) { alert(d.error); btn.disabled = false; return; }
+    isRunning = true;
+    document.getElementById('btnRunAll').disabled = true;
+  }
+
+  // ── Queue filter ──────────────────────────────────────────────────────
+
+  function filterQueue() {
+    const term = document.getElementById('queueFilter').value.toLowerCase();
+    document.querySelectorAll('#queueList .queue-item').forEach(item => {
+      const filename = item.querySelector('.queue-filename')?.title?.toLowerCase() || '';
+      item.style.display = (!term || filename.includes(term)) ? '' : 'none';
+    });
+  }
+
+  // ── Manual metadata ──────────────────────────────────────────────────
+
+  let _manualFile = null;
+
+  async function openManual(filename) {
+    _manualFile = filename;
+    document.getElementById('manualFilename').textContent = filename;
+    document.getElementById('mTitle').value = '';
+    document.getElementById('mStudio').value = '';
+    document.getElementById('mDate').value = '';
+    document.getElementById('mPerformers').value = '';
+    document.getElementById('mPlot').value = '';
+    document.getElementById('mImageUrl').value = '';
+    document.getElementById('mThumbPreview').style.display = 'none';
+    document.getElementById('mRegenBtn').style.display = 'none';
+    document.getElementById('mResolveResults').innerHTML = '';
+    document.getElementById('mResolveStatus').textContent = '';
+    mThumbMode = null; mThumbDataUrl = null;
+    mResolvedStudio = null; mResolvedPerformers = [];
+    // Set StashDB toggle from settings default
+    fetch('/api/settings').then(r=>r.json()).then(s=>{
+      const def = (s.manual_submit_stashdb_default || 'false') === 'true';
+      document.getElementById('mSubmitStashdb').checked = def;
+      document.getElementById('mStashdbFields').style.display = def ? 'block' : 'none';
+    });
+    document.getElementById('manualModal').classList.add('open');
+    // Parse filename via API
+    try {
+      const r = await fetch(`/api/parse/filename?filename=${encodeURIComponent(filename)}`);
+      const d = await r.json();
+      if (d.title)      document.getElementById('mTitle').value      = d.title;
+      if (d.site)       document.getElementById('mStudio').value     = d.site;
+      if (d.date)       document.getElementById('mDate').value       = d.date;
+      if (d.performers) document.getElementById('mPerformers').value = d.performers;
+    } catch {}
+  }
+
+  function closeManual() {
+    document.getElementById('manualModal').classList.remove('open');
+    _manualFile = null;
+  }
+
+  async function submitManual() {
+    if (!_manualFile) return;
+    const imageUrl = mThumbMode === 'generated' ? '' : document.getElementById('mImageUrl').value.trim();
+    const payload = {
+      filename:   _manualFile,
+      title:      document.getElementById('mTitle').value.trim(),
+      studio:     document.getElementById('mStudio').value.trim(),
+      date:       document.getElementById('mDate').value.trim(),
+      performers: document.getElementById('mPerformers').value.trim(),
+      plot:       document.getElementById('mPlot').value.trim(),
+      image_url:  imageUrl,
+    };
+    // If generated thumb, send as data_url separately
+    if (mThumbMode === 'generated' && mThumbDataUrl) {
+      payload.thumb_data_url = mThumbDataUrl;
+    }
+    if (!payload.title || !payload.studio || !payload.date) {
+      alert('Title, studio and date are required');
+      return;
+    }
+
+    // StashDB submission
+    const submitToStashdb = document.getElementById('mSubmitStashdb').checked;
+    if (submitToStashdb) {
+      // Check if any unresolved confirmations remain
+      const unresolvedBtns = document.getElementById('mResolveResults').querySelectorAll('button');
+      if (unresolvedBtns.length > 0) {
+        alert('Please confirm the StashDB matches before submitting');
+        return;
+      }
+    }
+
+    closeManual();
+    clearLog();
+    const r = await fetch('/api/file/manual/metadata', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (d.error) { alert(`Error: ${d.error}`); return; }
+    isRunning = true;
+    document.getElementById('btnRunAll').disabled = true;
+
+    // Submit to StashDB if toggled
+    if (submitToStashdb) {
+      setTimeout(async () => {
+        const stashPayload = {
+          filename:      _manualFile || payload.filename,
+          title:         payload.title,
+          date:          payload.date,
+          plot:          payload.plot,
+          studio_id:     mResolvedStudio || null,
+          performer_ids: mResolvedPerformers.filter(Boolean),
+          image_url:     imageUrl,
+        };
+        const sr = await fetch('/api/stashdb/submit-manual', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(stashPayload),
+        });
+        const sd = await sr.json();
+        if (sd.success) {
+          console.log('StashDB scene submitted:', sd.id);
+        } else {
+          console.warn('StashDB submit failed:', sd.error);
+          // Show in log if auth error
+          if (sd.error?.includes('authorised') || sd.error?.includes('authorized')) {
+            appendLog('  StashDB: ' + sd.error);
+          }
+        }
+      }, 500);
+    }
+  }
+
+  // Close manual modal on overlay click
+  document.getElementById('manualModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeManual();
+  });
+
+  // ── Manual modal: thumbnail & StashDB ───────────────────────────────
+
+  let mThumbMode = null;      // 'url' or 'generated'
+  let mThumbDataUrl = null;   // base64 from generation
+  let mResolvedStudio = null;
+  let mResolvedPerformers = [];
+
+  function mThumbPreview(url) {
+    if (!url) { document.getElementById('mThumbPreview').style.display = 'none'; return; }
+    document.getElementById('mThumbImg').src = url;
+    document.getElementById('mThumbPreview').style.display = 'block';
+    document.getElementById('mThumbPercent').textContent = '';
+    document.getElementById('mRegenBtn').style.display = 'none';
+  }
+
+  async function generateThumb() {
+    if (!_manualFile) return;
+    const btn = document.querySelector('[onclick="generateThumb()"]');
+    document.getElementById('mThumbPreview').style.display = 'none';
+    try {
+      const r = await fetch('/api/thumb/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ filename: _manualFile }),
+      });
+      const d = await r.json();
+      if (d.error) { alert(`Thumb error: ${d.error}`); return; }
+      mThumbDataUrl = d.data_url;
+      mThumbMode = 'generated';
+      document.getElementById('mThumbImg').src = d.data_url;
+      document.getElementById('mThumbPreview').style.display = 'block';
+      document.getElementById('mThumbPercent').textContent = `Frame at ${d.percent}%`;
+      document.getElementById('mRegenBtn').style.display = 'inline-flex';
+      document.getElementById('mImageUrl').value = '';
+    } catch(e) { alert(`Thumb error: ${e.message}`); }
+  }
+
+  function toggleStashdbFields(show) {
+    document.getElementById('mStashdbFields').style.display = show ? 'block' : 'none';
+    if (show) resolveStashdb();
+  }
+
+  async function resolveStashdb() {
+    const studio = document.getElementById('mStudio').value.trim();
+    const performers = document.getElementById('mPerformers').value.trim();
+    if (!studio && !performers) return;
+    document.getElementById('mResolveStatus').textContent = 'Looking up on StashDB...';
+    document.getElementById('mResolveResults').innerHTML = '';
+    mResolvedStudio = null;
+    mResolvedPerformers = [];
+    try {
+      const r = await fetch('/api/stashdb/resolve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ studio, performers }),
+      });
+      const d = await r.json();
+      if (d.error) { document.getElementById('mResolveStatus').textContent = d.error; return; }
+      renderResolveResults(d);
+    } catch(e) {
+      document.getElementById('mResolveStatus').textContent = `Lookup failed: ${e.message}`;
+    }
+  }
+
+  function renderResolveResults(d) {
+    document.getElementById('mResolveStatus').textContent = '';
+    let html = '';
+
+    if (d.studio) {
+      if (d.studio.confirmed) {
+        mResolvedStudio = d.studio.id;
+        html += `<div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Studio: ${esc(d.studio.name)}</div>`;
+      } else if (d.studio.suggestions?.length) {
+        html += `<div style="font-size:11px;color:var(--amber);margin-bottom:4px">Studio not found. Did you mean:</div>`;
+        d.studio.suggestions.forEach(s => {
+          html += `<button class="btn-small" style="margin:2px" onclick="confirmStudio('${s.id}','${esc(s.name)}')">
+            ${esc(s.name)}
+          </button>`;
+        });
+        html += `<button class="btn-small" style="margin:2px;color:var(--dim)" onclick="confirmStudio(null,'${esc(d.studio.name)}')">Skip studio</button>`;
+        html += '<br style="margin-bottom:8px">';
+      } else {
+        html += `<div style="font-size:11px;color:var(--dim);margin-bottom:6px">Studio not found on StashDB — will submit without</div>`;
+        mResolvedStudio = null;
+      }
+    }
+
+    if (d.performers?.length) {
+      d.performers.forEach((p, i) => {
+        if (p.confirmed) {
+          mResolvedPerformers[i] = p.id;
+          html += `<div style="font-size:11px;color:var(--green);margin-bottom:4px">✓ Performer: ${esc(p.name)}</div>`;
+        } else if (p.suggestions?.length) {
+          html += `<div style="font-size:11px;color:var(--amber);margin-bottom:4px">${esc(p.name)}: Did you mean:</div>`;
+          p.suggestions.forEach(s => {
+            html += `<button class="btn-small" style="margin:2px" onclick="confirmPerformer(${i},'${s.id}','${esc(s.name)}')">
+              ${esc(s.name)}
+            </button>`;
+          });
+          html += `<button class="btn-small" style="margin:2px;color:var(--dim)" onclick="confirmPerformer(${i},null,'${esc(p.name)}')">Skip</button>`;
+          html += '<br style="margin-bottom:8px">';
+        } else {
+          html += `<div style="font-size:11px;color:var(--dim);margin-bottom:4px">${esc(p.name)}: not found — will skip</div>`;
+          mResolvedPerformers[i] = null;
+        }
+      });
+    }
+
+    document.getElementById('mResolveResults').innerHTML = html;
+  }
+
+  function confirmStudio(id, name) {
+    mResolvedStudio = id;
+    const colour = id ? 'var(--green)' : 'var(--dim)';
+    document.getElementById('mResolveResults').querySelectorAll('[onclick^="confirmStudio"]')
+      .forEach(b => b.closest('div')?.remove());
+    document.getElementById('mResolveResults').insertAdjacentHTML('afterbegin',
+      `<div style="font-size:11px;color:${colour};margin-bottom:6px">${id ? '✓' : '–'} Studio: ${esc(name)}</div>`);
+  }
+
+  function confirmPerformer(idx, id, name) {
+    mResolvedPerformers[idx] = id;
+    const colour = id ? 'var(--green)' : 'var(--dim)';
+    // Replace the suggestion block for this performer with confirmation
+    const results = document.getElementById('mResolveResults');
+    const marker = `confirmPerformer(${idx},`;
+    let replaced = false;
+    results.querySelectorAll('button').forEach(b => {
+      if (!replaced && b.getAttribute('onclick')?.startsWith(marker)) {
+        // Remove all sibling buttons for this performer
+        let node = b;
+        while (node && !node.tagName?.match(/^BR$/i)) {
+          const next = node.nextSibling;
+          if (node.nodeType === 1) node.remove();
+          node = next;
+        }
+        if (node) node.remove();
+        replaced = true;
+      }
+    });
+    results.insertAdjacentHTML('beforeend',
+      `<div style="font-size:11px;color:${colour};margin-bottom:4px">${id ? '✓' : '–'} Performer: ${esc(name)}</div>`);
+  }
+
+  // Patch submitManual to handle StashDB submission
+  const _origSubmitManual = submitManual;
+
+  // ── Auth ─────────────────────────────────────────────────────────────
+
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+  }
+
+  async function setPassword() {
+    const pw = document.getElementById('cfgNewPassword').value.trim();
+    const hours = parseInt(document.getElementById('cfgSessionHours').value) || 24;
+    const msg = document.getElementById('pwMsg');
+    if (pw) {
+      const r = await fetch('/api/auth/set-password', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ password: pw }),
+      });
+      const d = await r.json();
+      if (d.error) { msg.style.cssText = 'display:block;color:var(--red)'; msg.textContent = d.error; return; }
+    }
+    // Save session hours via settings
+    msg.style.cssText = 'display:block;color:var(--green)';
+    msg.textContent = pw ? 'Password updated' : 'Settings saved';
+    document.getElementById('cfgNewPassword').value = '';
+    setTimeout(() => msg.style.display = 'none', 3000);
+  }
+
+  async function removePassword() {
+    if (!confirm('Remove password protection? Anyone on the network will be able to access Top-Shelf.')) return;
+    const r = await fetch('/api/auth/remove-password', { method: 'POST' });
+    const d = await r.json();
+    const msg = document.getElementById('pwMsg');
+    msg.style.cssText = 'display:block;color:var(--amber)';
+    msg.textContent = 'Password removed — access is now open';
+    setTimeout(() => msg.style.display = 'none', 3000);
+  }
+
+
+
+  // ── Download folder ──────────────────────────────────────────────────
+
+  async function refreshIndexers() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Refreshing...';
+    try {
+      const r = await fetch('/api/prowlarr/indexers/refresh', { method: 'POST' });
+      const d = await r.json();
+      document.getElementById('indexerCount').textContent = `${d.count} indexers cached`;
+    } catch(e) {
+      document.getElementById('indexerCount').textContent = 'Failed';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Refresh indexers';
+    }
+  }
+
+  async function runTpdbSync() {
+    const el = document.getElementById('tpdbSyncStatus');
+    el.textContent = 'Syncing...';
+    el.style.color = 'var(--accent)';
+    try {
+      const r = await fetch('/api/tpdb/sync', { method: 'POST' });
+      const d = await r.json();
+      if (d.skipped) { el.textContent = 'Sync disabled'; el.style.color = 'var(--dim)'; }
+      else if (d.error) { el.textContent = d.error; el.style.color = 'var(--red)'; }
+      else {
+        let msg = `Created ${d.count} folder(s)`;
+        if (d.to_favs) {
+          const p = d.to_favs.performers || {};
+          const s = d.to_favs.studios || {};
+          const totalAdded = (p.added||0) + (s.added||0);
+          const totalSkipped = (p.skipped||0) + (s.skipped||0);
+          if (totalAdded || totalSkipped) {
+            msg += ` · Favs: ${totalAdded} added`;
+            if (totalSkipped) msg += `, ${totalSkipped} already`;
+          }
+        }
+        el.textContent = msg;
+        el.style.color = 'var(--green)';
+      }
+    } catch(e) {
+      el.textContent = 'Failed'; el.style.color = 'var(--red)';
+    }
+  }
+
+  async function processAllDownloads() {
+    const r = await fetch('/api/download/process-all', { method: 'POST' });
+    const d = await r.json();
+    if (d.error) { alert(`Error: ${d.error}`); return; }
+    if (!d.started) { alert('No entries found in download folder'); return; }
+    alert(`Processing ${d.count} entr${d.count === 1 ? 'y' : 'ies'} - check the log`);
+    closeSettings();
+    clearLog();
+  }
+
+  // ── Collapsible & toggle helpers ─────────────────────────────────────
+
+  function toggleSection(bodyId, show) {
+    const el = document.getElementById(bodyId);
+    if (el) el.style.display = show ? 'block' : 'none';
+  }
+
+  function toggleNzbFields() {
+    const client = document.getElementById('cfgDlNzbClient').value;
+    const row = document.getElementById('nzbApiKeyRow');
+    if (row) row.style.display = client === 'sabnzbd' ? '' : 'none';
+  }
+
+  function toggleCollapsible(bodyId, arrowId) {
+    const body  = document.getElementById(bodyId);
+    const arrow = document.getElementById(arrowId);
+    const open  = body.classList.toggle('open');
+    if (arrow) arrow.classList.toggle('open', open);
+  }
+
+  // ── Watcher status ────────────────────────────────────────────────────
+
+  async function loadWatcherStatus() {
+    try {
+      const r = await fetch('/api/watcher/status');
+      const d = await r.json();
+      const pill = document.getElementById('watcherPill');
+      if (d.pending?.length) {
+        pill.style.display = 'inline-block';
+        pill.textContent = `⟳ ${d.pending.length} arriving`;
+      } else {
+        pill.style.display = 'none';
+      }
+    } catch {}
+  }
+
+  async function loadScanStatus() {
+    try {
+      const r = await fetch('/api/scan/status');
+      const d = await r.json();
+      const pill = document.getElementById('scanPill');
+      const pending = d.pending || {};
+      const servers = Object.keys(pending);
+      if (servers.length) {
+        const soonest = Math.min(...Object.values(pending));
+        if (soonest > 0) {
+          pill.style.display = 'inline-block';
+          pill.textContent = `⟳ scan in ${soonest}s`;
+        } else {
+          pill.style.display = 'none';
+        }
+      } else {
+        pill.style.display = 'none';
+      }
+    } catch {}
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────
+
+  startSSE();
+  setQueueMode(queueMode);
+  loadRetryStatus();
+  loadWatcherStatus();
+  setInterval(pollStatus, 2000);
+  setInterval(loadRetryStatus, 30000);
+  setInterval(loadWatcherStatus, 15000);
+  loadScanStatus();
+  setInterval(loadScanStatus, 10000);
+  if (window.location.pathname === '/settings') {
+    document.getElementById('navQueueBtn')?.classList.remove('active-nav');
+    document.getElementById('navSettingsBtn')?.classList.add('active-nav');
+    document.body.classList.add('settings-page');
+    openSettings();
+  } else if (new URLSearchParams(window.location.search).get('settings') === '1') {
+    openSettings();
+    history.replaceState(null, '', '/queue');
+  }
+</script>
+<script defer src="/static/app-shell.js"></script>
+</body>
+</html>
