@@ -4609,13 +4609,64 @@ def _find_matching_child_dir(parent: Path, label: str) -> Path | None:
                 return ch.resolve()
     except OSError:
         pass
+    alt2 = _find_overlap_child_dir(parent, label)
+    if alt2 is not None:
+        return alt2
     return None
 
 
-def _nzb_dest_path_candidates(dest_raw: str, job_name: str) -> list[str]:
+def _find_overlap_child_dir(parent: Path, label: str) -> Path | None:
     """
-    NZBGet may report only the category folder (…/Series) or the full job path.
-    Prefer ``dest/job`` when the last component of ``dest`` is not already the job folder name.
+    When the client path's last segment differs slightly from the folder on disk (truncation or
+    extra ``.x264``-style suffix), pick the only subdirectory whose name shares a long prefix with
+    ``label`` and similar length.
+    """
+    if not label or len(label) < 16:
+        return None
+    try:
+        if not parent.is_dir():
+            return None
+        lf = unicodedata.normalize("NFC", label).casefold()
+    except Exception:
+        lf = label.casefold()
+    stem = min(40, len(lf))
+    if stem < 16:
+        return None
+    head = lf[:stem]
+    hits: list[Path] = []
+    try:
+        for ch in parent.iterdir():
+            if not ch.is_dir():
+                continue
+            try:
+                cn = unicodedata.normalize("NFC", ch.name).casefold()
+            except Exception:
+                cn = ch.name.casefold()
+            if cn == lf:
+                continue
+            if len(cn) < 8:
+                continue
+            if len(cn) >= stem:
+                if cn[:stem] != head[:stem]:
+                    continue
+            else:
+                if not head.startswith(cn):
+                    continue
+            if abs(len(cn) - len(lf)) > 28:
+                continue
+            hits.append(ch)
+    except OSError:
+        return None
+    if len(hits) == 1:
+        return hits[0].resolve()
+    return None
+
+
+def _download_client_dest_candidates(dest_raw: str, job_name: str) -> list[str]:
+    """
+    Download clients often report only the category folder (…/Features) or the full job path.
+    Prefer ``base/job`` when the last component of ``base`` is not already the job folder name.
+    Used for NZBGet and SABnzbd.
     """
     d = _normalize_import_path_str((dest_raw or "").strip())
     if not d:
@@ -5317,32 +5368,45 @@ def _download_import_by_id(dl_id: str) -> dict:
             if not storage:
                 return {"error": "SABnzbd did not report a storage path yet"}
             storage_raw = _normalize_import_path_str(storage)
-            path = Path(storage_raw)
-            path = _resolve_local_download_path(path, s)
+            sab_nm = (
+                (slot.get("filename") or slot.get("name") or slot.get("nzb_name") or "")
+                .strip()
+            )
+            path = None
+            for cand in _download_client_dest_candidates(storage, sab_nm):
+                p = _resolve_local_download_path(Path(cand), s)
+                if p:
+                    path = p
+                    break
             used_mirror = False
             if not path:
                 dest_dir_try, derr_try = _dl_resolve_import_dest_dir(
                     s, sab_cat, storage_raw, storage_raw
                 )
                 if not derr_try and dest_dir_try:
-                    path = _resolve_local_download_path_via_save_mirror(
-                        Path(storage_raw),
-                        str(Path(storage_raw).parent),
-                        storage_raw,
-                        s,
-                        dest_dir_try,
-                    )
-                    used_mirror = path is not None
+                    for cand in _download_client_dest_candidates(storage, sab_nm):
+                        path = _resolve_local_download_path_via_save_mirror(
+                            Path(cand),
+                            str(Path(cand).parent),
+                            cand,
+                            s,
+                            dest_dir_try,
+                        )
+                        if path:
+                            used_mirror = True
+                            break
             found_via_watch = False
             if not path:
-                sab_nm = (
-                    (slot.get("filename") or slot.get("name") or slot.get("nzb_name") or "")
-                    .strip()
+                jn = sab_nm.replace(".nzb", "").strip()
+                client_reported = (
+                    os.path.normpath(storage_raw.rstrip("/") + "/" + _normalize_import_path_str(jn))
+                    if jn
+                    else storage_raw
                 )
                 path = _find_local_download_under_watch_dirs(
                     s,
                     job_name=sab_nm,
-                    client_reported_path=storage_raw,
+                    client_reported_path=client_reported,
                 )
                 found_via_watch = path is not None
             if not path:
@@ -5410,7 +5474,7 @@ def _download_import_by_id(dl_id: str) -> dict:
             dest_raw = _normalize_import_path_str(dest)
             ng_nm = (g.get("NZBName") or g.get("Name") or "").strip()
             path = None
-            for cand in _nzb_dest_path_candidates(dest, ng_nm):
+            for cand in _download_client_dest_candidates(dest, ng_nm):
                 p = _resolve_local_download_path(Path(cand), s)
                 if p:
                     path = p
@@ -5421,7 +5485,7 @@ def _download_import_by_id(dl_id: str) -> dict:
                     s, ng_cat, dest_raw, dest_raw
                 )
                 if not derr_try and dest_dir_try:
-                    for cand in _nzb_dest_path_candidates(dest, ng_nm):
+                    for cand in _download_client_dest_candidates(dest, ng_nm):
                         path = _resolve_local_download_path_via_save_mirror(
                             Path(cand),
                             str(Path(cand).parent),
@@ -5499,45 +5563,44 @@ def _download_import_by_id(dl_id: str) -> dict:
             if not dest:
                 return {"error": "NZBGet did not report a destination path"}
             dest_raw = _normalize_import_path_str(dest)
-            path = Path(dest_raw)
-            if name:
-                sn = name.replace(".nzb", "")
-                sub = path / _normalize_import_path_str(sn)
-                if sub.exists():
-                    path = sub
-                else:
-                    r = _resolve_local_download_path(sub, s)
-                    if r:
-                        path = r
-            path = _resolve_local_download_path(path, s)
+            dest_for_res = dest_raw
+            nh_cat = str(h.get("Category") or "")
+            path = None
+            for cand in _download_client_dest_candidates(dest, name):
+                p = _resolve_local_download_path(Path(cand), s)
+                if p:
+                    path = p
+                    break
             used_mirror = False
             if not path:
-                dest_for_res = (h.get("DestDir") or h.get("FinalDir") or "").strip()
-                dest_for_res = _normalize_import_path_str(dest_for_res)
-                nh_cat = str(h.get("Category") or "")
                 dest_dir_try, derr_try = _dl_resolve_import_dest_dir(
                     s, nh_cat, dest_for_res, dest_for_res
                 )
                 if not derr_try and dest_dir_try:
-                    if name:
-                        sn_m = name.replace(".nzb", "")
-                        rep = str(Path(dest_raw) / _normalize_import_path_str(sn_m))
-                    else:
-                        rep = dest_raw
-                    path = _resolve_local_download_path_via_save_mirror(
-                        Path(rep),
-                        dest_raw,
-                        rep,
-                        s,
-                        dest_dir_try,
-                    )
-                    used_mirror = path is not None
+                    for cand in _download_client_dest_candidates(dest, name):
+                        path = _resolve_local_download_path_via_save_mirror(
+                            Path(cand),
+                            dest_for_res,
+                            cand,
+                            s,
+                            dest_dir_try,
+                        )
+                        if path:
+                            used_mirror = True
+                            break
             found_via_watch = False
             if not path:
+                jn = name.replace(".nzb", "").strip()
+                raw_dest = (h.get("DestDir") or h.get("FinalDir") or "").strip()
+                client_reported = (
+                    os.path.normpath(dest_raw.rstrip("/") + "/" + _normalize_import_path_str(jn))
+                    if jn
+                    else _normalize_import_path_str(raw_dest)
+                )
                 path = _find_local_download_under_watch_dirs(
                     s,
                     job_name=name,
-                    client_reported_path=(h.get("DestDir") or h.get("FinalDir") or "").strip(),
+                    client_reported_path=client_reported,
                 )
                 found_via_watch = path is not None
             if not path:
