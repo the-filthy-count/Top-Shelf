@@ -4533,7 +4533,12 @@ def _resolve_local_download_path(raw_path: Path, s: dict) -> Path | None:
         pass
 
     def _try_anchor_prefix(anchor_str: str) -> Path | None:
-        """If p is under anchor (same tree as Settings), resolve anchor / relpath — works for nested folders."""
+        """
+        If ``p`` is under ``anchor`` on disk, return the path via Settings' anchor.
+
+        Uses ``os.path.realpath`` so NAS symlink layouts match (e.g. ``/share/Download/…`` in
+        Top-Shelf vs ``/volume4/Downloads/…`` from NZBGet).
+        """
         a = (anchor_str or "").strip()
         if not a:
             return None
@@ -4541,15 +4546,18 @@ def _resolve_local_download_path(raw_path: Path, s: dict) -> Path | None:
             anchor = Path(a).expanduser()
             if not anchor.is_dir():
                 return None
-            rel = p.relative_to(anchor)
-        except (ValueError, OSError):
-            return None
-        candidate = anchor / rel
-        try:
+            ar = os.path.realpath(str(anchor))
+            pr = os.path.realpath(str(p))
+            if pr != ar and not pr.startswith(ar + os.sep):
+                return None
+            rel = os.path.relpath(pr, ar)
+            if rel == ".." or rel.startswith(".."):
+                return None
+            candidate = anchor / rel
             if candidate.exists():
                 return candidate.resolve()
-        except OSError:
-            pass
+        except (ValueError, OSError):
+            return None
         return None
 
     for key in ("download_watch_dir", "movie_download_watch_dir", "source_dir", "movies_source_dir", "features_dir"):
@@ -4868,6 +4876,14 @@ def _find_local_download_under_watch_dirs(
     for t in list(path_candidates):
         if "/" in t and t.lower().startswith("top-shelf/"):
             sub = t.split("/", 1)[1].strip()
+            if sub and sub not in seen:
+                seen.add(sub)
+                path_candidates.append(sub)
+    # Movie watch is often …/Warez/Features — avoid doubling Warez/Features/ when joining root.
+    for t in list(path_candidates):
+        low = t.lower()
+        if low.startswith("warez/features/") and "/" in t:
+            sub = t.split("/", 2)[2].strip()
             if sub and sub not in seen:
                 seen.add(sub)
                 path_candidates.append(sub)
