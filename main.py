@@ -4758,13 +4758,14 @@ def _relative_tail_candidates_from_client_path(norm: str) -> list[str]:
     for i in range(len(parts)):
         tails.append("/".join(parts[i:]))
     low = [p.lower() for p in parts]
-    for marker in ("top-shelf", "warez", "series"):
+    for marker in ("top-shelf", "warez", "features", "series"):
         try:
             idx = low.index(marker)
         except ValueError:
             continue
         tails.append("/".join(parts[idx:]))
-        break
+        if marker in ("top-shelf", "warez"):
+            break
     seen: set[str] = set()
     out: list[str] = []
     for t in tails:
@@ -4816,6 +4817,7 @@ def _find_local_download_under_watch_dirs(
         "download_watch_dir",
         "movie_download_watch_dir",
         "movies_source_dir",
+        "features_dir",
         "source_dir",
     )
     roots: list[Path] = []
@@ -5232,17 +5234,18 @@ def _download_import_by_id(dl_id: str) -> dict:
             path = _resolve_local_download_path(path, s)
             used_mirror = False
             if not path:
-                dest_dir, derr = _dl_resolve_import_dest_dir(s, sab_cat, storage_raw, storage_raw)
-                if derr or not dest_dir:
-                    return {"error": derr or "Could not resolve import destination"}
-                path = _resolve_local_download_path_via_save_mirror(
-                    Path(storage_raw),
-                    str(Path(storage_raw).parent),
-                    storage_raw,
-                    s,
-                    dest_dir,
+                dest_dir_try, derr_try = _dl_resolve_import_dest_dir(
+                    s, sab_cat, storage_raw, storage_raw
                 )
-                used_mirror = path is not None
+                if not derr_try and dest_dir_try:
+                    path = _resolve_local_download_path_via_save_mirror(
+                        Path(storage_raw),
+                        str(Path(storage_raw).parent),
+                        storage_raw,
+                        s,
+                        dest_dir_try,
+                    )
+                    used_mirror = path is not None
             found_via_watch = False
             if not path:
                 sab_nm = (
@@ -5257,14 +5260,17 @@ def _download_import_by_id(dl_id: str) -> dict:
                 found_via_watch = path is not None
             if not path:
                 return {"error": f"Path not found: {storage}"}
-            if not used_mirror:
-                dest_dir, derr = _dl_resolve_import_dest_dir(s, sab_cat, storage_raw, str(path))
-                if derr or not dest_dir:
-                    return {"error": derr or "Could not resolve import destination"}
+            dest_dir = None
             if used_mirror or found_via_watch:
                 d2 = _dest_dir_for_local_download_path(path, s)
                 if d2 is not None:
                     dest_dir = d2
+            if dest_dir is None:
+                dest_dir, derr = _dl_resolve_import_dest_dir(
+                    s, sab_cat, storage_raw, str(path)
+                )
+                if derr or not dest_dir:
+                    return {"error": derr or "Could not resolve import destination"}
             _process_download_entry(path, dest_dir)
             if remove_after:
                 requests.get(
@@ -5319,17 +5325,18 @@ def _download_import_by_id(dl_id: str) -> dict:
             path = _resolve_local_download_path(path, s)
             used_mirror = False
             if not path:
-                dest_dir, derr = _dl_resolve_import_dest_dir(s, ng_cat, dest_raw, dest_raw)
-                if derr or not dest_dir:
-                    return {"error": derr or "Could not resolve import destination"}
-                path = _resolve_local_download_path_via_save_mirror(
-                    Path(dest_raw),
-                    str(Path(dest_raw).parent),
-                    dest_raw,
-                    s,
-                    dest_dir,
+                dest_dir_try, derr_try = _dl_resolve_import_dest_dir(
+                    s, ng_cat, dest_raw, dest_raw
                 )
-                used_mirror = path is not None
+                if not derr_try and dest_dir_try:
+                    path = _resolve_local_download_path_via_save_mirror(
+                        Path(dest_raw),
+                        str(Path(dest_raw).parent),
+                        dest_raw,
+                        s,
+                        dest_dir_try,
+                    )
+                    used_mirror = path is not None
             found_via_watch = False
             if not path:
                 ng_nm = (g.get("NZBName") or g.get("Name") or "").strip()
@@ -5341,14 +5348,17 @@ def _download_import_by_id(dl_id: str) -> dict:
                 found_via_watch = path is not None
             if not path:
                 return {"error": f"Path not found: {dest}"}
-            if not used_mirror:
-                dest_dir, derr = _dl_resolve_import_dest_dir(s, ng_cat, dest_raw, str(path))
-                if derr or not dest_dir:
-                    return {"error": derr or "Could not resolve import destination"}
+            dest_dir = None
             if used_mirror or found_via_watch:
                 d2 = _dest_dir_for_local_download_path(path, s)
                 if d2 is not None:
                     dest_dir = d2
+            if dest_dir is None:
+                dest_dir, derr = _dl_resolve_import_dest_dir(
+                    s, ng_cat, dest_raw, str(path)
+                )
+                if derr or not dest_dir:
+                    return {"error": derr or "Could not resolve import destination"}
             _process_download_entry(path, dest_dir)
             if remove_after:
                 _nzbget_rpc(host, port, "editqueue", ["GroupDelete", 0, "", [tid]], user, pw)
@@ -5405,22 +5415,23 @@ def _download_import_by_id(dl_id: str) -> dict:
                 dest_for_res = (h.get("DestDir") or h.get("FinalDir") or "").strip()
                 dest_for_res = _normalize_import_path_str(dest_for_res)
                 nh_cat = str(h.get("Category") or "")
-                dest_dir, derr = _dl_resolve_import_dest_dir(s, nh_cat, dest_for_res, dest_for_res)
-                if derr or not dest_dir:
-                    return {"error": derr or "Could not resolve import destination"}
-                if name:
-                    sn_m = name.replace(".nzb", "")
-                    rep = str(Path(dest_raw) / _normalize_import_path_str(sn_m))
-                else:
-                    rep = dest_raw
-                path = _resolve_local_download_path_via_save_mirror(
-                    Path(rep),
-                    dest_raw,
-                    rep,
-                    s,
-                    dest_dir,
+                dest_dir_try, derr_try = _dl_resolve_import_dest_dir(
+                    s, nh_cat, dest_for_res, dest_for_res
                 )
-                used_mirror = path is not None
+                if not derr_try and dest_dir_try:
+                    if name:
+                        sn_m = name.replace(".nzb", "")
+                        rep = str(Path(dest_raw) / _normalize_import_path_str(sn_m))
+                    else:
+                        rep = dest_raw
+                    path = _resolve_local_download_path_via_save_mirror(
+                        Path(rep),
+                        dest_raw,
+                        rep,
+                        s,
+                        dest_dir_try,
+                    )
+                    used_mirror = path is not None
             found_via_watch = False
             if not path:
                 path = _find_local_download_under_watch_dirs(
@@ -5431,18 +5442,21 @@ def _download_import_by_id(dl_id: str) -> dict:
                 found_via_watch = path is not None
             if not path:
                 return {"error": f"Path not found: {dest}"}
-            nh_cat = str(h.get("Category") or "")
-            dest_for_res = _normalize_import_path_str(
-                (h.get("DestDir") or h.get("FinalDir") or "").strip(),
-            )
-            if not used_mirror:
-                dest_dir, derr = _dl_resolve_import_dest_dir(s, nh_cat, dest_for_res, str(path))
-                if derr or not dest_dir:
-                    return {"error": derr or "Could not resolve import destination"}
+            dest_dir = None
             if used_mirror or found_via_watch:
                 d2 = _dest_dir_for_local_download_path(path, s)
                 if d2 is not None:
                     dest_dir = d2
+            if dest_dir is None:
+                nh_cat = str(h.get("Category") or "")
+                dest_for_res = _normalize_import_path_str(
+                    (h.get("DestDir") or h.get("FinalDir") or "").strip(),
+                )
+                dest_dir, derr = _dl_resolve_import_dest_dir(
+                    s, nh_cat, dest_for_res, str(path)
+                )
+                if derr or not dest_dir:
+                    return {"error": derr or "Could not resolve import destination"}
             _process_download_entry(path, dest_dir)
             if remove_after:
                 try:
