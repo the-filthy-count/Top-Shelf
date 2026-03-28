@@ -4565,7 +4565,75 @@ def _resolve_local_download_path(raw_path: Path, s: dict) -> Path | None:
         if got:
             return got
 
+    try:
+        lab = p.name
+        if lab:
+            par = p.parent
+            if par.is_dir():
+                alt = _find_matching_child_dir(par, lab)
+                if alt is not None:
+                    return alt
+    except OSError:
+        pass
     return None
+
+
+def _find_matching_child_dir(parent: Path, label: str) -> Path | None:
+    """
+    Return ``parent/label`` if it exists; otherwise find a directory under ``parent`` whose name
+    matches ``label`` ignoring case or Unicode NFC. Handles NAS/client vs filesystem naming drift.
+    """
+    if not label:
+        return None
+    try:
+        if not parent.is_dir():
+            return None
+        direct = parent / label
+        if direct.exists():
+            return direct.resolve()
+    except OSError:
+        return None
+    try:
+        want = unicodedata.normalize("NFC", label).casefold()
+    except Exception:
+        want = label.casefold()
+    try:
+        for ch in parent.iterdir():
+            if not ch.is_dir():
+                continue
+            try:
+                cn = unicodedata.normalize("NFC", ch.name).casefold()
+            except Exception:
+                cn = ch.name.casefold()
+            if cn == want:
+                return ch.resolve()
+    except OSError:
+        pass
+    return None
+
+
+def _nzb_dest_path_candidates(dest_raw: str, job_name: str) -> list[str]:
+    """
+    NZBGet may report only the category folder (…/Series) or the full job path.
+    Prefer ``dest/job`` when the last component of ``dest`` is not already the job folder name.
+    """
+    d = _normalize_import_path_str((dest_raw or "").strip())
+    if not d:
+        return []
+    j = (job_name or "").replace(".nzb", "").strip()
+    jn = _normalize_import_path_str(j) if j else ""
+    if not jn:
+        return [d]
+    try:
+        if Path(d).name.casefold() == unicodedata.normalize("NFC", jn).casefold():
+            return [d]
+    except Exception:
+        if Path(d).name == jn:
+            return [d]
+    combined = os.path.normpath(d.rstrip("/") + "/" + jn)
+    if combined != d:
+        return [combined, d]
+    return [d]
 
 
 def _normalize_import_path_str(p: str) -> str:
@@ -4902,6 +4970,9 @@ def _find_local_download_under_watch_dirs(
                     hit = root / c
                     if hit.exists():
                         return hit.resolve()
+                    alt = _find_matching_child_dir(root, c)
+                    if alt is not None:
+                        return alt
                 except OSError:
                     continue
 
@@ -5337,29 +5408,42 @@ def _download_import_by_id(dl_id: str) -> dict:
             if not dest:
                 return {"error": "NZBGet did not report DestDir"}
             dest_raw = _normalize_import_path_str(dest)
-            path = Path(dest_raw)
-            path = _resolve_local_download_path(path, s)
+            ng_nm = (g.get("NZBName") or g.get("Name") or "").strip()
+            path = None
+            for cand in _nzb_dest_path_candidates(dest, ng_nm):
+                p = _resolve_local_download_path(Path(cand), s)
+                if p:
+                    path = p
+                    break
             used_mirror = False
             if not path:
                 dest_dir_try, derr_try = _dl_resolve_import_dest_dir(
                     s, ng_cat, dest_raw, dest_raw
                 )
                 if not derr_try and dest_dir_try:
-                    path = _resolve_local_download_path_via_save_mirror(
-                        Path(dest_raw),
-                        str(Path(dest_raw).parent),
-                        dest_raw,
-                        s,
-                        dest_dir_try,
-                    )
-                    used_mirror = path is not None
+                    for cand in _nzb_dest_path_candidates(dest, ng_nm):
+                        path = _resolve_local_download_path_via_save_mirror(
+                            Path(cand),
+                            str(Path(cand).parent),
+                            cand,
+                            s,
+                            dest_dir_try,
+                        )
+                        if path:
+                            used_mirror = True
+                            break
             found_via_watch = False
             if not path:
-                ng_nm = (g.get("NZBName") or g.get("Name") or "").strip()
+                jn = ng_nm.replace(".nzb", "").strip()
+                client_reported = (
+                    os.path.normpath(dest_raw.rstrip("/") + "/" + _normalize_import_path_str(jn))
+                    if jn
+                    else dest_raw
+                )
                 path = _find_local_download_under_watch_dirs(
                     s,
                     job_name=ng_nm,
-                    client_reported_path=dest_raw,
+                    client_reported_path=client_reported,
                 )
                 found_via_watch = path is not None
             if not path:
