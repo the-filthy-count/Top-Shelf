@@ -1184,10 +1184,11 @@
 
           <div style="grid-column:1/-1;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:12px;border-top:1px solid var(--border);margin-top:4px">Download Folder Watch</div>
           <div class="field-hint" style="grid-column:1/-1;margin-top:0;margin-bottom:4px">Watches folders for completed NZB/torrent downloads (same processing for both): junk cleanup, gibberish renames from folder name, then moves videos to your <strong>Scene Source</strong> or <strong>Movies Library</strong> folder. Uses the same hold time as below.</div>
-          <div class="field-row" style="grid-column:1/-1">
-            <label class="toggle" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <div class="toggle-row" style="grid-column:1/-1">
+            <span style="font-size:calc(12px + 2pt);color:var(--dim);letter-spacing:0.04em;text-transform:uppercase;flex:1;min-width:0;line-height:1.35">Enable download folder watch</span>
+            <label class="toggle">
               <input type="checkbox" id="cfgDownloadWatchEnabled" onchange="toggleSection('downloadWatchBody', this.checked)">
-              <span>Enable download folder watch</span>
+              <span class="toggle-slider"></span>
             </label>
           </div>
           <div class="collapsible-body" id="downloadWatchBody" style="display:none;grid-column:1/-1">

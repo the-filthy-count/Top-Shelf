@@ -4726,6 +4726,79 @@ def _resolve_local_download_path_via_save_mirror(
     return None
 
 
+def _path_parts_no_root(norm: str) -> list[str]:
+    """Path segments without leading drive/root (for building relative tails)."""
+    try:
+        p = Path(_normalize_import_path_str(norm))
+        parts = list(p.parts)
+    except Exception:
+        return []
+    out: list[str] = []
+    for x in parts:
+        if not x or x == "/" or x == "\\":
+            continue
+        if len(x) == 2 and x[1] == ":":
+            continue
+        out.append(x)
+    return out
+
+
+def _relative_tail_candidates_from_client_path(norm: str) -> list[str]:
+    """
+    All meaningful relative paths from the client-reported absolute path.
+
+    Includes every suffix (…/Top-Shelf/Warez/…/Folder) and, when present, the path from
+    ``Top-Shelf`` onward so we match Docker roots like ``/downloads`` → ``Top-Shelf/Warez/…``
+    without a spurious ``Download/`` segment from the NAS path.
+    """
+    parts = _path_parts_no_root(norm)
+    if not parts:
+        return []
+    tails: list[str] = []
+    for i in range(len(parts)):
+        tails.append("/".join(parts[i:]))
+    low = [p.lower() for p in parts]
+    for marker in ("top-shelf", "warez", "series"):
+        try:
+            idx = low.index(marker)
+        except ValueError:
+            continue
+        tails.append("/".join(parts[idx:]))
+        break
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in tails:
+        t = (t or "").strip().strip("/")
+        if t and t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out
+
+
+def _bfs_find_dir_named(root: Path, dirname: str, max_depth: int = 14) -> Path | None:
+    """Breadth-first search for a directory whose name equals ``dirname`` (exact)."""
+    if not dirname:
+        return None
+    from collections import deque
+
+    q: deque[tuple[Path, int]] = deque([(root, 0)])
+    while q:
+        cur, d = q.popleft()
+        if d > max_depth:
+            continue
+        try:
+            for ch in cur.iterdir():
+                if not ch.is_dir():
+                    continue
+                if ch.name == dirname:
+                    return ch.resolve()
+                if d < max_depth:
+                    q.append((ch, d + 1))
+        except OSError:
+            continue
+    return None
+
+
 def _find_local_download_under_watch_dirs(
     s: dict,
     *,
@@ -4733,54 +4806,73 @@ def _find_local_download_under_watch_dirs(
     client_reported_path: str = "",
 ) -> Path | None:
     """
-    Locate the completed download under scene/movie watch dirs only.
+    Locate the completed download under configured local dirs only (ignore client host prefix).
 
-    Ignores the client-reported host prefix (e.g. /share/... vs /downloads/...).
-    Matches job name, basename, and trailing path segments under each watch root.
+    Uses scene/movie watch dirs plus scene/movie *input* dirs as search roots. Tries relative
+    tails from the client path (including from ``Top-Shelf`` onward), job/NZB name, basename,
+    and a bounded directory-name search (handles ``..`` in folder names that break glob).
     """
+    root_keys = (
+        "download_watch_dir",
+        "movie_download_watch_dir",
+        "movies_source_dir",
+        "source_dir",
+    )
     roots: list[Path] = []
-    for key in ("download_watch_dir", "movie_download_watch_dir"):
+    seen_r: set[str] = set()
+    for key in root_keys:
         raw = (s.get(key) or "").strip()
         if not raw:
             continue
         try:
             p = Path(raw).expanduser()
-            if p.is_dir():
-                roots.append(p)
+            if not p.is_dir():
+                continue
+            rp = str(p.resolve())
+            if rp in seen_r:
+                continue
+            seen_r.add(rp)
+            roots.append(p)
         except OSError:
             continue
     if not roots:
         return None
 
-    candidates: list[str] = []
-    jn = (job_name or "").strip()
-    if jn:
-        candidates.append(jn.replace(".nzb", "").strip())
-        candidates.append(jn)
+    rel_tails: list[str] = []
     cp = (client_reported_path or "").strip()
     if cp:
         try:
             norm = _normalize_import_path_str(cp)
-            p = Path(norm)
-            candidates.append(p.name)
-            parts = p.parts
-            for k in range(1, min(8, len(parts) + 1)):
-                candidates.append(str(Path(*parts[-k:])).replace("\\", "/"))
+            rel_tails.extend(_relative_tail_candidates_from_client_path(norm))
+            rel_tails.append(Path(norm).name)
         except Exception:
             pass
 
+    jn = (job_name or "").strip()
+    name_candidates: list[str] = []
+    if jn:
+        name_candidates.append(jn.replace(".nzb", "").strip())
+        name_candidates.append(jn)
+
     seen: set[str] = set()
-    ordered: list[str] = []
-    for c in candidates:
-        c = (c or "").strip()
-        if not c or c in seen:
+    path_candidates: list[str] = []
+    for t in rel_tails + name_candidates:
+        t = (t or "").strip()
+        if not t or t in seen:
             continue
-        seen.add(c)
-        ordered.append(c)
+        seen.add(t)
+        path_candidates.append(t)
+    # If watch dir is …/Top-Shelf, also try path below it (drop leading Top-Shelf/)
+    for t in list(path_candidates):
+        if "/" in t and t.lower().startswith("top-shelf/"):
+            sub = t.split("/", 1)[1].strip()
+            if sub and sub not in seen:
+                seen.add(sub)
+                path_candidates.append(sub)
 
     for root in roots:
-        for c in ordered:
-            if "/" in c:
+        for c in path_candidates:
+            if "/" in c or "\\" in c:
                 try:
                     hit = root / c.replace("\\", "/").lstrip("/")
                     if hit.exists():
@@ -4794,10 +4886,16 @@ def _find_local_download_under_watch_dirs(
                         return hit.resolve()
                 except OSError:
                     continue
-        for c in ordered:
-            if "/" in c:
+
+        for c in path_candidates:
+            if "/" in c or "\\" in c:
                 continue
-            for depth in range(0, 8):
+            if ".." in c or "*" in c or "[" in c or "?" in c:
+                found = _bfs_find_dir_named(root, c)
+                if found:
+                    return found
+                continue
+            for depth in range(0, 9):
                 pat = ("/".join(["*"] * depth) + "/" + c) if depth else c
                 try:
                     for hit in root.glob(pat):
@@ -4805,6 +4903,9 @@ def _find_local_download_under_watch_dirs(
                             return hit.resolve()
                 except OSError:
                     continue
+            found = _bfs_find_dir_named(root, c)
+            if found:
+                return found
     return None
 
 
