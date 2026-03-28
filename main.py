@@ -4494,23 +4494,31 @@ def _resolve_local_download_path(raw_path: Path, s: dict) -> Path | None:
     return None
 
 
+def _normalize_import_path_str(p: str) -> str:
+    """Normalize client-reported paths for comparison (Windows backslashes, etc.)."""
+    x = (p or "").strip().replace("\\", "/")
+    if not x:
+        return ""
+    return os.path.normpath(x)
+
+
 def _relative_path_under_client_root(client_abs: str, root: str) -> Path | None:
     """
     Path of ``client_abs`` relative to ``root`` when the client path is under that directory.
     Uses string prefix logic (not pathlib.relative_to) so odd filenames (e.g. brackets) and
     non-existent paths behave consistently.
     """
-    ca = os.path.normpath((client_abs or "").strip())
-    r = os.path.normpath((root or "").strip())
+    ca = _normalize_import_path_str(client_abs)
+    r = _normalize_import_path_str(root)
     if not r or not ca:
         return None
     if ca == r:
         return Path(".")
-    sep = os.sep
+    sep = "/"
     prefix = r if r.endswith(sep) else r + sep
     if not ca.startswith(prefix):
         return None
-    rel = ca[len(prefix) :].strip(sep)
+    rel = ca[len(prefix) :].strip("/")
     return Path(rel) if rel else Path(".")
 
 
@@ -4542,51 +4550,105 @@ def _dest_dir_for_local_download_path(local: Path, s: dict) -> Path | None:
     return None
 
 
+def _candidate_client_path_roots(save_path: str, content_path: str, reported: str) -> list[str]:
+    """Possible torrent roots on the client (save_path, content parent, etc.) in try order."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in (save_path, content_path):
+        x = _normalize_import_path_str(raw)
+        if x and x not in seen:
+            seen.add(x)
+            out.append(x)
+    cp = _normalize_import_path_str(content_path)
+    if cp:
+        try:
+            if Path(cp).suffix.lower() in VIDEO_EXTENSIONS:
+                parent = _normalize_import_path_str(str(Path(cp).parent))
+                if parent and parent not in seen:
+                    seen.add(parent)
+                    out.append(parent)
+        except OSError:
+            pass
+    rp = _normalize_import_path_str(reported)
+    if rp:
+        parent = _normalize_import_path_str(str(Path(rp).parent))
+        if parent and parent not in seen:
+            seen.add(parent)
+            out.append(parent)
+    return out
+
+
 def _resolve_local_download_path_via_save_mirror(
     reported: Path,
     save_path: str,
+    content_path: str,
     s: dict,
     dest_dir: Path,
 ) -> Path | None:
     """
     When the client reports paths that only exist on another machine (e.g. /share/... on the
     torrent host) but the same files exist here under Download watch directory or Movies input
-    folder, map by path relative to the client's save_path onto each local anchor and try both.
+    folder, map by path relative to each plausible client root onto local anchors.
 
-    ``dest_dir`` is unused for picking anchors (avoids misclassification from category alone);
-    callers should set the real import destination via ``_dest_dir_for_local_download_path``.
+    Tries multiple roots (save_path, content_path, parent of file video, etc.), then a
+    basename-only match in each anchor directory.
+
+    ``dest_dir`` is unused for picking anchors; callers should set import destination via
+    ``_dest_dir_for_local_download_path`` when mirror succeeds.
     """
     _ = dest_dir  # kept for call-site compatibility
-    sp = (save_path or "").strip()
-    if not sp:
-        try:
-            sp = str(Path(str(reported)).parent)
-        except OSError:
-            return None
-    rel = _relative_path_under_client_root(str(reported), sp)
-    if rel is None:
-        try:
-            pp = os.path.normpath(str(Path(reported).parent))
-            if pp == os.path.normpath(sp):
-                rel = Path(Path(reported).name)
-        except OSError:
-            return None
-    if rel is None:
+    rep_s = _normalize_import_path_str(str(reported))
+    if not rep_s:
         return None
+    roots = _candidate_client_path_roots(save_path, content_path, rep_s)
+    if not roots:
+        try:
+            roots = [_normalize_import_path_str(str(Path(rep_s).parent))]
+        except OSError:
+            return None
     watch = (s.get("download_watch_dir") or "").strip()
     ms = (s.get("movies_source_dir") or "").strip()
-    for anchor_str in (watch, ms):
-        if not anchor_str:
+    for sp in roots:
+        rel = _relative_path_under_client_root(rep_s, sp)
+        if rel is None:
+            try:
+                pp = _normalize_import_path_str(str(Path(rep_s).parent))
+                if pp == sp:
+                    rel = Path(Path(rep_s).name)
+            except OSError:
+                continue
+        if rel is None:
             continue
-        anchor = Path(anchor_str).expanduser()
-        if not anchor.is_dir():
-            continue
-        candidate = anchor / rel
-        try:
-            if candidate.exists():
-                return candidate.resolve()
-        except OSError:
-            continue
+        for anchor_str in (watch, ms):
+            if not anchor_str:
+                continue
+            anchor = Path(anchor_str).expanduser()
+            if not anchor.is_dir():
+                continue
+            candidate = anchor / rel
+            try:
+                if candidate.exists():
+                    return candidate.resolve()
+            except OSError:
+                continue
+    # Last resort: same filename as a direct child of watch or movies folder
+    try:
+        bn = Path(rep_s).name
+    except OSError:
+        return None
+    if bn:
+        for anchor_str in (watch, ms):
+            if not anchor_str:
+                continue
+            anchor = Path(anchor_str).expanduser()
+            if not anchor.is_dir():
+                continue
+            direct = anchor / bn
+            try:
+                if direct.exists():
+                    return direct.resolve()
+            except OSError:
+                continue
     return None
 
 
@@ -4663,7 +4725,7 @@ def _download_import_by_id(dl_id: str) -> dict:
             used_mirror = False
             if not path:
                 path = _resolve_local_download_path_via_save_mirror(
-                    Path(raw_reported), sp, s, dest_dir,
+                    Path(raw_reported), sp, cp, s, dest_dir,
                 )
                 used_mirror = path is not None
             if not path:
@@ -4729,7 +4791,9 @@ def _download_import_by_id(dl_id: str) -> dict:
             path = _resolve_local_download_path(path, s)
             used_mirror = False
             if not path:
-                path = _resolve_local_download_path_via_save_mirror(Path(raw_tr), dd, s, dest_dir)
+                path = _resolve_local_download_path_via_save_mirror(
+                    Path(raw_tr), dd, raw_tr, s, dest_dir,
+                )
                 used_mirror = path is not None
             if not path:
                 return {"error": _download_path_missing_message(s, raw_tr)}
@@ -4807,7 +4871,7 @@ def _download_import_by_id(dl_id: str) -> dict:
             used_mirror = False
             if not path:
                 path = _resolve_local_download_path_via_save_mirror(
-                    Path(raw_reported), sp, s, dest_dir,
+                    Path(raw_reported), sp, str(raw_reported), s, dest_dir,
                 )
                 used_mirror = path is not None
             if not path:
