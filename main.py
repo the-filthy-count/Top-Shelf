@@ -76,7 +76,7 @@ IMAGE_CACHE_JPEG_QUALITY = 85
 FAVOURITES_FAV_IMAGE_MAX_EDGE = 750
 FAVOURITES_IMG_CACHE_DIR = Path(__file__).resolve().parent / "favourites_img_cache"
 # Bump when studio thumb pipeline changes so stale .ver / URL-hash caches are rebuilt (e.g. PNG alpha fixes).
-FAVOURITES_STUDIO_THUMB_CACHE_REV = "png-passthrough-v1"
+FAVOURITES_STUDIO_THUMB_CACHE_REV = "studio-logo-casefix-v1"
 
 STASHDB_ENDPOINT = "https://stashdb.org/graphql"
 TPDB_ENDPOINT    = "https://theporndb.net/graphql"
@@ -3544,7 +3544,8 @@ def _favourite_find_local_poster_file(folder_path: str) -> Path | None:
     return None
 
 
-# Studio folder art: logos before posters. Jellyfin/Kodi names + common variants & *logo* filenames.
+# Studio folder art: logos / landscape / banner before poster.jpg. Logo-only exact pass, then
+# case-insensitive map, so Logo.png wins over poster.jpg on Linux before poster is considered.
 _FAVOURITE_STUDIO_LOCAL_LOGO_NAMES = (
     "logo.png",
     "clearlogo.png",
@@ -3554,15 +3555,36 @@ _FAVOURITE_STUDIO_LOCAL_LOGO_NAMES = (
     "clearlogo.jpeg",
     "logo.webp",
     "clearlogo.webp",
+    "landscape.png",
+    "landscape.jpg",
+    "landscape.webp",
+    "banner.png",
+    "banner.jpg",
+    "banner.webp",
+    "clearart.png",
+    "clearart.jpg",
+    "clearart.webp",
 )
 _FAVOURITE_STUDIO_LOCAL_POSTER_NAMES = ("poster.jpg", "folder.jpg")
 _STUDIO_ART_IMAGE_EXT = frozenset({".png", ".webp", ".jpg", ".jpeg"})
+_STUDIO_LOGO_STEMS_EXACT = frozenset(
+    {
+        "logo",
+        "clearlogo",
+        "clear_logo",
+        "studialogo",
+        "landscape",
+        "banner",
+        "clearart",
+    }
+)
+_STUDIO_LOGO_STEM_SEGMENTS = frozenset({"logo", "clearlogo", "clearart", "studialogo"})
 
 
-def _favourite_find_local_studio_logoish(root: Path) -> Path | None:
-    """studio-logo.png, etc., in the show root — skipped if only poster/folder exists."""
+def _favourite_studio_root_logo_candidates(root: Path) -> list[Path]:
+    """Root files that look like logo art (not poster.jpg / folder.jpg)."""
     poster_lower = {n.lower() for n in _FAVOURITE_STUDIO_LOCAL_POSTER_NAMES}
-    candidates: list[tuple[int, str, Path]] = []
+    candidates: list[tuple[int, int, str, Path]] = []
     try:
         for child in root.iterdir():
             if not child.is_file():
@@ -3573,29 +3595,34 @@ def _favourite_find_local_studio_logoish(root: Path) -> Path | None:
             if nl in poster_lower:
                 continue
             stem_l = child.stem.lower()
-            tier = None
-            if stem_l in ("logo", "clearlogo", "clear_logo", "studialogo"):
+            tier: int | None = None
+            if stem_l in _STUDIO_LOGO_STEMS_EXACT:
                 tier = 0
             elif nl.startswith("clearlogo"):
                 tier = 0
             elif stem_l.endswith("-logo") or stem_l.endswith("_logo"):
                 tier = 1
+            else:
+                parts = [p for p in re.split(r"[-_.\s]+", stem_l) if p]
+                if _STUDIO_LOGO_STEM_SEGMENTS.intersection(parts):
+                    tier = 2
             if tier is None:
                 continue
-            candidates.append((tier, nl, child))
+            candidates.append((tier, len(nl), nl, child))
     except OSError:
-        return None
-    if not candidates:
-        return None
-    candidates.sort(key=lambda t: (t[0], len(t[1]), t[1]))
-    try:
-        return candidates[0][2].resolve()
-    except OSError:
-        return None
+        return []
+    candidates.sort(key=lambda t: (t[0], t[1], t[2]))
+    out: list[Path] = []
+    for _a, _b, _c, child in candidates:
+        try:
+            out.append(child.resolve())
+        except OSError:
+            continue
+    return out
 
 
 def _favourite_find_local_studio_art(folder_path: str) -> Path | None:
-    """Show root: logo-style assets first, then poster.jpg / folder.jpg (case-insensitive)."""
+    """Show root: logo / landscape / banner art first, then poster.jpg / folder.jpg."""
     raw = (folder_path or "").strip()
     if not raw:
         return None
@@ -3605,12 +3632,17 @@ def _favourite_find_local_studio_art(folder_path: str) -> Path | None:
         return None
     if not root.is_dir():
         return None
-    ordered = _FAVOURITE_STUDIO_LOCAL_LOGO_NAMES + _FAVOURITE_STUDIO_LOCAL_POSTER_NAMES
-    allowed_lower = {n.lower() for n in ordered}
-    for name in ordered:
+    all_names = _FAVOURITE_STUDIO_LOCAL_LOGO_NAMES + _FAVOURITE_STUDIO_LOCAL_POSTER_NAMES
+    allowed_lower = {n.lower() for n in all_names}
+
+    for name in _FAVOURITE_STUDIO_LOCAL_LOGO_NAMES:
         p = root / name
         if p.is_file():
-            return p.resolve()
+            try:
+                return p.resolve()
+            except OSError:
+                continue
+
     found: dict[str, Path] = {}
     try:
         for child in root.iterdir():
@@ -3621,16 +3653,33 @@ def _favourite_find_local_studio_art(folder_path: str) -> Path | None:
                 found[key] = child
     except OSError:
         return None
-    for name in ordered:
+
+    for name in _FAVOURITE_STUDIO_LOCAL_LOGO_NAMES:
         p = found.get(name.lower())
         if p:
             try:
                 return p.resolve()
             except OSError:
                 continue
-    extra = _favourite_find_local_studio_logoish(root)
-    if extra:
-        return extra
+
+    for p in _favourite_studio_root_logo_candidates(root):
+        if p.is_file():
+            return p
+
+    for name in _FAVOURITE_STUDIO_LOCAL_POSTER_NAMES:
+        p = root / name
+        if p.is_file():
+            try:
+                return p.resolve()
+            except OSError:
+                continue
+    for name in _FAVOURITE_STUDIO_LOCAL_POSTER_NAMES:
+        p = found.get(name.lower())
+        if p:
+            try:
+                return p.resolve()
+            except OSError:
+                continue
     return None
 
 

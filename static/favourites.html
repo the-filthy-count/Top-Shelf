@@ -71,14 +71,29 @@
     width: 100%;
   }
   .fav-sticky-title-row {
-    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-    gap: 10px 14px;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 10px 16px;
     min-width: 0;
     width: 100%;
   }
   .fav-sticky-title-left {
     display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 14px;
     min-width: 0;
+    justify-self: start;
+  }
+  .fav-sticky-title-center {
+    justify-self: center;
+  }
+  .fav-sticky-title-right {
+    justify-self: end;
+    min-width: 0;
+    width: 100%;
+    max-width: min(320px, 42vw);
+  }
+  .fav-sticky-title-right .fav-progress-wrap {
+    width: 100%;
   }
   .fav-page-title {
     font-family: var(--acid); font-size: 26px; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; margin: 0; line-height: 1.1;
@@ -108,10 +123,6 @@
     margin: 0;
     min-height: 0;
   }
-  .fav-sticky-extra {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;
-    width: 100%;
-  }
   .fav-sticky-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .fav-icon-btn {
     width: 42px; height: 42px; border-radius: 8px; border: 1px solid var(--border);
@@ -124,10 +135,18 @@
   .fav-icon-btn--primary { background: rgba(192,132,252,0.15); border-color: rgba(192,132,252,0.35); color: var(--accent); }
   .fav-icon-btn--primary:hover { filter: brightness(1.1); }
 
-  .fav-sticky-title-row .fav-seg {
-    flex: 0 1 auto;
+  .fav-sticky-title-center .fav-seg {
     width: min(320px, 100%);
     max-width: 100%;
+  }
+  @media (max-width: 800px) {
+    .fav-sticky-title-row {
+      grid-template-columns: 1fr;
+      justify-items: stretch;
+    }
+    .fav-sticky-title-left { order: 1; justify-self: start; }
+    .fav-sticky-title-center { order: 2; justify-self: center; }
+    .fav-sticky-title-right { order: 3; justify-self: stretch; max-width: none; }
   }
 
   .fav-filter-wrap input {
@@ -169,11 +188,6 @@
 
   .fav-count { font-size: 15px; font-weight: 600; color: var(--dim); font-family: var(--secs); white-space: nowrap; letter-spacing: -0.02em; }
 
-  .fav-sticky-extra .fav-progress-wrap {
-    flex: 1 1 200px;
-    max-width: min(380px, 100%);
-    min-width: 160px;
-  }
   .fav-progress-wrap {
     display: none;
     flex-direction: column;
@@ -764,9 +778,17 @@
           <h1 class="fav-page-title">Favourites</h1>
           <span class="fav-count" id="favCount">—</span>
         </div>
-        <div class="ts-seg ts-seg--2 fav-seg" role="tablist">
-          <button type="button" id="segPerf" class="active" onclick="setView('performer')">Performers</button>
-          <button type="button" id="segStudio" onclick="setView('studio')">Studios</button>
+        <div class="fav-sticky-title-center">
+          <div class="ts-seg ts-seg--2 fav-seg" role="tablist">
+            <button type="button" id="segPerf" class="active" onclick="setView('performer')">Performers</button>
+            <button type="button" id="segStudio" onclick="setView('studio')">Studios</button>
+          </div>
+        </div>
+        <div class="fav-sticky-title-right">
+          <div class="fav-progress-wrap" id="favProgressWrap">
+            <div class="fav-progress-label" id="favProgressLabel"></div>
+            <div class="fav-progress-track"><div class="fav-progress-fill" id="favProgressFill"></div></div>
+          </div>
         </div>
       </div>
     </div>
@@ -811,12 +833,6 @@
         <button type="button" class="fav-icon-btn" id="btnUnlockAll" onclick="unlockAllMatches()" title="Unlock all — allow automatic refresh and scan to update matches again"><i class="fa-solid fa-unlock"></i></button>
       </div>
       <span class="toast fav-toolbar-toast" id="toolMsg"></span>
-    </div>
-    <div class="fav-sticky-extra">
-      <div class="fav-progress-wrap" id="favProgressWrap">
-        <div class="fav-progress-label" id="favProgressLabel"></div>
-        <div class="fav-progress-track"><div class="fav-progress-fill" id="favProgressFill"></div></div>
-      </div>
     </div>
   </div>
 
