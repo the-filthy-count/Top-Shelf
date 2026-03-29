@@ -103,13 +103,13 @@
   }
   .logo { display: flex; align-items: baseline; gap: 12px; }
   .logo-title { font-family: var(--sans); font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
-  .logo-sub { font-size: 11px; color: var(--dim); letter-spacing: 0.05em; }
+  .logo-sub { font-size: 12px; color: var(--dim); letter-spacing: 0.05em; }
   .header-right { display: flex; align-items: center; gap: 12px; }
   .active-nav { border-color: var(--accent) !important; color: var(--accent) !important; }
   .status-pill {
     display: flex; align-items: center; gap: 8px;
     padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border);
-    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--dim); background: var(--surface); transition: all 0.3s;
   }
   .status-pill.running { border-color: var(--accent); color: var(--accent); }
@@ -182,7 +182,7 @@
   .log-line.warning  { color: var(--amber); }
   .log-line.error    { color: var(--red); }
   .log-line.sep      { color: var(--muted); }
-  .log-line.pipeline { color: var(--blue); font-family: var(--sans); font-weight: 600; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .log-line.pipeline { color: var(--blue); font-family: var(--sans); font-weight: 600; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
   .log-line.default  { color: var(--dim); }
 
   /* ── History ── */
@@ -199,7 +199,7 @@
   col.col-date       { width: 8%; }
   col.col-source     { width: 8%; }
   col.col-processed  { width: 11%; }
-  th { padding: 10px 12px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  th { padding: 10px 12px; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   td { padding: 9px 12px; border-bottom: 1px solid rgba(255,255,255,0.03); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   tr:last-child td { border-bottom: none; }
   tr:hover td { background: rgba(255,255,255,0.015); }
@@ -247,7 +247,7 @@
     cursor: pointer; user-select: none;
   }
   .collapsible-header:hover .settings-section-title { color: var(--text); }
-  .collapsible-arrow { font-size: 11px; color: var(--dim); transition: transform 0.2s; }
+  .collapsible-arrow { font-size: 12px; color: var(--dim); transition: transform 0.2s; }
   .collapsible-arrow.open { transform: rotate(90deg); }
   .collapsible-body { display: none; margin-top: 12px; }
   .collapsible-body.open { display: block; }
@@ -327,18 +327,18 @@
   .settings-section { display: flex; flex-direction: column; gap: 12px; }
   .settings-section-title { font-family: var(--acid); font-size: 28px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; color: #d4cfc4; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
   .field-row { display: flex; flex-direction: column; gap: 6px; }
-  .field-label { font-size: 11px; color: var(--dim); letter-spacing: 0.05em; }
+  .field-label { font-size: 12px; color: var(--dim); letter-spacing: 0.05em; }
   .field-input {
     background: var(--raised); border: 1px solid var(--border); color: var(--text);
     padding: 9px 12px; border-radius: 6px; font-family: var(--mono); font-size: 12px;
     width: 100%; transition: border-color 0.15s; outline: none;
   }
   .field-input:focus { border-color: var(--accent); }
-  .field-hint { font-size: 10px; color: var(--muted); line-height: 1.5; }
+  .field-hint { font-size: 12px; color: var(--muted); line-height: 1.5; }
 
   /* Pattern tokens */
   .token-guide { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-  .token { font-size: 10px; padding: 2px 8px; border-radius: 4px; background: rgba(192,132,252,0.1); color: var(--accent); border: 1px solid rgba(192,132,252,0.2); cursor: default; }
+  .token { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: rgba(192,132,252,0.1); color: var(--accent); border: 1px solid rgba(192,132,252,0.2); cursor: default; }
   .token span { color: var(--dim); }
 
   /* Directory list */
@@ -371,7 +371,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 10px;
+    font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: var(--dim);
@@ -406,7 +406,7 @@
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.03em;
     color: var(--dim);
@@ -427,16 +427,16 @@
   .dir-gender-chip--on .dir-gender-chip-inner i { color: var(--accent); opacity: 1; }
   .dir-gender-hint {
     margin-top: 10px;
-    font-size: 10px;
+    font-size: 12px;
     line-height: 1.45;
     color: var(--dim);
     letter-spacing: 0.02em;
   }
-  .dir-rank { font-size: 11px; color: var(--dim); text-align: center; }
-  .dir-type-tag { font-size: 10px; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.06em; text-align: center; }
+  .dir-rank { font-size: 12px; color: var(--dim); text-align: center; }
+  .dir-type-tag { font-size: 12px; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.06em; text-align: center; }
   .dir-type-series   { background: rgba(74,222,128,0.1);  color: var(--green); }
   .dir-type-performer { background: rgba(192,132,252,0.1); color: var(--accent); }
-  .dir-path { font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dir-path { font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dir-reorder { display: flex; flex-direction: column; gap: 1px; }
   .dir-controls { display: flex; gap: 4px; align-items: center; }
 
@@ -500,16 +500,16 @@
       <div class="logo">
         <img src="/static/logo.png" alt="Top-Shelf" style="height:36px; object-fit:contain;">
       </div>
-      <span id="appVersion" style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.06em">v1.0.0</span>
+      <span id="appVersion" style="font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:0.06em">v1.0.0</span>
       <div id="statusPill" class="status-pill">
         <span class="status-dot"></span>
         <span id="statusText">Idle</span>
       </div>
     </div>
     <div class="header-right">
-      <div id="retryPill" style="display:none;font-size:11px;color:var(--dim);padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);letter-spacing:0.06em"></div>
-      <div id="watcherPill" style="display:none;font-size:11px;color:var(--amber);padding:6px 14px;border-radius:20px;border:1px solid var(--amber);background:var(--surface);letter-spacing:0.06em"></div>
-      <div id="scanPill" style="display:none;font-size:11px;color:var(--blue);padding:6px 14px;border-radius:20px;border:1px solid var(--blue);background:var(--surface);letter-spacing:0.06em"></div>
+      <div id="retryPill" style="display:none;font-size:12px;color:var(--dim);padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);letter-spacing:0.06em"></div>
+      <div id="watcherPill" style="display:none;font-size:12px;color:var(--amber);padding:6px 14px;border-radius:20px;border:1px solid var(--amber);background:var(--surface);letter-spacing:0.06em"></div>
+      <div id="scanPill" style="display:none;font-size:12px;color:var(--blue);padding:6px 14px;border-radius:20px;border:1px solid var(--blue);background:var(--surface);letter-spacing:0.06em"></div>
       <button class="btn-secondary" id="btnRetryNow" onclick="retryNow()" title="Retry failed files"><i class="fa-solid fa-arrows-rotate"></i></button>
       <a href="/scenes" style="text-decoration:none"><button class="btn-secondary" title="Scenes"><i class="fa-solid fa-ticket"></i></button></a>
       <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="fa-solid fa-clapperboard"></i></button></a>
@@ -569,7 +569,7 @@
     <div class="panel-header">
       <div style="display:flex;align-items:center;gap:12px">
         <span class="panel-title">Scene Search</span>
-        <span id="searchFileLabel" style="display:none;font-size:11px;color:var(--accent);padding:3px 10px;background:rgba(192,132,252,0.1);border-radius:4px;border:1px solid rgba(192,132,252,0.25);cursor:pointer" onclick="clearSelectedFile()" title="Click to deselect"></span>
+        <span id="searchFileLabel" style="display:none;font-size:12px;color:var(--accent);padding:3px 10px;background:rgba(192,132,252,0.1);border-radius:4px;border:1px solid rgba(192,132,252,0.25);cursor:pointer" onclick="clearSelectedFile()" title="Click to deselect"></span>
       </div>
       <div class="header-actions">
         <button class="btn-secondary" onclick="clearSearch()" title="Clear search"><i class="fa-solid fa-x"></i></button>
@@ -626,7 +626,7 @@
       <button class="btn-icon" onclick="closeManual()"><i class="fa-solid fa-x"></i></button>
     </div>
     <div class="modal-body" style="gap:16px">
-      <div style="font-size:11px;color:var(--dim)" id="manualFilename"></div>
+      <div style="font-size:12px;color:var(--dim)" id="manualFilename"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div class="field-row">
           <label class="field-label">Title *</label>
@@ -651,7 +651,7 @@
       </div>
       <!-- Thumbnail -->
       <div class="field-row">
-        <label class="field-label">Thumbnail <span style="color:var(--muted);font-size:10px">(saved locally only — StashDB does not permit image uploads via API)</span></label>
+        <label class="field-label">Thumbnail <span style="color:var(--muted);font-size:12px">(saved locally only — StashDB does not permit image uploads via API)</span></label>
         <div style="display:flex;gap:8px;align-items:flex-start">
           <div style="flex:1">
             <input class="field-input" id="mImageUrl" type="text" placeholder="Paste image URL..." oninput="mThumbMode='url';mThumbPreview(this.value)">
@@ -665,7 +665,7 @@
         </div>
         <div id="mThumbPreview" style="display:none;margin-top:8px">
           <img id="mThumbImg" style="max-width:200px;border-radius:4px;cursor:pointer" onclick="this.parentElement.style.display='none'">
-          <div id="mThumbPercent" style="font-size:10px;color:var(--dim);margin-top:2px"></div>
+          <div id="mThumbPercent" style="font-size:12px;color:var(--dim);margin-top:2px"></div>
         </div>
       </div>
 
@@ -680,7 +680,7 @@
         </div>
         <div id="mStashdbFields" style="display:none;margin-top:12px">
           <div class="field-hint" style="margin-bottom:10px">Studio and performer names will be looked up on StashDB. Close matches will ask for confirmation before submitting.</div>
-          <div style="font-size:11px;color:var(--dim)" id="mResolveStatus"></div>
+          <div style="font-size:12px;color:var(--dim)" id="mResolveStatus"></div>
           <!-- Resolve results appear here -->
           <div id="mResolveResults"></div>
         </div>
@@ -719,7 +719,7 @@
           <button class="btn-secondary" onclick="setPassword()" style="font-size:12px;padding:6px 12px">Set Password</button>
           <button class="btn-secondary" onclick="removePassword()" style="font-size:12px;padding:6px 12px;color:var(--red);border-color:var(--red)">Remove Password</button>
         </div>
-        <div id="pwMsg" style="font-size:11px;margin-top:8px;display:none"></div>
+        <div id="pwMsg" style="font-size:12px;margin-top:8px;display:none"></div>
       </div>
 
       <!-- Directories -->
@@ -760,7 +760,7 @@
         <div class="field-hint" style="margin-bottom:8px">Matched in rank order. Files route to the first directory that contains a matching performer folder. Use gender toggles to narrow Favourites auto-matching (TPDB / StashDB / FansDB).</div>
         <div class="dir-list" id="dirList"></div>
         <div style="margin-top:12px">
-          <div class="settings-section-title" style="margin-bottom:10px;font-size:10px">Add Directory</div>
+          <div class="settings-section-title" style="margin-bottom:10px;font-size:12px">Add Directory</div>
           <div class="add-dir-row">
             <div class="field-row">
               <label class="field-label">Label</label>
@@ -863,7 +863,7 @@
             </div>
             <div class="field-row">
               <label class="field-label">Status</label>
-              <div id="watcherStatus" style="font-size:11px;color:var(--dim);padding:9px 0">Checking...</div>
+              <div id="watcherStatus" style="font-size:12px;color:var(--dim);padding:9px 0">Checking...</div>
             </div>
           </div>
         </div>
@@ -907,12 +907,12 @@
         <div class="collapsible-body" id="abbrevBody">
           <div class="field-row" style="margin-top:12px">
             <label class="field-label">Abbreviations — JSON map of short name → full name</label>
-            <textarea class="field-input" id="cfgSiteAbbrevs" rows="5" style="font-size:11px;resize:vertical" placeholder='{"brcc": "Backroom Casting Couch", "nvg": "Net Video Girls"}'></textarea>
+            <textarea class="field-input" id="cfgSiteAbbrevs" rows="5" style="font-size:12px;resize:vertical" placeholder='{"brcc": "Backroom Casting Couch", "nvg": "Net Video Girls"}'></textarea>
             <div class="field-hint" style="margin-top:4px">Expands short site names found in filenames during parsing</div>
           </div>
           <div class="field-row" style="margin-top:10px">
             <label class="field-label">Rename map — JSON map of wrong name → correct name</label>
-            <textarea class="field-input" id="cfgSiteRenameMap" rows="4" style="font-size:11px;resize:vertical" placeholder='{"Tonights Girlfriend": "Tonights Girlfriend"}'></textarea>
+            <textarea class="field-input" id="cfgSiteRenameMap" rows="4" style="font-size:12px;resize:vertical" placeholder='{"Tonights Girlfriend": "Tonights Girlfriend"}'></textarea>
             <div class="field-hint" style="margin-top:4px">Corrects known bad site names returned by databases (e.g. "BANG! Casting" → "Bang! Casting")</div>
           </div>
         </div>
@@ -1069,7 +1069,7 @@
         <div class="settings-section-title">Download Clients</div>
         <div class="field-hint" style="margin-top:4px;margin-bottom:10px">Configure your NZB and torrent clients directly — Top-Shelf will send downloads to them</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div style="grid-column:1/-1;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:4px">NZB Client</div>
+          <div style="grid-column:1/-1;font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:4px">NZB Client</div>
           <div class="field-row">
             <label class="field-label">Client</label>
             <select class="field-input" id="cfgDlNzbClient" onchange="toggleNzbFields()">
@@ -1099,7 +1099,7 @@
             <input class="field-input" id="cfgDlNzbApiKey" type="password" autocomplete="off">
           </div>
 
-          <div style="grid-column:1/-1;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:12px;border-top:1px solid var(--border);margin-top:4px">Torrent Client</div>
+          <div style="grid-column:1/-1;font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:12px;border-top:1px solid var(--border);margin-top:4px">Torrent Client</div>
           <div class="field-row">
             <label class="field-label">Client</label>
             <select class="field-input" id="cfgDlTorrentClient">
@@ -1126,7 +1126,7 @@
             <input class="field-input" id="cfgDlTorrentPass" type="password" autocomplete="off">
           </div>
 
-          <div style="grid-column:1/-1;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:12px;border-top:1px solid var(--border);margin-top:4px">Download Folder Watch</div>
+          <div style="grid-column:1/-1;font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:12px;border-top:1px solid var(--border);margin-top:4px">Download Folder Watch</div>
           <div class="field-hint" style="grid-column:1/-1;margin-top:0;margin-bottom:4px">Watches folders for completed NZB/torrent downloads (same processing for both): junk cleanup, gibberish renames from folder name, then moves videos to your <strong>Scene Source</strong> or <strong>Movies Library</strong> folder. Uses the same hold time as below.</div>
           <div class="toggle-row" style="grid-column:1/-1">
             <span style="font-size:calc(12px + 2pt);color:var(--dim);letter-spacing:0.04em;text-transform:uppercase;flex:1;min-width:0;line-height:1.35">Enable download folder watch</span>
@@ -1156,7 +1156,7 @@
             </div>
           </div>
 
-          <div style="grid-column:1/-1;font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:12px;border-top:1px solid var(--border);margin-top:4px">Download Category</div>
+          <div style="grid-column:1/-1;font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);padding-top:12px;border-top:1px solid var(--border);margin-top:4px">Download Category</div>
           <div class="field-row" style="grid-column:1/-1">
             <label class="field-label">Category <span style="color:var(--dim)">(applied to all downloads)</span></label>
             <input class="field-input" id="cfgProwlarrCategory" type="text" placeholder="Top-Shelf">
@@ -1180,9 +1180,9 @@
           <div class="field-row" style="grid-column:1/-1">
             <label class="field-label">Status</label>
             <div style="display:flex;align-items:center;gap:8px">
-              <div id="prowlarrStatus" style="font-size:11px;color:var(--dim);padding:9px 0">Not checked</div>
-              <button class="btn-secondary" onclick="refreshIndexers()" style="font-size:11px;padding:4px 8px">Refresh indexers</button>
-              <span id="indexerCount" style="font-size:11px;color:var(--dim)"></span>
+              <div id="prowlarrStatus" style="font-size:12px;color:var(--dim);padding:9px 0">Not checked</div>
+              <button class="btn-secondary" onclick="refreshIndexers()" style="font-size:12px;padding:4px 8px">Refresh indexers</button>
+              <span id="indexerCount" style="font-size:12px;color:var(--dim)"></span>
             </div>
           </div>
         </div>
@@ -1238,7 +1238,7 @@
           </div>
           <div class="field-row" style="grid-column:1/-1">
             <button class="btn-secondary" onclick="runTpdbSync()" style="font-size:12px;padding:6px 14px"><i class="fa-solid fa-arrows-rotate"></i> Run sync now</button>
-            <span id="tpdbSyncStatus" style="font-size:11px;color:var(--dim);margin-left:8px"></span>
+            <span id="tpdbSyncStatus" style="font-size:12px;color:var(--dim);margin-left:8px"></span>
           </div>
         </div>
       </div>
@@ -1862,11 +1862,11 @@
   row.source === 'ThePornDB' ? 'https://theporndb.net/scenes/' + row.id :
   row.source === 'FansDB'    ? 'https://fansdb.cc/scenes/'    + row.id :
                                'https://stashdb.org/scenes/'  + row.id
-}" target="_blank" style="color:var(--accent);font-size:10px">View ↗</a>` : '-'}</td>
+}" target="_blank" style="color:var(--accent);font-size:12px">View ↗</a>` : '-'}</td>
                 <td style="vertical-align:middle">
                   ${selectedFile
                     ? `<button class="btn-run-file" style="border-color:var(--green);color:var(--green);white-space:nowrap" onclick="useThisScene(${idx})">Use this</button>`
-                    : `<span style="font-size:10px;color:var(--muted)">No file selected</span>`}
+                    : `<span style="font-size:12px;color:var(--muted)">No file selected</span>`}
                 </td>
               </tr>`).join('')}
           </tbody>
@@ -2118,9 +2118,9 @@
     if (d.studio) {
       if (d.studio.confirmed) {
         mResolvedStudio = d.studio.id;
-        html += `<div style="font-size:11px;color:var(--green);margin-bottom:6px">✓ Studio: ${esc(d.studio.name)}</div>`;
+        html += `<div style="font-size:12px;color:var(--green);margin-bottom:6px">✓ Studio: ${esc(d.studio.name)}</div>`;
       } else if (d.studio.suggestions?.length) {
-        html += `<div style="font-size:11px;color:var(--amber);margin-bottom:4px">Studio not found. Did you mean:</div>`;
+        html += `<div style="font-size:12px;color:var(--amber);margin-bottom:4px">Studio not found. Did you mean:</div>`;
         d.studio.suggestions.forEach(s => {
           html += `<button class="btn-small" style="margin:2px" onclick="confirmStudio('${s.id}','${esc(s.name)}')">
             ${esc(s.name)}
@@ -2129,7 +2129,7 @@
         html += `<button class="btn-small" style="margin:2px;color:var(--dim)" onclick="confirmStudio(null,'${esc(d.studio.name)}')">Skip studio</button>`;
         html += '<br style="margin-bottom:8px">';
       } else {
-        html += `<div style="font-size:11px;color:var(--dim);margin-bottom:6px">Studio not found on StashDB — will submit without</div>`;
+        html += `<div style="font-size:12px;color:var(--dim);margin-bottom:6px">Studio not found on StashDB — will submit without</div>`;
         mResolvedStudio = null;
       }
     }
@@ -2138,9 +2138,9 @@
       d.performers.forEach((p, i) => {
         if (p.confirmed) {
           mResolvedPerformers[i] = p.id;
-          html += `<div style="font-size:11px;color:var(--green);margin-bottom:4px">✓ Performer: ${esc(p.name)}</div>`;
+          html += `<div style="font-size:12px;color:var(--green);margin-bottom:4px">✓ Performer: ${esc(p.name)}</div>`;
         } else if (p.suggestions?.length) {
-          html += `<div style="font-size:11px;color:var(--amber);margin-bottom:4px">${esc(p.name)}: Did you mean:</div>`;
+          html += `<div style="font-size:12px;color:var(--amber);margin-bottom:4px">${esc(p.name)}: Did you mean:</div>`;
           p.suggestions.forEach(s => {
             html += `<button class="btn-small" style="margin:2px" onclick="confirmPerformer(${i},'${s.id}','${esc(s.name)}')">
               ${esc(s.name)}
@@ -2149,7 +2149,7 @@
           html += `<button class="btn-small" style="margin:2px;color:var(--dim)" onclick="confirmPerformer(${i},null,'${esc(p.name)}')">Skip</button>`;
           html += '<br style="margin-bottom:8px">';
         } else {
-          html += `<div style="font-size:11px;color:var(--dim);margin-bottom:4px">${esc(p.name)}: not found — will skip</div>`;
+          html += `<div style="font-size:12px;color:var(--dim);margin-bottom:4px">${esc(p.name)}: not found — will skip</div>`;
           mResolvedPerformers[i] = null;
         }
       });
@@ -2164,7 +2164,7 @@
     document.getElementById('mResolveResults').querySelectorAll('[onclick^="confirmStudio"]')
       .forEach(b => b.closest('div')?.remove());
     document.getElementById('mResolveResults').insertAdjacentHTML('afterbegin',
-      `<div style="font-size:11px;color:${colour};margin-bottom:6px">${id ? '✓' : '–'} Studio: ${esc(name)}</div>`);
+      `<div style="font-size:12px;color:${colour};margin-bottom:6px">${id ? '✓' : '–'} Studio: ${esc(name)}</div>`);
   }
 
   function confirmPerformer(idx, id, name) {
@@ -2188,7 +2188,7 @@
       }
     });
     results.insertAdjacentHTML('beforeend',
-      `<div style="font-size:11px;color:${colour};margin-bottom:4px">${id ? '✓' : '–'} Performer: ${esc(name)}</div>`);
+      `<div style="font-size:12px;color:${colour};margin-bottom:4px">${id ? '✓' : '–'} Performer: ${esc(name)}</div>`);
   }
 
   // Patch submitManual to handle StashDB submission

@@ -24,8 +24,8 @@
   --font-impact-label: "Impact Label", system-ui, sans-serif;
   /* Segmented tab toggles & settings switch row titles (Impact Label Reversed) */
   --font-toggle: "Seconds", "DM Mono", ui-monospace, monospace;
-  /* Old UI min was ~11px; bump by 2pt without changing sizes already well above this */
-  --font-reversed-min: calc(11px + 2pt);
+  /* Segmented toggles + settings microcopy floor (Impact Label Reversed / hints) */
+  --font-reversed-min: calc(12px + 2pt);
 }
 
 body {
@@ -169,13 +169,57 @@ header {
   }
 }
 
-/* Toggles: segmented controls (Favourites, Scenes, Queue) + settings switch labels */
-.fav-seg button,
-.queue-mode-toggle button,
-.type-toggle .type-btn,
-.source-toggle .source-btn {
+/* Unified segmented controls (Scenes type + feed + source, Queue mode, Favourites view) */
+.ts-seg {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(192, 132, 252, 0.35);
+  background: rgba(14, 14, 20, 0.92);
+  align-self: center;
+}
+.ts-seg--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.ts-seg--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.ts-seg button {
+  min-height: 40px;
+  padding: 0 12px;
+  margin: 0;
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  border-right: 1px solid rgba(192, 132, 252, 0.28);
+  color: var(--dim, #6b6b7a);
   font-family: var(--font-toggle);
   font-size: var(--font-reversed-min);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+.ts-seg button:last-child {
+  border-right: none;
+}
+.ts-seg button:hover {
+  color: var(--text, #e8e8f0);
+  background: rgba(255, 255, 255, 0.08);
+}
+.ts-seg button.active {
+  background: var(--accent, #c084fc);
+  color: #0c0c0e;
 }
 .toggle-row > span:not(.field-label) {
   font-family: var(--font-toggle);

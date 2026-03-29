@@ -71,6 +71,12 @@
     width: 100%;
   }
   .fav-sticky-title-row {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 10px 14px;
+    min-width: 0;
+    width: 100%;
+  }
+  .fav-sticky-title-left {
     display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 14px;
     min-width: 0;
   }
@@ -118,30 +124,11 @@
   .fav-icon-btn--primary { background: rgba(192,132,252,0.15); border-color: rgba(192,132,252,0.35); color: var(--accent); }
   .fav-icon-btn--primary:hover { filter: brightness(1.1); }
 
-  .fav-seg {
-    display: flex;
-    align-self: center;
+  .fav-sticky-title-row .fav-seg {
+    flex: 0 1 auto;
     width: min(320px, 100%);
     max-width: 100%;
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid var(--border);
   }
-  .fav-seg button {
-    flex: 1 1 0;
-    min-width: 0;
-    text-align: center;
-    padding: 8px 12px;
-    border: none;
-    cursor: pointer;
-    background: rgba(255,255,255,0.04);
-    color: var(--dim);
-    transition: background 0.15s, color 0.15s;
-    font-family: var(--mono);
-    font-size: 12px;
-  }
-  .fav-seg button:hover { color: var(--text); }
-  .fav-seg button.active { background: rgba(192,132,252,0.2); color: #fff; }
 
   .fav-filter-wrap input {
     width: 100%; padding: 9px 12px 9px 36px; border-radius: 8px; border: 1px solid var(--border);
@@ -195,7 +182,7 @@
   }
   .fav-progress-wrap.is-active { display: flex; }
   .fav-progress-label {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--dim);
     white-space: nowrap;
     overflow: hidden;
@@ -763,12 +750,14 @@
   <div class="fav-sticky">
     <div class="fav-sticky-top">
       <div class="fav-sticky-title-row">
-        <h1 class="fav-page-title">Favourites</h1>
-        <span class="fav-count" id="favCount">—</span>
-      </div>
-      <div class="fav-seg" role="tablist">
-        <button type="button" id="segPerf" class="active" onclick="setView('performer')">Performers</button>
-        <button type="button" id="segStudio" onclick="setView('studio')">Studios</button>
+        <div class="fav-sticky-title-left">
+          <h1 class="fav-page-title">Favourites</h1>
+          <span class="fav-count" id="favCount">—</span>
+        </div>
+        <div class="ts-seg ts-seg--2 fav-seg" role="tablist">
+          <button type="button" id="segPerf" class="active" onclick="setView('performer')">Performers</button>
+          <button type="button" id="segStudio" onclick="setView('studio')">Studios</button>
+        </div>
       </div>
     </div>
     <div class="fav-sticky-toolbar">
