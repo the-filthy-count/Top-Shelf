@@ -75,6 +75,8 @@ IMAGE_CACHE_JPEG_QUALITY = 85
 # Performer tiles: JPEG (photos). Studio logos: PNG (preserve transparency; JPEG was flattening onto white).
 FAVOURITES_FAV_IMAGE_MAX_EDGE = 750
 FAVOURITES_IMG_CACHE_DIR = Path(__file__).resolve().parent / "favourites_img_cache"
+# Bump when studio thumb pipeline changes so stale .ver / URL-hash caches are rebuilt (e.g. PNG alpha fixes).
+FAVOURITES_STUDIO_THUMB_CACHE_REV = "alpha-v3"
 
 STASHDB_ENDPOINT = "https://stashdb.org/graphql"
 TPDB_ENDPOINT    = "https://theporndb.net/graphql"
@@ -1874,9 +1876,8 @@ def _pil_normalize_for_output(im: Image.Image) -> Image.Image:
     if im.mode in ("L", "I", "F"):
         return im.convert("RGB")
     if im.mode == "P":
-        if "transparency" in im.info:
-            return im.convert("RGBA")
-        return im.convert("RGB")
+        # Palette PNG-8 / GIF: tRNS + transparency index need RGBA merge — not only im.info["transparency"].
+        return im.convert("RGBA")
     return im
 
 
@@ -1896,7 +1897,9 @@ def save_image_bytes_optimized(
         dest.parent.mkdir(parents=True, exist_ok=True)
         suffix = dest.suffix.lower()
         if suffix == ".png":
-            if im.mode not in ("RGB", "RGBA", "LA"):
+            if im.mode == "LA":
+                im = im.convert("RGBA")
+            elif im.mode not in ("RGB", "RGBA"):
                 im = im.convert("RGBA")
             im.save(dest, format="PNG", optimize=True, compress_level=9)
         else:
@@ -6793,7 +6796,10 @@ def _ensure_favourites_studio_thumb_path(row_id: int) -> Path | None:
     if p_local and p_local.is_file():
         try:
             src_mtime = p_local.stat().st_mtime
-            src_key = f"{p_local.resolve()}\n{src_mtime}\n"
+            src_key = (
+                f"{p_local.resolve()}\n{src_mtime}\n"
+                f"{FAVOURITES_STUDIO_THUMB_CACHE_REV}\n"
+            )
         except OSError:
             return None
         cache = FAVOURITES_IMG_CACHE_DIR / f"studio_{row_id}_local.png"
@@ -6823,7 +6829,9 @@ def _ensure_favourites_studio_thumb_path(row_id: int) -> Path | None:
         return None
     if not (img.startswith("http://") or img.startswith("https://")):
         return None
-    h = hashlib.sha256(img.encode("utf-8")).hexdigest()[:16]
+    h = hashlib.sha256(
+        f"{img}\n{FAVOURITES_STUDIO_THUMB_CACHE_REV}".encode("utf-8")
+    ).hexdigest()[:16]
     cache = FAVOURITES_IMG_CACHE_DIR / f"studio_{row_id}_r_{h}.png"
     if cache.is_file() and cache.stat().st_size > 0:
         return cache
