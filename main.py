@@ -12,6 +12,7 @@ import json
 import logging
 import secrets
 import math
+import mimetypes
 import os
 import re
 import shutil
@@ -34,7 +35,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import Body, FastAPI, BackgroundTasks, Request
-from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
@@ -3146,6 +3147,30 @@ def search_studios(name: str) -> list[dict]:
                 })
         except Exception:
             pass
+    if settings.get("api_key_fansdb"):
+        try:
+            gql = """
+            query($term: String!) {
+              searchStudio(term: $term, limit: 10) {
+                id name images { url width height }
+              }
+            }
+            """
+            data = _fansdb_gql(gql, {"term": name})
+            for s in (data.get("searchStudio") or []):
+                imgs = s.get("images") or []
+                img = best_image_url(imgs) if imgs else None
+                if not img and imgs and isinstance(imgs[0], dict):
+                    img = (imgs[0].get("url") or "").strip() or None
+                results.append({
+                    "source": "FansDB",
+                    "id":     str(s["id"]),
+                    "slug":   str(s["id"]),
+                    "name":   s.get("name") or "",
+                    "image":  img,
+                })
+        except Exception:
+            pass
     return results
 
 
@@ -3317,6 +3342,70 @@ def _favourite_studio_sort_birth_date(mt_id: str | None) -> str | None:
     return None
 
 
+_FAVOURITE_LOCAL_POSTER_NAMES = ("poster.jpg", "folder.jpg")
+
+
+def _favourite_find_local_poster_file(folder_path: str) -> Path | None:
+    """Root-of-folder poster.jpg or folder.jpg (case-insensitive)."""
+    raw = (folder_path or "").strip()
+    if not raw:
+        return None
+    try:
+        root = Path(raw).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return None
+    if not root.is_dir():
+        return None
+    for name in _FAVOURITE_LOCAL_POSTER_NAMES:
+        p = root / name
+        if p.is_file():
+            return p.resolve()
+    found: dict[str, Path] = {}
+    try:
+        for child in root.iterdir():
+            if not child.is_file():
+                continue
+            key = child.name.lower()
+            if key in ("poster.jpg", "folder.jpg"):
+                found[key] = child
+    except OSError:
+        return None
+    for name in _FAVOURITE_LOCAL_POSTER_NAMES:
+        p = found.get(name.lower())
+        if p:
+            try:
+                return p.resolve()
+            except OSError:
+                continue
+    return None
+
+
+def _favourite_find_local_studio_logo(folder_path: str) -> Path | None:
+    """Root-of-folder logo.png (case-insensitive)."""
+    raw = (folder_path or "").strip()
+    if not raw:
+        return None
+    try:
+        root = Path(raw).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return None
+    if not root.is_dir():
+        return None
+    p = root / "logo.png"
+    if p.is_file():
+        return p.resolve()
+    try:
+        for child in root.iterdir():
+            if child.is_file() and child.name.lower() == "logo.png":
+                try:
+                    return child.resolve()
+                except OSError:
+                    continue
+    except OSError:
+        pass
+    return None
+
+
 def favourites_refresh_entity_row(
     row_id: int,
     *,
@@ -3411,13 +3500,16 @@ def favourites_refresh_entity_row(
         else:
             if p_tp:
                 mt_id, mt_n = str(p_tp.get("id") or ""), p_tp.get("name") or ""
-                img = p_tp.get("image") or img
             if p_st:
                 ms_id, ms_n = str(p_st.get("id") or ""), p_st.get("name") or ""
-                img = p_st.get("image") or img
             if p_fn:
                 mf_id, mf_n = str(p_fn.get("id") or ""), p_fn.get("name") or ""
-                img = p_fn.get("image") or img
+            img = (
+                (p_tp.get("image") if p_tp else None)
+                or (p_st.get("image") if p_st else None)
+                or (p_fn.get("image") if p_fn else None)
+                or img
+            )
             if scrape_aliases:
                 aliases = _fetch_performer_aliases(name, quiet=True)
         if g_allow is not None:
@@ -3428,13 +3520,17 @@ def favourites_refresh_entity_row(
         res_s = search_studios(name)
         res_tpdb = [r for r in res_s if r.get("source") == "TPDB"]
         res_st = [r for r in res_s if r.get("source") == "StashDB"]
+        res_fan = [r for r in res_s if r.get("source") == "FansDB"]
         p_tp = _pick_best_name_match(res_tpdb, name)
         p_st = _pick_best_name_match(res_st, name)
+        p_fn = _pick_best_name_match(res_fan, name)
         if only_missing:
             mt_id = (row.get("match_tpdb_id") or "").strip() or None
             mt_n = (row.get("match_tpdb_name") or "") or ""
             ms_id = (row.get("match_stashdb_id") or "").strip() or None
             ms_n = (row.get("match_stashdb_name") or "") or ""
+            mf_id = (row.get("match_fansdb_id") or "").strip() or None
+            mf_n = (row.get("match_fansdb_name") or "") or ""
             if not mt_id and p_tp:
                 mt_id = str(p_tp.get("id") or "")
                 mt_n = p_tp.get("name") or ""
@@ -3447,13 +3543,25 @@ def favourites_refresh_entity_row(
                 if not had_img and p_st.get("image"):
                     img = p_st.get("image")
                     had_img = True
+            if not mf_id and p_fn:
+                mf_id = str(p_fn.get("id") or "")
+                mf_n = p_fn.get("name") or ""
+                if not had_img and p_fn.get("image"):
+                    img = p_fn.get("image")
+                    had_img = True
         else:
             if p_tp:
                 mt_id, mt_n = str(p_tp.get("id") or ""), p_tp.get("name") or ""
-                img = p_tp.get("image") or img
             if p_st:
                 ms_id, ms_n = str(p_st.get("id") or ""), p_st.get("name") or ""
-                img = p_st.get("image") or img
+            if p_fn:
+                mf_id, mf_n = str(p_fn.get("id") or ""), p_fn.get("name") or ""
+            img = (
+                (p_tp.get("image") if p_tp else None)
+                or (p_st.get("image") if p_st else None)
+                or (p_fn.get("image") if p_fn else None)
+                or img
+            )
 
     now = datetime.now(timezone.utc).isoformat()
     if kind == "performer" and scrape_aliases:
@@ -3467,6 +3575,11 @@ def favourites_refresh_entity_row(
         sort_bd = _favourite_performer_sort_birth_date(mt_id, ms_id, mf_id)
     else:
         sort_bd = _favourite_studio_sort_birth_date(mt_id)
+
+    if kind == "performer" and _favourite_find_local_poster_file(row.get("path") or ""):
+        img = f"/api/favourites/folder-poster?row_id={row_id}"
+    elif kind == "studio" and _favourite_find_local_studio_logo(row.get("path") or ""):
+        img = f"/api/favourites/folder-logo?row_id={row_id}"
 
     db.favourite_overwrite_matches(
         row_id,
@@ -3595,6 +3708,164 @@ def fetch_studio_detail(source: str, sid: str) -> dict | None:
         except Exception:
             pass
     return None
+
+
+def _favourite_tpdb_performer_image(mt_id: str | None) -> str | None:
+    if not mt_id or not str(mt_id).strip():
+        return None
+    d = fetch_performer_detail("TPDB", str(mt_id).strip())
+    if not d:
+        return None
+    posters = d.get("posters") or []
+    if not posters:
+        return None
+    p0 = posters[0]
+    if isinstance(p0, str):
+        return p0.strip() or None
+    if isinstance(p0, dict):
+        return (p0.get("url") or "").strip() or None
+    return None
+
+
+def _favourite_stashdb_performer_image(ms_id: str | None) -> str | None:
+    if not ms_id or not str(ms_id).strip():
+        return None
+    key = (db.get_settings().get("api_key_stashdb") or "").strip()
+    if not key:
+        return None
+    try:
+        gql = """
+        query($id: ID!) {
+          findPerformer(id: $id) {
+            images { url width height }
+          }
+        }
+        """
+        resp = requests.post(
+            "https://stashdb.org/graphql",
+            json={"query": gql, "variables": {"id": str(ms_id).strip()}},
+            headers={"ApiKey": key, "Content-Type": "application/json"},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return None
+        data = resp.json().get("data") or {}
+        p = data.get("findPerformer") or {}
+        return best_image_url(p.get("images") or [])
+    except Exception:
+        return None
+
+
+def _favourite_fansdb_performer_image(mf_id: str | None) -> str | None:
+    if not mf_id or not str(mf_id).strip():
+        return None
+    d = fetch_performer_detail("FansDB", str(mf_id).strip())
+    if not d:
+        return None
+    posters = d.get("posters") or []
+    if not posters:
+        return None
+    p0 = posters[0]
+    if isinstance(p0, str):
+        return p0.strip() or None
+    if isinstance(p0, dict):
+        return (p0.get("url") or "").strip() or None
+    return None
+
+
+def _favourite_tpdb_studio_image(mt_id: str | None) -> str | None:
+    if not mt_id or not str(mt_id).strip():
+        return None
+    d = fetch_studio_detail("TPDB", str(mt_id).strip())
+    if not d:
+        return None
+    return _tpdb_site_image_url(d)
+
+
+def _favourite_stashdb_studio_image(ms_id: str | None) -> str | None:
+    if not ms_id or not str(ms_id).strip():
+        return None
+    key = (db.get_settings().get("api_key_stashdb") or "").strip()
+    if not key:
+        return None
+    try:
+        gql = """
+        query($id: ID!) {
+          findStudio(id: $id) {
+            images { url width height }
+          }
+        }
+        """
+        resp = requests.post(
+            "https://stashdb.org/graphql",
+            json={"query": gql, "variables": {"id": str(ms_id).strip()}},
+            headers={"ApiKey": key, "Content-Type": "application/json"},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return None
+        data = resp.json().get("data") or {}
+        s = data.get("findStudio") or {}
+        return best_image_url(s.get("images") or [])
+    except Exception:
+        return None
+
+
+def _favourite_fansdb_studio_image(mf_id: str | None) -> str | None:
+    if not mf_id or not str(mf_id).strip():
+        return None
+    try:
+        data = _fansdb_gql(
+            """
+            query($id: ID!) {
+              findStudio(id: $id) {
+                images { url width height }
+              }
+            }
+            """,
+            {"id": str(mf_id).strip()},
+        )
+        s = data.get("findStudio") or {}
+        return best_image_url(s.get("images") or [])
+    except Exception:
+        return None
+
+
+def favourites_refresh_entity_images(row_id: int) -> dict:
+    """Set image_url from local art first, then TPDB → StashDB → FansDB for stored match IDs only."""
+    row = db.favourite_get(row_id)
+    if not row:
+        return {"error": "Not found"}
+    if int(row.get("matches_locked") or 0):
+        return {"ok": True, "id": row_id, "skipped": True}
+    kind = row["kind"]
+    path = row.get("path") or ""
+    mt = (row.get("match_tpdb_id") or "").strip() or None
+    ms = (row.get("match_stashdb_id") or "").strip() or None
+    mf = (row.get("match_fansdb_id") or "").strip() or None
+    prev = row.get("image_url")
+    if kind == "performer":
+        if _favourite_find_local_poster_file(path):
+            img: str | None = f"/api/favourites/folder-poster?row_id={row_id}"
+        else:
+            img = (
+                _favourite_tpdb_performer_image(mt)
+                or _favourite_stashdb_performer_image(ms)
+                or _favourite_fansdb_performer_image(mf)
+                or prev
+            )
+    else:
+        if _favourite_find_local_studio_logo(path):
+            img = f"/api/favourites/folder-logo?row_id={row_id}"
+        else:
+            img = (
+                _favourite_tpdb_studio_image(mt)
+                or _favourite_stashdb_studio_image(ms)
+                or _favourite_fansdb_studio_image(mf)
+                or prev
+            )
+    db.favourite_update_matches(row_id, image_url=img)
+    return {"ok": True, "id": row_id}
 
 
 def build_performer_tvshow_nfo(data: dict) -> str:
@@ -6264,6 +6535,32 @@ async def api_favourites_list():
     }
 
 
+@app.get("/api/favourites/folder-poster")
+async def api_favourites_folder_poster(row_id: int):
+    """Serve performer folder root poster.jpg or folder.jpg for favourites image_url."""
+    row = db.favourite_get(row_id)
+    if not row or row.get("kind") != "performer":
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    p = _favourite_find_local_poster_file(row.get("path") or "")
+    if not p or not p.is_file():
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    mt, _ = mimetypes.guess_type(str(p))
+    return FileResponse(p, media_type=mt or "image/jpeg")
+
+
+@app.get("/api/favourites/folder-logo")
+async def api_favourites_folder_logo(row_id: int):
+    """Serve studio folder root logo.png for favourites image_url."""
+    row = db.favourite_get(row_id)
+    if not row or row.get("kind") != "studio":
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    p = _favourite_find_local_studio_logo(row.get("path") or "")
+    if not p or not p.is_file():
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    mt, _ = mimetypes.guess_type(str(p))
+    return FileResponse(p, media_type=mt or "image/png")
+
+
 @app.get("/api/favourites/entity-panel")
 async def api_favourites_entity_panel(row_id: int):
     """Poster, TPDB scenes, and metadata for the favourites detail panel."""
@@ -6357,6 +6654,37 @@ async def api_favourites_refresh_all(background_tasks: BackgroundTasks):
             _favourites_refresh_all_loop(rows)
         except Exception as e:
             emit(f"FAVOURITES refresh-all error: {e}")
+        finally:
+            _favourites_progress_finish()
+
+    background_tasks.add_task(run)
+    return {"started": True, "count": n}
+
+
+def _favourites_refresh_images_all_loop(rows: list) -> None:
+    done = 0
+    for row in rows:
+        nm = str(row.get("folder_name") or "")
+        _favourites_progress_update(nm, done)
+        try:
+            favourites_refresh_entity_images(int(row["id"]))
+        except Exception as e:
+            emit(f"FAVOURITES refresh images row {row.get('id')}: {e}")
+        done += 1
+        _favourites_progress_update(nm, done)
+
+
+@app.post("/api/favourites/refresh-images-all")
+async def api_favourites_refresh_images_all(background_tasks: BackgroundTasks):
+    rows = db.favourite_list()
+    n = len(rows)
+    _favourites_progress_start("refresh_images_all", n)
+
+    def run():
+        try:
+            _favourites_refresh_images_all_loop(rows)
+        except Exception as e:
+            emit(f"FAVOURITES refresh-images-all error: {e}")
         finally:
             _favourites_progress_finish()
 
@@ -6477,7 +6805,16 @@ async def api_favourites_match(payload: dict = Body(...)):
         }
     else:
         return JSONResponse({"error": "source must be TPDB, StashDB, or FansDB"}, status_code=400)
-    if image:
+    row_pre = db.favourite_get(row_id)
+    if row_pre and row_pre.get("kind") == "performer" and _favourite_find_local_poster_file(
+        row_pre.get("path") or ""
+    ):
+        kw["image_url"] = f"/api/favourites/folder-poster?row_id={row_id}"
+    elif row_pre and row_pre.get("kind") == "studio" and _favourite_find_local_studio_logo(
+        row_pre.get("path") or ""
+    ):
+        kw["image_url"] = f"/api/favourites/folder-logo?row_id={row_id}"
+    elif image:
         kw["image_url"] = image
     db.favourite_update_matches(row_id, **kw)
     row = db.favourite_get(row_id)
