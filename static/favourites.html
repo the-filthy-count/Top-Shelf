@@ -81,17 +81,32 @@
     display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px;
     width: 100%;
   }
+  .fav-sticky-toolbar .fav-filter-wrap {
+    flex: 0 1 320px;
+    min-width: 160px;
+    max-width: min(380px, 100%);
+  }
   .fav-filter-selects {
     display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
-    flex: 1 1 240px;
-    justify-content: flex-end;
+    flex: 0 1 auto;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+  .fav-sticky-actions {
+    display: flex; align-items: center; gap: 8px;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+  .fav-toolbar-toast {
+    flex: 1 1 100%;
+    margin: 0;
+    min-height: 0;
   }
   .fav-sticky-extra {
     display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;
     width: 100%;
   }
   .fav-sticky-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .fav-sticky-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .fav-icon-btn {
     width: 42px; height: 42px; border-radius: 8px; border: 1px solid var(--border);
     background: rgba(255,255,255,0.06); color: var(--text); cursor: pointer;
@@ -111,7 +126,6 @@
   .fav-seg button:hover { color: var(--text); }
   .fav-seg button.active { background: rgba(192,132,252,0.2); color: #fff; }
 
-  .fav-sticky-toolbar .fav-filter-wrap { flex: 1 1 200px; min-width: 160px; max-width: min(420px, 100%); }
   .fav-filter-wrap input {
     width: 100%; padding: 9px 12px 9px 36px; border-radius: 8px; border: 1px solid var(--border);
     background: rgba(255,255,255,0.06); color: var(--text); font-family: var(--mono); font-size: 12px;
@@ -133,22 +147,23 @@
     padding: 7px 10px;
     border-radius: 8px;
     border: 1px solid var(--border);
-    background: rgba(255,255,255,0.06);
-    color: var(--text);
     font-family: var(--mono);
     font-size: 12px;
     min-width: 100px;
     max-width: min(200px, 36vw);
     cursor: pointer;
+    color-scheme: dark;
+    background-color: #16161c;
+    color: #e8e8f0;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .fav-sel option {
+    background: #1c1c26;
+    color: #e8e8f0;
   }
   .fav-sel:focus { outline: none; border-color: var(--accent); }
 
   .fav-count { font-size: 15px; font-weight: 600; color: var(--dim); font-family: var(--secs); white-space: nowrap; letter-spacing: -0.02em; }
-
-  details.fav-schedule { font-size: 11px; color: var(--dim); }
-  details.fav-schedule summary { cursor: pointer; user-select: none; color: var(--muted); }
-  details.fav-schedule summary:hover { color: var(--text); }
-  .fav-schedule-inner { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
   .fav-sticky-extra .fav-progress-wrap {
     flex: 1 1 200px;
@@ -745,22 +760,13 @@
         <button type="button" class="fav-icon-btn" id="btnLockAll" onclick="lockAllMatches()" title="Lock all — scans and refresh will not change matches for any folder (manual search picks still work)"><i class="fa-solid fa-lock"></i></button>
         <button type="button" class="fav-icon-btn" id="btnUnlockAll" onclick="unlockAllMatches()" title="Unlock all — allow automatic refresh and scan to update matches again"><i class="fa-solid fa-unlock"></i></button>
       </div>
+      <span class="toast fav-toolbar-toast" id="toolMsg"></span>
     </div>
     <div class="fav-sticky-extra">
       <div class="fav-progress-wrap" id="favProgressWrap">
         <div class="fav-progress-label" id="favProgressLabel"></div>
         <div class="fav-progress-track"><div class="fav-progress-fill" id="favProgressFill"></div></div>
       </div>
-      <details class="fav-schedule">
-        <summary>Nightly index</summary>
-        <div class="fav-schedule-inner">
-          <label><input type="checkbox" id="chkNightly"> Enable</label>
-          <span>UTC hour</span>
-          <input type="number" id="nightlyHour" min="0" max="23" value="3" style="width:48px;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--raised);color:var(--text);font-family:var(--mono);font-size:11px">
-          <button type="button" class="fav-icon-btn" onclick="saveSchedule()" title="Save schedule" style="width:36px;height:36px;font-size:13px"><i class="fa-solid fa-floppy-disk"></i></button>
-          <span class="toast" id="toolMsg"></span>
-        </div>
-      </details>
     </div>
   </div>
 
@@ -1476,8 +1482,6 @@
       const r = await fetch('/api/favourites', { credentials: 'same-origin' });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Failed to load');
-      document.getElementById('chkNightly').checked = d.settings && d.settings.favourites_scan_enabled === 'true';
-      document.getElementById('nightlyHour').value = (d.settings && d.settings.favourites_scan_hour) || '3';
       _rowsStudio = d.studios || [];
       _rowsPerf = d.performers || [];
       populateRootFilter();
@@ -1623,21 +1627,6 @@
     } catch (e) {
       alert(e.message || 'Failed');
     }
-  }
-
-  async function saveSchedule() {
-    const r0 = await fetch('/api/settings');
-    const cfg = await r0.json();
-    const s = Object.assign({}, cfg.settings || {});
-    s.favourites_scan_enabled = document.getElementById('chkNightly').checked ? 'true' : 'false';
-    s.favourites_scan_hour = String(parseInt(document.getElementById('nightlyHour').value, 10) || 3);
-    await fetch('/api/settings', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ settings: s, directories: cfg.directories || [] }),
-    });
-    showMsg('Saved');
   }
 
   function openSearchForRow(rowId, focusSource) {
