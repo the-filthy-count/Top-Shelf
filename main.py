@@ -76,7 +76,7 @@ IMAGE_CACHE_JPEG_QUALITY = 85
 FAVOURITES_FAV_IMAGE_MAX_EDGE = 750
 FAVOURITES_IMG_CACHE_DIR = Path(__file__).resolve().parent / "favourites_img_cache"
 # Bump when studio thumb pipeline changes so stale .ver / URL-hash caches are rebuilt (e.g. PNG alpha fixes).
-FAVOURITES_STUDIO_THUMB_CACHE_REV = "alpha-v3"
+FAVOURITES_STUDIO_THUMB_CACHE_REV = "png-passthrough-v1"
 
 STASHDB_ENDPOINT = "https://stashdb.org/graphql"
 TPDB_ENDPOINT    = "https://theporndb.net/graphql"
@@ -1881,6 +1881,9 @@ def _pil_normalize_for_output(im: Image.Image) -> Image.Image:
     return im
 
 
+_PNG_FILE_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
 def save_image_bytes_optimized(
     data: bytes,
     dest: Path,
@@ -1888,20 +1891,28 @@ def save_image_bytes_optimized(
     max_edge: int,
     jpeg_quality: int = IMAGE_CACHE_JPEG_QUALITY,
 ) -> bool:
-    """Decode image bytes, downscale if needed, write JPEG or PNG from dest suffix."""
+    """Decode image bytes, downscale if needed, write JPEG or PNG from dest suffix.
+
+    PNG outputs: if input is already PNG, copy bytes unchanged (no re-encode / resize) so
+    transparency stays bit-exact. Other formats decoded to PNG use Pillow without PNG
+    ``optimize=`` packing. JPEG path unchanged (resize + quality encode).
+    """
     try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        suffix = dest.suffix.lower()
+        if suffix == ".png" and len(data) >= 8 and data.startswith(_PNG_FILE_MAGIC):
+            dest.write_bytes(data)
+            return True
         im = Image.open(BytesIO(data))
         im.load()
         im = _pil_normalize_for_output(im)
         im = _pil_resize_max_edge(im, max_edge)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        suffix = dest.suffix.lower()
         if suffix == ".png":
             if im.mode == "LA":
                 im = im.convert("RGBA")
             elif im.mode not in ("RGB", "RGBA"):
                 im = im.convert("RGBA")
-            im.save(dest, format="PNG", optimize=True, compress_level=9)
+            im.save(dest, format="PNG", optimize=False)
         else:
             base = Image.new("RGB", im.size, (255, 255, 255))
             if im.mode == "RGBA":
