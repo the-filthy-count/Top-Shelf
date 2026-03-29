@@ -3118,6 +3118,17 @@ def _tpdb_site_image_url(site: dict) -> str | None:
     return None
 
 
+def _tpdb_scalar_media_url(val) -> str | None:
+    """TPDB field that is either a URL string or {url, full, large}."""
+    if isinstance(val, str) and val.strip():
+        return val.strip()
+    if isinstance(val, dict):
+        u = val.get("url") or val.get("full") or val.get("large")
+        if isinstance(u, str) and u.strip():
+            return u.strip()
+    return None
+
+
 def search_studios(name: str) -> list[dict]:
     results = []
     settings = db.get_settings()
@@ -3380,8 +3391,17 @@ def _favourite_find_local_poster_file(folder_path: str) -> Path | None:
     return None
 
 
-def _favourite_find_local_studio_logo(folder_path: str) -> Path | None:
-    """Root-of-folder logo.png (case-insensitive)."""
+# Studio show folder: Kodi/Jellyfin-style art. Order = preference for favourites image.
+_FAVOURITE_STUDIO_LOCAL_ART_NAMES = (
+    "logo.png",
+    "clearlogo.png",
+    "poster.jpg",
+    "folder.jpg",
+)
+
+
+def _favourite_find_local_studio_art(folder_path: str) -> Path | None:
+    """First match in show root: logo.png, clearlogo.png, poster.jpg, folder.jpg (case-insensitive)."""
     raw = (folder_path or "").strip()
     if not raw:
         return None
@@ -3391,18 +3411,28 @@ def _favourite_find_local_studio_logo(folder_path: str) -> Path | None:
         return None
     if not root.is_dir():
         return None
-    p = root / "logo.png"
-    if p.is_file():
-        return p.resolve()
+    allowed_lower = {n.lower() for n in _FAVOURITE_STUDIO_LOCAL_ART_NAMES}
+    for name in _FAVOURITE_STUDIO_LOCAL_ART_NAMES:
+        p = root / name
+        if p.is_file():
+            return p.resolve()
+    found: dict[str, Path] = {}
     try:
         for child in root.iterdir():
-            if child.is_file() and child.name.lower() == "logo.png":
-                try:
-                    return child.resolve()
-                except OSError:
-                    continue
+            if not child.is_file():
+                continue
+            key = child.name.lower()
+            if key in allowed_lower:
+                found[key] = child
     except OSError:
-        pass
+        return None
+    for name in _FAVOURITE_STUDIO_LOCAL_ART_NAMES:
+        p = found.get(name.lower())
+        if p:
+            try:
+                return p.resolve()
+            except OSError:
+                continue
     return None
 
 
@@ -3578,7 +3608,7 @@ def favourites_refresh_entity_row(
 
     if kind == "performer" and _favourite_find_local_poster_file(row.get("path") or ""):
         img = f"/api/favourites/folder-poster?row_id={row_id}"
-    elif kind == "studio" and _favourite_find_local_studio_logo(row.get("path") or ""):
+    elif kind == "studio" and _favourite_find_local_studio_art(row.get("path") or ""):
         img = f"/api/favourites/folder-logo?row_id={row_id}"
 
     db.favourite_overwrite_matches(
@@ -3855,7 +3885,7 @@ def favourites_refresh_entity_images(row_id: int) -> dict:
                 or prev
             )
     else:
-        if _favourite_find_local_studio_logo(path):
+        if _favourite_find_local_studio_art(path):
             img = f"/api/favourites/folder-logo?row_id={row_id}"
         else:
             img = (
@@ -3939,12 +3969,20 @@ def build_studio_tvshow_nfo(data: dict) -> str:
     return buf.getvalue().decode("utf-8")
 
 
-def create_tvshow_folder(name: str, dest_dir: Path, nfo_content: str,
-                          poster_url: str = None) -> Path:
+def create_tvshow_folder(
+    name: str,
+    dest_dir: Path,
+    nfo_content: str,
+    poster_url: str | None = None,
+    *,
+    logo_url: str | None = None,
+) -> Path:
     folder = dest_dir / name
     folder.mkdir(parents=True, exist_ok=True)
     nfo_path = folder / "tvshow.nfo"
     nfo_path.write_text(nfo_content, encoding="utf-8")
+    if logo_url:
+        download_image(logo_url, folder / "logo.png")
     if poster_url:
         download_image(poster_url, folder / "poster.jpg")
     return folder
@@ -6550,15 +6588,15 @@ async def api_favourites_folder_poster(row_id: int):
 
 @app.get("/api/favourites/folder-logo")
 async def api_favourites_folder_logo(row_id: int):
-    """Serve studio folder root logo.png for favourites image_url."""
+    """Serve studio folder local art (logo.png, clearlogo.png, poster.jpg, folder.jpg)."""
     row = db.favourite_get(row_id)
     if not row or row.get("kind") != "studio":
         return JSONResponse({"error": "Not found"}, status_code=404)
-    p = _favourite_find_local_studio_logo(row.get("path") or "")
+    p = _favourite_find_local_studio_art(row.get("path") or "")
     if not p or not p.is_file():
         return JSONResponse({"error": "Not found"}, status_code=404)
     mt, _ = mimetypes.guess_type(str(p))
-    return FileResponse(p, media_type=mt or "image/png")
+    return FileResponse(p, media_type=mt or "image/jpeg")
 
 
 @app.get("/api/favourites/entity-panel")
@@ -6810,7 +6848,7 @@ async def api_favourites_match(payload: dict = Body(...)):
         row_pre.get("path") or ""
     ):
         kw["image_url"] = f"/api/favourites/folder-poster?row_id={row_id}"
-    elif row_pre and row_pre.get("kind") == "studio" and _favourite_find_local_studio_logo(
+    elif row_pre and row_pre.get("kind") == "studio" and _favourite_find_local_studio_art(
         row_pre.get("path") or ""
     ):
         kw["image_url"] = f"/api/favourites/folder-logo?row_id={row_id}"
@@ -7617,20 +7655,28 @@ async def metadata_create(payload: dict):
         nfo        = build_performer_tvshow_nfo(data)
         posters    = data.get("posters") or []
         poster_url = posters[0].get("url") if posters and isinstance(posters[0], dict) else (posters[0] if posters else None)
+        folder = create_tvshow_folder(name, dest_path, nfo, poster_url)
+        has_poster = poster_url is not None
     else:
         data = fetch_studio_detail(source, mid)
         if not data:
             return JSONResponse({"error": "Failed to fetch studio data"}, status_code=500)
-        name       = data.get("name") or data.get("title", "Unknown")
-        nfo        = build_studio_tvshow_nfo(data)
-        poster_url = data.get("logo") or data.get("poster")
+        name      = data.get("name") or data.get("title", "Unknown")
+        nfo       = build_studio_tvshow_nfo(data)
+        logo_url = _tpdb_scalar_media_url(data.get("logo"))
+        poster_url = _tpdb_scalar_media_url(data.get("poster"))
+        if not logo_url and not poster_url:
+            poster_url = _tpdb_site_image_url(data)
+        folder = create_tvshow_folder(
+            name, dest_path, nfo, poster_url, logo_url=logo_url
+        )
+        has_poster = bool(logo_url or poster_url)
 
-    folder = create_tvshow_folder(name, dest_path, nfo, poster_url)
     return {
         "success":    True,
         "name":       name,
         "folder":     str(folder),
-        "has_poster": poster_url is not None,
+        "has_poster": has_poster,
     }
 
 
