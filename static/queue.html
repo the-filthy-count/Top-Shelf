@@ -37,6 +37,8 @@
     --sans:    'Syne', sans-serif;
     --acid:    'Acidoze', 'Syne', sans-serif;
     --secs:    'Seconds', 'DM Mono', monospace;
+    --counter-value-size: clamp(64px, 7.5vw, 86px);
+    --counter-label-size: 20px;
     /* Frosted glass tiles (stats, panels, scene search) */
     --glass-panel-bg: linear-gradient(160deg, rgba(36, 36, 48, 0.48) 0%, rgba(18, 18, 26, 0.36) 100%);
     --glass-stat-bg: linear-gradient(145deg, rgba(40, 40, 52, 0.44) 0%, rgba(22, 22, 30, 0.36) 100%);
@@ -118,9 +120,9 @@
 
   /* ── Stats ── */
   .stats-bar { display: contents; }
-  .stat-card { background: var(--glass-stat-bg); border: 1px solid var(--glass-border); border-radius: 10px; padding: 20px 16px; backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 132px; box-shadow: var(--glass-inset), var(--glass-shadow); }
-  .stat-value { font-family: var(--secs); font-size: clamp(44px, 5vw, 64px); font-weight: 400; line-height: 1; display: block; letter-spacing: 0.02em; text-align: center; }
-  .stat-label { font-family: var(--secs); font-size: 18px; text-transform: uppercase; letter-spacing: -0.02em; color: #d4cfc4; display: block; margin-top: 8px; text-align: center; }
+  .stat-card { background: var(--glass-stat-bg); border: 1px solid var(--glass-border); border-radius: 10px; padding: 20px 16px; backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 144px; box-shadow: var(--glass-inset), var(--glass-shadow); }
+  .stat-value { font-family: var(--secs); font-size: var(--counter-value-size); font-weight: 400; line-height: 1; display: block; letter-spacing: 0.02em; text-align: center; }
+  .stat-label { font-family: var(--secs); font-size: var(--counter-label-size); text-transform: uppercase; letter-spacing: -0.02em; color: #d4cfc4; display: block; margin-top: 8px; text-align: center; }
   .stat-filed .stat-value     { color: var(--green); }
   .stat-unmatched .stat-value { color: var(--amber); }
   .stat-no_dir .stat-value    { color: var(--blue); }
@@ -522,6 +524,13 @@
     }
     .layout-grid .panel-queue,
     .layout-grid .panel-log { grid-column: 1 / 2; }
+  }
+
+  @media (max-width: 540px) {
+    :root {
+      --counter-value-size: clamp(52px, 13vw, 68px);
+      --counter-label-size: 17px;
+    }
   }
 </style>
 </head>

@@ -10,6 +10,7 @@ import base64
 import io
 import json
 import logging
+import hashlib
 import secrets
 import math
 import mimetypes
@@ -69,6 +70,10 @@ IMAGE_CACHE_POSTER_MAX = 1280
 IMAGE_CACHE_FANART_MAX = 1920
 IMAGE_CACHE_LOGO_MAX = 800
 IMAGE_CACHE_JPEG_QUALITY = 85
+
+# Favourites grid images: JPEG cache under favourites_img_cache/ only — never writes to library paths.
+FAVOURITES_FAV_IMAGE_MAX_EDGE = 750
+FAVOURITES_IMG_CACHE_DIR = Path(__file__).resolve().parent / "favourites_img_cache"
 
 STASHDB_ENDPOINT = "https://stashdb.org/graphql"
 TPDB_ENDPOINT    = "https://theporndb.net/graphql"
@@ -6636,6 +6641,126 @@ async def favourites_page():
         return f.read()
 
 
+def _ensure_favourites_performer_thumb_path(row_id: int) -> Path | None:
+    """Build or reuse JPEG in favourites_img_cache; reads library files only — never modifies them."""
+    row = db.favourite_get(row_id)
+    if not row or row.get("kind") != "performer":
+        return None
+    try:
+        FAVOURITES_IMG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None
+    max_edge = FAVOURITES_FAV_IMAGE_MAX_EDGE
+
+    p_local = _favourite_find_local_poster_file(row.get("path") or "")
+    if p_local and p_local.is_file():
+        try:
+            src_mtime = p_local.stat().st_mtime
+            src_key = f"{p_local.resolve()}\n{src_mtime}\n"
+        except OSError:
+            return None
+        cache = FAVOURITES_IMG_CACHE_DIR / f"perf_{row_id}_local.jpg"
+        ver = FAVOURITES_IMG_CACHE_DIR / f"perf_{row_id}_local.ver"
+        if cache.is_file() and ver.is_file():
+            try:
+                if ver.read_text(encoding="utf-8") == src_key:
+                    return cache
+            except OSError:
+                pass
+        try:
+            data = p_local.read_bytes()
+        except OSError:
+            return None
+        if save_image_bytes_optimized(data, cache, max_edge=max_edge):
+            try:
+                ver.write_text(src_key, encoding="utf-8")
+            except OSError:
+                pass
+            return cache
+        return None
+
+    img = (row.get("image_url") or "").strip()
+    if not img or img.startswith("/api/favourites/performer-thumb"):
+        return None
+    if img.startswith("/api/favourites/folder-poster"):
+        return None
+    if not (img.startswith("http://") or img.startswith("https://")):
+        return None
+    h = hashlib.sha256(img.encode("utf-8")).hexdigest()[:16]
+    cache = FAVOURITES_IMG_CACHE_DIR / f"perf_{row_id}_r_{h}.jpg"
+    if cache.is_file() and cache.stat().st_size > 0:
+        return cache
+    try:
+        resp = requests.get(img, timeout=25)
+        if resp.status_code != 200:
+            return None
+        if save_image_bytes_optimized(resp.content, cache, max_edge=max_edge):
+            return cache
+    except Exception:
+        pass
+    return None
+
+
+def _ensure_favourites_studio_thumb_path(row_id: int) -> Path | None:
+    """Build or reuse JPEG in favourites_img_cache; reads library files only — never modifies them."""
+    row = db.favourite_get(row_id)
+    if not row or row.get("kind") != "studio":
+        return None
+    try:
+        FAVOURITES_IMG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None
+    max_edge = FAVOURITES_FAV_IMAGE_MAX_EDGE
+
+    p_local = _favourite_find_local_studio_art(row.get("path") or "")
+    if p_local and p_local.is_file():
+        try:
+            src_mtime = p_local.stat().st_mtime
+            src_key = f"{p_local.resolve()}\n{src_mtime}\n"
+        except OSError:
+            return None
+        cache = FAVOURITES_IMG_CACHE_DIR / f"studio_{row_id}_local.jpg"
+        ver = FAVOURITES_IMG_CACHE_DIR / f"studio_{row_id}_local.ver"
+        if cache.is_file() and ver.is_file():
+            try:
+                if ver.read_text(encoding="utf-8") == src_key:
+                    return cache
+            except OSError:
+                pass
+        try:
+            data = p_local.read_bytes()
+        except OSError:
+            return None
+        if save_image_bytes_optimized(data, cache, max_edge=max_edge):
+            try:
+                ver.write_text(src_key, encoding="utf-8")
+            except OSError:
+                pass
+            return cache
+        return None
+
+    img = (row.get("image_url") or "").strip()
+    if not img or img.startswith("/api/favourites/studio-thumb"):
+        return None
+    if img.startswith("/api/favourites/folder-logo"):
+        return None
+    if not (img.startswith("http://") or img.startswith("https://")):
+        return None
+    h = hashlib.sha256(img.encode("utf-8")).hexdigest()[:16]
+    cache = FAVOURITES_IMG_CACHE_DIR / f"studio_{row_id}_r_{h}.jpg"
+    if cache.is_file() and cache.stat().st_size > 0:
+        return cache
+    try:
+        resp = requests.get(img, timeout=25)
+        if resp.status_code != 200:
+            return None
+        if save_image_bytes_optimized(resp.content, cache, max_edge=max_edge):
+            return cache
+    except Exception:
+        pass
+    return None
+
+
 def _favourites_row_api(r: dict) -> dict:
     out = dict(r)
     ml = out.get("matches_locked")
@@ -6660,6 +6785,18 @@ def _favourites_row_api(r: dict) -> dict:
         out["path_missing"] = bool(int(pm)) if pm is not None else False
     except (TypeError, ValueError):
         out["path_missing"] = bool(pm)
+    if out.get("kind") == "performer" and (out.get("image_url") or "").strip():
+        try:
+            rid = int(out["id"])
+            out["image_url"] = f"/api/favourites/performer-thumb?row_id={rid}"
+        except (KeyError, TypeError, ValueError):
+            pass
+    elif out.get("kind") == "studio" and (out.get("image_url") or "").strip():
+        try:
+            rid = int(out["id"])
+            out["image_url"] = f"/api/favourites/studio-thumb?row_id={rid}"
+        except (KeyError, TypeError, ValueError):
+            pass
     return out
 
 
@@ -6679,9 +6816,35 @@ async def api_favourites_list():
     }
 
 
+@app.get("/api/favourites/performer-thumb")
+async def api_favourites_performer_thumb(row_id: int):
+    """Resized performer image for UI (disk cache only; library originals unchanged)."""
+    pth = _ensure_favourites_performer_thumb_path(row_id)
+    if not pth or not pth.is_file():
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    return FileResponse(
+        pth,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
+
+
+@app.get("/api/favourites/studio-thumb")
+async def api_favourites_studio_thumb(row_id: int):
+    """Resized studio logo/poster for UI (disk cache only; library originals unchanged)."""
+    pth = _ensure_favourites_studio_thumb_path(row_id)
+    if not pth or not pth.is_file():
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    return FileResponse(
+        pth,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
+
+
 @app.get("/api/favourites/folder-poster")
 async def api_favourites_folder_poster(row_id: int):
-    """Serve performer folder root poster.jpg or folder.jpg for favourites image_url."""
+    """Read-only: original local poster.jpg / folder.jpg (full size)."""
     row = db.favourite_get(row_id)
     if not row or row.get("kind") != "performer":
         return JSONResponse({"error": "Not found"}, status_code=404)
@@ -6694,7 +6857,7 @@ async def api_favourites_folder_poster(row_id: int):
 
 @app.get("/api/favourites/folder-logo")
 async def api_favourites_folder_logo(row_id: int):
-    """Serve studio folder local art (logo.png, clearlogo.png, poster.jpg, folder.jpg)."""
+    """Read-only: studio folder art (logo.png, clearlogo.png, poster.jpg, folder.jpg)."""
     row = db.favourite_get(row_id)
     if not row or row.get("kind") != "studio":
         return JSONResponse({"error": "Not found"}, status_code=404)

@@ -5,3 +5,4 @@ __pycache__/
 phash_filer.db
 *.phash
 .env
+favourites_img_cache/
