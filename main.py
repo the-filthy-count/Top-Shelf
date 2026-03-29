@@ -63,6 +63,13 @@ SCREENSHOT_SIZE = 160
 COLUMNS = 5
 ROWS = 5
 
+# After HTTP download: cap longest edge and recompress (saves disk + faster media library scans).
+IMAGE_CACHE_SCENE_THUMB_MAX = 720
+IMAGE_CACHE_POSTER_MAX = 1280
+IMAGE_CACHE_FANART_MAX = 1920
+IMAGE_CACHE_LOGO_MAX = 800
+IMAGE_CACHE_JPEG_QUALITY = 85
+
 STASHDB_ENDPOINT = "https://stashdb.org/graphql"
 TPDB_ENDPOINT    = "https://theporndb.net/graphql"
 FANSDB_ENDPOINT  = "https://fansdb.cc/graphql"
@@ -1838,15 +1845,90 @@ def safe_move(src: Path, dst: Path) -> None:
             raise
 
 
-def download_image(url: str, dest: Path) -> bool:
+def _pil_resize_max_edge(im: Image.Image, max_edge: int) -> Image.Image:
+    if max_edge <= 0:
+        return im
+    w, h = im.size
+    if w <= 0 or h <= 0:
+        return im
+    m = max(w, h)
+    if m <= max_edge:
+        return im
+    scale = max_edge / float(m)
+    nw = max(1, int(round(w * scale)))
+    nh = max(1, int(round(h * scale)))
+    return im.resize((nw, nh), Image.Resampling.LANCZOS)
+
+
+def _pil_normalize_for_output(im: Image.Image) -> Image.Image:
+    if im.mode == "CMYK":
+        return im.convert("RGB")
+    if im.mode == "LA":
+        return im.convert("RGBA")
+    if im.mode in ("L", "I", "F"):
+        return im.convert("RGB")
+    if im.mode == "P":
+        if "transparency" in im.info:
+            return im.convert("RGBA")
+        return im.convert("RGB")
+    return im
+
+
+def save_image_bytes_optimized(
+    data: bytes,
+    dest: Path,
+    *,
+    max_edge: int,
+    jpeg_quality: int = IMAGE_CACHE_JPEG_QUALITY,
+) -> bool:
+    """Decode image bytes, downscale if needed, write JPEG or PNG from dest suffix."""
     try:
-        resp = requests.get(url, timeout=15)
-        if resp.status_code == 200:
-            dest.write_bytes(resp.content)
-            return True
+        im = Image.open(BytesIO(data))
+        im.load()
+        im = _pil_normalize_for_output(im)
+        im = _pil_resize_max_edge(im, max_edge)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        suffix = dest.suffix.lower()
+        if suffix == ".png":
+            if im.mode not in ("RGB", "RGBA", "LA"):
+                im = im.convert("RGBA")
+            im.save(dest, format="PNG", optimize=True, compress_level=9)
+        else:
+            base = Image.new("RGB", im.size, (255, 255, 255))
+            if im.mode == "RGBA":
+                base.paste(im, mask=im.split()[3])
+            elif im.mode == "RGB":
+                base = im
+            else:
+                base.paste(im.convert("RGB"))
+            base.save(
+                dest,
+                format="JPEG",
+                quality=jpeg_quality,
+                optimize=True,
+                subsampling=2,
+            )
+        return True
     except Exception:
-        pass
-    return False
+        return False
+
+
+def download_image(
+    url: str,
+    dest: Path,
+    *,
+    max_edge: int = IMAGE_CACHE_POSTER_MAX,
+    jpeg_quality: int = IMAGE_CACHE_JPEG_QUALITY,
+) -> bool:
+    try:
+        resp = requests.get(url, timeout=30)
+        if resp.status_code != 200:
+            return False
+        return save_image_bytes_optimized(
+            resp.content, dest, max_edge=max_edge, jpeg_quality=jpeg_quality
+        )
+    except Exception:
+        return False
 
 
 def best_image_url(images: list) -> str | None:
@@ -1991,14 +2073,26 @@ def file_scene_from_match(video: Path, scene: dict, source: str = "") -> dict:
     if thumb_data_url and thumb_data_url.startswith("data:image"):
         try:
             header, b64data = thumb_data_url.split(",", 1)
-            (dest_season / f"{base_name}-thumb.jpg").write_bytes(base64.b64decode(b64data))
-            emit("  Thumb: saved (generated frame)")
+            raw = base64.b64decode(b64data)
+            ok = save_image_bytes_optimized(
+                raw,
+                dest_season / f"{base_name}-thumb.jpg",
+                max_edge=IMAGE_CACHE_SCENE_THUMB_MAX,
+            )
+            if ok:
+                emit("  Thumb: saved (generated frame)")
+            else:
+                emit("  Thumb: save failed (could not encode image)")
         except Exception as e:
             emit(f"  Thumb: save failed ({e})")
     else:
         image_url = best_image_url(images)
         if image_url:
-            ok = download_image(image_url, dest_season / f"{base_name}-thumb.jpg")
+            ok = download_image(
+                image_url,
+                dest_season / f"{base_name}-thumb.jpg",
+                max_edge=IMAGE_CACHE_SCENE_THUMB_MAX,
+            )
             emit("  Thumb: downloaded" if ok else "  Thumb: download failed")
         else:
             emit("  Thumb: no image available")
@@ -2224,14 +2318,22 @@ def file_movie(
 
     # Poster
     if movie.get("poster_url"):
-        if download_image(movie["poster_url"], dest_dir / f"{base_name}-poster.jpg"):
+        if download_image(
+            movie["poster_url"],
+            dest_dir / f"{base_name}-poster.jpg",
+            max_edge=IMAGE_CACHE_POSTER_MAX,
+        ):
             emit("  Poster: downloaded")
         else:
             emit("  Poster: download failed")
 
     # Backdrop / fanart
     if movie.get("backdrop_url"):
-        if download_image(movie["backdrop_url"], dest_dir / f"{base_name}-fanart.jpg"):
+        if download_image(
+            movie["backdrop_url"],
+            dest_dir / f"{base_name}-fanart.jpg",
+            max_edge=IMAGE_CACHE_FANART_MAX,
+        ):
             emit("  Fanart: downloaded")
         else:
             emit("  Fanart: download failed")
@@ -3982,9 +4084,13 @@ def create_tvshow_folder(
     nfo_path = folder / "tvshow.nfo"
     nfo_path.write_text(nfo_content, encoding="utf-8")
     if logo_url:
-        download_image(logo_url, folder / "logo.png")
+        download_image(
+            logo_url, folder / "logo.png", max_edge=IMAGE_CACHE_LOGO_MAX
+        )
     if poster_url:
-        download_image(poster_url, folder / "poster.jpg")
+        download_image(
+            poster_url, folder / "poster.jpg", max_edge=IMAGE_CACHE_POSTER_MAX
+        )
     return folder
 
 
