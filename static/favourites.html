@@ -806,7 +806,7 @@
       <div class="fav-sticky-actions">
         <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="btnSearchMissing" onclick="searchMissing()" title="Search missing links only — fills empty TPDB/Stash/Fans slots; does not overwrite existing matches"><i class="fa-solid fa-magnifying-glass"></i></button>
         <button type="button" class="fav-icon-btn" id="btnRefreshImages" onclick="refreshImagesAll()" title="Refresh images only — performers: poster.jpg → folder.jpg → TPDB → StashDB → FansDB; studios: logo/clearlogo (png/jpg/webp and *-logo*) before poster.jpg, then TPDB/Stash/Fans (prefers wide logos over tall posters); does not change links"><i class="fa-solid fa-image"></i></button>
-        <button type="button" class="fav-icon-btn" id="btnRefreshAll" onclick="refreshAll()" title="Re-match all — full refresh; may overwrite or clear existing TPDB/Stash/Fans links"><i class="fa-solid fa-arrows-rotate"></i></button>
+        <button type="button" class="fav-icon-btn" id="btnRefreshAll" onclick="refreshAll()" title="Re-match all — full refresh; may overwrite or clear existing TPDB/Stash/Fans links; clears favourites image thumbnails cache per folder"><i class="fa-solid fa-arrows-rotate"></i></button>
         <button type="button" class="fav-icon-btn" id="btnLockAll" onclick="lockAllMatches()" title="Lock all — scans and refresh will not change matches for any folder (manual search picks still work)"><i class="fa-solid fa-lock"></i></button>
         <button type="button" class="fav-icon-btn" id="btnUnlockAll" onclick="unlockAllMatches()" title="Unlock all — allow automatic refresh and scan to update matches again"><i class="fa-solid fa-unlock"></i></button>
       </div>

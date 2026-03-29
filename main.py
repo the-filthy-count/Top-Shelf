@@ -6721,6 +6721,42 @@ async def favourites_page():
         return f.read()
 
 
+def favourites_clear_image_disk_cache(row_id: int) -> None:
+    """Remove favourites_img_cache files for a row (local + remote-hash thumbs)."""
+    try:
+        rid = int(row_id)
+    except (TypeError, ValueError):
+        return
+    d = FAVOURITES_IMG_CACHE_DIR
+    if not d.is_dir():
+        return
+    for name in (
+        f"perf_{rid}_local.jpg",
+        f"perf_{rid}_local.ver",
+        f"studio_{rid}_local.png",
+        f"studio_{rid}_local.jpg",
+        f"studio_{rid}_local.ver",
+    ):
+        p = d / name
+        try:
+            if p.is_file():
+                p.unlink()
+        except OSError:
+            pass
+    try:
+        for p in d.glob(f"perf_{rid}_r_*"):
+            if p.is_file():
+                p.unlink()
+    except OSError:
+        pass
+    try:
+        for p in d.glob(f"studio_{rid}_r_*"):
+            if p.is_file():
+                p.unlink()
+    except OSError:
+        pass
+
+
 def _ensure_favourites_performer_thumb_path(row_id: int) -> Path | None:
     """Build or reuse JPEG in favourites_img_cache; reads library files only — never modifies them."""
     row = db.favourite_get(row_id)
@@ -7012,6 +7048,8 @@ async def api_favourites_refresh(payload: dict = Body(...)):
         return JSONResponse({"error": "id required"}, status_code=400)
     scrape = payload.get("scrape_aliases", True)
     only_missing = bool(payload.get("only_missing", False))
+    if not only_missing:
+        favourites_clear_image_disk_cache(row_id)
     return favourites_refresh_entity_row(
         row_id,
         scrape_aliases=bool(scrape),
@@ -7025,8 +7063,10 @@ def _favourites_refresh_all_loop(rows: list) -> None:
         nm = str(row.get("folder_name") or "")
         _favourites_progress_update(nm, done)
         try:
+            rid = int(row["id"])
+            favourites_clear_image_disk_cache(rid)
             favourites_refresh_entity_row(
-                int(row["id"]),
+                rid,
                 scrape_aliases=True,
                 only_missing=False,
             )
