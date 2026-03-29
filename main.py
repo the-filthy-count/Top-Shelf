@@ -71,7 +71,8 @@ IMAGE_CACHE_FANART_MAX = 1920
 IMAGE_CACHE_LOGO_MAX = 800
 IMAGE_CACHE_JPEG_QUALITY = 85
 
-# Favourites grid images: JPEG cache under favourites_img_cache/ only — never writes to library paths.
+# Favourites grid images: cache under favourites_img_cache/ only — never writes to library paths.
+# Performer tiles: JPEG (photos). Studio logos: PNG (preserve transparency; JPEG was flattening onto white).
 FAVOURITES_FAV_IMAGE_MAX_EDGE = 750
 FAVOURITES_IMG_CACHE_DIR = Path(__file__).resolve().parent / "favourites_img_cache"
 
@@ -6702,7 +6703,7 @@ def _ensure_favourites_performer_thumb_path(row_id: int) -> Path | None:
 
 
 def _ensure_favourites_studio_thumb_path(row_id: int) -> Path | None:
-    """Build or reuse JPEG in favourites_img_cache; reads library files only — never modifies them."""
+    """Build or reuse PNG in favourites_img_cache (transparency-safe); reads library files only."""
     row = db.favourite_get(row_id)
     if not row or row.get("kind") != "studio":
         return None
@@ -6719,7 +6720,7 @@ def _ensure_favourites_studio_thumb_path(row_id: int) -> Path | None:
             src_key = f"{p_local.resolve()}\n{src_mtime}\n"
         except OSError:
             return None
-        cache = FAVOURITES_IMG_CACHE_DIR / f"studio_{row_id}_local.jpg"
+        cache = FAVOURITES_IMG_CACHE_DIR / f"studio_{row_id}_local.png"
         ver = FAVOURITES_IMG_CACHE_DIR / f"studio_{row_id}_local.ver"
         if cache.is_file() and ver.is_file():
             try:
@@ -6747,7 +6748,7 @@ def _ensure_favourites_studio_thumb_path(row_id: int) -> Path | None:
     if not (img.startswith("http://") or img.startswith("https://")):
         return None
     h = hashlib.sha256(img.encode("utf-8")).hexdigest()[:16]
-    cache = FAVOURITES_IMG_CACHE_DIR / f"studio_{row_id}_r_{h}.jpg"
+    cache = FAVOURITES_IMG_CACHE_DIR / f"studio_{row_id}_r_{h}.png"
     if cache.is_file() and cache.stat().st_size > 0:
         return cache
     try:
@@ -6835,9 +6836,10 @@ async def api_favourites_studio_thumb(row_id: int):
     pth = _ensure_favourites_studio_thumb_path(row_id)
     if not pth or not pth.is_file():
         return JSONResponse({"error": "Not found"}, status_code=404)
+    mt, _ = mimetypes.guess_type(str(pth))
     return FileResponse(
         pth,
-        media_type="image/jpeg",
+        media_type=mt or "image/png",
         headers={"Cache-Control": "private, max-age=86400"},
     )
 
