@@ -551,8 +551,12 @@
     background: rgba(19,19,23,0.98); border: 1px solid var(--border); border-radius: 10px;
     width: min(520px, 96vw); max-height: 85vh; overflow: hidden; display: flex; flex-direction: column;
   }
+  .fav-search-modal-box {
+    width: min(820px, 96vw); max-height: 92vh;
+  }
   .modal-box h3 { padding: 14px 16px; border-bottom: 1px solid var(--border); font-size: 14px; color: var(--text); }
   .modal-body { padding: 14px 16px; overflow-y: auto; flex: 1; min-height: 0; }
+  .fav-search-modal-box .modal-body { padding: 16px 18px 18px; }
   .modal-foot { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
   .search-row { display: flex; gap: 8px; margin-bottom: 12px; }
   .search-row input { flex: 1; background: var(--raised); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 6px; font-family: var(--mono); font-size: 12px; }
@@ -565,13 +569,47 @@
   .search-filters button:hover { color: var(--text); border-color: var(--muted); }
   .search-filters button.active { background: rgba(192,132,252,0.2); border-color: rgba(192,132,252,0.4); color: #fff; }
   .sr-item {
-    display: flex; gap: 10px; align-items: center; padding: 8px; border-radius: 6px; cursor: pointer;
-    border: 1px solid transparent; margin-bottom: 6px;
+    display: flex; gap: 14px; align-items: flex-start; padding: 12px; border-radius: 8px; cursor: pointer;
+    border: 1px solid transparent; margin-bottom: 8px;
   }
   .sr-item:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
-  .sr-item img { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; background: var(--raised); flex-shrink: 0; }
-  .sr-name { font-size: 12px; color: var(--text); }
-  .sr-src { font-size: 10px; color: var(--accent); margin-top: 2px; }
+  .fav-search-modal-box .sr-item__thumb {
+    flex-shrink: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--raised);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .fav-search-modal-box .sr-item--performer .sr-item__thumb {
+    width: 112px;
+    aspect-ratio: 2/3;
+  }
+  .fav-search-modal-box .sr-item--studio .sr-item__thumb {
+    width: 168px;
+    aspect-ratio: 16/9;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.35);
+  }
+  .fav-search-modal-box .sr-item__thumb img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  .fav-search-modal-box .sr-item--studio .sr-item__thumb img {
+    object-fit: contain;
+  }
+  .sr-item__body { flex: 1; min-width: 0; }
+  .fav-search-modal-box .sr-name { font-size: 14px; color: var(--text); font-weight: 500; line-height: 1.35; }
+  .fav-search-modal-box .sr-src { font-size: 11px; color: var(--accent); margin-top: 4px; }
+  .sr-ext {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
+    margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .sr-ext-sep { color: var(--dim); font-size: 10px; user-select: none; }
+  .sr-ext a {
+    font-size: 11px; font-family: var(--mono);
+    color: #c4b5fd; text-decoration: none;
+  }
+  .sr-ext a:hover { text-decoration: underline; color: #e9d5ff; }
+  .sr-ext-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); width: 100%; margin-bottom: 2px; }
 
   /* Entity detail panel (card click) */
   .entity-panel-overlay { z-index: 195; }
@@ -795,7 +833,7 @@
 </div>
 
 <div class="modal-overlay" id="searchModal">
-  <div class="modal-box">
+  <div class="modal-box fav-search-modal-box">
     <h3 id="searchModalTitle">Search databases</h3>
     <div class="modal-body">
       <div class="search-row">
@@ -846,6 +884,8 @@
 
   function setIndexBusy(busy) {
     document.getElementById('btnSearchMissing').disabled = !!busy;
+    const bImg = document.getElementById('btnRefreshImages');
+    if (bImg) bImg.disabled = !!busy;
     document.getElementById('btnRefreshAll').disabled = !!busy;
   }
 
@@ -1058,6 +1098,44 @@
     </div>`;
   }
 
+  function searchHitProfileUrl(x) {
+    const src = String(x.source || '').trim();
+    const id = String(x.id || '').trim();
+    const slug = String(x.slug || x.id || '').trim();
+    if (!id && !slug) return '';
+    const isStudio = _searchKind === 'studio';
+    const segSlug = encodeURIComponent(slug || id);
+    const segId = encodeURIComponent(id);
+    if (src === 'TPDB')
+      return isStudio ? `https://theporndb.net/sites/${segSlug}` : `https://theporndb.net/performers/${segSlug}`;
+    if (src === 'StashDB')
+      return isStudio ? `https://stashdb.org/studios/${segId}` : `https://stashdb.org/performers/${segId}`;
+    if (src === 'FansDB')
+      return isStudio ? `https://fansdb.cc/studios/${segId}` : `https://fansdb.cc/performers/${segId}`;
+    return '';
+  }
+
+  function searchHitBrowseUrl(site, x) {
+    const q = encodeURIComponent((x.name || '').trim() || '');
+    const isStudio = _searchKind === 'studio';
+    if (site === 'TPDB')
+      return isStudio ? `https://theporndb.net/sites?search=${q}` : `https://theporndb.net/performers?search=${q}`;
+    if (site === 'StashDB')
+      return isStudio ? `https://stashdb.org/studios?q=${q}` : `https://stashdb.org/performers?q=${q}`;
+    if (site === 'FansDB')
+      return isStudio ? `https://fansdb.cc/studios?q=${q}` : `https://fansdb.cc/performers?q=${q}`;
+    return '#';
+  }
+
+  function searchHitExternalHref(site, x) {
+    const hit = String(x.source || '').trim() === site;
+    if (hit) {
+      const direct = searchHitProfileUrl(x);
+      if (direct) return direct;
+    }
+    return searchHitBrowseUrl(site, x);
+  }
+
   function renderSearchResultsList() {
     const box = document.getElementById('searchResults');
     let list = _lastSearchResults || [];
@@ -1069,18 +1147,37 @@
       return;
     }
     const noSearchImg = _searchKind === 'studio' ? STUDIO_POSTER_FALLBACK : POSTER_FALLBACK;
+    const kindClass = _searchKind === 'studio' ? 'sr-item--studio' : 'sr-item--performer';
     box.innerHTML = list.map(x => {
-      const img = x.image
-        ? `<img src="${esc(x.image)}" alt="" referrerpolicy="no-referrer">`
-        : `<img src="${noSearchImg}" alt="" width="40" height="40">`;
-      return `<div class="sr-item" role="button" tabindex="0"
+      const thumbInner = x.image
+        ? `<img src="${esc(x.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+        : `<img src="${noSearchImg}" alt="" loading="lazy" referrerpolicy="no-referrer">`;
+      const sites = [
+        { site: 'TPDB', label: 'TPDB' },
+        { site: 'StashDB', label: 'StashDB' },
+        { site: 'FansDB', label: 'FansDB' },
+      ];
+      const links = sites.map(({ site, label }) => {
+        const href = searchHitExternalHref(site, x);
+        const isHit = String(x.source || '').trim() === site;
+        const hint = isHit ? 'This search hit — open profile' : 'Open site search';
+        return `<a href="${escAttr(href)}" target="_blank" rel="noopener noreferrer" title="${esc(hint)}" onclick="event.stopPropagation()">${esc(label)}</a>`;
+      }).join('<span class="sr-ext-sep" aria-hidden="true">·</span>');
+      return `<div class="sr-item ${kindClass}" role="button" tabindex="0"
         data-source="${esc(x.source)}"
         data-id="${esc(String(x.id))}"
         data-name="${esc(x.name)}"
         data-image="${esc(x.image || '')}"
         onclick="pickSearch(this)">
-        ${img}
-        <div><div class="sr-name">${esc(x.name)}</div><div class="sr-src">${esc(x.source)}</div></div>
+        <div class="sr-item__thumb">${thumbInner}</div>
+        <div class="sr-item__body">
+          <div class="sr-name">${esc(x.name)}</div>
+          <div class="sr-src">${esc(x.source)}</div>
+          <div class="sr-ext">
+            <span class="sr-ext-label">Open</span>
+            ${links}
+          </div>
+        </div>
       </div>`;
     }).join('');
   }
