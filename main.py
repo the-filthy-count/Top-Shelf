@@ -1944,6 +1944,33 @@ def best_image_url(images: list) -> str | None:
     return max(valid, key=lambda i: (i.get("width") or 0) * (i.get("height") or 0))["url"]
 
 
+def best_studio_image_url(images: list) -> str | None:
+    """Prefer landscape/wide images (typical logos/banners) over tall posters when dimensions exist."""
+    valid = [
+        i
+        for i in (images or [])
+        if isinstance(i, dict) and (str(i.get("url") or "").strip())
+    ]
+    if not valid:
+        return None
+    dimmed = [
+        i
+        for i in valid
+        if (i.get("width") or 0) > 0 and (i.get("height") or 0) > 0
+    ]
+    if not dimmed:
+        return str(valid[0]["url"]).strip()
+
+    def sort_key(i: dict):
+        w, h = i.get("width") or 0, i.get("height") or 0
+        r = w / h if h else 0.0
+        area = w * h
+        wide = 1 if r >= 1.05 else 0
+        return (wide, w if wide else 0, area)
+
+    return str(max(dimmed, key=sort_key)["url"]).strip()
+
+
 def build_nfo(title, show_title, studio, performers, date) -> str:
     try:
         dt = datetime.strptime(date, "%Y-%m-%d")
@@ -3220,7 +3247,11 @@ def _tpdb_site_image_url(site: dict) -> str | None:
     for key in ("logos", "posters", "images"):
         arr = site.get(key)
         if isinstance(arr, list) and arr and isinstance(arr[0], dict):
-            got = best_image_url(arr)
+            got = (
+                best_image_url(arr)
+                if key == "logos"
+                else best_studio_image_url(arr)
+            )
             if got:
                 return got
     return None
@@ -3262,7 +3293,7 @@ def search_studios(name: str) -> list[dict]:
                     "id":     str(s["id"]),
                     "slug":   str(s["id"]),
                     "name":   s.get("name") or "",
-                    "image":  best_image_url(s.get("images") or []),
+                    "image":  best_studio_image_url(s.get("images") or []),
                 })
         except Exception:
             pass
@@ -3278,7 +3309,7 @@ def search_studios(name: str) -> list[dict]:
             data = _fansdb_gql(gql, {"term": name})
             for s in (data.get("searchStudio") or []):
                 imgs = s.get("images") or []
-                img = best_image_url(imgs) if imgs else None
+                img = best_studio_image_url(imgs) if imgs else None
                 if not img and imgs and isinstance(imgs[0], dict):
                     img = (imgs[0].get("url") or "").strip() or None
                 results.append({
@@ -3499,17 +3530,58 @@ def _favourite_find_local_poster_file(folder_path: str) -> Path | None:
     return None
 
 
-# Studio show folder: Kodi/Jellyfin-style art. Order = preference for favourites image.
-_FAVOURITE_STUDIO_LOCAL_ART_NAMES = (
+# Studio folder art: logos before posters. Jellyfin/Kodi names + common variants & *logo* filenames.
+_FAVOURITE_STUDIO_LOCAL_LOGO_NAMES = (
     "logo.png",
     "clearlogo.png",
-    "poster.jpg",
-    "folder.jpg",
+    "logo.jpg",
+    "clearlogo.jpg",
+    "logo.jpeg",
+    "clearlogo.jpeg",
+    "logo.webp",
+    "clearlogo.webp",
 )
+_FAVOURITE_STUDIO_LOCAL_POSTER_NAMES = ("poster.jpg", "folder.jpg")
+_STUDIO_ART_IMAGE_EXT = frozenset({".png", ".webp", ".jpg", ".jpeg"})
+
+
+def _favourite_find_local_studio_logoish(root: Path) -> Path | None:
+    """studio-logo.png, etc., in the show root — skipped if only poster/folder exists."""
+    poster_lower = {n.lower() for n in _FAVOURITE_STUDIO_LOCAL_POSTER_NAMES}
+    candidates: list[tuple[int, str, Path]] = []
+    try:
+        for child in root.iterdir():
+            if not child.is_file():
+                continue
+            if child.suffix.lower() not in _STUDIO_ART_IMAGE_EXT:
+                continue
+            nl = child.name.lower()
+            if nl in poster_lower:
+                continue
+            stem_l = child.stem.lower()
+            tier = None
+            if stem_l in ("logo", "clearlogo", "clear_logo", "studialogo"):
+                tier = 0
+            elif nl.startswith("clearlogo"):
+                tier = 0
+            elif stem_l.endswith("-logo") or stem_l.endswith("_logo"):
+                tier = 1
+            if tier is None:
+                continue
+            candidates.append((tier, nl, child))
+    except OSError:
+        return None
+    if not candidates:
+        return None
+    candidates.sort(key=lambda t: (t[0], len(t[1]), t[1]))
+    try:
+        return candidates[0][2].resolve()
+    except OSError:
+        return None
 
 
 def _favourite_find_local_studio_art(folder_path: str) -> Path | None:
-    """First match in show root: logo.png, clearlogo.png, poster.jpg, folder.jpg (case-insensitive)."""
+    """Show root: logo-style assets first, then poster.jpg / folder.jpg (case-insensitive)."""
     raw = (folder_path or "").strip()
     if not raw:
         return None
@@ -3519,8 +3591,9 @@ def _favourite_find_local_studio_art(folder_path: str) -> Path | None:
         return None
     if not root.is_dir():
         return None
-    allowed_lower = {n.lower() for n in _FAVOURITE_STUDIO_LOCAL_ART_NAMES}
-    for name in _FAVOURITE_STUDIO_LOCAL_ART_NAMES:
+    ordered = _FAVOURITE_STUDIO_LOCAL_LOGO_NAMES + _FAVOURITE_STUDIO_LOCAL_POSTER_NAMES
+    allowed_lower = {n.lower() for n in ordered}
+    for name in ordered:
         p = root / name
         if p.is_file():
             return p.resolve()
@@ -3534,13 +3607,16 @@ def _favourite_find_local_studio_art(folder_path: str) -> Path | None:
                 found[key] = child
     except OSError:
         return None
-    for name in _FAVOURITE_STUDIO_LOCAL_ART_NAMES:
+    for name in ordered:
         p = found.get(name.lower())
         if p:
             try:
                 return p.resolve()
             except OSError:
                 continue
+    extra = _favourite_find_local_studio_logoish(root)
+    if extra:
+        return extra
     return None
 
 
@@ -3944,7 +4020,7 @@ def _favourite_stashdb_studio_image(ms_id: str | None) -> str | None:
             return None
         data = resp.json().get("data") or {}
         s = data.get("findStudio") or {}
-        return best_image_url(s.get("images") or [])
+        return best_studio_image_url(s.get("images") or [])
     except Exception:
         return None
 
@@ -3964,7 +4040,7 @@ def _favourite_fansdb_studio_image(mf_id: str | None) -> str | None:
             {"id": str(mf_id).strip()},
         )
         s = data.get("findStudio") or {}
-        return best_image_url(s.get("images") or [])
+        return best_studio_image_url(s.get("images") or [])
     except Exception:
         return None
 
