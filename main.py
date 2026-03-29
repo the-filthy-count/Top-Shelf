@@ -3536,6 +3536,8 @@ def favourites_scan_index(
         if prune_missing:
             _favourites_progress_update("prune", done)
             removed = db.favourite_delete_missing_paths(valid_paths)
+        _favourites_progress_update("paths", done)
+        db.favourite_refresh_all_path_existence()
         emit(f"FAVOURITES index: {seen} folders scanned, {removed} stale rows removed")
         return {"scanned": seen, "removed_stale": removed}
     finally:
@@ -6238,6 +6240,11 @@ def _favourites_row_api(r: dict) -> dict:
         out["gender_filters"] = json.loads(gfj) if gfj.strip() else []
     except json.JSONDecodeError:
         out["gender_filters"] = []
+    pm = out.get("path_missing")
+    try:
+        out["path_missing"] = bool(int(pm)) if pm is not None else False
+    except (TypeError, ValueError):
+        out["path_missing"] = bool(pm)
     return out
 
 
@@ -6397,6 +6404,18 @@ async def api_favourites_clear_matches(payload: dict = Body(...)):
     if not db.favourite_get(row_id):
         return JSONResponse({"error": "Not found"}, status_code=404)
     db.favourite_clear_all_match_ids(row_id)
+    return {"ok": True}
+
+
+@app.post("/api/favourites/delete")
+async def api_favourites_delete(payload: dict = Body(...)):
+    """Remove one favourites index row (folder links). Does not delete files on disk."""
+    row_id = int(payload.get("id") or 0)
+    if not row_id:
+        return JSONResponse({"error": "id required"}, status_code=400)
+    if not db.favourite_get(row_id):
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    db.favourite_delete(row_id)
     return {"ok": True}
 
 

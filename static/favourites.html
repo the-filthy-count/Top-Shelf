@@ -93,6 +93,37 @@
   .fav-filter-wrap { position: relative; }
   .fav-filter-wrap .fa-magnifying-glass { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--dim); font-size: 13px; pointer-events: none; }
 
+  .fav-filter-row2 {
+    flex: 1 1 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 18px;
+    padding-top: 2px;
+  }
+  .fav-mini-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--dim);
+  }
+  .fav-sel {
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--raised);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    min-width: 120px;
+    max-width: min(320px, 100%);
+    cursor: pointer;
+  }
+  .fav-sel:focus { outline: none; border-color: var(--accent); }
+
   .fav-count { font-size: 16px; font-weight: 600; color: var(--text); font-family: var(--secs); white-space: nowrap; letter-spacing: -0.02em; }
 
   details.fav-schedule { font-size: 11px; color: var(--dim); }
@@ -191,6 +222,24 @@
     display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 28px;
   }
   .fav-perf-ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .fav-path-missing-icon {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 4;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 80px;
+    line-height: 1;
+    color: var(--amber);
+    filter: drop-shadow(0 2px 12px rgba(0,0,0,0.92));
+    pointer-events: none;
+  }
+  .fav-path-missing-icon i { font-size: 1em; vertical-align: middle; }
   .fav-card-heart {
     position: absolute;
     top: 8px;
@@ -440,6 +489,10 @@
   }
   .fav-ov-actions .fav-icon-btn { width: 38px; height: 38px; font-size: 14px; }
   .fav-ov-actions .heart-on { color: #f472b6; border-color: rgba(244,114,182,0.45); }
+  .fav-ov-actions .fav-icon-btn--danger:hover {
+    border-color: rgba(239,68,68,0.55);
+    color: var(--red);
+  }
 
   .fav-tap-hint {
     display: none; font-size: 9px; color: var(--dim); text-align: center; padding: 4px;
@@ -632,6 +685,34 @@
       <i class="fa-solid fa-magnifying-glass"></i>
       <input type="search" id="favFilter" placeholder="Filter by name…" autocomplete="off" oninput="render()">
     </div>
+    <div class="fav-filter-row2">
+      <label class="fav-mini-label">Favourite
+        <select id="favFilterStar" class="fav-sel" onchange="render()">
+          <option value="all">All</option>
+          <option value="yes">Favourite</option>
+          <option value="no">Not favourite</option>
+        </select>
+      </label>
+      <label class="fav-mini-label">Matches
+        <select id="favFilterLock" class="fav-sel" onchange="render()">
+          <option value="all">All</option>
+          <option value="locked">Locked</option>
+          <option value="unlocked">Unlocked</option>
+        </select>
+      </label>
+      <label class="fav-mini-label">Library
+        <select id="favFilterRoot" class="fav-sel" onchange="render()">
+          <option value="all">All directories</option>
+        </select>
+      </label>
+      <label class="fav-mini-label">Folder
+        <select id="favFilterPath" class="fav-sel" onchange="render()">
+          <option value="all">All</option>
+          <option value="ok">On disk</option>
+          <option value="missing">Missing</option>
+        </select>
+      </label>
+    </div>
     <span class="fav-count" id="favCount">—</span>
     <div class="fav-progress-wrap" id="favProgressWrap">
       <div class="fav-progress-label" id="favProgressLabel"></div>
@@ -714,6 +795,10 @@
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  function escAttr(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  }
+
   function displayFolderName(name) {
     return String(name || '').trim();
   }
@@ -752,6 +837,8 @@
     let nm = String(p.current_name || '').trim();
     if (nm === 'prune') {
       label.textContent = 'Removing stale entries…';
+    } else if (nm === 'paths') {
+      label.textContent = 'Checking folder paths…';
     } else if (nm) {
       label.textContent = 'indexing ' + nm;
     } else {
@@ -809,6 +896,67 @@
     return hay.includes(n);
   }
 
+  function populateRootFilter() {
+    const sel = document.getElementById('favFilterRoot');
+    if (!sel) return;
+    const list = _view === 'studio' ? _rowsStudio : _rowsPerf;
+    const labels = new Set();
+    list.forEach(r => labels.add((r.root_label || '').trim()));
+    const sorted = [...labels].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    const prev = sel.value;
+    const parts = ['<option value="all">All directories</option>'];
+    sorted.forEach(lab => {
+      if (!lab) {
+        parts.push('<option value="__empty__">(no label)</option>');
+      } else {
+        parts.push(`<option value="${escAttr(lab)}">${esc(lab)}</option>`);
+      }
+    });
+    sel.innerHTML = parts.join('');
+    const nonEmpty = sorted.filter(Boolean);
+    if (prev === 'all' || prev === '__empty__' || nonEmpty.includes(prev)) {
+      sel.value = prev;
+    } else {
+      sel.value = 'all';
+    }
+  }
+
+  function rowPassesFilters(row) {
+    const q = document.getElementById('favFilter').value.trim();
+    if (!rowMatchesFilter(row, q)) return false;
+    const fav = document.getElementById('favFilterStar')?.value || 'all';
+    const lock = document.getElementById('favFilterLock')?.value || 'all';
+    const root = document.getElementById('favFilterRoot')?.value ?? 'all';
+    const pathSel = document.getElementById('favFilterPath')?.value || 'all';
+    const isFav = !!row.is_favourite;
+    const isLocked = !!row.matches_locked;
+    const pathMissing = row.path_missing === true || row.path_missing === 1;
+    if (fav === 'yes' && !isFav) return false;
+    if (fav === 'no' && isFav) return false;
+    if (lock === 'locked' && !isLocked) return false;
+    if (lock === 'unlocked' && isLocked) return false;
+    if (pathSel === 'missing' && !pathMissing) return false;
+    if (pathSel === 'ok' && pathMissing) return false;
+    if (root !== 'all') {
+      const rl = (row.root_label || '').trim();
+      if (root === '__empty__') {
+        if (rl) return false;
+      } else if (rl !== root) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function filtersActive() {
+    const q = document.getElementById('favFilter').value.trim();
+    const fav = document.getElementById('favFilterStar')?.value || 'all';
+    const lock = document.getElementById('favFilterLock')?.value || 'all';
+    const root = document.getElementById('favFilterRoot')?.value || 'all';
+    const pathSel = document.getElementById('favFilterPath')?.value || 'all';
+    return !!(q || fav !== 'all' || lock !== 'all' || root !== 'all' || pathSel !== 'all');
+  }
+
   function setView(kind) {
     _view = kind;
     document.getElementById('segPerf').classList.toggle('active', kind === 'performer');
@@ -816,6 +964,7 @@
     const grid = document.getElementById('favGrid');
     grid.classList.remove('fav-grid--perf', 'fav-grid--studio');
     grid.classList.add(kind === 'studio' ? 'fav-grid--studio' : 'fav-grid--perf');
+    populateRootFilter();
     render();
   }
 
@@ -920,9 +1069,13 @@
     const posterSrc = imgUrl ? esc(imgUrl) : posterFallback;
     const imgErr = imgUrl ? `this.onerror=null;this.src='${posterFallback}'` : '';
     const errAttr = imgErr ? ` onerror="${imgErr}"` : '';
+    const pathMissing = row.path_missing === true || row.path_missing === 1;
+    const pathMissingWarn = pathMissing
+      ? '<span class="fav-path-missing-icon" title="Folder path missing on disk" aria-label="Folder path missing on disk"><i class="fa-solid fa-circle-exclamation"></i></span>'
+      : '';
     const visual = kind === 'studio'
-      ? `<div class="fav-studio-ph"><img src="${posterSrc}" alt="" loading="lazy" referrerpolicy="no-referrer"${errAttr}>${posterUnlockBtn}${posterSolidHeartBtn}</div>`
-      : `<div class="fav-perf-ph"><img src="${posterSrc}" alt="" loading="lazy" referrerpolicy="no-referrer"${errAttr}>${posterUnlockBtn}${posterSolidHeartBtn}</div>`;
+      ? `<div class="fav-studio-ph"><img src="${posterSrc}" alt="" loading="lazy" referrerpolicy="no-referrer"${errAttr}>${pathMissingWarn}${posterUnlockBtn}${posterSolidHeartBtn}</div>`
+      : `<div class="fav-perf-ph"><img src="${posterSrc}" alt="" loading="lazy" referrerpolicy="no-referrer"${errAttr}>${pathMissingWarn}${posterUnlockBtn}${posterSolidHeartBtn}</div>`;
 
     const tpOk = !!(row.match_tpdb_id);
     const stOk = !!(row.match_stashdb_id);
@@ -955,6 +1108,7 @@
           <button type="button" class="fav-icon-btn" title="Clear all database links" data-act="clear-matches" data-id="${id}"><i class="fa-solid fa-link-slash"></i></button>
           <button type="button" class="fav-icon-btn" title="Search missing links only" data-act="refresh-missing" data-id="${id}"><i class="fa-solid fa-magnifying-glass"></i></button>
           <button type="button" class="fav-icon-btn" title="Refresh all matches" data-act="refresh" data-id="${id}"><i class="fa-solid fa-arrows-rotate"></i></button>
+          <button type="button" class="fav-icon-btn fav-icon-btn--danger" title="Remove from database — drops this folder from the index (files on disk are not deleted)" data-act="remove-from-db" data-id="${id}"><i class="fa-solid fa-trash-can"></i></button>
         </div>
       </div>`;
 
@@ -997,8 +1151,10 @@
     const imgUrl = row.image_url || panelPosterFallback;
     const title = displayFolderName(row.folder_name);
     document.getElementById('entityPanelTitle').textContent = title;
+    const panelPathMissing = row.path_missing === true || row.path_missing === 1;
     document.getElementById('entityPanelMeta').textContent =
       (row.root_label || '—') + ' · ' + (kind === 'studio' ? 'Studio' : 'Performer') +
+      (panelPathMissing ? ' · Folder path missing on disk' : '') +
       (row.match_tpdb_id ? '' : ' · No TPDB link — scenes unavailable');
 
     const starBtn = document.getElementById('entityPanelStar');
@@ -1242,6 +1398,13 @@
       refreshOne(parseInt(ref.getAttribute('data-id'), 10), false);
       return;
     }
+    const removeDb = e.target.closest('[data-act="remove-from-db"]');
+    if (removeDb) {
+      e.preventDefault();
+      e.stopPropagation();
+      removeFromDatabase(parseInt(removeDb.getAttribute('data-id'), 10));
+      return;
+    }
     if (e.target.closest('button')) return;
     const cell = e.target.closest('.fav-cell');
     if (!cell) return;
@@ -1257,14 +1420,15 @@
   });
 
   function render() {
-    const q = document.getElementById('favFilter').value.trim();
     const list = _view === 'studio' ? _rowsStudio : _rowsPerf;
-    const filtered = list.filter(r => rowMatchesFilter(r, q));
+    const filtered = list.filter(r => rowPassesFilters(r));
     const grid = document.getElementById('favGrid');
     const total = list.length;
-    document.getElementById('favCount').textContent = q
-      ? `${filtered.length} / ${total}`
-      : `${total} ${_view === 'studio' ? 'studios' : 'performers'}`;
+    const kindLabel = _view === 'studio' ? 'studios' : 'performers';
+    const fa = filtersActive();
+    document.getElementById('favCount').textContent = fa
+      ? `${filtered.length} / ${total} ${kindLabel}`
+      : `${total} ${kindLabel}`;
 
     if (!list.length) {
       grid.innerHTML = `<div class="empty-tile">${_view === 'studio'
@@ -1273,7 +1437,7 @@
       return;
     }
     if (!filtered.length) {
-      grid.innerHTML = '<div class="empty-tile">No names match this filter.</div>';
+      grid.innerHTML = '<div class="empty-tile">No folders match these filters.</div>';
       return;
     }
     grid.innerHTML = filtered.map(renderCard).join('');
@@ -1288,6 +1452,7 @@
       document.getElementById('nightlyHour').value = (d.settings && d.settings.favourites_scan_hour) || '3';
       _rowsStudio = d.studios || [];
       _rowsPerf = d.performers || [];
+      populateRootFilter();
       render();
       checkIndexProgressOnce();
     } catch (e) {
@@ -1314,6 +1479,31 @@
     });
     await load();
     if (_entityPanelRowId === id) await openEntityDetail(id);
+  }
+
+  async function removeFromDatabase(id) {
+    if (!id) return;
+    if (!confirm('Remove this folder from the favourites index? Files on disk are not deleted; a later library scan can add it again.')) return;
+    showMsg('Removing…');
+    try {
+      const r = await fetch('/api/favourites/delete', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        alert(d.error || 'Remove failed');
+        return;
+      }
+      showMsg('Removed from index');
+      closeAllFavMenus();
+      if (_entityPanelRowId === id) closeEntityPanel();
+      await load();
+    } catch (e) {
+      alert(e.message || 'Remove failed');
+    }
   }
 
   async function clearMatchesOne(id) {

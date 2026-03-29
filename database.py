@@ -254,6 +254,12 @@ def init_db() -> None:
             )
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute(
+                "ALTER TABLE favourite_entities ADD COLUMN path_missing INTEGER NOT NULL DEFAULT 0"
+            )
+        except sqlite3.OperationalError:
+            pass
         conn.commit()
 
     # Seed defaults if empty
@@ -384,6 +390,35 @@ def favourite_get(row_id: int) -> dict | None:
         return dict(row) if row else None
 
 
+def favourite_delete(row_id: int) -> bool:
+    """Remove a favourites index row. Returns True if a row was deleted."""
+    with get_conn() as conn:
+        cur = conn.execute("DELETE FROM favourite_entities WHERE id = ?", (row_id,))
+        conn.commit()
+        return (cur.rowcount or 0) > 0
+
+
+def favourite_refresh_all_path_existence() -> None:
+    """Set path_missing from ``Path(path).is_dir()`` for every row. Ignores matches_locked."""
+    now = datetime.now(timezone.utc).isoformat()
+    rows = favourite_list()
+    with get_conn() as conn:
+        for r in rows:
+            pth = (r.get("path") or "").strip()
+            ok = False
+            if pth:
+                try:
+                    ok = Path(pth).expanduser().is_dir()
+                except OSError:
+                    ok = False
+            missing = 0 if ok else 1
+            conn.execute(
+                "UPDATE favourite_entities SET path_missing = ?, updated_at = ? WHERE id = ?",
+                (missing, now, r["id"]),
+            )
+        conn.commit()
+
+
 def favourite_upsert_folder(
     kind: str,
     folder_name: str,
@@ -399,15 +434,16 @@ def favourite_upsert_folder(
             INSERT INTO favourite_entities (
                 kind, folder_name, path, root_label,
                 is_favourite, sort_birth_date, gender_filters_json,
-                scanned_at, updated_at
-            ) VALUES (?, ?, ?, ?, 0, NULL, ?, ?, ?)
+                scanned_at, updated_at, path_missing
+            ) VALUES (?, ?, ?, ?, 0, NULL, ?, ?, ?, 0)
             ON CONFLICT(path) DO UPDATE SET
                 kind = excluded.kind,
                 folder_name = excluded.folder_name,
                 root_label = excluded.root_label,
                 gender_filters_json = excluded.gender_filters_json,
                 scanned_at = excluded.scanned_at,
-                updated_at = excluded.updated_at
+                updated_at = excluded.updated_at,
+                path_missing = 0
             """,
             (kind, folder_name, path, root_label, gender_filters_json, now, now),
         )
