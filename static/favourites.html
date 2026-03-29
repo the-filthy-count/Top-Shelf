@@ -54,17 +54,44 @@
 
   .page-title { font-family: var(--acid); font-size: 26px; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; margin-bottom: 10px; }
 
-  /* Sticky controls */
+  /* Sticky controls — glass panel (matches app header) */
   .fav-sticky {
     position: sticky; top: 0; z-index: 40;
-    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
-    padding: 10px 14px; margin: 0 -4px 14px -4px;
-    background: rgba(10,10,14,0.92); backdrop-filter: blur(12px);
-    border: 1px solid rgba(255,255,255,0.07); border-radius: 10px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+    display: flex; flex-direction: column; align-items: stretch; gap: 12px;
+    padding: 14px 16px; margin: 0 0 14px 0;
+    background: linear-gradient(160deg, rgba(36,36,48,0.88) 0%, rgba(18,18,26,0.78) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.22);
+  }
+  .fav-sticky-top {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px;
+    width: 100%;
+  }
+  .fav-sticky-title-row {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 14px;
+    min-width: 0;
+  }
+  .fav-page-title {
+    font-family: var(--acid); font-size: 26px; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; margin: 0; line-height: 1.1;
+  }
+  .fav-sticky-toolbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px;
+    width: 100%;
+  }
+  .fav-filter-selects {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+    flex: 1 1 240px;
+    justify-content: flex-end;
+  }
+  .fav-sticky-extra {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;
+    width: 100%;
   }
   .fav-sticky-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .fav-sticky-actions { margin-left: auto; flex-shrink: 0; }
+  .fav-sticky-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .fav-icon-btn {
     width: 42px; height: 42px; border-radius: 8px; border: 1px solid var(--border);
     background: rgba(255,255,255,0.06); color: var(--text); cursor: pointer;
@@ -84,23 +111,15 @@
   .fav-seg button:hover { color: var(--text); }
   .fav-seg button.active { background: rgba(192,132,252,0.2); color: #fff; }
 
-  .fav-filter-wrap { flex: 1; min-width: 180px; max-width: 420px; }
+  .fav-sticky-toolbar .fav-filter-wrap { flex: 1 1 200px; min-width: 160px; max-width: min(420px, 100%); }
   .fav-filter-wrap input {
     width: 100%; padding: 9px 12px 9px 36px; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--raised); color: var(--text); font-family: var(--mono); font-size: 12px;
+    background: rgba(255,255,255,0.06); color: var(--text); font-family: var(--mono); font-size: 12px;
   }
   .fav-filter-wrap input:focus { outline: none; border-color: var(--accent); }
   .fav-filter-wrap { position: relative; }
   .fav-filter-wrap .fa-magnifying-glass { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--dim); font-size: 13px; pointer-events: none; }
 
-  .fav-filter-row2 {
-    flex: 1 1 100%;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px 18px;
-    padding-top: 2px;
-  }
   .fav-mini-label {
     display: inline-flex;
     align-items: center;
@@ -114,27 +133,29 @@
     padding: 7px 10px;
     border-radius: 8px;
     border: 1px solid var(--border);
-    background: var(--raised);
+    background: rgba(255,255,255,0.06);
     color: var(--text);
     font-family: var(--mono);
     font-size: 12px;
-    min-width: 120px;
-    max-width: min(320px, 100%);
+    min-width: 100px;
+    max-width: min(200px, 36vw);
     cursor: pointer;
   }
   .fav-sel:focus { outline: none; border-color: var(--accent); }
 
-  .fav-count { font-size: 16px; font-weight: 600; color: var(--text); font-family: var(--secs); white-space: nowrap; letter-spacing: -0.02em; }
+  .fav-count { font-size: 15px; font-weight: 600; color: var(--dim); font-family: var(--secs); white-space: nowrap; letter-spacing: -0.02em; }
 
   details.fav-schedule { font-size: 11px; color: var(--dim); }
   details.fav-schedule summary { cursor: pointer; user-select: none; color: var(--muted); }
   details.fav-schedule summary:hover { color: var(--text); }
   .fav-schedule-inner { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
-  .fav-progress-wrap {
-    flex: 1 1 220px;
+  .fav-sticky-extra .fav-progress-wrap {
+    flex: 1 1 200px;
     max-width: min(380px, 100%);
     min-width: 160px;
+  }
+  .fav-progress-wrap {
     display: none;
     flex-direction: column;
     gap: 5px;
@@ -674,65 +695,72 @@
     </div>
   </header>
 
-  <div class="page-title">Favourites</div>
-
   <div class="fav-sticky">
-    <div class="fav-seg" role="tablist">
-      <button type="button" id="segPerf" class="active" onclick="setView('performer')">Performers</button>
-      <button type="button" id="segStudio" onclick="setView('studio')">Studios</button>
-    </div>
-    <div class="fav-filter-wrap">
-      <i class="fa-solid fa-magnifying-glass"></i>
-      <input type="search" id="favFilter" placeholder="Filter by name…" autocomplete="off" oninput="render()">
-    </div>
-    <div class="fav-filter-row2">
-      <label class="fav-mini-label">Favourite
-        <select id="favFilterStar" class="fav-sel" onchange="render()">
-          <option value="all">All</option>
-          <option value="yes">Favourite</option>
-          <option value="no">Not favourite</option>
-        </select>
-      </label>
-      <label class="fav-mini-label">Matches
-        <select id="favFilterLock" class="fav-sel" onchange="render()">
-          <option value="all">All</option>
-          <option value="locked">Locked</option>
-          <option value="unlocked">Unlocked</option>
-        </select>
-      </label>
-      <label class="fav-mini-label">Library
-        <select id="favFilterRoot" class="fav-sel" onchange="render()">
-          <option value="all">All directories</option>
-        </select>
-      </label>
-      <label class="fav-mini-label">Folder
-        <select id="favFilterPath" class="fav-sel" onchange="render()">
-          <option value="all">All</option>
-          <option value="ok">On disk</option>
-          <option value="missing">Missing</option>
-        </select>
-      </label>
-    </div>
-    <span class="fav-count" id="favCount">—</span>
-    <div class="fav-progress-wrap" id="favProgressWrap">
-      <div class="fav-progress-label" id="favProgressLabel"></div>
-      <div class="fav-progress-track"><div class="fav-progress-fill" id="favProgressFill"></div></div>
-    </div>
-    <details class="fav-schedule">
-      <summary>Nightly index</summary>
-      <div class="fav-schedule-inner">
-        <label><input type="checkbox" id="chkNightly"> Enable</label>
-        <span>UTC hour</span>
-        <input type="number" id="nightlyHour" min="0" max="23" value="3" style="width:48px;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--raised);color:var(--text);font-family:var(--mono);font-size:11px">
-        <button type="button" class="fav-icon-btn" onclick="saveSchedule()" title="Save schedule" style="width:36px;height:36px;font-size:13px"><i class="fa-solid fa-floppy-disk"></i></button>
-        <span class="toast" id="toolMsg"></span>
+    <div class="fav-sticky-top">
+      <div class="fav-sticky-title-row">
+        <h1 class="fav-page-title">Favourites</h1>
+        <span class="fav-count" id="favCount">—</span>
       </div>
-    </details>
-    <div class="fav-sticky-group fav-sticky-actions">
-      <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="btnSearchMissing" onclick="searchMissing()" title="Search missing links only — fills empty TPDB/Stash/Fans slots; does not overwrite existing matches"><i class="fa-solid fa-magnifying-glass"></i></button>
-      <button type="button" class="fav-icon-btn" id="btnRefreshAll" onclick="refreshAll()" title="Re-match all — full refresh; may overwrite or clear existing TPDB/Stash/Fans links"><i class="fa-solid fa-arrows-rotate"></i></button>
-      <button type="button" class="fav-icon-btn" id="btnLockAll" onclick="lockAllMatches()" title="Lock all — scans and refresh will not change matches for any folder (manual search picks still work)"><i class="fa-solid fa-lock"></i></button>
-      <button type="button" class="fav-icon-btn" id="btnUnlockAll" onclick="unlockAllMatches()" title="Unlock all — allow automatic refresh and scan to update matches again"><i class="fa-solid fa-unlock"></i></button>
+      <div class="fav-seg" role="tablist">
+        <button type="button" id="segPerf" class="active" onclick="setView('performer')">Performers</button>
+        <button type="button" id="segStudio" onclick="setView('studio')">Studios</button>
+      </div>
+    </div>
+    <div class="fav-sticky-toolbar">
+      <div class="fav-filter-wrap">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="search" id="favFilter" placeholder="Filter by name…" autocomplete="off" oninput="render()">
+      </div>
+      <div class="fav-filter-selects">
+        <label class="fav-mini-label">Favourite
+          <select id="favFilterStar" class="fav-sel" onchange="render()">
+            <option value="all">All</option>
+            <option value="yes">Favourite</option>
+            <option value="no">Not favourite</option>
+          </select>
+        </label>
+        <label class="fav-mini-label">Locked
+          <select id="favFilterLock" class="fav-sel" onchange="render()">
+            <option value="all">All</option>
+            <option value="locked">Locked</option>
+            <option value="unlocked">Unlocked</option>
+          </select>
+        </label>
+        <label class="fav-mini-label">Library
+          <select id="favFilterRoot" class="fav-sel" onchange="render()">
+            <option value="all">All directories</option>
+          </select>
+        </label>
+        <label class="fav-mini-label">Folder
+          <select id="favFilterPath" class="fav-sel" onchange="render()">
+            <option value="all">All</option>
+            <option value="ok">On disk</option>
+            <option value="missing">Missing</option>
+          </select>
+        </label>
+      </div>
+      <div class="fav-sticky-actions">
+        <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="btnSearchMissing" onclick="searchMissing()" title="Search missing links only — fills empty TPDB/Stash/Fans slots; does not overwrite existing matches"><i class="fa-solid fa-magnifying-glass"></i></button>
+        <button type="button" class="fav-icon-btn" id="btnRefreshAll" onclick="refreshAll()" title="Re-match all — full refresh; may overwrite or clear existing TPDB/Stash/Fans links"><i class="fa-solid fa-arrows-rotate"></i></button>
+        <button type="button" class="fav-icon-btn" id="btnLockAll" onclick="lockAllMatches()" title="Lock all — scans and refresh will not change matches for any folder (manual search picks still work)"><i class="fa-solid fa-lock"></i></button>
+        <button type="button" class="fav-icon-btn" id="btnUnlockAll" onclick="unlockAllMatches()" title="Unlock all — allow automatic refresh and scan to update matches again"><i class="fa-solid fa-unlock"></i></button>
+      </div>
+    </div>
+    <div class="fav-sticky-extra">
+      <div class="fav-progress-wrap" id="favProgressWrap">
+        <div class="fav-progress-label" id="favProgressLabel"></div>
+        <div class="fav-progress-track"><div class="fav-progress-fill" id="favProgressFill"></div></div>
+      </div>
+      <details class="fav-schedule">
+        <summary>Nightly index</summary>
+        <div class="fav-schedule-inner">
+          <label><input type="checkbox" id="chkNightly"> Enable</label>
+          <span>UTC hour</span>
+          <input type="number" id="nightlyHour" min="0" max="23" value="3" style="width:48px;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--raised);color:var(--text);font-family:var(--mono);font-size:11px">
+          <button type="button" class="fav-icon-btn" onclick="saveSchedule()" title="Save schedule" style="width:36px;height:36px;font-size:13px"><i class="fa-solid fa-floppy-disk"></i></button>
+          <span class="toast" id="toolMsg"></span>
+        </div>
+      </details>
     </div>
   </div>
 
