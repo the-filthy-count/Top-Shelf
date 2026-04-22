@@ -1883,6 +1883,13 @@
   }
   .entity-pr-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .entity-pr-meta { font-size: 10px; color: var(--dim); }
+  /* Torrent / NZB type-logo used by Prowlarr rows in the entity side-panel
+     and the per-scene release list; replaces the old two-letter text tag. */
+  img.dl-type-logo {
+    max-height: 18px; max-width: 50px; height: auto; width: auto;
+    display: block;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.6));
+  }
   .entity-match-btns { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
   .entity-match-btns button {
     width: 100%; text-align: left; padding: 10px 12px; border-radius: 8px; font-family: var(--mono); font-size: 12px;
@@ -4158,7 +4165,7 @@
             <div class="entity-pr-title" title="${esc(res.title)}">${esc(res.title)}</div>
             <div class="entity-pr-meta">${esc(meta)} · ${esc(res.indexer || '')}</div>
           </div>
-          <span style="font-size:10px;color:var(--dim)">${esc(isTor ? 'TOR' : 'NZB')}</span>
+          <img class="dl-type-logo" src="/static/logos/${isTor ? 'torrent' : 'nzb'}.png" alt="${isTor ? 'Torrent' : 'NZB'}" title="${isTor ? 'Torrent' : 'NZB'}">
           <button type="button" class="btn-prowlarr-grab ${res.type === 'nzb' ? 'nzb' : ''}" title="Send to download client" onclick="grabEntityPanelProwlarr(event,${i})"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
         </div>`;
       }).join('');
@@ -4331,7 +4338,7 @@
             <div class="fav-scene-rel-meta">${esc(meta)}</div>
           </div>
           <span style="font-size:10px;color:var(--dim);max-width:64px;overflow:hidden;text-overflow:ellipsis" title="${escAttr(res.indexer || '')}">${esc(ix)}</span>
-          <span style="font-size:10px;color:var(--green);font-weight:600">${isTor ? 'TOR' : 'NZB'}</span>
+          <img class="dl-type-logo" src="/static/logos/${isTor ? 'torrent' : 'nzb'}.png" alt="${isTor ? 'Torrent' : 'NZB'}" title="${isTor ? 'Torrent' : 'NZB'}">
           <button type="button" class="btn-prowlarr-grab ${isTor ? '' : 'nzb'}" title="Send to download client" onclick="favSceneGrabSend(${sceneIdx}, ${ri}, this)"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
         </div>`;
       }).join('');

@@ -267,25 +267,24 @@
   }
   .dl-bar-type {
     flex-shrink: 0;
-    /* Fixed width wide enough for the longest label ("TORRENT") so the
-       studio logo and text in every row start at the same X offset, like
-       a tab stop, regardless of whether the tag is "NZB" or "TORRENT". */
+    /* Logo sits in a fixed slot so the studio logo + text beside it
+       always start at the same X offset regardless of which logo
+       (torrent / nzb) happens to be rendered. */
     width: 88px;
-    display: inline-block;
-    font-family: var(--secs, "Impact Label Reversed", sans-serif);
-    font-size: 18px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    line-height: 1;
-    padding: 0;
-    background: none;
-    border: none;
-    text-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.85),
-      0 0 6px rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
-  /* Pink / brand purple sit outside the red→green rainbow gradient so
-     the tag stays readable wherever the fill edge is. */
+  .dl-bar-type img.dl-type-logo {
+    max-height: 28px;
+    max-width: 84px;
+    height: auto;
+    width: auto;
+    display: block;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.75)) drop-shadow(0 0 4px rgba(0,0,0,0.55));
+  }
+  /* Text-fallback colours kept in case a future branch reuses this slot
+     for text; the image replacement never reads them. */
   .dl-bar-type-torrent { color: #f472b6; }
   .dl-bar-type-nzb { color: #c084fc; }
   .dl-bar-name-wrap {
@@ -526,15 +525,21 @@
     text-shadow: 0 1px 2px rgba(0,0,0,0.6);
   }
   .dl-pr-type {
-    font-family: var(--secs, "Impact Label Reversed", sans-serif);
-    font-size: 15px;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
     line-height: 1;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.85);
   }
-  .dl-pr-type-torrent { color: #f472b6; }
-  .dl-pr-type-nzb { color: #c084fc; }
+  .dl-pr-type img.dl-type-logo {
+    max-height: 22px;
+    max-width: 68px;
+    height: auto;
+    width: auto;
+    display: block;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7));
+  }
+  /* Kept as no-ops for any callers still passing the class names. */
+  .dl-pr-type-torrent, .dl-pr-type-nzb { color: inherit; }
   .dl-pr-indexer {
     font-family: var(--secs, "Impact Label Reversed", sans-serif);
     font-size: 12px;
@@ -778,18 +783,34 @@
     pointer-events: none;
     filter: drop-shadow(0 1px 2px rgba(0,0,0,0.85));
   }
-  /* On performer/favourites-mode tiles the badge sits at the far right
-     of the image, just above the title block at the bottom of the
-     overlay. The overlay reserves up to ~83px of bottom space for the
-     4-line title + 10px padding, so `bottom: 88px` leaves a small gap
-     above typical titles. Studio-mode tiles keep the original
-     top-right position (the studio IS the poster). */
+  /* On performer/favourites-mode tiles the badge sits horizontally
+     centred, just above the top edge of the centre headshot medallion.
+     Offset tracks the medallion radius at each responsive breakpoint
+     (120px → 96px → 84px). z-index beats the medallion (4) and studio
+     logo (5) so the heart is the topmost tile overlay. Studio-mode
+     tiles keep the original top-right position (the studio IS the
+     poster). */
   .rss-tile:not(.rss-tile--studio) .rss-tile-fav-heart {
-    top: auto;
-    bottom: 88px;
-    left: auto;
-    right: 8px;
-    transform: none;
+    top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    /* Heart centre = 50% − (medallion/2 + 8px gap + heart/2 = 11px).
+       Default medallion is 120px → -(60+8+11) = -79px. */
+    transform: translate(-50%, -79px);
+    z-index: 6;
+  }
+  @media (max-width: 1200px) {
+    /* Medallion shrinks to 96px → offset = -(48+8+11) = -67px. */
+    .rss-tile:not(.rss-tile--studio) .rss-tile-fav-heart {
+      transform: translate(-50%, -67px);
+    }
+  }
+  @media (max-width: 860px) {
+    /* Medallion shrinks to 84px → offset = -(42+8+11) = -61px. */
+    .rss-tile:not(.rss-tile--studio) .rss-tile-fav-heart {
+      transform: translate(-50%, -61px);
+    }
   }
   /* Inner poster area keeps the aspect ratio */
   .rss-tile-inner {
@@ -861,20 +882,26 @@
 
   /* ── Inverted duotone mode (palette toggle on the RSS toolbar) ──
    * Default: duotone at rest, clean image on hover.
-   * Inverted: clean image at rest, duotone on hover.
+   * Inverted: clean (no duotone) at rest, duotone on hover.
+   * Blur behaviour is orthogonal to the toggle — we always blur at rest
+   * and sharpen on hover, because the blur reads as "card in its resting
+   * state" independent of which way the duotone is flipped.
    * Studio rules intentionally exempt — studios use their own accent/purple
    * swap and the palette toggle leaves that behaviour alone. */
   html[data-duotone-inverted="1"] .rss-tile:not(.rss-tile--studio) .rss-tile-poster {
     filter: brightness(var(--auto-b-hover, 1.04))
             contrast(var(--auto-c-hover, 1.1))
             hue-rotate(var(--auto-h, 0deg))
-            saturate(1.22);
+            saturate(1.22)
+            blur(6px);
+    transform: scale(1.04);
   }
   html[data-duotone-inverted="1"] .rss-tile:not(.rss-tile--studio):hover .rss-tile-poster {
     filter: brightness(var(--auto-b, 1.06))
             contrast(var(--auto-c, 1.12))
             hue-rotate(var(--auto-h, 0deg))
             var(--duotone-filter, none);
+    transform: scale(1);
   }
   /* Palette toggle button active state (generic) */
   [data-duotone-toggle].is-active { outline: 1px solid rgba(var(--brand-accent-rgb),0.65); outline-offset: 1px; }
@@ -3061,7 +3088,7 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
         const seedPart = res.seeders != null ? res.seeders + ' seed' : '';
         const meta = [agePart, seedPart, Math.round(res.size_mb || 0) + ' MB'].filter(Boolean).join(' · ');
         const typLabel = isTor ? 'Torrent' : 'NZB';
-        const typClass = isTor ? 'dl-pr-type-torrent' : 'dl-pr-type-nzb';
+        const typLogo = `<img class="dl-type-logo" src="/static/logos/${isTor ? 'torrent' : 'nzb'}.png" alt="${typLabel}" title="${typLabel}">`;
         const m = res.match || {};
         const studio = (m.studio || '').trim();
         const perfs = (m.performers || []).filter(Boolean);
@@ -3079,7 +3106,7 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
           </div>
           <div class="dl-pr-cell dl-pr-cell-headshots">${headshotSlot}</div>
           <div class="dl-pr-cell dl-pr-cell-badges">
-            <span class="dl-pr-type ${typClass}">${typLabel}</span>
+            <span class="dl-pr-type">${typLogo}</span>
             <span class="dl-pr-indexer" title="${esc(res.indexer || '')}">${esc(res.indexer || '')}</span>
           </div>
           <div class="dl-pr-cell">
@@ -3158,8 +3185,9 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
       }
       if (fid !== _downloadsFetchGen) return;
       tbody.innerHTML = items.map(it => {
-        const typ = it.source === 'torrent' ? 'Torrent' : 'NZB';
-        const typClass = it.source === 'torrent' ? 'dl-bar-type-torrent' : 'dl-bar-type-nzb';
+        const isTor = it.source === 'torrent';
+        const typ = isTor ? 'Torrent' : 'NZB';
+        const typLogo = `<img class="dl-type-logo" src="/static/logos/${isTor ? 'torrent' : 'nzb'}.png" alt="${typ}" title="${typ}">`;
         const q = it.queue === 'active' ? 'active' : 'history';
         const qClass = it.queue === 'active' ? 'pill-active' : 'pill-hist';
         const sz = it.size_mb != null ? `${esc(String(it.size_mb))} MB` : '';
@@ -3217,7 +3245,7 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
           <div class="dl-bar-fill"></div>
           <div class="dl-bar-image"></div>
           <div class="dl-bar-content">
-            <div class="dl-bar-cell"><span class="dl-bar-type ${typClass}">${typ}</span></div>
+            <div class="dl-bar-cell"><span class="dl-bar-type">${typLogo}</span></div>
             <div class="dl-bar-cell">${studioLogo}</div>
             <div class="dl-bar-cell-name">
               <div class="dl-bar-name" title="${esc(it.name)}">${esc(spaceifyReleaseName(it.name))}</div>
