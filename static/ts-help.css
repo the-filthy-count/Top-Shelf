@@ -1,0 +1,127 @@
+/* Contextual help: dim secondary-text icon → modal (wa-icon / Font Awesome).
+   Use --dim, not --muted: app tokens define --muted as a dark border tone (#3a3a44). */
+
+.ts-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: var(--dim, #6b6b7a);
+  cursor: pointer;
+  vertical-align: middle;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.ts-info-btn:hover,
+.ts-info-btn:focus-visible {
+  color: var(--text, #d4cfc4);
+  outline: none;
+}
+
+.ts-info-btn i {
+  font-size: 1rem;
+  pointer-events: none;
+  color: inherit;
+}
+
+.settings-section-title.ts-title-help-wrap,
+.ts-title-help-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.collapsible-header .ts-info-btn {
+  margin-left: 4px;
+}
+
+.toggle-row .settings-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ts-help-dialog {
+  max-width: min(520px, 94vw);
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: linear-gradient(160deg, rgba(36, 36, 48, 0.98) 0%, rgba(18, 18, 26, 0.96) 100%);
+  color: var(--text, #d4cfc4);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+.ts-help-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.62);
+}
+
+.ts-help-dialog-box {
+  padding: 18px 20px 16px;
+}
+
+.ts-help-dialog-heading {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text, #d4cfc4);
+}
+
+.ts-help-body {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--dim, #b8b8c8);
+  max-height: min(70vh, 480px);
+  overflow-y: auto;
+}
+
+.ts-help-prose p {
+  margin: 0 0 10px;
+}
+
+.ts-help-prose p:last-child {
+  margin-bottom: 0;
+}
+
+.ts-help-prose code {
+  font-family: var(--mono, "DM Mono", ui-monospace, monospace);
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.ts-help-prose strong {
+  color: var(--text, #d4cfc4);
+  font-weight: 600;
+}
+
+.ts-help-prose em {
+  font-style: italic;
+  color: var(--text, #d4cfc4);
+}
+
+.ts-help-dialog-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.panel-title-row .panel-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.page-head-actions .ts-info-btn {
+  margin-left: 6px;
+}
