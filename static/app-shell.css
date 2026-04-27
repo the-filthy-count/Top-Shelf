@@ -1638,6 +1638,16 @@ html[data-theme="vhs"] #spotlightGrid {
    * how many performers loaded. JS in scenes.html sets
    * `--tile-count` on the element when the row renders. */
   container-type: inline-size;
+  /* Raised-frame surface — shows in the diagonal gaps between
+   * adjacent tile polygons and behind the slivers. Tracks the
+   * user's duotone palette, top-to-bottom, so the frame
+   * matches the same gradient that runs through the slivers. */
+  background: linear-gradient(
+    180deg,
+    var(--duotone-lighten, #0048FF) 0%,
+    var(--duotone-midtone, #6c2683) 50%,
+    var(--duotone-multiply, #D500FF) 100%
+  );
 }
 html[data-theme="vhs"] #spotlightGrid .spotlight-tile {
   border: 1px solid #0048FF;
@@ -1675,6 +1685,11 @@ html[data-theme="vhs"] #spotlightGrid::after {
     var(--duotone-midtone, #6c2683) 50%,
     var(--duotone-multiply, #D500FF) 100%
   );
+  /* Same recessed bevel as the tiles so the slivers read as
+   * shallow cuts in the raised frame, not flat extensions. */
+  box-shadow:
+    inset 6px 6px 10px rgba(0, 0, 0, 0.7),
+    inset -6px -6px 10px rgba(255, 255, 255, 0.15);
 }
 html[data-theme="vhs"] #spotlightGrid::before {
   /* Overlap fully into tile 1's slanted left cut. */
