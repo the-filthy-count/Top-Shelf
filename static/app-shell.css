@@ -1583,25 +1583,48 @@ html[data-theme="vhs"] .spotlight-tile:hover::after {
   opacity: 0;
 }
 /* Spotlight tiles: thin shadow-blue frame plus a uniform
- * parallelogram `clip-path`. Middle tiles get a 12% slant on
- * both vertical edges so adjacent diagonals run parallel and
- * leave a thin negative-space band between them. The first and
- * last tiles keep their OUTER edge straight (filling the
- * rectangle space against the panel) while still slanting the
- * inner edge to match the row's diagonal rhythm. */
+ * parallelogram `clip-path` — every tile (including the first
+ * and last) gets the same 12% slant on both vertical edges.
+ * Adjacent tiles overlap by ~12px via negative `margin-left`
+ * so the parallel diagonals close the visual gap between
+ * faces — restores the original tight spacing instead of
+ * leaving a parallelogram-shaped band of negative space
+ * between every pair.
+ *
+ * Because the end tiles also slant on their OUTER edge, the
+ * row's outer corners would otherwise show the panel
+ * background through the cut. The `#spotlightGrid::before` /
+ * `::after` slivers below fill those triangular cut-outs with
+ * `#0048FF` (the duotone shadow stop) so the row ends in a
+ * dark sliver matching the palette rather than a bare panel
+ * background. */
 html[data-theme="vhs"] #spotlightGrid .spotlight-tile {
   border: 1px solid #0048FF;
   clip-path: polygon(12% 0, 100% 0, 88% 100%, 0 100%);
 }
-html[data-theme="vhs"] #spotlightGrid .spotlight-tile:first-child {
-  /* Straight left edge against the panel; right edge still
-   * slants to match the middle tiles' left. */
-  clip-path: polygon(0 0, 100% 0, 88% 100%, 0 100%);
+html[data-theme="vhs"] #spotlightGrid .spotlight-tile + .spotlight-tile {
+  margin-left: -12px;
 }
-html[data-theme="vhs"] #spotlightGrid .spotlight-tile:last-child {
-  /* Slanted left edge to match the previous tile's right;
-   * straight right edge against the panel. */
-  clip-path: polygon(12% 0, 100% 0, 100% 100%, 0 100%);
+/* End slivers — fill the triangular cuts at the row's outer
+ * corners with the duotone shadow colour. Each sliver is a
+ * 14px-wide flex item; the negative margin overlaps it with
+ * the adjacent tile by 12px (matching the inter-tile overlap
+ * above) so the visible dark area is approximately the same
+ * "proportionate gap" as elsewhere in the row, plus the
+ * triangular extension that the tile's clip-path leaves
+ * exposed. */
+html[data-theme="vhs"] #spotlightGrid::before,
+html[data-theme="vhs"] #spotlightGrid::after {
+  content: '';
+  flex: 0 0 14px;
+  align-self: stretch;
+  background: #0048FF;
+}
+html[data-theme="vhs"] #spotlightGrid::before {
+  margin-right: -12px;
+}
+html[data-theme="vhs"] #spotlightGrid::after {
+  margin-left: -12px;
 }
 html[data-theme="vhs"] .fav-grid--perf:not(.fav-grid--movie) .fav-cell .fav-perf-ph::after,
 html[data-theme="vhs"] .dl-tile-source-poster--scene::after {
@@ -2203,6 +2226,15 @@ html[data-theme="vhs"] .is-active .fav-lips {
 html[data-theme="vhs"] .scene-performer-label > .perf-hl,
 html[data-theme="vhs"] .spotlight-tile-name {
   background: transparent !important;
+}
+/* Tilt the spotlight name pill to follow the tile's 12% diagonal
+ * left edge. Base CSS sets `transform: rotate(180deg)` to make
+ * the vertical-rl writing-mode read bottom-to-top with upright
+ * glyphs; we add ~7° of clockwise rotation on top so the text
+ * axis runs parallel to the parallelogram's slanted left edge. */
+html[data-theme="vhs"] .spotlight-tile-name {
+  transform: rotate(187deg) !important;
+  transform-origin: left bottom;
 }
 
 /* Duotone swap buttons are no-ops on the VHS theme — the duotone
