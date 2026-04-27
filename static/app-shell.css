@@ -1582,45 +1582,16 @@ html[data-theme="vhs"] .spotlight-tile::after {
 html[data-theme="vhs"] .spotlight-tile:hover::after {
   opacity: 0;
 }
-/* Spotlight tiles: thin shadow-blue frame plus a 4-cycle of
- * `clip-path` polygons so the row reads as a collage of skewed
- * shapes rather than a strip of identical rectangles. Each
- * polygon trims 6–7% off two opposing corners (parallelograms
- * leaning either way + two trapezoids), staying inside the
- * tile's available space so the layout box doesn't change.
- * The clip cuts run inside the border edge, which means the
- * border only paints on the straight edges of each polygon —
- * intentional, the angled cuts between adjacent tiles read as
- * negative space. */
+/* Spotlight tiles: thin shadow-blue frame plus a uniform
+ * parallelogram `clip-path` so every tile leans the same way.
+ * Adjacent tiles' parallel diagonal edges leave a thin
+ * negative-space band between them — that's the "slight
+ * diagonal line" between faces. All tiles get the same shape
+ * so the row reads as a consistent slanted strip rather than a
+ * collage of mismatched cuts. */
 html[data-theme="vhs"] #spotlightGrid .spotlight-tile {
   border: 1px solid #0048FF;
-}
-html[data-theme="vhs"] #spotlightGrid .spotlight-tile:nth-child(4n+1) {
-  /* parallelogram leaning right */
-  clip-path: polygon(6% 0, 100% 0, 94% 100%, 0 100%);
-}
-html[data-theme="vhs"] #spotlightGrid .spotlight-tile:nth-child(4n+2) {
-  /* trapezoid — narrower top */
-  clip-path: polygon(7% 0, 93% 0, 100% 100%, 0 100%);
-}
-html[data-theme="vhs"] #spotlightGrid .spotlight-tile:nth-child(4n+3) {
-  /* parallelogram leaning left */
-  clip-path: polygon(0 0, 94% 0, 100% 100%, 6% 100%);
-}
-html[data-theme="vhs"] #spotlightGrid .spotlight-tile:nth-child(4n+4) {
-  /* trapezoid — narrower bottom */
-  clip-path: polygon(0 0, 100% 0, 93% 100%, 7% 100%);
-}
-/* First + last tiles fill their full rectangle so the row's
- * outer edges align cleanly with the panel. Their inner edges
- * butt against a slanted neighbour, so the visible silhouette
- * is rectangle-on-the-outside, angled-on-the-inside —
- * irregular shapes that frame the slanted strip in the middle.
- * Placed after the 4n cycle so source order wins on tied
- * specificity. */
-html[data-theme="vhs"] #spotlightGrid .spotlight-tile:first-child,
-html[data-theme="vhs"] #spotlightGrid .spotlight-tile:last-child {
-  clip-path: none;
+  clip-path: polygon(7% 0, 100% 0, 93% 100%, 0 100%);
 }
 html[data-theme="vhs"] .fav-grid--perf:not(.fav-grid--movie) .fav-cell .fav-perf-ph::after,
 html[data-theme="vhs"] .dl-tile-source-poster--scene::after {
