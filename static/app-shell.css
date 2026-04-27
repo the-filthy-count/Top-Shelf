@@ -1554,6 +1554,41 @@ html[data-theme="vhs"] .spotlight-tile:hover img {
   filter: none !important;
   transform: scale(1);
 }
+/* Recessed-image depth — `::before` paints a frame-cast
+ * shadow over the duotone'd image so each face reads as
+ * sitting BEHIND the slanted polygon, like an inset
+ * photograph. Three stacked gradients:
+ *   1. faint highlight along the bottom edge (frame's lower
+ *      lip catching light)
+ *   2. heavy shadow falling from the top (light-from-above
+ *      casting onto the recessed picture)
+ *   3. edge vignette wrapping the full polygon
+ * Clipped by the parent's `clip-path`, so the gradients hug
+ * the parallelogram's slanted edges instead of bleeding past
+ * the silhouette — that's what gives the "under the frame"
+ * read on the diagonal cuts. z-index 1 sits above the <img>
+ * and the ::after grain (z-0) but below the name pill (z-1
+ * with later source order), score badge (z-2), and exclude
+ * button (z-10). */
+html[data-theme="vhs"] .spotlight-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    linear-gradient(0deg,
+      rgba(255, 255, 255, 0.07) 0%,
+      transparent 12%),
+    linear-gradient(180deg,
+      rgba(0, 0, 0, 0.55) 0%,
+      rgba(0, 0, 0, 0.18) 8%,
+      transparent 22%),
+    radial-gradient(ellipse 140% 140% at 50% 50%,
+      transparent 55%,
+      rgba(0, 0, 0, 0.4) 100%);
+}
+
 /* Soft grain on top of the tritone — 60% size (background-size
  * scales the SVG noise tile to 60% of the spotlight-tile so the
  * grain reads at a moderate scale across narrow + wide tiles)
@@ -1632,18 +1667,19 @@ html[data-theme="vhs"] #spotlightGrid::after {
 }
 html[data-theme="vhs"] #spotlightGrid::before {
   margin-right: -12px;
-  /* Triangle widest at the top, narrowing to a point at
-   * bottom-left — mirrors the bottom-left edge slant of the
-   * adjacent tile so the row starts on the same diagonal as
-   * the rest of the strip. */
-  clip-path: polygon(0 0, 100% 0, 0 100%);
+  /* Triangle widest at the top, narrowing to a point near
+   * (but not quite at) bottom-left — the 2px lift accounts for
+   * the 1px tile border so the sliver's hypotenuse meets the
+   * tile's slanted edge cleanly instead of overshooting the
+   * corner. */
+  clip-path: polygon(0 0, 100% 0, 0 calc(100% - 2px));
 }
 html[data-theme="vhs"] #spotlightGrid::after {
   margin-left: -12px;
-  /* Triangle narrow at the top-right (point), widening to the
-   * bottom — matches the top-right slant of the adjacent tile
-   * so the row ends on the same diagonal. */
-  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  /* Triangle narrow at the top-right point, widening to the
+   * bottom — same 2px nudge so the point meets the tile's
+   * slanted right edge inside the border, not on top of it. */
+  clip-path: polygon(100% 2px, 100% 100%, 0 100%);
 }
 html[data-theme="vhs"] .fav-grid--perf:not(.fav-grid--movie) .fav-cell .fav-perf-ph::after,
 html[data-theme="vhs"] .dl-tile-source-poster--scene::after {
@@ -2247,14 +2283,16 @@ html[data-theme="vhs"] .spotlight-tile-name {
   background: transparent !important;
 }
 /* Tilt the spotlight name pill ~7° to follow the parallelogram's
- * slant. Keep the default `transform-origin` (centre of the
- * element) — pivoting around `left bottom` shifts the rotated
- * box leftward/downward by its full size and pushes it outside
- * the tile's `clip-path`, which hides the labels entirely. With
- * the centre origin, the pill tilts in place and stays inside
- * the polygon so the names remain visible. */
+ * slant. The polygon's left edge runs from bottom-left up to
+ * top-right (going up, x increases), so the text's "up" should
+ * point slightly to the right — under the `vertical-rl` +
+ * `rotate(180deg)` base, that's a SUBTRACTION of ~7° from the
+ * 180° base, not an addition. Keep the default centre
+ * `transform-origin` so the rotated bounding box stays inside
+ * the tile's `clip-path` (pivoting around `left bottom`
+ * pushes the box outside the polygon and hides the label). */
 html[data-theme="vhs"] .spotlight-tile-name {
-  transform: rotate(187deg) !important;
+  transform: rotate(173deg) !important;
 }
 /* Move the 'never show again' (✕) button to the top-right.
  * The base CSS pins it at top-left, but the parallelogram
