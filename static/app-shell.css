@@ -1583,15 +1583,25 @@ html[data-theme="vhs"] .spotlight-tile:hover::after {
   opacity: 0;
 }
 /* Spotlight tiles: thin shadow-blue frame plus a uniform
- * parallelogram `clip-path` so every tile leans the same way.
- * Adjacent tiles' parallel diagonal edges leave a thin
- * negative-space band between them — that's the "slight
- * diagonal line" between faces. All tiles get the same shape
- * so the row reads as a consistent slanted strip rather than a
- * collage of mismatched cuts. */
+ * parallelogram `clip-path`. Middle tiles get a 12% slant on
+ * both vertical edges so adjacent diagonals run parallel and
+ * leave a thin negative-space band between them. The first and
+ * last tiles keep their OUTER edge straight (filling the
+ * rectangle space against the panel) while still slanting the
+ * inner edge to match the row's diagonal rhythm. */
 html[data-theme="vhs"] #spotlightGrid .spotlight-tile {
   border: 1px solid #0048FF;
-  clip-path: polygon(7% 0, 100% 0, 93% 100%, 0 100%);
+  clip-path: polygon(12% 0, 100% 0, 88% 100%, 0 100%);
+}
+html[data-theme="vhs"] #spotlightGrid .spotlight-tile:first-child {
+  /* Straight left edge against the panel; right edge still
+   * slants to match the middle tiles' left. */
+  clip-path: polygon(0 0, 100% 0, 88% 100%, 0 100%);
+}
+html[data-theme="vhs"] #spotlightGrid .spotlight-tile:last-child {
+  /* Slanted left edge to match the previous tile's right;
+   * straight right edge against the panel. */
+  clip-path: polygon(12% 0, 100% 0, 100% 100%, 0 100%);
 }
 html[data-theme="vhs"] .fav-grid--perf:not(.fav-grid--movie) .fav-cell .fav-perf-ph::after,
 html[data-theme="vhs"] .dl-tile-source-poster--scene::after {
