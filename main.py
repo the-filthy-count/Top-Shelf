@@ -25119,7 +25119,16 @@ def _spotlight_fetch_from_stashbox(
     """
     candidates: list[dict] = []
     seen_ids: set[str] = set()
-    page_num = 1
+    # Random starting page so each fetch samples a different slice of the
+    # SCENE_COUNT-sorted performer list. Without this, page 1 always returns
+    # the same top-50 most-prolific performers and the spotlight cycles
+    # through the same handful that pass the user's hard filters. With
+    # per_page=50 and a 1–200 random range, we cover the top ~10,000
+    # most-scene-having performers across loads. The existing wrap/exit
+    # logic below (total_pages_hint check, _SPOTLIGHT_MAX_PAGES cap,
+    # budget timeout) still applies; we just no longer always begin at the
+    # same densest slice.
+    page_num = random.randint(1, 200)
     pages_checked = 0
     total_pages_hint: int | None = None
     fetch_started = time.time()
@@ -25216,10 +25225,21 @@ def _spotlight_fetch_from_stashbox(
                 "score_breakdown":         scored["breakdown"],
             })
 
-        # Stop when we've read past the end of the sorted list.
-        if len(page_performers) < _SPOTLIGHT_PER_PAGE:
-            break
+        # Past-the-end handling — when the random starting page lands beyond
+        # `total_pages_hint`, the API returns an empty page. Instead of
+        # bailing out (which would yield zero candidates for this source),
+        # rewind to a fresh random page inside the actual range and keep
+        # going. We only treat a short page as a definitive end when we've
+        # actually seen content on it.
         if total_pages_hint is not None and page_num >= total_pages_hint:
+            if total_pages_hint > 1:
+                page_num = random.randint(1, total_pages_hint - 1)
+                continue
+            break
+        if len(page_performers) < _SPOTLIGHT_PER_PAGE and len(page_performers) > 0:
+            break
+        if len(page_performers) == 0 and total_pages_hint is None:
+            # First-page miss with no count info — give up on this source.
             break
         page_num += 1
 

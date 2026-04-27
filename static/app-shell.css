@@ -1554,65 +1554,32 @@ html[data-theme="vhs"] .spotlight-tile:hover img {
   filter: none !important;
   transform: scale(1);
 }
-/* Recessed-image depth — neumorphic dual inset shadow on a
- * `::before` overlay. Top-left receives a heavy dark inset
- * (the lip of the frame casts a shadow onto the recessed
- * photo); bottom-right gets a soft white inset (light bouncing
- * off the opposite frame edge). Together they read as the
- * image being depressed BELOW the slanted polygon surface.
- *
- * The pseudo's box edges are the tile's rectangle; the parent
- * `clip-path` then trims the shadows to the polygon, so the
- * dark/light wash hugs the diagonal cuts instead of leaking
- * past them. z-index 1 sits above the <img> and the ::after
- * grain (z-0) but below the name pill, score badge, and
- * exclude button. */
+/* Liquid-glass top-light — `::before` overlays a smooth glossy
+ * highlight that fades from bright at the top edge to clear in
+ * the middle, with a hint of warmth recovering at the bottom.
+ * No box-shadow, no recessed bevel: the result is a smooth
+ * convex glass surface lit from above, with the duotone'd
+ * image reading clearly through the glass (no blur). The
+ * parent `clip-path` trims the highlight to the polygon. */
 html[data-theme="vhs"] .spotlight-tile::before {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 1;
-  /* Recessed bevel — tighter offsets and smaller blur than the
-   * neumorphic wash, with the alpha balance inverted for dark
-   * mode: a strong dark shadow at top-left ("wall" of the
-   * frame blocking light) and a soft white highlight at
-   * bottom-right ("lip" catching light from the opposite
-   * side). Smaller blur keeps the bevel edge crisp instead of
-   * fogging the centre of the image. */
-  box-shadow:
-    inset 6px 6px 10px rgba(0, 0, 0, 0.7),
-    inset -6px -6px 10px rgba(255, 255, 255, 0.15);
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.28) 0%,
+      rgba(255, 255, 255, 0.10) 18%,
+      transparent 45%,
+      transparent 80%,
+      rgba(255, 255, 255, 0.06) 100%);
 }
 
-/* Soft grain on top of the tritone — 60% size (background-size
- * scales the SVG noise tile to 60% of the spotlight-tile so the
- * grain reads at a moderate scale across narrow + wide tiles)
- * and 30% strength (alpha=0.30 baked into the SVG). The base
- * stylesheet sets `.spotlight-tile::after { content: none }` to
- * suppress the legacy duotone overlay; we override with an empty
- * `content` here to re-enable the pseudo only for VHS. z-index
- * 0 puts it above the <img> but below the name pill (z-1), score
- * badge (z-2), and exclude button (z-10). `mix-blend-mode:
- * overlay` lets the grain modulate luminance without flat-tinting
- * the image. Fades on hover so the clean photo reads through
- * alongside the tritone removal. */
-html[data-theme="vhs"] .spotlight-tile::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.30 0"/></filter><rect width="100%" height="100%" filter="url(%23g)"/></svg>');
-  background-size: 60%;
-  background-repeat: repeat;
-  mix-blend-mode: overlay;
-  opacity: 1;
-  transition: opacity 0.3s ease;
-}
-html[data-theme="vhs"] .spotlight-tile:hover::after {
-  opacity: 0;
-}
+/* Grain `::after` removed — the smooth-liquid-glass look
+ * doesn't want surface noise. The base stylesheet's
+ * `.spotlight-tile::after { content: none }` keeps the pseudo
+ * empty on every theme now. */
 /* Spotlight tiles: thin shadow-blue frame plus a uniform
  * parallelogram `clip-path` — every tile (including the first
  * and last) gets the same 12% slant on both vertical edges.
@@ -1638,24 +1605,17 @@ html[data-theme="vhs"] #spotlightGrid {
    * how many performers loaded. JS in scenes.html sets
    * `--tile-count` on the element when the row renders. */
   container-type: inline-size;
-  /* Raised-frame surface for the diagonal gaps between adjacent
-   * tile polygons. Tracks `var(--duotone-lighten)` so the
-   * dividers always match whatever the user has set as the
-   * duotone shadow stop — same token the tile border below
-   * uses, so border + divider stay locked together regardless
-   * of palette retuning.
-   *
-   * A 135° linear-gradient adds a faint bottom-right highlight
-   * + top-left darkening to give the dividers an outset
-   * (raised) read — light source matches the tile bevel
-   * (dark TL, bright BR) so the dividers cast a believable
-   * shadow onto the recessed photos either side of them. */
+  /* Liquid-glass divider surface for the diagonal gaps between
+   * tile polygons. Solid duotone-shadow base with a smooth
+   * top-down highlight overlay so the gap reads as a slim
+   * raised glass strip instead of a flat coloured line. */
   background:
-    linear-gradient(135deg,
-      rgba(0, 0, 0, 0.35) 0%,
-      transparent 28%,
-      transparent 72%,
-      rgba(255, 255, 255, 0.20) 100%),
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.28) 0%,
+      rgba(255, 255, 255, 0.06) 28%,
+      transparent 60%,
+      transparent 85%,
+      rgba(255, 255, 255, 0.10) 100%),
     var(--duotone-lighten, #630198);
 }
 html[data-theme="vhs"] #spotlightGrid .spotlight-tile {
@@ -1689,18 +1649,21 @@ html[data-theme="vhs"] #spotlightGrid::after {
    * panel width. */
   flex: 0 0 calc(12cqi / var(--tile-count, 10));
   align-self: stretch;
-  /* Top-to-bottom gradient through the duotone palette so the
-   * slivers track the user's configured colours. The slivers
-   * are part of the RAISED frame (same level as the inter-tile
-   * dividers), not recessed cuts — no inset bevel here, so
-   * they read as flat extensions of the frame surface. The
-   * tile bevels alone supply the recessed look on the photos. */
-  background: linear-gradient(
-    180deg,
-    var(--duotone-lighten, #0048FF) 0%,
-    var(--duotone-midtone, #6c2683) 50%,
-    var(--duotone-multiply, #D500FF) 100%
-  );
+  /* Two-layer fill: liquid-glass highlight (top white wash
+   * fading mid, soft bottom shimmer) over the duotone-palette
+   * gradient. Reads as smooth raised glass with the same
+   * top-light direction as the tiles and dividers. */
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.30) 0%,
+      rgba(255, 255, 255, 0.08) 22%,
+      transparent 55%,
+      transparent 85%,
+      rgba(255, 255, 255, 0.10) 100%),
+    linear-gradient(180deg,
+      var(--duotone-lighten, #630198) 0%,
+      var(--duotone-midtone, #5b51d8) 50%,
+      var(--duotone-multiply, #fe43d9) 100%);
 }
 html[data-theme="vhs"] #spotlightGrid::before {
   /* Overlap fully into tile 1's slanted left cut. */
