@@ -1667,19 +1667,18 @@ html[data-theme="vhs"] #spotlightGrid::after {
 }
 html[data-theme="vhs"] #spotlightGrid::before {
   margin-right: -12px;
-  /* Triangle widest at the top, narrowing to a point near
-   * (but not quite at) bottom-left — the 2px lift accounts for
-   * the 1px tile border so the sliver's hypotenuse meets the
-   * tile's slanted edge cleanly instead of overshooting the
-   * corner. */
-  clip-path: polygon(0 0, 100% 0, 0 calc(100% - 2px));
+  /* Triangle widest at the top, narrowing to a point well
+   * above the bottom-left corner — the 6px lift gives the
+   * border on both the sliver and the adjacent tile room to
+   * meet cleanly without the diagonals overshooting. */
+  clip-path: polygon(0 0, 100% 0, 0 calc(100% - 6px));
 }
 html[data-theme="vhs"] #spotlightGrid::after {
   margin-left: -12px;
   /* Triangle narrow at the top-right point, widening to the
-   * bottom — same 2px nudge so the point meets the tile's
-   * slanted right edge inside the border, not on top of it. */
-  clip-path: polygon(100% 2px, 100% 100%, 0 100%);
+   * bottom — same 6px nudge below the top corner so the
+   * point lands inside the borders, not on top of them. */
+  clip-path: polygon(100% 6px, 100% 100%, 0 100%);
 }
 html[data-theme="vhs"] .fav-grid--perf:not(.fav-grid--movie) .fav-cell .fav-perf-ph::after,
 html[data-theme="vhs"] .dl-tile-source-poster--scene::after {
@@ -2282,17 +2281,15 @@ html[data-theme="vhs"] .scene-performer-label > .perf-hl,
 html[data-theme="vhs"] .spotlight-tile-name {
   background: transparent !important;
 }
-/* Tilt the spotlight name pill ~7° to follow the parallelogram's
- * slant. The polygon's left edge runs from bottom-left up to
- * top-right (going up, x increases), so the text's "up" should
- * point slightly to the right — under the `vertical-rl` +
- * `rotate(180deg)` base, that's a SUBTRACTION of ~7° from the
- * 180° base, not an addition. Keep the default centre
- * `transform-origin` so the rotated bounding box stays inside
- * the tile's `clip-path` (pivoting around `left bottom`
- * pushes the box outside the polygon and hides the label). */
+/* Tilt the spotlight name pill ~7° to match the parallelogram's
+ * proportional slant of 12% / 100% (`atan(0.12) ≈ 6.84°`). The
+ * polygon's left edge tilts so its top is to the RIGHT of its
+ * bottom; under the `vertical-rl` + `rotate(180deg)` base that
+ * direction is achieved by ADDING ~7° to the 180° base, hence
+ * `rotate(187deg)`. Default centre `transform-origin` keeps the
+ * rotated bounding box inside the tile's `clip-path`. */
 html[data-theme="vhs"] .spotlight-tile-name {
-  transform: rotate(173deg) !important;
+  transform: rotate(187deg) !important;
 }
 /* Move the 'never show again' (✕) button to the top-right.
  * The base CSS pins it at top-left, but the parallelogram
