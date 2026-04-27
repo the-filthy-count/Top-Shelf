@@ -1633,12 +1633,25 @@ html[data-theme="vhs"] .spotlight-tile:hover::after {
  * `#0048FF` (the duotone shadow stop) so the row ends in a
  * dark sliver matching the palette rather than a bare panel
  * background. */
+html[data-theme="vhs"] #spotlightGrid {
+  /* Container query root — `cqi` inside spotlight rules below
+   * resolves to a percentage of the grid's inline size, so we
+   * can size the slivers and overlap as a fraction of tile
+   * WIDTH (12% of tile_w = 12cqi / tile_count) and keep the
+   * hypotenuses parallel to the tile slants regardless of
+   * how many performers loaded. JS in scenes.html sets
+   * `--tile-count` on the element when the row renders. */
+  container-type: inline-size;
+}
 html[data-theme="vhs"] #spotlightGrid .spotlight-tile {
   border: 1px solid #0048FF;
   clip-path: polygon(12% 0, 100% 0, 88% 100%, 0 100%);
 }
 html[data-theme="vhs"] #spotlightGrid .spotlight-tile + .spotlight-tile {
-  margin-left: -12px;
+  /* Overlap each tile by exactly 12% of one tile width so the
+   * parallel diagonals close the visual gap, regardless of
+   * how many tiles are in the row. */
+  margin-left: calc(-12cqi / var(--tile-count, 10));
 }
 /* End slivers — fill the triangular cuts at the row's outer
  * corners with the duotone shadow colour. Each sliver is a
@@ -1651,13 +1664,15 @@ html[data-theme="vhs"] #spotlightGrid .spotlight-tile + .spotlight-tile {
 html[data-theme="vhs"] #spotlightGrid::before,
 html[data-theme="vhs"] #spotlightGrid::after {
   content: '';
-  flex: 0 0 14px;
+  /* Sliver width = 12% of one tile's width (= 12cqi /
+   * tile_count). That makes the sliver triangle's hypotenuse
+   * the same slope as the tile's slanted edge, so the two
+   * lines run truly parallel regardless of tile count or
+   * panel width. */
+  flex: 0 0 calc(12cqi / var(--tile-count, 10));
   align-self: stretch;
   /* Top-to-bottom gradient through the duotone palette so the
-   * slivers track the user's configured colours. `--duotone-
-   * lighten` is the shadow stop, `--duotone-midtone` (when
-   * enabled) sits at 50%, and `--duotone-multiply` is the
-   * highlight stop. */
+   * slivers track the user's configured colours. */
   background: linear-gradient(
     180deg,
     var(--duotone-lighten, #0048FF) 0%,
@@ -1666,18 +1681,18 @@ html[data-theme="vhs"] #spotlightGrid::after {
   );
 }
 html[data-theme="vhs"] #spotlightGrid::before {
-  margin-right: -12px;
-  /* Triangle widest at the top, narrowing to a point well
-   * above the bottom-left corner — the 6px lift gives the
-   * border on both the sliver and the adjacent tile room to
-   * meet cleanly without the diagonals overshooting. */
+  /* Overlap fully into tile 1's slanted left cut. */
+  margin-right: calc(-12cqi / var(--tile-count, 10));
+  /* Triangle widest at the top, narrowing to a point lifted
+   * 6px above the bottom-left corner so the diagonals on the
+   * sliver and the adjacent tile clear the 1px borders. */
   clip-path: polygon(0 0, 100% 0, 0 calc(100% - 6px));
 }
 html[data-theme="vhs"] #spotlightGrid::after {
-  margin-left: -12px;
-  /* Triangle narrow at the top-right point, widening to the
-   * bottom — same 6px nudge below the top corner so the
-   * point lands inside the borders, not on top of them. */
+  /* Overlap fully into tile N's slanted right cut. */
+  margin-left: calc(-12cqi / var(--tile-count, 10));
+  /* Triangle narrow at the top-right point (lifted 6px below
+   * the corner), widening to the bottom. */
   clip-path: polygon(100% 6px, 100% 100%, 0 100%);
 }
 html[data-theme="vhs"] .fav-grid--perf:not(.fav-grid--movie) .fav-cell .fav-perf-ph::after,

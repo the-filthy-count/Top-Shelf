@@ -3061,6 +3061,11 @@
 
       // Show grid, hide empty state
       gridEl.style.display = 'flex';
+      // Expose tile count for VHS-theme CSS that scales the
+      // diagonal sliver width with the actual tile width
+      // (slivers should be ~12% of tile width to keep the
+      // hypotenuse parallel to the tile's slanted edge).
+      gridEl.style.setProperty('--tile-count', performers.length);
       document.getElementById('detailEmpty').style.display = 'none';
     } catch(e) {
       console.error('Spotlight fetch failed:', e);
