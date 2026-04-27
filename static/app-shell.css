@@ -1,0 +1,3916 @@
+@font-face {
+  font-family: "Impact Label";
+  src: url("/static/fonts/Impact%20Label.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Seconds";
+  src: url("/static/fonts/Impact%20Label%20Reversed.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Tox Typewriter";
+  src: url("/static/fonts/Tox%20Typewriter.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "LedCounter";
+  src: url("/static/fonts/LEDBDREV.TTF") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* VHS-theme display fonts — only loaded when the VHS theme is
+ * active (the @font-face declarations are global, but they're not
+ * actually fetched until something in the document references the
+ * family name). */
+@font-face {
+  font-family: "VCRMono";
+  src: url("/static/fonts/SUPER-VCR_MONO.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Shatter";
+  src: url("/static/fonts/shatter.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Counter-tile display font — LED Board Reversed. Applied globally via
+ * the `.sky-counter` class (historical name; kept so existing HTML
+ * markup doesn't churn). Every stat-value / tab-count across /health,
+ * /downloads, /queue, /history and / picks this up.
+ *
+ * Required companion: JS writers should run values through
+ * `padSkyCounter()` so every cell renders 6 chars, right-aligned with
+ * leading spaces. The per-element MutationObserver in ts-utils.js
+ * handles this automatically for any element carrying .sky-counter.
+ *
+ * Styling is intentionally naked — brand accent colour, no border,
+ * no glow. The LED font's glow and thickness carry the look. */
+.sky-counter,
+.stat-value.sky-counter.sky-counter,
+.tab-count.sky-counter.sky-counter,
+.emb-summary-value.sky-counter.sky-counter,
+.queue-section .stat-value.sky-counter.sky-counter {
+  font-family: "LedCounter", "Seconds", ui-monospace, monospace;
+  color: var(--accent);
+  white-space: pre;              /* preserve leading pad spaces */
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  /* Font-size is set dynamically by `fitSkyCounter()` in ts-utils.js —
+   * it binary-searches the largest font-size where the 6-char strip
+   * still fits the parent tile. The clamp below is only a pre-JS
+   * safety net so the counter doesn't render at the browser default
+   * before the observer runs on DOMContentLoaded. */
+  font-size: clamp(18px, 20cqi, 48px);
+  line-height: 1;
+  text-align: center;
+  text-shadow: none;
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  /* Ensure LED digits are always visible even if the JS fit hasn't
+   * run yet (e.g. on panels that open post-load). Page-level rules
+   * on .emb-summary-value use `overflow: hidden + text-overflow:
+   * ellipsis` which swallow under-fit content. We bank on the fit
+   * keeping text inside the tile instead. */
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+ *  THEME PALETTE — adding a new theme
+ *
+ *  1. Copy one of the html[data-theme="..."] blocks below.
+ *  2. Rename the selector to [data-theme="yourname"].
+ *  3. Tweak the colour tokens to taste. The `*-rgb` tokens are
+ *     comma-separated R,G,B triples so layout code can splice them
+ *     into `rgba(var(--brand-purple-rgb), 0.35)` style calls.
+ *  4. Add "yourname" to the THEMES array in /static/theme-init.js.
+ *  5. Add an <option value="yourname"> to the Appearance panel in
+ *     static/queue.html (data-settings-category="appearance").
+ *
+ *  The :root block is the "dark" default — these tokens are the
+ *  single source of truth for colours app-wide. Per-page stylesheets
+ *  may only declare layout-related custom properties (fonts, radii,
+ *  spacing); colours live in this file.
+ *
+ *  Token glossary:
+ *    --bg / --text / --dim / --accent / --red / --green / --amber /
+ *    --blue / --danger / --border / --muted   — solid colour tokens.
+ *    --surface / --raised                     — themed translucent fills.
+ *    --brand-purple-rgb / --brand-accent-rgb  — primary + secondary hue
+ *                                               as "R, G, B" for rgba().
+ *    --bg-rgb / --panel-hi-rgb / --panel-lo-rgb — body bg and panel
+ *                                               gradient endpoints.
+ * ══════════════════════════════════════════════════════════════════ */
+:root,
+html[data-theme="dark"] {
+  --brand-purple-rgb: 155, 77, 202;
+  --brand-accent-rgb: 224, 64, 192;
+  --bg-rgb:         12, 12, 14;
+  --panel-hi-rgb:   36, 36, 48;
+  --panel-lo-rgb:   18, 18, 26;
+  --duotone-multiply: #ff4dc6;
+  --duotone-lighten:  #5b0094;
+  --duotone-filter:   url(#duotone-dark);
+
+  /* Page background — themes pick the dark or light master image so
+   * the colour-graded backdrop tracks the rest of the palette. Light
+   * themes override below. */
+  --app-bg-image: url("/static/background_dark.jpg");
+
+  /* ── Advanced duotone tuning tokens ──
+   * All duotone layers and filters read these so the user can drive
+   * the whole pipeline from the custom-theme "Advanced" expander. The
+   * values below are the baseline (visually identical to what the app
+   * shipped with) — user overrides from the Appearance panel land via
+   * theme-init.js's custom-style injection. */
+  --duotone-mode-multiply: multiply;   /* blend mode for layer 1 */
+  --duotone-mode-lighten:  lighten;    /* blend mode for layer 2 */
+  --duotone-opacity:    1;             /* overall duotone strength (both layers) */
+  --duotone-grayscale:  1;             /* how much to desat base before blend (0–1) */
+  --duotone-contrast:   1.08;          /* base contrast push at duotone time */
+  --duotone-saturation: 1;             /* base saturation (pre-blend) */
+  --duotone-exposure:   1;             /* base brightness (pre-blend) */
+
+  --bg:      #0c0c0e;
+  --surface: rgba(var(--panel-lo-rgb), 0.75);
+  --raised:  rgba(var(--panel-hi-rgb), 0.80);
+  --border:  #222228;
+  --muted:   #3a3a44;
+  --text:    #d4cfc4;
+  --dim:     #6b6b7a;
+  --accent:  #e040c0;
+  --green:   #4ade80;
+  --amber:   #fbbf24;
+  --red:     #e040c0;
+  --blue:    #60a5fa;
+  --danger:  #f87171;
+  --skyfont-color: #ffffff;
+}
+
+/* Themed native select dropdowns — option rendering is OS-driven in some
+ * browsers but Chromium/Firefox honour these properties on <option>. */
+select {
+  color-scheme: dark;
+  background-color: var(--raised);
+  color: var(--text);
+}
+html[data-theme="light"] select,
+html[data-theme="catppuccin-latte"] select,
+html[data-theme="rose-pine-dawn"] select,
+html[data-theme="everforest-light"] select,
+html[data-theme="nord-light"] select,
+html[data-theme="custom"][data-base="light"] select {
+  color-scheme: light;
+}
+select option {
+  background-color: var(--raised);
+  color: var(--text);
+}
+select option:checked,
+select option[selected] {
+  background-color: rgba(var(--brand-accent-rgb), 0.25);
+  color: var(--text);
+}
+
+/* ── Source-logo backdrop (removed) ──
+ * StashDB / FansDB / ThePornDB PNGs used to get a dark chip backdrop here
+ * so their near-white / pure-pink glyphs would pop on dark panels. The
+ * chip read as a square tag behind every logo — ugly against the glass
+ * panels on /scenes, /library and the settings source-toggle — and the
+ * user asked to drop it. The rule is kept with no properties so any
+ * earlier inline `style="background:none"` overrides elsewhere still
+ * target a matching selector, and so the comment above documents WHY
+ * this used to exist if someone wonders. Legibility is now handled by
+ * a drop-shadow filter on the logo tiles that host these images. */
+img[src$="/logos/tpdb.png"],
+img[src$="/logos/theporndb.png"],
+img[src$="/logos/stashdb.png"],
+img[src$="/logos/fansdb.png"] {
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  /* Soft drop-shadow so the glyph keeps legibility on bright / bare
+   * backgrounds without the boxy chip backdrop. */
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+}
+
+/* Fire icon — only used as the Vices emblem. Solid fire-orange with
+ * a subtle glow so it pops against every theme without touching the
+ * per-theme --accent. `!important` so inline `style="color:…"` left
+ * behind on old markup doesn't flatten the colour to whatever accent
+ * was active before the rule landed. */
+.fa-fire {
+  color: #ff6b1a !important;
+  text-shadow: 0 0 4px rgba(255, 107, 26, 0.35);
+}
+
+/* Queue-row Vice button: neutral yellow when the filename has NO
+ * keyword match against any configured vice — signals "action
+ * available but not pre-targeted". Flips to the signature fire-orange
+ * when a vice name is detected in the filename, reusing the default
+ * .fa-fire tone. Button stays clickable in either state. */
+.qi-vice-btn i.fa-fire {
+  color: #f5c542 !important;
+  text-shadow: 0 0 4px rgba(245, 197, 66, 0.30) !important;
+}
+.qi-vice-btn.is-vice-match i.fa-fire {
+  color: #ff6b1a !important;
+  text-shadow: 0 0 4px rgba(255, 107, 26, 0.35) !important;
+}
+
+/* Logo is a white PNG — invert on light-base themes so it reads on cream. */
+html[data-theme="light"] header .logo img,
+html[data-theme="catppuccin-latte"] header .logo img,
+html[data-theme="rose-pine-dawn"] header .logo img,
+html[data-theme="everforest-light"] header .logo img,
+html[data-theme="nord-light"] header .logo img,
+html[data-theme="custom"][data-base="light"] header .logo img,
+html[data-theme="light"] header a.logo img,
+html[data-theme="catppuccin-latte"] header a.logo img,
+html[data-theme="rose-pine-dawn"] header a.logo img,
+html[data-theme="everforest-light"] header a.logo img,
+html[data-theme="nord-light"] header a.logo img,
+html[data-theme="custom"][data-base="light"] header a.logo img {
+  filter: invert(0.92) hue-rotate(180deg) brightness(0.9);
+}
+
+html[data-theme="light"] {
+  --brand-purple-rgb: 156, 39, 176;
+  --brand-accent-rgb: 194, 24, 91;
+  --bg-rgb:         245, 241, 230;
+  --panel-hi-rgb:   255, 253, 247;
+  --panel-lo-rgb:   224, 218, 202;
+  --duotone-multiply: #ff4dc6;
+  --duotone-lighten:  #5b0094;
+  --duotone-filter:   url(#duotone-light);
+  --app-bg-image:    url("/static/background_light.jpg");
+
+  --bg:      #f5f1e6;
+  --surface: rgba(var(--panel-hi-rgb), 0.82);
+  --raised:  rgba(var(--panel-hi-rgb), 0.94);
+  --border:  #d8d2c2;
+  --muted:   #b0a992;
+  --text:    #2b2a25;
+  --dim:     #6b6b60;
+  --accent:  #c2185b;
+  --green:   #2e7d32;
+  --amber:   #ed6c02;
+  --red:     #c2185b;
+  --blue:    #1976d2;
+  --danger:  #c2185b;
+  --skyfont-color: #000000;
+}
+
+/* ── Nord Dark — Polar Night base, Frost+Aurora accents ── */
+html[data-theme="nord-dark"],
+html[data-theme="nord"] {  /* legacy alias for users on 'nord' before the split */
+  --brand-purple-rgb: 136, 192, 208;   /* nord8 / Frost */
+  --brand-accent-rgb: 191, 97, 106;    /* nord11 / Aurora */
+  --bg-rgb:         46, 52, 64;        /* nord0 */
+  --panel-hi-rgb:   59, 66, 82;        /* nord1 */
+  --panel-lo-rgb:   46, 52, 64;        /* nord0 */
+  --duotone-multiply: #8fbcbb;
+  --duotone-lighten:  #5e81ac;
+  --duotone-filter:   url(#duotone-nord-dark);
+
+  --bg:      #2e3440;
+  --surface: rgba(var(--panel-hi-rgb), 0.82);
+  --raised:  rgba(var(--panel-hi-rgb), 0.88);
+  --border:  #434c5e;
+  --muted:   #4c566a;
+  --text:    #eceff4;
+  --dim:     #81a1c1;
+  --accent:  #88c0d0;
+  --green:   #a3be8c;
+  --amber:   #ebcb8b;
+  --red:     #bf616a;
+  --blue:    #5e81ac;
+  --danger:  #bf616a;
+  --skyfont-color: #ffffff;
+}
+
+/* ── Nord Light — Snow Storm base, same Frost/Aurora accents */
+html[data-theme="nord-light"] {
+  --brand-purple-rgb: 94, 129, 172;    /* nord10 / Frost */
+  --brand-accent-rgb: 191, 97, 106;    /* nord11 / Aurora */
+  --bg-rgb:         236, 239, 244;     /* nord6 */
+  --panel-hi-rgb:   229, 233, 240;     /* nord5 */
+  --panel-lo-rgb:   216, 222, 233;     /* nord4 */
+  --duotone-multiply: #bf616a;
+  --duotone-lighten:  #5e81ac;
+  --duotone-filter:   url(#duotone-nord-light);
+  --app-bg-image:    url("/static/background_light.jpg");
+
+  --bg:      #eceff4;
+  --surface: rgba(var(--panel-hi-rgb), 0.85);
+  --raised:  rgba(var(--panel-hi-rgb), 0.94);
+  --border:  #c8cfdb;
+  --muted:   #9aa3b3;
+  --text:    #2e3440;
+  --dim:     #4c566a;
+  --accent:  #5e81ac;
+  --green:   #a3be8c;
+  --amber:   #d08770;
+  --red:     #bf616a;
+  --blue:    #81a1c1;
+  --danger:  #bf616a;
+  --skyfont-color: #000000;
+}
+
+html[data-theme="solarized"] {
+  --brand-purple-rgb: 108, 113, 196;
+  --brand-accent-rgb: 220, 50, 47;
+  --bg-rgb:         0, 43, 54;
+  --panel-hi-rgb:   7, 54, 66;
+  --panel-lo-rgb:   0, 43, 54;
+  --duotone-multiply: #fe5d5d;
+  --duotone-lighten:  #6c71c4;
+  --duotone-filter:   url(#duotone-solarized);
+
+  --bg:      #002b36;
+  --surface: rgba(var(--panel-hi-rgb), 0.80);
+  --raised:  rgba(88, 110, 117, 0.40);
+  --border:  #073642;
+  --muted:   #586e75;
+  --text:    #eee8d5;
+  --dim:     #93a1a1;
+  --accent:  #dc322f;
+  --green:   #859900;
+  --amber:   #b58900;
+  --red:     #dc322f;
+  --blue:    #268bd2;
+  --danger:  #dc322f;
+  --skyfont-color: #ffffff;
+}
+
+html[data-theme="dracula"] {
+  --brand-purple-rgb: 189, 147, 249;
+  --brand-accent-rgb: 255, 121, 198;
+  --bg-rgb:         40, 42, 54;
+  --panel-hi-rgb:   68, 71, 90;
+  --panel-lo-rgb:   40, 42, 54;
+  --duotone-multiply: #ff79c6;
+  --duotone-lighten:  #a50d0d;
+  --duotone-filter:   url(#duotone-dracula);
+
+  --bg:      #282a36;
+  --surface: rgba(var(--panel-lo-rgb), 0.78);
+  --raised:  rgba(var(--panel-hi-rgb), 0.85);
+  --border:  #44475a;
+  --muted:   #6272a4;
+  --text:    #f8f8f2;
+  --dim:     #6272a4;
+  --accent:  #ff79c6;
+  --green:   #50fa7b;
+  --amber:   #f1fa8c;
+  --red:     #ff5555;
+  --blue:    #8be9fd;
+  --danger:  #ff5555;
+  --skyfont-color: #ffffff;
+}
+
+html[data-theme="tokyo-night"] {
+  --brand-purple-rgb: 187, 154, 247;
+  --brand-accent-rgb: 247, 118, 142;
+  --bg-rgb:         26, 27, 38;
+  --panel-hi-rgb:   41, 46, 66;
+  --panel-lo-rgb:   26, 27, 38;
+  --duotone-multiply: #f7768e;
+  --duotone-lighten:  #2366a4;
+  --duotone-filter:   url(#duotone-tokyo-night);
+
+  --bg:      #1a1b26;
+  --surface: rgba(var(--panel-lo-rgb), 0.78);
+  --raised:  rgba(var(--panel-hi-rgb), 0.85);
+  --border:  #292e42;
+  --muted:   #414868;
+  --text:    #c0caf5;
+  --dim:     #565f89;
+  --accent:  #f7768e;
+  --green:   #9ece6a;
+  --amber:   #e0af68;
+  --red:     #f7768e;
+  --blue:    #7aa2f7;
+  --danger:  #f7768e;
+  --skyfont-color: #ffffff;
+}
+
+html[data-theme="gruvbox"] {
+  --brand-purple-rgb: 211, 134, 155;
+  --brand-accent-rgb: 254, 128, 25;
+  --bg-rgb:         40, 40, 40;
+  --panel-hi-rgb:   60, 56, 54;
+  --panel-lo-rgb:   40, 40, 40;
+  --duotone-multiply: #fe8019;
+  --duotone-lighten:  #b15139;
+  --duotone-filter:   url(#duotone-gruvbox);
+
+  --bg:      #282828;
+  --surface: rgba(var(--panel-lo-rgb), 0.80);
+  --raised:  rgba(var(--panel-hi-rgb), 0.86);
+  --border:  #3c3836;
+  --muted:   #504945;
+  --text:    #ebdbb2;
+  --dim:     #928374;
+  --accent:  #fe8019;
+  --green:   #b8bb26;
+  --amber:   #fabd2f;
+  --red:     #fb4934;
+  --blue:    #83a598;
+  --danger:  #fb4934;
+  --skyfont-color: #ffffff;
+}
+
+/* ── Catppuccin — four official flavours ────────────────────────
+ *  Latte (light), Frappé, Macchiato, Mocha (darkest).
+ *  Palette refs: https://catppuccin.com/palette/
+ *  Token pattern mirrors dark: brand-purple = mauve,
+ *  brand-accent = pink, accent/red = red. Duotone uses mauve
+ *  highlight + surface2 shadow for a signature pastel duotone.
+ * ──────────────────────────────────────────────────────────── */
+html[data-theme="catppuccin-latte"] {
+  --brand-purple-rgb: 136, 57, 239;
+  --brand-accent-rgb: 234, 118, 203;
+  --bg-rgb:         239, 241, 245;
+  --panel-hi-rgb:   230, 233, 239;
+  --panel-lo-rgb:   220, 224, 232;
+  --duotone-multiply: #fe640b;
+  --duotone-lighten:  #1e66f5;
+  --duotone-filter:   url(#duotone-catppuccin-latte);
+  --app-bg-image:    url("/static/background_light.jpg");
+
+  --bg:      #eff1f5;
+  --surface: rgba(var(--panel-hi-rgb), 0.85);
+  --raised:  rgba(var(--panel-hi-rgb), 0.94);
+  --border:  #acb0be;
+  --muted:   #8c8fa1;
+  --text:    #4c4f69;
+  --dim:     #6c6f85;
+  --accent:  #d20f39;
+  --green:   #40a02b;
+  --amber:   #df8e1d;
+  --red:     #d20f39;
+  --blue:    #1e66f5;
+  --danger:  #d20f39;
+  --skyfont-color: #000000;
+}
+
+html[data-theme="catppuccin-frappe"] {
+  --brand-purple-rgb: 202, 158, 230;
+  --brand-accent-rgb: 244, 184, 228;
+  --bg-rgb:         48, 52, 70;
+  --panel-hi-rgb:   65, 69, 89;
+  --panel-lo-rgb:   41, 44, 60;
+  --duotone-multiply: #ef9f76;
+  --duotone-lighten:  #8caaee;
+  --duotone-filter:   url(#duotone-catppuccin-frappe);
+
+  --bg:      #303446;
+  --surface: rgba(var(--panel-lo-rgb), 0.80);
+  --raised:  rgba(var(--panel-hi-rgb), 0.86);
+  --border:  #414559;
+  --muted:   #51576d;
+  --text:    #c6d0f5;
+  --dim:     #a5adce;
+  --accent:  #e78284;
+  --green:   #a6d189;
+  --amber:   #e5c890;
+  --red:     #e78284;
+  --blue:    #8caaee;
+  --danger:  #e78284;
+  --skyfont-color: #ffffff;
+}
+
+html[data-theme="catppuccin-macchiato"] {
+  --brand-purple-rgb: 198, 160, 246;
+  --brand-accent-rgb: 245, 189, 230;
+  --bg-rgb:         36, 39, 58;
+  --panel-hi-rgb:   54, 58, 78;
+  --panel-lo-rgb:   30, 32, 48;
+  --duotone-multiply: #f5a97f;
+  --duotone-lighten:  #8aadf4;
+  --duotone-filter:   url(#duotone-catppuccin-macchiato);
+
+  --bg:      #24273a;
+  --surface: rgba(var(--panel-lo-rgb), 0.80);
+  --raised:  rgba(var(--panel-hi-rgb), 0.86);
+  --border:  #363a4e;
+  --muted:   #494d64;
+  --text:    #cad3f5;
+  --dim:     #a5adcb;
+  --accent:  #ed8796;
+  --green:   #a6da95;
+  --amber:   #eed49f;
+  --red:     #ed8796;
+  --blue:    #8aadf4;
+  --danger:  #ed8796;
+  --skyfont-color: #ffffff;
+}
+
+html[data-theme="catppuccin-mocha"] {
+  --brand-purple-rgb: 203, 166, 247;
+  --brand-accent-rgb: 245, 194, 231;
+  --bg-rgb:         30, 30, 46;
+  --panel-hi-rgb:   49, 50, 68;
+  --panel-lo-rgb:   24, 24, 37;
+  --duotone-multiply: #fab387;
+  --duotone-lighten:  #89b4fa;
+  --duotone-filter:   url(#duotone-catppuccin-mocha);
+
+  --bg:      #1e1e2e;
+  --surface: rgba(var(--panel-lo-rgb), 0.80);
+  --raised:  rgba(var(--panel-hi-rgb), 0.86);
+  --border:  #313244;
+  --muted:   #45475a;
+  --text:    #cdd6f4;
+  --dim:     #a6adc8;
+  --accent:  #f38ba8;
+  --green:   #a6e3a1;
+  --amber:   #f9e2af;
+  --red:     #f38ba8;
+  --blue:    #89b4fa;
+  --danger:  #f38ba8;
+  --skyfont-color: #ffffff;
+}
+
+/* ── Rosé Pine — soho-style muted dark, low saturation ──── */
+html[data-theme="rose-pine"] {
+  --brand-purple-rgb: 196, 167, 231;   /* iris */
+  --brand-accent-rgb: 235, 111, 146;   /* love */
+  --bg-rgb:         25, 23, 36;        /* base */
+  --panel-hi-rgb:   38, 35, 58;        /* overlay */
+  --panel-lo-rgb:   31, 29, 46;        /* surface */
+  --duotone-multiply: #eb6f92;          /* love */
+  --duotone-lighten:  #31748f;          /* pine */
+  --duotone-filter:   url(#duotone-rose-pine);
+
+  --bg:      #191724;
+  --surface: rgba(var(--panel-lo-rgb), 0.80);
+  --raised:  rgba(var(--panel-hi-rgb), 0.86);
+  --border:  #26233a;
+  --muted:   #6e6a86;
+  --text:    #e0def4;
+  --dim:     #908caa;
+  --accent:  #ebbcba;     /* rose */
+  --green:   #31748f;     /* pine */
+  --amber:   #f6c177;     /* gold */
+  --red:     #eb6f92;
+  --blue:    #9ccfd8;     /* foam */
+  --danger:  #eb6f92;
+  --skyfont-color: #ffffff;
+}
+
+/* ── Rosé Pine Dawn — light counterpart ──────────────────── */
+html[data-theme="rose-pine-dawn"] {
+  --brand-purple-rgb: 144, 122, 169;   /* iris */
+  --brand-accent-rgb: 180, 99, 122;    /* love */
+  --bg-rgb:         250, 244, 237;     /* base */
+  --panel-hi-rgb:   255, 250, 243;     /* surface */
+  --panel-lo-rgb:   242, 233, 225;     /* overlay */
+  --duotone-multiply: #b4637a;
+  --duotone-lighten:  #286983;
+  --duotone-filter:   url(#duotone-rose-pine-dawn);
+  --app-bg-image:    url("/static/background_light.jpg");
+
+  --bg:      #faf4ed;
+  --surface: rgba(var(--panel-hi-rgb), 0.85);
+  --raised:  rgba(var(--panel-hi-rgb), 0.94);
+  --border:  #dfdad9;
+  --muted:   #9893a5;
+  --text:    #575279;
+  --dim:     #797593;
+  --accent:  #b4637a;
+  --green:   #286983;
+  --amber:   #ea9d34;
+  --red:     #b4637a;
+  --blue:    #56949f;
+  --danger:  #b4637a;
+  --skyfont-color: #000000;
+}
+
+/* ── Everforest Dark — warm green-leaning, paper-tone fg ── */
+html[data-theme="everforest-dark"] {
+  --brand-purple-rgb: 214, 153, 182;   /* purple */
+  --brand-accent-rgb: 230, 126, 128;   /* red */
+  --bg-rgb:         45, 53, 59;        /* bg0 */
+  --panel-hi-rgb:   62, 70, 76;        /* bg2 */
+  --panel-lo-rgb:   52, 63, 68;        /* bg1 */
+  --duotone-multiply: #a7c080;   /* highlight — green */
+  --duotone-lighten:  #e67e80;   /* shadow — red */
+  --duotone-filter:   url(#duotone-everforest-dark);
+
+  --bg:      #2d353b;
+  --surface: rgba(var(--panel-lo-rgb), 0.82);
+  --raised:  rgba(var(--panel-hi-rgb), 0.88);
+  --border:  #475258;
+  --muted:   #4f5b58;
+  --text:    #d3c6aa;
+  --dim:     #859289;
+  --accent:  #e69875;     /* orange */
+  --green:   #a7c080;
+  --amber:   #dbbc7f;
+  --red:     #e67e80;
+  --blue:    #7fbbb3;
+  --danger:  #e67e80;
+  --skyfont-color: #ffffff;
+}
+
+/* ── Everforest Light — warm cream paper-tone background ── */
+html[data-theme="everforest-light"] {
+  --brand-purple-rgb: 223, 105, 186;
+  --brand-accent-rgb: 248, 85, 82;
+  --bg-rgb:         253, 246, 227;     /* bg0 */
+  --panel-hi-rgb:   244, 240, 217;     /* bg1 */
+  --panel-lo-rgb:   236, 230, 199;     /* bg2 */
+  --duotone-multiply: #3a94c5;   /* highlight — blue */
+  --duotone-lighten:  #f85552;   /* shadow — red */
+  --duotone-filter:   url(#duotone-everforest-light);
+  --app-bg-image:    url("/static/background_light.jpg");
+
+  --bg:      #fdf6e3;
+  --surface: rgba(var(--panel-hi-rgb), 0.85);
+  --raised:  rgba(var(--panel-hi-rgb), 0.94);
+  --border:  #d8cfa3;
+  --muted:   #a59f80;
+  --text:    #5c6a72;
+  --dim:     #829181;
+  --accent:  #f57d26;
+  --green:   #8da101;
+  --amber:   #dfa000;
+  --red:     #f85552;
+  --blue:    #3a94c5;
+  --danger:  #f85552;
+  --skyfont-color: #000000;
+}
+
+/* ── Kanagawa — sumi ink dark with samurai red accent ───── */
+html[data-theme="kanagawa"] {
+  --brand-purple-rgb: 149, 127, 184;   /* oniViolet */
+  --brand-accent-rgb: 232, 36, 36;     /* samuraiRed */
+  --bg-rgb:         31, 31, 40;        /* sumiInk0 */
+  --panel-hi-rgb:   54, 54, 70;        /* sumiInk4 */
+  --panel-lo-rgb:   42, 42, 55;        /* sumiInk2 */
+  --duotone-multiply: #957fb8;   /* highlight — oniViolet */
+  --duotone-lighten:  #e82424;   /* shadow — samuraiRed */
+  --duotone-filter:   url(#duotone-kanagawa);
+
+  --bg:      #1f1f28;
+  --surface: rgba(var(--panel-lo-rgb), 0.82);
+  --raised:  rgba(var(--panel-hi-rgb), 0.88);
+  --border:  #363646;
+  --muted:   #54546d;
+  --text:    #dcd7ba;     /* fujiWhite */
+  --dim:     #727169;
+  --accent:  #ffa066;     /* surimiOrange */
+  --green:   #76946a;
+  --amber:   #c0a36e;
+  --red:     #c34043;
+  --blue:    #7fb4ca;     /* springBlue */
+  --danger:  #e82424;
+  --skyfont-color: #ffffff;
+}
+
+/* ── Monokai Pro — classic editor palette, warm dark ────── */
+html[data-theme="monokai-pro"] {
+  --brand-purple-rgb: 171, 157, 242;   /* purple */
+  --brand-accent-rgb: 255, 97, 136;    /* red */
+  --bg-rgb:         45, 42, 46;
+  --panel-hi-rgb:   64, 62, 65;
+  --panel-lo-rgb:   34, 33, 34;
+  --duotone-multiply: #78dce8;   /* highlight */
+  --duotone-lighten:  #ff6188;   /* shadow */
+  --duotone-filter:   url(#duotone-monokai-pro);
+
+  --bg:      #2d2a2e;
+  --surface: rgba(var(--panel-lo-rgb), 0.82);
+  --raised:  rgba(var(--panel-hi-rgb), 0.88);
+  --border:  #5b595c;
+  --muted:   #727072;
+  --text:    #fcfcfa;
+  --dim:     #939293;
+  --accent:  #fc9867;     /* orange */
+  --green:   #a9dc76;
+  --amber:   #ffd866;
+  --red:     #ff6188;
+  --blue:    #78dce8;
+  --danger:  #ff6188;
+  --skyfont-color: #ffffff;
+}
+
+/* ── High Contrast — accessibility focus, pure black + gold */
+html[data-theme="high-contrast"] {
+  --brand-purple-rgb: 255, 215, 0;     /* gold (used as primary so all
+                                        * brand-purple alpha layers stay
+                                        * legible on pure black). */
+  --brand-accent-rgb: 0, 229, 255;     /* electric cyan secondary */
+  --bg-rgb:         0, 0, 0;
+  --panel-hi-rgb:   26, 26, 26;
+  --panel-lo-rgb:   13, 13, 13;
+  --duotone-multiply: #ffd700;
+  --duotone-lighten:  #00e5ff;
+  --duotone-filter:   url(#duotone-high-contrast);
+
+  --bg:      #000000;
+  --surface: rgba(var(--panel-lo-rgb), 0.92);
+  --raised:  rgba(var(--panel-hi-rgb), 0.95);
+  --border:  #ffffff;
+  --muted:   #6e6e6e;
+  --text:    #ffffff;
+  --dim:     #c0c0c0;
+  --accent:  #ffd700;
+  --green:   #00ff7f;
+  --amber:   #ffaa00;
+  --red:     #ff5555;
+  --blue:    #00e5ff;
+  --danger:  #ff5555;
+  --skyfont-color: #ffffff;
+}
+
+/* ── Sunset — magenta→gold gradient, warm dusk palette ───
+ * Inspired by social-feed gradient marks (pink/purple shadows
+ * lifting through orange to a gold highlight). Legacy alias
+ * "instagram" still selects this block via theme-init's
+ * THEME_ALIASES map. */
+html[data-theme="sunset"],
+html[data-theme="instagram"] {
+  --brand-purple-rgb: 131, 58, 180;    /* #833ab4 */
+  --brand-accent-rgb: 225, 48, 108;    /* #e1306c */
+  --bg-rgb:         26, 16, 36;
+  --panel-hi-rgb:   46, 28, 62;
+  --panel-lo-rgb:   30, 18, 42;
+  --duotone-multiply: #f56040;          /* warm gradient end */
+  --duotone-lighten:  #5b51d8;          /* cool gradient end */
+  --duotone-filter:   url(#duotone-sunset);
+
+  --bg:      #1a1024;
+  --surface: rgba(var(--panel-lo-rgb), 0.82);
+  --raised:  rgba(var(--panel-hi-rgb), 0.88);
+  --border:  #3a2552;
+  --muted:   #4f3868;
+  --text:    #ffe9c2;
+  --dim:     #b8a3c2;
+  --accent:  #e1306c;
+  --green:   #4caf50;
+  --amber:   #ffdc80;
+  --red:     #e1306c;
+  --blue:    #5b51d8;
+  --danger:  #c13584;
+  --skyfont-color: #ffffff;
+}
+
+/* ── VHS / synthwave theme ────────────────────────────────────
+ *  Hot-magenta + neon-cyan complementary palette over deep navy
+ *  glass. Display fonts switch to VCR-mono (data readouts) and
+ *  Shatter (titles). Background image is the synthwave landscape.
+ *  This block is just the FOUNDATION (palette, tokens, fonts);
+ *  scanlines, chromatic aberration, and tape-glitch animations
+ *  ship in a follow-up phase scoped to `[data-theme="vhs"]`.
+ * ──────────────────────────────────────────────────────────── */
+html[data-theme="vhs"] {
+  --brand-purple-rgb: 255, 28, 145;     /* #ff1c91 hot magenta */
+  --brand-accent-rgb: 0, 224, 255;      /* #00e0ff neon cyan   */
+  --bg-rgb:         12, 6, 32;          /* #0c0620 deep navy   */
+  --panel-hi-rgb:   46, 16, 78;         /* #2e104e            */
+  --panel-lo-rgb:   24, 8, 48;          /* #180830            */
+  /* Duotone runs deep purple → hot pink so the conic ring reads
+   * as a magenta sunset. Cyan reserved for chromatic-aberration
+   * accents in the surface treatments phase. */
+  --duotone-multiply: #ff36a8;
+  --duotone-midtone:  #7a1d8a;
+  --duotone-lighten:  #3a0c5e;
+  --duotone-filter:   url(#duotone-vhs);
+
+  --bg:      #0c0620;
+  --surface: rgba(var(--panel-lo-rgb), 0.78);
+  --raised:  rgba(var(--panel-hi-rgb), 0.86);
+  /* Card/panel border token. NOT magenta — magenta is reserved
+   * for buttons + toggles. Cards, panels, inputs, tiles all read
+   * with a neutral translucent edge so the magenta only appears
+   * on interactive controls. */
+  --border:  rgba(255, 255, 255, 0.10);
+  --muted:   #6a3a8a;
+  --text:    #ffd9f0;
+  --dim:     #a070b8;
+  --accent:  #ff1c91;
+  --green:   #00ff9f;
+  --amber:   #f9ff21;
+  --red:     #ff1c91;
+  --blue:    #00e0ff;
+  --danger:  #ff1c91;
+  --skyfont-color: #00e0ff;
+
+  /* VHS theme drops the duotone half-tone entirely — degradation is
+   * handled by the glitch treatment further down the file (scanlines,
+   * chromatic aberration, tape jitter, noise). The hue tones still
+   * power the conic-ring gradient via --duotone-multiply / etc.
+   *
+   * Resolve to `grayscale(0)` (a no-op filter function) instead of
+   * `none` so any filter chain that interpolates this variable
+   * — e.g. `filter: brightness() ... var(--duotone-filter) blur()`
+   * on the /downloads .rss-tile-poster — stays a valid CSS filter
+   * function-list. Plain `none` is not a valid mid-chain value; the
+   * browser drops the whole filter when it appears. */
+  --duotone-filter: grayscale(0);
+
+  /* Display-font swap. The mono token is also picked up by chip
+   * labels, meta lines, and the % readout in the progress wheel
+   * — VCRMono fits all of them tonally. Shatter applies to titles
+   * via --acid. Both fonts are registered above; non-VHS themes
+   * never reference these family names. */
+  --mono: 'VCRMono', 'DM Mono', monospace;
+  --acid: 'Shatter', 'Acidoze', 'DM Mono', monospace;
+  --secs: 'VCRMono', 'Seconds', 'DM Mono', monospace;
+
+  --app-bg-image: url("/static/background_vhs.jpg");
+}
+
+/* ══ VHS surface effects ═══════════════════════════════════════
+ *  Phase-2 treatments scoped to html[data-theme="vhs"]:
+ *   • Header logo swap (logo_vhs.png).
+ *   • Scanlines layered onto poster + headshot wrappers.
+ *   • Chromatic aberration (cyan/magenta channel split) on
+ *     image content via stacked drop-shadow filters.
+ *   • Faint full-tile scanline overlay.
+ *   • Magenta+cyan neon hover halo on tiles.
+ *   • Neon text-shadow on titles + filenames.
+ *   • Sharper chip corners for the retro UI feel.
+ * ────────────────────────────────────────────────────────── */
+
+/* Logo swap — `content: url(...)` rebinds the <img> element's
+ * source via CSS without touching markup. Supported across
+ * Chromium/Firefox/Safari. */
+html[data-theme="vhs"] header .logo img,
+html[data-theme="vhs"] header a.logo img {
+  content: url('/static/logo_vhs.png');
+  /* `transform: scale()` blows the logo up visually without
+   * affecting layout, so the header strip stays the same height
+   * even though the artwork reads bigger. `transform-origin: left
+   * center` anchors the growth to the existing left edge so
+   * neighbouring items (version pill, nav links) don't shift. */
+  transform: scale(1.7);
+  transform-origin: left center;
+}
+/* Transforms don't add layout space, so the scaled-up logo
+ * overflows its 36px-tall layout box to the right by ~40px and
+ * collides with the version pill. Push #appVersion right in VHS
+ * theme to clear the visual edge of the artwork. */
+html[data-theme="vhs"] header #appVersion {
+  margin-left: 50px;
+}
+
+/* Tile chrome — keep the dark-glass surface but add a barely-
+ * there full-tile scanline overlay and a stronger magenta+cyan
+ * neon halo on hover. */
+html[data-theme="vhs"] .dl-bar::before {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.06) 0 1px,
+      transparent 1px 3px),
+    radial-gradient(ellipse 70% 28% at 30% -8%,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0) 70%);
+}
+html[data-theme="vhs"] .dl-bar:hover {
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+    0 0 32px rgba(255, 28, 145, 0.55),
+    0 0 16px rgba(0, 224, 255, 0.35);
+}
+
+/* ── VHS image treatment ───────────────────────────────────
+ *  REST  → clean image (suppressed via :not(:hover) reset
+ *          block at the END of this section). Exception:
+ *          /downloads tile images get a 3px blur at rest so
+ *          the queue reads as static.
+ *  HOVER → triggers the appropriate effect:
+ *            • scenes / performers / spotlight / library-perf
+ *              → VHS glitch (chromatic aberration, scanlines,
+ *                tape grain, jitter, black vignette)
+ *            • movies → paper VHS cover + RGB halftone dots
+ *  The original effect rules below were authored as REST-state
+ *  styles, but the :not(:hover) reset at the end of this
+ *  section overrides them via !important so they only "show"
+ *  when not at rest — i.e. on hover. */
+
+/* Reusable noise + grain background-images expressed as inline
+ * SVG turbulence. Three flavours:
+ *   --vhs-noise: bright TV static, ~22% alpha — visible grain.
+ *   --vhs-noise2: coarser low-freq grain that pans on a different
+ *                 timer, layered with --vhs-noise to break up the
+ *                 repeating pattern of the smaller cell.
+ *   --vhs-paper: soft warm grain, ~12% alpha — paper texture for
+ *                the hover state. */
+html[data-theme="vhs"] {
+  --vhs-noise:  url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.22 0"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>');
+  --vhs-noise2: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.45" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.10 0"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>');
+  /* Horizontal interference bands: vertical-only fractal noise so
+   * each row has a different brightness — reads like rolling tape
+   * damage when the layer pans in Y. */
+  --vhs-bands:  url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="280"><filter id="b"><feTurbulence type="fractalNoise" baseFrequency="0 0.55" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.20 0"/></filter><rect width="100%" height="100%" filter="url(%23b)"/></svg>');
+  --vhs-paper:  url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><filter id="p"><feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0.85 0 0 0 0 0.78 0 0 0 0 0.65 0 0 0 0.12 0"/></filter><rect width="100%" height="100%" filter="url(%23p)"/></svg>');
+}
+
+/* CRT-bulb wrapper styling — applied to every image surface that
+ * gets the VHS treatment. Aggressive border-radius (elliptical
+ * 18/22 ratio) suggests a curved glass face. Outer box-shadow is
+ * a stacked cyan + magenta phosphor bloom plus a hard dark
+ * frame; INSET shadows now do real work — large cyan + magenta
+ * inner glows that pool at the rim like phosphor light bleeding
+ * inward from the edge of a powered CRT tube, plus a thin white
+ * inner rim for the glass-edge highlight. */
+html[data-theme="vhs"] .dl-tile-source-poster--scene,
+html[data-theme="vhs"] .scene-card .img-load,
+html[data-theme="vhs"] .fav-grid--perf .fav-cell .fav-perf-ph {
+  /* Scene / performer chrome — outer phosphor halo only.
+   * (Spotlight tiles intentionally excluded — they get their own
+   * tritone-on-hover treatment further down, no CRT halo.) */
+  box-shadow:
+    0 0 5px 1px rgba(0, 0, 0, 0.25),
+    0 0 22px rgba(0, 224, 255, 0.30),
+    0 0 36px rgba(255, 28, 145, 0.22);
+}
+/* Black inner vignette — applied to the ::after overlay so it
+ * paints on top of the image content. Heavy at the corners,
+ * transparent in the middle, plus a 2px hard inner stroke for
+ * the recessed-screen feel. Targets every VHS image surface
+ * including the headshots and library cells. */
+html[data-theme="vhs"] .dl-tile-source-poster--scene::after,
+html[data-theme="vhs"] .scene-card .img-load::after,
+html[data-theme="vhs"] .fav-grid--perf .fav-cell .fav-perf-ph::after,
+html[data-theme="vhs"] .dl-bar-headshot::after {
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.45),
+    inset 0 0 30px rgba(0, 0, 0, 0.75),
+    inset 0 0 70px rgba(0, 0, 0, 0.55);
+}
+/* Standalone wrappers — their own outermost block, no parent
+ * card constraining the curve. Use a generous 14px radius. */
+html[data-theme="vhs"] .dl-tile-source-poster--scene,
+html[data-theme="vhs"] .spotlight-tile {
+  border-radius: 14px;
+}
+/* Nested wrappers — inherit from the OUTER card so the visible
+ * curve at the corner matches the card edge. Without this the
+ * wrapper rounds to its own value, leaving a sliver of card
+ * background visible between the image's curve and the card's
+ * curve. */
+html[data-theme="vhs"] .scene-card .img-load,
+html[data-theme="vhs"] .fav-grid--perf .fav-cell .fav-perf-ph {
+  border-radius: inherit;
+}
+
+/* ── Paper VHS cover — movie posters ──
+ * Movies are framed printed sleeves, not CRT signal. Quiet
+ * matte treatment: very light desat + warm tint + subtle paper
+ * grain, no scanlines, no glitch. Hover reveals the clean photo.
+ *
+ * `border-radius: inherit` matches whatever the outer card has
+ * (`.movie-card` is 8px, `.dl-tile-source-poster` is its own
+ * 4px). Without this the wrapper rounded to a different curve
+ * than its parent, leaving a sliver of card-background visible
+ * at the corners between the image and the card edge. */
+html[data-theme="vhs"] .dl-tile-source-poster:not(.dl-tile-source-poster--scene) {
+  position: relative;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(120, 90, 50, 0.30),
+    0 4px 10px rgba(0, 0, 0, 0.30),
+    0 14px 28px rgba(0, 0, 0, 0.45);
+}
+html[data-theme="vhs"] .movie-card .img-load {
+  position: relative;
+  border-radius: inherit;
+  overflow: hidden;
+}
+html[data-theme="vhs"] .dl-tile-source-poster:not(.dl-tile-source-poster--scene) img,
+html[data-theme="vhs"] .movie-card .img-load .movie-poster,
+html[data-theme="vhs"] .fav-grid--movie .fav-cell .duo-img {
+  filter: saturate(0.78) sepia(0.16) contrast(1.05) brightness(0.96);
+  transition: filter 0.3s ease;
+  animation: none;
+  border-radius: inherit;
+}
+html[data-theme="vhs"] .dl-tile-source-poster:not(.dl-tile-source-poster--scene)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  border-radius: inherit;
+  background-image:
+    /* RGB halftone — three offset radial-dot grids on a 2.5px
+     * grid with 0.55px / 0.85px dots. Saturation pushed via
+     * near-pure RGB primaries and high alpha so each dot pops
+     * against the paper. `background-blend-mode: screen` (set
+     * further down) makes each dot additively brighten the
+     * layers below it, giving a risograph / comic-book
+     * misregistered RGB print look. */
+    radial-gradient(circle at center, rgba(255, 20, 50, 0.95)  0.55px, transparent 0.85px),
+    radial-gradient(circle at center, rgba(20, 255, 80, 0.85)  0.55px, transparent 0.85px),
+    radial-gradient(circle at center, rgba(30, 60, 255, 0.95)  0.55px, transparent 0.85px),
+    /* Cream warm wash — paper tone */
+    linear-gradient(160deg,
+      rgba(255, 245, 215, 0.06) 0%,
+      rgba(255, 240, 200, 0.02) 50%,
+      rgba(150, 110, 60, 0.14) 100%),
+    /* Cross-hatch fibers */
+    repeating-linear-gradient(112deg,
+      transparent 0 6px,
+      rgba(120, 90, 40, 0.04) 6px 7px),
+    /* Random paper grain */
+    var(--vhs-paper);
+  background-size:
+    2.5px 2.5px, 2.5px 2.5px, 2.5px 2.5px,
+    100% 100%, 100% 100%, 100% 100%;
+  background-position:
+    0 0, 0.85px 1.2px, 1.6px 0.4px,
+    0 0, 0 0, 0 0;
+  /* Per-layer blend modes — halftone dots `screen` over the
+   * paper layers (additive brightening), paper layers `normal`
+   * over each other. */
+  background-blend-mode:
+    screen, screen, screen,
+    normal, normal, normal;
+  /* Element-level blend with the image below: `screen` means
+   * bright dots painted over white pixels resolve to white
+   * (invisible), while the same dots over dark pixels stay
+   * visible. Real halftone behaviour — dots only show in the
+   * shadows. Movie posters don't carry the black box-shadow
+   * vignette that scenes do, so screen-blending the whole
+   * overlay doesn't dilute anything important. */
+  mix-blend-mode: screen;
+  transition: opacity 0.3s ease;
+  opacity: 1;
+}
+/* (Old hover-clean override deleted — rest is now clean by
+ *  default via the :not(:hover) suppressor at the end of this
+ *  section. The paper + halftone effect above now only fires
+ *  on hover.) */
+/* Lock inner image radius to the wrapper's so the visible
+ * corner curve matches exactly — `.scene-thumb` etc. ship with
+ * their own baseline `border-radius: 4px 4px 0 0`, which doesn't
+ * match the VHS wrapper's 14px at rest, so the bottom corners
+ * looked sharper than the wrapper. Forcing `inherit` makes the
+ * image always match whatever the wrapper currently has. */
+html[data-theme="vhs"] .dl-tile-source-poster img,
+html[data-theme="vhs"] .scene-card .img-load img,
+html[data-theme="vhs"] .movie-card .img-load img,
+html[data-theme="vhs"] .spotlight-tile img,
+html[data-theme="vhs"] .scene-card .img-load .scene-thumb,
+html[data-theme="vhs"] .movie-card .img-load .movie-poster,
+html[data-theme="vhs"] .fav-grid--perf .fav-cell .duo-img,
+html[data-theme="vhs"] .fav-grid--perf .fav-cell .duo-inner,
+html[data-theme="vhs"] .fav-grid--perf .fav-cell .fav-perf-ph img {
+  border-radius: inherit !important;
+}
+html[data-theme="vhs"] .dl-bar-headshot {
+  box-shadow:
+    0 0 5px 1px rgba(0, 0, 0, 0.25),
+    0 0 14px rgba(0, 224, 255, 0.30),
+    0 0 22px rgba(255, 28, 145, 0.22);
+}
+
+/* ── Posters ── */
+/* The wrapper carries a multilayer overlay:
+ *   1. Top-left curved-glass highlight — light catching the bulb.
+ *   2. Strong corner vignette — simulates the CRT tube bulge,
+ *      darkening edges relative to the centre of the screen.
+ *   3. Two grain layers panning at different rates — moving
+ *      static.
+ *   4. Dense scanlines.
+ *   5. A faint magenta→cyan chromatic wash top-to-bottom.
+ * Animated panning on the noise layers so the grain shimmers. */
+html[data-theme="vhs"] .dl-tile-source-poster::after {
+  background-image:
+    /* (1) glass highlight */
+    radial-gradient(ellipse 60% 35% at 25% 12%,
+      rgba(255, 255, 255, 0.18) 0%,
+      rgba(255, 255, 255, 0) 60%),
+    /* (2) tube bulge vignette — alpha bumped to compensate for
+     *     the `mix-blend-mode: overlay` applied below (overlay
+     *     makes pure black no-op against mid-tones, so we lean
+     *     darker to keep the bulge readable). */
+    radial-gradient(ellipse 130% 130% at 50% 50%,
+      transparent 48%,
+      rgba(0, 0, 0, 0.78) 100%),
+    /* (3a) fine grain */
+    var(--vhs-noise),
+    /* (3b) coarse grain */
+    var(--vhs-noise2),
+    /* (4) horizontal interference bands */
+    var(--vhs-bands),
+    /* (5a) RGB phosphor — horizontal stripes (R/G/B at 2/4px).
+     *      Replaces the old flat-black scanline. Under
+     *      `mix-blend-mode: overlay` the colours TINT the
+     *      underlying image rather than dimming it, so the
+     *      stripes read as actual phosphor triads. */
+    repeating-linear-gradient(
+      0deg,
+      rgba(218, 49, 49, 0.45) 0px,
+      rgba(112, 159, 115, 0.45) 2px,
+      rgba(40, 129, 206, 0.45) 4px),
+    /* (5b) RGB phosphor — vertical stripes (R/G/B at 1/2/3px).
+     *      Combined with (5a) this gives an aperture-grille /
+     *      shadowmask shimmer rather than venetian-blind dimming. */
+    repeating-linear-gradient(
+      90deg,
+      rgba(218, 49, 49, 0.38) 1px,
+      rgba(112, 159, 115, 0.38) 2px,
+      rgba(40, 129, 206, 0.38) 3px),
+    /* (6) chroma wash */
+    linear-gradient(180deg,
+      rgba(255, 28, 145, 0.10) 0%,
+      transparent 50%,
+      rgba(0, 224, 255, 0.10) 100%);
+  background-size:
+    100% 100%, 100% 100%,
+    100% 100%, 100% 100%,
+    100% 100%,
+    100% 4px,
+    3px 100%,
+    100% 100%;
+  mix-blend-mode: overlay;
+  animation:
+    vhs-grain-pan-fine 1.3s steps(8) infinite,
+    vhs-grain-pan-coarse 3.1s steps(7) infinite,
+    vhs-bands-roll 7s linear infinite,
+    vhs-scanline-drift 4.1s steps(6) infinite,
+    vhs-phosphor-pulse 5.3s ease-in-out infinite;
+}
+html[data-theme="vhs"] .dl-tile-source-poster img {
+  /* Desaturated washed-out tape look. The chromatic aberration
+   * itself is animated by `vhs-chroma-flicker` — keyframes vary
+   * the drop-shadow offsets and opacities per step so the channel
+   * split doesn't look mechanical. No transform animation —
+   * jolting the whole image looks broken; the tracking band
+   * (`::before` below) carries the motion instead. */
+  filter:
+    saturate(0.48) contrast(1.05) brightness(1.16) blur(0.4px)
+    drop-shadow( 2px 0 0 rgba(0, 224, 255, 0.85))
+    drop-shadow(-2px 0 0 rgba(255, 28, 145, 0.85));
+  animation: vhs-chroma-flicker 2.7s steps(8) infinite;
+}
+/* Hover → paper. Drops every glitch effect, animates the CRT
+ * bulb shape down to flat paper corners, swaps the phosphor
+ * halo for a soft floor-shadow as if the print is laid on a
+ * surface, adds a printed cream paper margin around the
+ * photograph via inset box-shadow on the overlay, and swaps the
+ * static grain for woven fiber texture + warm aged-paper wash. */
+html[data-theme="vhs"] .dl-tile-source-poster {
+  transition:
+    border-radius 0.35s ease,
+    transform 0.35s ease,
+    box-shadow 0.35s ease;
+}
+html[data-theme="vhs"] .dl-tile-source-poster:hover {
+  /* Flat paper corners — animate the elliptical CRT bulb down. */
+  border-radius: 4px;
+  transform: translateY(-4px) rotate(0.4deg);
+  /* Stack: cream paper rim (visible just outside the cream
+   * margin painted by `::after` below) + soft drop shadow as if
+   * resting on a desk. No phosphor glow. */
+  box-shadow:
+    0 0 0 1px rgba(120, 90, 50, 0.35),
+    0 4px 10px rgba(0, 0, 0, 0.30),
+    0 14px 28px rgba(0, 0, 0, 0.45);
+}
+html[data-theme="vhs"] .dl-tile-source-poster:hover::after {
+  /* Paper texture only — no cream margin border. Layer stack:
+   *   1. Soft cream warm wash (top-left lit, bottom-right aged).
+   *   2. Diagonal fiber pattern — paper grain has direction.
+   *   3. Random paper noise (--vhs-paper). */
+  background-image:
+    linear-gradient(160deg,
+      rgba(255, 245, 215, 0.06) 0%,
+      rgba(255, 240, 200, 0.02) 40%,
+      rgba(150, 110, 60, 0.18) 100%),
+    repeating-linear-gradient(112deg,
+      transparent 0 6px,
+      rgba(120, 90, 40, 0.05) 6px 7px),
+    repeating-linear-gradient(22deg,
+      transparent 0 9px,
+      rgba(140, 110, 60, 0.04) 9px 10px),
+    var(--vhs-paper);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+  box-shadow: none;
+  animation: none;
+  opacity: 1;
+}
+html[data-theme="vhs"] .dl-tile-source-poster:hover img {
+  /* Faded ink with a deeper black point: contrast bumped from
+   * 0.95 → 1.18 punches the shadows down so the printed photo
+   * has true blacks instead of grey-washed blacks. Brightness
+   * dropped from 1.04 → 0.98 to compensate for the contrast lift. */
+  filter:
+    saturate(0.62) sepia(0.32) contrast(1.18) brightness(0.98);
+  animation: none;
+}
+
+/* ── Headshots ── */
+html[data-theme="vhs"] .dl-bar-headshot::after {
+  background-image:
+    radial-gradient(circle at 30% 18%,
+      rgba(255, 255, 255, 0.20) 0%,
+      rgba(255, 255, 255, 0) 60%),
+    radial-gradient(circle at 50% 50%,
+      transparent 48%,
+      rgba(0, 0, 0, 0.55) 100%),
+    var(--vhs-noise),
+    var(--vhs-noise2),
+    var(--vhs-bands),
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.16) 0 1px,
+      transparent 1px 2px),
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.32) 0 1px,
+      transparent 1px 4px);
+  background-size:
+    100% 100%, 100% 100%,
+    100% 100%, 100% 100%,
+    100% 100%,
+    100% 2px,
+    100% 4px;
+  animation:
+    vhs-grain-pan-fine 1.0s steps(8) infinite,
+    vhs-grain-pan-coarse 2.6s steps(7) infinite,
+    vhs-bands-roll 6.3s linear infinite,
+    vhs-scanline-drift 3.7s steps(6) infinite,
+    vhs-phosphor-pulse 4.7s ease-in-out infinite;
+}
+html[data-theme="vhs"] .dl-bar-headshot img {
+  filter:
+    saturate(0.48) contrast(1.05) brightness(1.16) blur(0.3px)
+    drop-shadow( 1.5px 0 0 rgba(0, 224, 255, 0.80))
+    drop-shadow(-1.5px 0 0 rgba(255, 28, 145, 0.80));
+  animation: vhs-chroma-flicker-sm 2.3s steps(8) infinite;
+}
+/* (Old headshot paper-hover override removed — the rest VHS
+ *  glitch effect above now only fires on hover via the
+ *  :not(:hover) reset block at the end of this section.) */
+html[data-theme="vhs"] .dl-bar-headshot {
+  transition: box-shadow 0.35s ease, transform 0.35s ease;
+}
+
+/* Glitch keyframes.
+ *
+ * Two grain panners running at different rates against the same
+ * background-image stack. Each only translates ITS layer in the
+ * stack — the other layers are pinned by being declared with
+ * matching positions on both keyframes. The order of stops in
+ * each background-position list matches the order of
+ * background-image layers above:
+ *   posters: glass, vignette, noise(fine), noise(coarse), scanlines, chroma-wash
+ *   headshots: glass, vignette, noise(fine), noise(coarse), scanlines
+ * Stops we don't pan get `0 0` on both keyframes.
+ *
+ * `vhs-chroma-flicker` (and the `-sm` small-surface variant)
+ * vary the drop-shadow offsets per step so the channel split
+ * jitters — random chromatic aberration without ever animating
+ * to zero (faces should always have the split, just varying). */
+
+/* Layer-3 fine grain panner.  Up to 8 stops so the same keyframe
+ * works for posters (8 layers), headshots (7 layers), and
+ * scene/movie/spotlight cards (7 layers) — browsers truncate
+ * the position list to the actual layer count. Only layer 3 (the
+ * fine grain) gets a non-zero translation; everything else is
+ * pinned by `0 0` on both keyframes. */
+@keyframes vhs-grain-pan-fine {
+  0%   { background-position: 0 0, 0 0, 0 0,        0 0, 0 0, 0 0, 0 0, 0 0; }
+  100% { background-position: 0 0, 0 0, 90px 70px,  0 0, 0 0, 0 0, 0 0, 0 0; }
+}
+/* Layer-4 coarse grain panner. */
+@keyframes vhs-grain-pan-coarse {
+  0%   { background-position: 0 0, 0 0, 0 0, 0 0,        0 0, 0 0, 0 0, 0 0; }
+  100% { background-position: 0 0, 0 0, 0 0, -120px 80px, 0 0, 0 0, 0 0, 0 0; }
+}
+/* Layer-5 vertical interference bands rolling down. The SVG
+ * tile is 280px tall — translating by exactly 280px in Y means
+ * the noise pattern wraps cleanly each cycle, no visible seam. */
+@keyframes vhs-bands-roll {
+  0%   { background-position: 0 0, 0 0, 0 0, 0 0, 0 0,     0 0, 0 0, 0 0; }
+  100% { background-position: 0 0, 0 0, 0 0, 0 0, 0 280px, 0 0, 0 0, 0 0; }
+}
+/* Layers 6 + 7 — fine and wide scanlines drift down by their
+ * own pitch so the pattern wraps cleanly back to alignment but
+ * the two scanline densities pan TOGETHER without realigning
+ * with each other. Using steps(6) gives a chunky snap rather
+ * than a smooth slide — feels more like CRT vertical hold drift. */
+@keyframes vhs-scanline-drift {
+  0%   { background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0,   0 0,   0 0; }
+  100% { background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 2px, 0 5px, 0 0; }
+}
+/* Phosphor pulse — pulses the overlay's opacity slightly so the
+ * effective brightness of the image breathes. Eased so it feels
+ * organic, not mechanical. */
+@keyframes vhs-phosphor-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.86; }
+}
+
+/* Chromatic flicker (large surfaces — posters, scene cards). */
+@keyframes vhs-chroma-flicker {
+  0% {
+    filter: saturate(0.48) contrast(1.05) brightness(1.16) blur(0.4px)
+            drop-shadow( 2px 0 0 rgba(0, 224, 255, 0.85))
+            drop-shadow(-2px 0 0 rgba(255, 28, 145, 0.85));
+  }
+  12% {
+    filter: saturate(0.48) contrast(1.05) brightness(1.16) blur(0.4px)
+            drop-shadow( 3.5px 0 0 rgba(0, 224, 255, 0.95))
+            drop-shadow(-1px   0 0 rgba(255, 28, 145, 0.70));
+  }
+  25% {
+    filter: saturate(0.44) contrast(1.05) brightness(1.16) blur(0.5px)
+            drop-shadow( 1px   0 0 rgba(0, 224, 255, 0.70))
+            drop-shadow(-3px   0 0 rgba(255, 28, 145, 0.95));
+  }
+  37% {
+    filter: saturate(0.50) contrast(1.05) brightness(1.16) blur(0.4px)
+            drop-shadow( 2.5px 0 0 rgba(0, 224, 255, 0.90))
+            drop-shadow(-2.5px 0 0 rgba(255, 28, 145, 0.90));
+  }
+  50% {
+    filter: saturate(0.46) contrast(1.06) brightness(1.16) blur(0.4px)
+            drop-shadow( 1.5px 0 0 rgba(0, 224, 255, 0.75))
+            drop-shadow(-2px   0 0 rgba(255, 28, 145, 0.80));
+  }
+  62% {
+    filter: saturate(0.48) contrast(1.05) brightness(1.16) blur(0.4px)
+            drop-shadow( 4px   0 0 rgba(0, 224, 255, 0.95))
+            drop-shadow(-1.5px 0 0 rgba(255, 28, 145, 0.65));
+  }
+  75% {
+    filter: saturate(0.48) contrast(1.05) brightness(1.16) blur(0.4px)
+            drop-shadow( 2px   0 0 rgba(0, 224, 255, 0.85))
+            drop-shadow(-2.5px 0 0 rgba(255, 28, 145, 0.90));
+  }
+  87% {
+    filter: saturate(0.48) contrast(1.05) brightness(1.16) blur(0.4px)
+            drop-shadow( 1px   0 0 rgba(0, 224, 255, 0.70))
+            drop-shadow(-3.5px 0 0 rgba(255, 28, 145, 0.95));
+  }
+  100% {
+    filter: saturate(0.48) contrast(1.05) brightness(1.16) blur(0.4px)
+            drop-shadow( 2px 0 0 rgba(0, 224, 255, 0.85))
+            drop-shadow(-2px 0 0 rgba(255, 28, 145, 0.85));
+  }
+}
+
+/* Smaller-surface variant — tighter offsets so the chroma split
+ * doesn't dominate a 64px headshot. */
+@keyframes vhs-chroma-flicker-sm {
+  0% {
+    filter: saturate(0.48) contrast(1.05) brightness(1.16) blur(0.3px)
+            drop-shadow( 1.5px 0 0 rgba(0, 224, 255, 0.80))
+            drop-shadow(-1.5px 0 0 rgba(255, 28, 145, 0.80));
+  }
+  20% {
+    filter: saturate(0.48) contrast(1.05) brightness(1.16) blur(0.3px)
+            drop-shadow( 2.5px 0 0 rgba(0, 224, 255, 0.90))
+            drop-shadow(-0.5px 0 0 rgba(255, 28, 145, 0.65));
+  }
+  40% {
+    filter: saturate(0.44) contrast(1.05) brightness(1.16) blur(0.4px)
+            drop-shadow( 0.5px 0 0 rgba(0, 224, 255, 0.65))
+            drop-shadow(-2.5px 0 0 rgba(255, 28, 145, 0.90));
+  }
+  60% {
+    filter: saturate(0.48) contrast(1.06) brightness(1.16) blur(0.3px)
+            drop-shadow( 2px   0 0 rgba(0, 224, 255, 0.85))
+            drop-shadow(-1.5px 0 0 rgba(255, 28, 145, 0.75));
+  }
+  80% {
+    filter: saturate(0.48) contrast(1.05) brightness(1.16) blur(0.3px)
+            drop-shadow( 1px   0 0 rgba(0, 224, 255, 0.70))
+            drop-shadow(-2px   0 0 rgba(255, 28, 145, 0.85));
+  }
+  100% {
+    filter: saturate(0.48) contrast(1.05) brightness(1.16) blur(0.3px)
+            drop-shadow( 1.5px 0 0 rgba(0, 224, 255, 0.80))
+            drop-shadow(-1.5px 0 0 rgba(255, 28, 145, 0.80));
+  }
+}
+
+/* Tape jitter — mostly still with three brief horizontal slips
+ * per 9-second cycle. Uses `steps(60)` so the slip is an
+ * instant snap rather than a smooth slide. */
+@keyframes vhs-jitter {
+  0%, 12%, 14%, 49%, 51%, 76%, 78%, 100% {
+    transform: translateX(0);
+  }
+  13% { transform: translateX(-1.5px); }
+  50% { transform: translateX(1.5px); }
+  77% { transform: translateX(-1px); }
+}
+
+/* Title neon — sign-tube glow on filenames + panel titles. */
+html[data-theme="vhs"] .dl-bar-name,
+html[data-theme="vhs"] .panel-title {
+  text-shadow:
+    0 0 4px rgba(255, 28, 145, 0.65),
+    0 0 12px rgba(255, 28, 145, 0.35);
+}
+
+/* Sharper chip corners for the retro hardware feel. */
+html[data-theme="vhs"] .dl-tile-chip {
+  border-radius: 3px;
+}
+
+/* VCR font glyphs render visibly larger than DM Mono at the same
+ * px value, so card-title strings ship over-sized under VHS. The
+ * sizes here are the THEME baseline; the global container-query
+ * scaling below clamps them down on narrow cells. */
+html[data-theme="vhs"] .scene-date,
+html[data-theme="vhs"] .movie-meta {
+  font-size: 9.5px !important;
+}
+html[data-theme="vhs"] .dl-tile-title .dl-bar-meta {
+  font-size: 9.5px !important;
+}
+
+/* Conic ring rim — bloom out a bit so the ring reads as a CRT
+ * portal rather than a recessed dial. */
+html[data-theme="vhs"] .dl-tile-ring {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    0 0 18px rgba(255, 28, 145, 0.45),
+    0 0 32px rgba(0, 224, 255, 0.20);
+}
+
+/* Tracking-line glitch — a slow, faint bright horizontal band
+ * sliding down the entire viewport every ~14s. Sits above all
+ * content via `position: fixed; z-index: 9999`, but
+ * `pointer-events: none` so it never intercepts clicks. The
+ * 200vh height + translate animation gives a long off-screen
+ * lead-in/out so the effect appears periodic rather than
+ * constant. */
+html[data-theme="vhs"] body::after {
+  content: '';
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 12vh;
+  pointer-events: none;
+  z-index: 9999;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.05) 35%,
+    rgba(0, 224, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.05) 65%,
+    transparent 100%);
+  animation: vhs-tracking-glitch 14s linear infinite;
+  mix-blend-mode: screen;
+}
+@keyframes vhs-tracking-glitch {
+  0%   { transform: translateY(-20vh); opacity: 0; }
+  10%  { opacity: 0.6; }
+  85%  { opacity: 0.4; }
+  100% { transform: translateY(110vh); opacity: 0; }
+}
+
+/* Scene-card / spotlight image treatment — VHS glitch.
+ * Movie cards use a separate "paper VHS cover" treatment further
+ * down (movies are framed printed sleeves, not CRT signal). The
+ * /library performer cells join the glitch group too. No duotone
+ * half-tone (--duotone-filter is forced to `none` for the VHS theme). */
+html[data-theme="vhs"] .scene-card .img-load,
+html[data-theme="vhs"] .movie-card .img-load,
+html[data-theme="vhs"] .spotlight-tile,
+html[data-theme="vhs"] .fav-grid--perf .fav-cell .fav-perf-ph {
+  position: relative;
+}
+/* Settings → Appearance duotone preview. The preview <img> in
+ * queue.html is inlined with `filter: var(--duotone-filter, none)`
+ * so it tracks each theme's duotone live. VHS deliberately
+ * remaps `--duotone-filter` to `grayscale(0)` (a no-op) for
+ * general surfaces, which would leave the preview blank under
+ * VHS. Point the preview at the real `#duotone-vhs` filter so
+ * the user can see palette/midpoint/contrast edits as they
+ * tune them, even on this theme. */
+html[data-theme="vhs"] .duo-preview-img {
+  filter: url(#duotone-vhs) !important;
+}
+
+/* ── Spotlight duotone (rest) ─────────────────────────────────
+ * The visible effect is a chain of two SVG filters:
+ *
+ *   1. `#spotlight-bloom` (defined in scenes.html) — Photoshop-
+ *      style half-strength highlight bleed: extract bright
+ *      values, blur, halve, screen-blend onto SourceGraphic.
+ *
+ *   2. `#duotone-vhs` — the user's CONFIGURED VHS duotone.
+ *      theme-init.js builds this filter from DUOTONE_PAIRS['vhs']
+ *      at startup AND live-rebuilds it whenever Settings →
+ *      Appearance pushes a new spec via setDuotoneOverride.
+ *
+ * We can't use `var(--duotone-filter)` here because the VHS
+ * theme block reassigns that variable to `grayscale(0)` (a
+ * no-op) so general surfaces fall back to the CRT glitch look
+ * instead of a duotone. Spotlight is the one place under VHS
+ * that wants the duotone, so we reference `#duotone-vhs`
+ * directly.
+ *
+ * `--spotlight-duotone-override`: optional manual override.
+ * Set it to `url(#…)` on a tile / page / theme to bypass the
+ * Appearance settings without touching them.
+ *
+ * Hover clears the filter chain so the clean photo shows. */
+html[data-theme="vhs"] .spotlight-tile img {
+  filter: url(#spotlight-bloom) var(--spotlight-duotone-override, url(#duotone-vhs)) !important;
+  /* 25% zoom-in at rest, anchored to the top of the tile so the
+   * face stays in frame while the bottom of the image crops out
+   * via the tile's `overflow: hidden`. Hover scales back to 1. */
+  transform: scale(1.25);
+  transform-origin: top center;
+  transition: filter 0.3s ease, transform 0.3s ease;
+}
+html[data-theme="vhs"] .spotlight-tile:hover img {
+  filter: none !important;
+  transform: scale(1);
+}
+/* Liquid-glass top-light — `::before` overlays a smooth glossy
+ * highlight that fades from bright at the top edge to clear in
+ * the middle, with a hint of warmth recovering at the bottom.
+ * No box-shadow, no recessed bevel: the result is a smooth
+ * convex glass surface lit from above, with the duotone'd
+ * image reading clearly through the glass (no blur). The
+ * parent `clip-path` trims the highlight to the polygon. */
+html[data-theme="vhs"] .spotlight-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.28) 0%,
+      rgba(255, 255, 255, 0.10) 18%,
+      transparent 45%,
+      transparent 80%,
+      rgba(255, 255, 255, 0.06) 100%);
+}
+
+/* Grain `::after` removed — the smooth-liquid-glass look
+ * doesn't want surface noise. The base stylesheet's
+ * `.spotlight-tile::after { content: none }` keeps the pseudo
+ * empty on every theme now. */
+/* Spotlight tiles: thin shadow-blue frame plus a uniform
+ * parallelogram `clip-path` — every tile (including the first
+ * and last) gets the same 12% slant on both vertical edges.
+ * Adjacent tiles overlap by ~12px via negative `margin-left`
+ * so the parallel diagonals close the visual gap between
+ * faces — restores the original tight spacing instead of
+ * leaving a parallelogram-shaped band of negative space
+ * between every pair.
+ *
+ * Because the end tiles also slant on their OUTER edge, the
+ * row's outer corners would otherwise show the panel
+ * background through the cut. The `#spotlightGrid::before` /
+ * `::after` slivers below fill those triangular cut-outs with
+ * `#0048FF` (the duotone shadow stop) so the row ends in a
+ * dark sliver matching the palette rather than a bare panel
+ * background. */
+html[data-theme="vhs"] #spotlightGrid {
+  /* Container query root — `cqi` inside spotlight rules below
+   * resolves to a percentage of the grid's inline size, so we
+   * can size the slivers and overlap as a fraction of tile
+   * WIDTH (12% of tile_w = 12cqi / tile_count) and keep the
+   * hypotenuses parallel to the tile slants regardless of
+   * how many performers loaded. JS in scenes.html sets
+   * `--tile-count` on the element when the row renders. */
+  container-type: inline-size;
+  /* Liquid-glass divider surface for the diagonal gaps between
+   * tile polygons. Solid duotone-shadow base with a smooth
+   * top-down highlight overlay so the gap reads as a slim
+   * raised glass strip instead of a flat coloured line. */
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.28) 0%,
+      rgba(255, 255, 255, 0.06) 28%,
+      transparent 60%,
+      transparent 85%,
+      rgba(255, 255, 255, 0.10) 100%),
+    var(--duotone-lighten, #630198);
+}
+html[data-theme="vhs"] #spotlightGrid .spotlight-tile {
+  /* Border + divider both pull from `--duotone-lighten` so they
+   * stay the same colour as each other (and the duotone shadow
+   * stop) when the palette is retuned. */
+  border: 1px solid var(--duotone-lighten, #630198);
+  clip-path: polygon(12% 0, 100% 0, 88% 100%, 0 100%);
+}
+html[data-theme="vhs"] #spotlightGrid .spotlight-tile + .spotlight-tile {
+  /* Overlap each tile by exactly 12% of one tile width so the
+   * parallel diagonals close the visual gap, regardless of
+   * how many tiles are in the row. */
+  margin-left: calc(-12cqi / var(--tile-count, 10));
+}
+/* End slivers — fill the triangular cuts at the row's outer
+ * corners with the duotone shadow colour. Each sliver is a
+ * 14px-wide flex item; the negative margin overlaps it with
+ * the adjacent tile by 12px (matching the inter-tile overlap
+ * above) so the visible dark area is approximately the same
+ * "proportionate gap" as elsewhere in the row, plus the
+ * triangular extension that the tile's clip-path leaves
+ * exposed. */
+html[data-theme="vhs"] #spotlightGrid::before,
+html[data-theme="vhs"] #spotlightGrid::after {
+  content: '';
+  /* Sliver width = 12% of one tile's width (= 12cqi /
+   * tile_count). That makes the sliver triangle's hypotenuse
+   * the same slope as the tile's slanted edge, so the two
+   * lines run truly parallel regardless of tile count or
+   * panel width. */
+  flex: 0 0 calc(12cqi / var(--tile-count, 10));
+  align-self: stretch;
+  /* Two-layer fill: liquid-glass highlight (top white wash
+   * fading mid, soft bottom shimmer) over the duotone-palette
+   * gradient. Reads as smooth raised glass with the same
+   * top-light direction as the tiles and dividers. */
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.30) 0%,
+      rgba(255, 255, 255, 0.08) 22%,
+      transparent 55%,
+      transparent 85%,
+      rgba(255, 255, 255, 0.10) 100%),
+    linear-gradient(180deg,
+      var(--duotone-lighten, #630198) 0%,
+      var(--duotone-midtone, #5b51d8) 50%,
+      var(--duotone-multiply, #fe43d9) 100%);
+}
+html[data-theme="vhs"] #spotlightGrid::before {
+  /* Overlap fully into tile 1's slanted left cut. */
+  margin-right: calc(-12cqi / var(--tile-count, 10));
+  /* Triangle widest at the top, narrowing to a point lifted
+   * 6px above the bottom-left corner so the diagonals on the
+   * sliver and the adjacent tile clear the 1px borders. */
+  clip-path: polygon(0 0, 100% 0, 0 calc(100% - 6px));
+}
+html[data-theme="vhs"] #spotlightGrid::after {
+  /* Overlap fully into tile N's slanted right cut. */
+  margin-left: calc(-12cqi / var(--tile-count, 10));
+  /* Triangle narrow at the top-right point (lifted 6px below
+   * the corner), widening to the bottom. */
+  clip-path: polygon(100% 6px, 100% 100%, 0 100%);
+}
+html[data-theme="vhs"] .fav-grid--perf:not(.fav-grid--movie) .fav-cell .fav-perf-ph::after,
+html[data-theme="vhs"] .dl-tile-source-poster--scene::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  background-image:
+    radial-gradient(ellipse 60% 35% at 25% 12%,
+      rgba(255, 255, 255, 0.16) 0%,
+      rgba(255, 255, 255, 0) 60%),
+    radial-gradient(ellipse 130% 130% at 50% 50%,
+      transparent 48%,
+      rgba(0, 0, 0, 0.55) 100%),
+    var(--vhs-noise),
+    var(--vhs-noise2),
+    var(--vhs-bands),
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.16) 0 1px,
+      transparent 1px 2px),
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.30) 0 1px,
+      transparent 1px 5px);
+  background-size:
+    100% 100%, 100% 100%,
+    100% 100%, 100% 100%,
+    100% 100%,
+    100% 2px,
+    100% 5px;
+  animation:
+    vhs-grain-pan-fine 1.3s steps(8) infinite,
+    vhs-grain-pan-coarse 3.1s steps(7) infinite,
+    vhs-bands-roll 7s linear infinite,
+    vhs-scanline-drift 4.1s steps(6) infinite,
+    vhs-phosphor-pulse 5.3s ease-in-out infinite;
+}
+/* Scene cards get the new RGB-phosphor + overlay-blend treatment
+ * (split out of the group above so headshots / spotlight stay on
+ * the old flat-black scanline look until we extend the technique).
+ * Layer stack identical to .dl-tile-source-poster::after — see the
+ * commented version above for what each gradient does and why the
+ * vignette alpha is bumped under overlay blending. */
+html[data-theme="vhs"] .scene-card .img-load::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  background-image:
+    radial-gradient(ellipse 60% 35% at 25% 12%,
+      rgba(255, 255, 255, 0.16) 0%,
+      rgba(255, 255, 255, 0) 60%),
+    radial-gradient(ellipse 130% 130% at 50% 50%,
+      transparent 48%,
+      rgba(0, 0, 0, 0.72) 100%),
+    var(--vhs-noise),
+    var(--vhs-noise2),
+    var(--vhs-bands),
+    repeating-linear-gradient(
+      0deg,
+      rgba(218, 49, 49, 0.45) 0px,
+      rgba(112, 159, 115, 0.45) 2px,
+      rgba(40, 129, 206, 0.45) 4px),
+    repeating-linear-gradient(
+      90deg,
+      rgba(218, 49, 49, 0.38) 1px,
+      rgba(112, 159, 115, 0.38) 2px,
+      rgba(40, 129, 206, 0.38) 3px);
+  background-size:
+    100% 100%, 100% 100%,
+    100% 100%, 100% 100%,
+    100% 100%,
+    100% 4px,
+    3px 100%;
+  mix-blend-mode: overlay;
+  animation:
+    vhs-grain-pan-fine 1.3s steps(8) infinite,
+    vhs-grain-pan-coarse 3.1s steps(7) infinite,
+    vhs-bands-roll 7s linear infinite,
+    vhs-scanline-drift 4.1s steps(6) infinite,
+    vhs-phosphor-pulse 5.3s ease-in-out infinite;
+}
+/* CRT TV bezel — overlays /static/tv.png on every scene-card
+ * thumbnail, so the Performers / Studios / Vices feeds read as
+ * scenes playing inside a chunky black CRT housing. The PNG has
+ * a transparent screen area + opaque black bezel, so the
+ * underlying photo shows through.
+ *
+ * z-index 4 sits BELOW every other card overlay:
+ *   z-5 phosphor `::after`  ─ stripes paint OVER the bezel; under
+ *                             `mix-blend-mode: overlay` the black
+ *                             bezel stays black so the phosphor
+ *                             reads only on the screen content.
+ *   z-6 .scene-headshots-hover, z-7 .scene-wanted-btn, etc.
+ *                           ─ interactive overlays sit on top of
+ *                             the bezel on hover (no fade needed). */
+html[data-theme="vhs"] .scene-card .img-load::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  background-image: url('/static/tv.png');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+/* tv.png has ~10% of its height as bezel on top + bottom. Push the
+ * top studio logo down and the bottom performer-name strip up so
+ * they sit INSIDE the screen area at rest, not under the bezel.
+ * Hover swaps in the existing bevel-clear positions (label moves to
+ * top: 78px and bezel fades), so these overrides only need to fix
+ * the rest state. */
+html[data-theme="vhs"] .scene-card .scene-studio-logo {
+  top: 10% !important;
+}
+html[data-theme="vhs"] .scene-card .scene-performer-label {
+  bottom: 8%;
+}
+/* Glitch filter — applied ONLY to actual photo content
+ * (`.scene-thumb` / `.duo-img`), never to studio logos
+ * (`.scene-studio-logo`) or the small headshot avatars
+ * (`.scene-headshot-avatar`) that share the wrapper.
+ * `.fav-grid--perf:not(.fav-grid--movie)` excludes /library
+ * movie cells (which use the perf grid for layout but get the
+ * paper+halftone movie effect, not the scene glitch). */
+html[data-theme="vhs"] .scene-card .img-load .scene-thumb,
+html[data-theme="vhs"] .fav-grid--perf:not(.fav-grid--movie) .fav-cell .duo-img {
+  filter:
+    saturate(0.48) contrast(1.05) brightness(1.16) blur(0.4px)
+    drop-shadow( 2px 0 0 rgba(0, 224, 255, 0.80))
+    drop-shadow(-2px 0 0 rgba(255, 28, 145, 0.80));
+  animation: vhs-chroma-flicker 2.7s steps(8) infinite;
+}
+
+/* ── /library performer headshots — old-photo (frameless polaroid) ──
+ * Settings ported verbatim from the user's reference snippet:
+ *   filter: blur(0.05em) saturate(0.7) contrast(1.5) brightness(1.2)
+ *   overlay stack (top → bottom):
+ *     1. radial vignette  — radial-gradient(ellipse, #0000, #0007)
+ *     2. warm yellow wash — linear-gradient(0deg, #9725, #9725)
+ *        (#9725 ≡ rgba(153, 119, 34, 0.33))
+ *     3. noisy paper grain
+ * The reference paints the image itself as the bottom of a
+ * single `background-image` chain on a plain div. Here the
+ * image is a real `<img>` (`.duo-img`) so the same filter is
+ * applied to that element directly, and the three overlay
+ * layers ride on the wrapper's `::after`. `--vhs-paper`
+ * substitutes for the external noisy-texture PNG referenced in
+ * the snippet. The hover-reset block further down still wipes
+ * the whole effect on hover. */
+html[data-theme="vhs"] .fav-grid--perf:not(.fav-grid--movie) .fav-cell .duo-img {
+  filter: blur(0.05em) saturate(0.7) contrast(1.5) brightness(1.2) !important;
+  animation: none !important;
+}
+html[data-theme="vhs"] .fav-grid--perf:not(.fav-grid--movie) .fav-cell .fav-perf-ph::after {
+  background-image:
+    /* High-frequency film grain — fractalNoise at 0.95 baseFreq
+     * with 14% white alpha, blended `soft-light` against the
+     * vignette below so it nudges luminance instead of dumping
+     * a white veil over the polaroid. */
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.14 0"/></filter><rect width="100%" height="100%" filter="url(%23g)"/></svg>'),
+    radial-gradient(ellipse, #0000, #0007),
+    linear-gradient(0deg, #78A3, #78A3),
+    var(--vhs-paper) !important;
+  background-size:
+    auto,
+    cover,
+    cover,
+    auto !important;
+  background-repeat:
+    repeat,
+    no-repeat,
+    no-repeat,
+    repeat !important;
+  background-position:
+    center,
+    center,
+    center,
+    center !important;
+  background-blend-mode: soft-light, normal, normal, normal !important;
+  mix-blend-mode: normal !important;
+  animation: none !important;
+  opacity: 1 !important;
+}
+/* (Old paper-on-hover overrides for scenes / spotlight /
+ *  library-perf cells deleted — rest is now clean by default,
+ *  hover triggers the VHS glitch effect above. The transition
+ *  property stays so any wrapper-level chrome changes ease
+ *  smoothly. The :not(:hover) rest reset block further down
+ *  enforces the rest=clean behaviour. */
+html[data-theme="vhs"] .scene-card .img-load,
+html[data-theme="vhs"] .spotlight-tile,
+html[data-theme="vhs"] .fav-grid--perf .fav-cell .fav-perf-ph {
+  transition:
+    border-radius 0.35s ease,
+    transform 0.35s ease,
+    box-shadow 0.35s ease;
+}
+
+/* /downloads images get an additional blur at rest on top of
+ * the existing VHS overlay (the queue should read as static
+ * glass until you hover a tile). The hover reset below clears
+ * the blur with a smooth transition.
+ *
+ * Selectors mirror the existing per-variant rules
+ * (`.dl-tile-source-poster--scene`, `:not(.dl-tile-source-poster--scene)`)
+ * so we match their specificity and !important wins cleanly.
+ * A bare `.dl-tile-source-poster img` selector loses the
+ * cascade race against the more specific `:not()` variant
+ * rule that sets the paper filter on movies. */
+/* (Rest-state blur on .dl-tile-source-poster and .dl-bar-headshot
+ *  removed — Downloads-tab queue tiles render crisp. Discover-tab
+ *  blur lives on .rss-tile-poster in downloads.html and is
+ *  unaffected.) */
+
+/* ════════════════════════════════════════════════════════════
+ * HOVER RESET — VHS effects are REST-ONLY.
+ *
+ * Every effect rule above (chromatic aberration, scanlines,
+ * paper, halftone, vignette overlays, animations) is authored
+ * as a "rest-state" style. This block uses :hover to
+ * !important-override those properties on hover so the picture
+ * resolves to a clean photograph the moment the cursor lands
+ * on it — the user's "peek through the static" gesture.
+ * ════════════════════════════════════════════════════════════ */
+html[data-theme="vhs"] .scene-card:hover .img-load .scene-thumb,
+html[data-theme="vhs"] .movie-card:hover .img-load .movie-poster,
+html[data-theme="vhs"] .movie-card:hover .img-load img,
+html[data-theme="vhs"] .fav-grid--perf .fav-cell:hover .duo-img,
+html[data-theme="vhs"] .fav-grid--movie .fav-cell:hover .fav-perf-ph img,
+html[data-theme="vhs"] .fav-grid--movie .fav-cell:hover .duo-img,
+html[data-theme="vhs"] .dl-tile-source-poster:hover img,
+html[data-theme="vhs"] .dl-bar-headshot:hover img {
+  filter: none !important;
+  animation: none !important;
+  transition: filter 0.25s ease;
+}
+html[data-theme="vhs"] .scene-card:hover .img-load::after,
+html[data-theme="vhs"] .movie-card:hover .img-load::after,
+html[data-theme="vhs"] .fav-grid--perf .fav-cell:hover .fav-perf-ph::after,
+html[data-theme="vhs"] .fav-grid--movie .fav-cell:hover .fav-perf-ph::after,
+html[data-theme="vhs"] .dl-tile-source-poster:hover::after,
+html[data-theme="vhs"] .dl-bar-headshot:hover::after {
+  opacity: 0 !important;
+  animation: none !important;
+}
+
+/* Hide the studio logo on /scenes movie cards at rest — show
+ * on hover. The logo is a separate `<img class="scene-studio-
+ * logo">` injected inside `.movie-card .img-load` (see
+ * scenes.html). The hover-reset above clears the rest overlay
+ * to a clean image; pair the logo's visibility with hover so
+ * it appears at the same time. */
+html[data-theme="vhs"] .movie-card .img-load .scene-studio-logo {
+  opacity: 0 !important;
+  transition: opacity 0.25s ease;
+}
+html[data-theme="vhs"] .movie-card:hover .img-load .scene-studio-logo {
+  opacity: 1 !important;
+}
+
+/* ── Movie poster rest overlay (vhsoverlay.png + paper) ──
+ * Movie posters on /scenes and /library swap the RGB halftone
+ * for a full-bleed PNG overlay AT REST. Layered ON TOP of the
+ * overlay is a subtle paper texture stack adapted from
+ *   https://stackoverflow.com/a/63615485 (CC BY-SA 4.0)
+ *   — feTurbulence-driven warm grain via the existing
+ *     `--vhs-paper` SVG data URL
+ *   — repeating diagonal fibers (two angles) for direction
+ *   — a faint warm wash so highlights pick up cream tone
+ * `multiply` blend keeps the texture subtle (darkens, doesn't
+ * tint), and the fibers/wash sit at low alpha. Hover clears it
+ * to a clean image via the hover-reset block above. Targets
+ *   /scenes:  .movie-card .img-load::after
+ *   /library: .fav-grid--movie .fav-cell .fav-perf-ph::after */
+html[data-theme="vhs"] .movie-card .img-load::after,
+html[data-theme="vhs"] .fav-grid--movie .fav-cell .fav-perf-ph::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  border-radius: inherit;
+  background-color: transparent;
+  background-image:
+    /* (1) Paper grain — warm fractal noise */
+    var(--vhs-paper),
+    /* (2) Diagonal fibers, primary angle */
+    repeating-linear-gradient(112deg,
+      transparent 0 6px,
+      rgba(120, 90, 40, 0.045) 6px 7px),
+    /* (3) Diagonal fibers, cross angle */
+    repeating-linear-gradient(22deg,
+      transparent 0 9px,
+      rgba(140, 110, 60, 0.035) 9px 10px),
+    /* (4) Warm cream wash — top-left lit, bottom-right aged */
+    linear-gradient(160deg,
+      rgba(255, 245, 215, 0.05) 0%,
+      rgba(255, 240, 200, 0.02) 40%,
+      rgba(150, 110, 60, 0.10) 100%),
+    /* (5) The base VHS overlay PNG */
+    url('/static/vhsoverlay.png');
+  background-size:
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    cover;
+  background-position:
+    0 0, 0 0, 0 0, 0 0, center center;
+  background-repeat:
+    repeat, repeat, repeat, no-repeat, no-repeat;
+  /* Per-layer blend: paper + fibers `multiply` to darken paper
+   * texture into the artwork (subtle), the wash overlays
+   * normally, and the vhs overlay stays as authored. */
+  background-blend-mode:
+    multiply, multiply, multiply, normal, normal;
+  mix-blend-mode: normal;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+/* Saturation + blacks boost on the movie poster image itself,
+ * applied at rest. The hover-reset block above resets `filter`
+ * to `none` on hover, so the boost is rest-only. */
+html[data-theme="vhs"] .movie-card .img-load .movie-poster,
+html[data-theme="vhs"] .movie-card .img-load img,
+html[data-theme="vhs"] .fav-grid--movie .fav-cell .fav-perf-ph img,
+html[data-theme="vhs"] .fav-grid--movie .fav-cell .duo-img {
+  filter: saturate(1.55) contrast(1.22) brightness(0.92);
+  transition: filter 0.25s ease;
+}
+
+/* (Spotlight inversion block removed — the global default is
+ *  now effects-at-rest, so the spotlight inherits the same
+ *  behaviour as every other surface without needing its own
+ *  per-state override.) */
+
+/* ── /library studio + vice cells ──
+ * Logos sit in front of heavy VHS static (no card background).
+ * Hover replaces the static with a themed brand-colour gradient
+ * so the logo pops on a clean surface. */
+html[data-theme="vhs"] .fav-grid--studio .fav-cell {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+}
+html[data-theme="vhs"] .fav-grid--studio .fav-studio-ph {
+  /* Heavy untuned-channel static. Layer stack:
+   *   1. Inline ultra-bright SVG fractal noise (alpha 0.55) — high
+   *      density "snow" cell that overrides --vhs-noise's 0.22.
+   *   2. Coarser SVG noise (alpha 0.40) at a different scale so
+   *      the snow has a chunky overlay grain.
+   *   3. Original --vhs-noise / --vhs-noise2 panning layers for
+   *      sub-pixel shimmer.
+   *   4. Horizontal interference bands rolling vertically.
+   *   5. Dense scanlines (1px every 2px, alpha 0.34).
+   *   6. Wider scanlines (1px every 4px, alpha 0.50) — broken
+   *      pattern means the rows don't all read the same depth.
+   *   7. Tube-bulge vignette at the bottom of the stack so the
+   *      static fades into the cell edges. */
+  background:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="1.05" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>'),
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="260" height="260"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.40 0"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>'),
+    var(--vhs-noise),
+    var(--vhs-noise2),
+    var(--vhs-bands),
+    repeating-linear-gradient(0deg,
+      rgba(0, 0, 0, 0.34) 0 1px,
+      transparent 1px 2px),
+    repeating-linear-gradient(0deg,
+      rgba(0, 0, 0, 0.50) 0 1px,
+      transparent 1px 4px),
+    radial-gradient(ellipse at center,
+      rgba(0, 0, 0, 0.30) 0%,
+      rgba(0, 0, 0, 0.82) 100%) !important;
+  background-size:
+    100% 100%,
+    100% 100%,
+    100% 100%, 100% 100%,
+    100% 100%,
+    100% 2px,
+    100% 4px,
+    100% 100%;
+  animation:
+    vhs-grain-pan-fine 0.55s steps(10) infinite,
+    vhs-grain-pan-coarse 1.6s steps(7) infinite,
+    vhs-bands-roll 4.5s linear infinite,
+    vhs-scanline-drift 2.1s steps(6) infinite,
+    vhs-phosphor-pulse 3.6s ease-in-out infinite;
+  transition: background 0.35s ease;
+}
+html[data-theme="vhs"] .fav-grid--studio .fav-cell:hover .fav-studio-ph {
+  background: linear-gradient(160deg,
+    rgba(var(--brand-purple-rgb), 0.55) 0%,
+    rgba(var(--brand-accent-rgb), 0.40) 100%) !important;
+  animation: none;
+}
+
+/* ── /downloads studio tiles ──
+ * Mirror the /library studio cell treatment on the Discover
+ * Studios tab. The downloads.html stylesheet renders studio
+ * tiles with a duotone gradient + studio-.jpg backdrop on
+ * `.rss-tile--studio .rss-tile-inner`; under VHS we override
+ * that with the same heavy-static-at-rest + themed-gradient-on-
+ * hover surface used in /library so the two pages match. */
+html[data-theme="vhs"] .rss-tile--studio {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+}
+html[data-theme="vhs"] .rss-tile--studio .rss-tile-inner,
+html[data-theme="vhs"] .rss-tile--studio:hover .rss-tile-inner {
+  background-color: transparent !important;
+  /* Match the heavy /library studio static stack — see
+   * .fav-grid--studio .fav-studio-ph above for the layer
+   * breakdown. */
+  background-image:
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="1.05" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>'),
+    url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="260" height="260"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.40 0"/></filter><rect width="100%" height="100%" filter="url(%23n)"/></svg>'),
+    var(--vhs-noise),
+    var(--vhs-noise2),
+    var(--vhs-bands),
+    repeating-linear-gradient(0deg,
+      rgba(0, 0, 0, 0.34) 0 1px,
+      transparent 1px 2px),
+    repeating-linear-gradient(0deg,
+      rgba(0, 0, 0, 0.50) 0 1px,
+      transparent 1px 4px),
+    radial-gradient(ellipse at center,
+      rgba(0, 0, 0, 0.30) 0%,
+      rgba(0, 0, 0, 0.82) 100%) !important;
+  background-size:
+    100% 100%,
+    100% 100%,
+    100% 100%, 100% 100%,
+    100% 100%,
+    100% 2px,
+    100% 4px,
+    100% 100% !important;
+  background-blend-mode: normal !important;
+  animation:
+    vhs-grain-pan-fine 0.55s steps(10) infinite,
+    vhs-grain-pan-coarse 1.6s steps(7) infinite,
+    vhs-bands-roll 4.5s linear infinite,
+    vhs-scanline-drift 2.1s steps(6) infinite,
+    vhs-phosphor-pulse 3.6s ease-in-out infinite;
+  transition: background 0.35s ease;
+}
+html[data-theme="vhs"] .rss-tile--studio:hover .rss-tile-inner {
+  background-image: linear-gradient(160deg,
+    rgba(var(--brand-purple-rgb), 0.55) 0%,
+    rgba(var(--brand-accent-rgb), 0.40) 100%) !important;
+  animation: none;
+}
+
+/* ── /downloads queue images — strip blur ──
+ * The .dl-tile-source-poster and .dl-bar-headshot chromatic
+ * aberration filter chains carry a small blur (0.3–0.4px). Per
+ * user, the Downloads tab queue tiles should render crisp; the
+ * blur-at-rest only applies on the Discover panel (Favourites /
+ * Performers tabs, which use .rss-tile-poster — handled by the
+ * downloads.html filter chain via --duotone-filter). */
+html[data-theme="vhs"] .dl-tile-source-poster img {
+  filter:
+    saturate(0.48) contrast(1.05) brightness(1.16)
+    drop-shadow( 2px 0 0 rgba(0, 224, 255, 0.85))
+    drop-shadow(-2px 0 0 rgba(255, 28, 145, 0.85));
+}
+/* Queue-tile headshot stays clean — no chromatic aberration,
+ * no blur, no animation. The user wants the headshots crisp;
+ * the channel-split drop-shadows above and the flicker
+ * animation produce a perceived blur even with no `blur()`
+ * filter, so kill them all here. */
+html[data-theme="vhs"] .dl-bar-headshot img {
+  filter: none !important;
+  animation: none !important;
+}
+html[data-theme="vhs"] .dl-bar-headshot::after {
+  display: none !important;
+}
+
+/* ── Font hardening ──
+ * Several pages and inline styles hardcode `Acidoze`, `Tox
+ * Typewriter`, `Impact Label`, or `Seconds` as direct
+ * font-family values rather than going through `--mono` /
+ * `--acid` / `--secs`. Under the VHS theme we force every
+ * element to fall back to VCRMono so those direct refs don't
+ * break the aesthetic. Titles get the Shatter override. Font
+ * Awesome icon families (`"Font Awesome 6 Free"`, etc.) keep
+ * their declared family because the `*` rule below uses
+ * `:not(.fa):not(.fa-solid)...` to exclude them. */
+html[data-theme="vhs"] body,
+html[data-theme="vhs"] body * {
+  font-family: 'VCRMono', 'DM Mono', monospace;
+}
+/* Restore Font Awesome icon families — the rule above is too
+ * broad otherwise and icon glyphs render as boxes. */
+html[data-theme="vhs"] .fa,
+html[data-theme="vhs"] .fas,
+html[data-theme="vhs"] .far,
+html[data-theme="vhs"] .fal,
+html[data-theme="vhs"] .fab,
+html[data-theme="vhs"] [class^="fa-"],
+html[data-theme="vhs"] [class*=" fa-"] {
+  font-family: 'Font Awesome 6 Free', 'Font Awesome 6 Brands',
+               'Font Awesome 5 Free', sans-serif !important;
+}
+/* LedCounter (the .sky-counter strip) stays as-is — it's the
+ * tile-readout LED font and pairs well with VHS aesthetic. */
+html[data-theme="vhs"] .sky-counter,
+html[data-theme="vhs"] .dl-tile-pct-num,
+html[data-theme="vhs"] .dl-tile-pct-sym {
+  font-family: 'LedCounter', 'VCRMono', ui-monospace, monospace !important;
+}
+/* Titles get Shatter — broad selector list so all "title-y"
+ * surfaces pick it up regardless of which page hardcoded a
+ * font on them. */
+html[data-theme="vhs"] .panel-title,
+html[data-theme="vhs"] .fav-page-title,
+html[data-theme="vhs"] .page-title,
+html[data-theme="vhs"] .q-panel-title,
+html[data-theme="vhs"] h1,
+html[data-theme="vhs"] h2,
+html[data-theme="vhs"] h3 {
+  font-family: 'Shatter', 'VCRMono', monospace !important;
+}
+
+/* Tile bottom progress bar — magenta-to-cyan gradient on the
+ * filled portion with a soft outer glow. The full progress
+ * `var(--pct)` chain still drives the fill width via the calc()
+ * stops we already had. */
+html[data-theme="vhs"] .dl-bar::after {
+  background: linear-gradient(90deg,
+    rgba(255, 28, 145, 1) 0%,
+    rgba(180, 80, 200, 1) calc(var(--pct, 0) * 0.5%),
+    rgba(0, 224, 255, 1) calc(var(--pct, 0) * 1%),
+    rgba(255, 255, 255, 0.06) calc(var(--pct, 0) * 1%),
+    rgba(255, 255, 255, 0.06) 100%);
+  box-shadow:
+    0 0 12px rgba(255, 28, 145, 0.55),
+    0 0 20px rgba(0, 224, 255, 0.30);
+}
+
+/* Header nav buttons — subtle neon outline + magenta hover. */
+html[data-theme="vhs"] header .nav-links .btn-secondary,
+html[data-theme="vhs"] header .header-right .btn-secondary {
+  border-color: rgba(255, 28, 145, 0.35);
+  text-shadow: 0 0 6px rgba(255, 28, 145, 0.5);
+}
+html[data-theme="vhs"] header .nav-links .btn-secondary:hover,
+html[data-theme="vhs"] header .header-right .btn-secondary:hover {
+  border-color: rgba(0, 224, 255, 0.7);
+  box-shadow: 0 0 10px rgba(0, 224, 255, 0.35);
+}
+html[data-theme="vhs"] header .nav-links .btn-secondary.active-nav,
+html[data-theme="vhs"] header .header-right .btn-secondary.active-nav {
+  border-color: rgba(0, 224, 255, 0.85);
+  background: rgba(0, 224, 255, 0.10);
+}
+
+/* Conic ring inner disc — give it a subtle CRT-style cyan glow
+ * inside the recess so the dial reads as a glowing tube rather
+ * than just a dark well. */
+html[data-theme="vhs"] .dl-tile-ring::before {
+  background:
+    radial-gradient(circle at 50% 80%,
+      rgba(0, 50, 80, 0.55) 0%,
+      rgba(0, 0, 0, 0.95) 100%);
+  box-shadow:
+    inset 0 6px 10px rgba(0, 0, 0, 0.75),
+    inset 0 -1px 0 rgba(0, 224, 255, 0.18),
+    inset 0 0 24px rgba(0, 224, 255, 0.10);
+}
+
+/* Favourite-heart icon — stays the original deep crimson at
+ * rest so it reads as the "favourite" affordance. When the
+ * containing toggle / nav button is in an active state, the
+ * icon inherits the button's currentColor so it matches the
+ * other icons in that toggle group instead of fighting the
+ * active-state fill. */
+html[data-theme="vhs"] .fav-lips {
+  color: #C0022F !important;
+}
+html[data-theme="vhs"] button.active .fav-lips,
+html[data-theme="vhs"] .ts-seg button.active .fav-lips,
+html[data-theme="vhs"] .feed-mode-btn.active .fav-lips,
+html[data-theme="vhs"] .btn-secondary.active-nav .fav-lips,
+html[data-theme="vhs"] .is-active .fav-lips {
+  color: currentColor !important;
+}
+
+/* Kill the coloured pill background behind text overlays on
+ * scene cards and spotlight tiles — under VHS the duotone-shadow
+ * tinted background fights with the chromatic aberration / glow
+ * treatment. The text-shadow on these labels (already heavy
+ * black drop shadow) carries enough legibility on its own. */
+html[data-theme="vhs"] .scene-performer-label > .perf-hl,
+html[data-theme="vhs"] .spotlight-tile-name {
+  background: transparent !important;
+}
+/* Tilt the spotlight name pill to match the sliver / polygon
+ * diagonal in screen space. The 12% slant is proportional to
+ * tile WIDTH but the angle the eye sees depends on tile
+ * ASPECT — for the spotlight row's portrait tiles the
+ * effective screen-space tilt is ~3–4°, not the 6.84° you'd
+ * get from `atan(0.12)` in unit coords. `rotate(183.5deg)` =
+ * 180° base + 3.5° CW so the text axis runs parallel to the
+ * sliver's hypotenuse and the polygon's slanted left edge.
+ * Default centre `transform-origin` keeps the rotated box
+ * inside the tile's `clip-path`. */
+html[data-theme="vhs"] .spotlight-tile-name {
+  transform: rotate(183.5deg) !important;
+}
+/* Move the 'never show again' (✕) button to the top-right.
+ * The base CSS pins it at top-left, but the parallelogram
+ * `clip-path` cuts away the top-left triangle, so the button
+ * is hidden. Top-right sits inside the polygon. */
+html[data-theme="vhs"] .spotlight-exclude-btn {
+  left: auto !important;
+  right: 5px !important;
+}
+
+/* Duotone swap buttons are no-ops on the VHS theme — the duotone
+ * filter is forced to `none` and degradation is handled by the
+ * glitch chain instead. Hide them so the toolbars stay clean. */
+html[data-theme="vhs"] [data-duotone-toggle] {
+  display: none !important;
+}
+
+/* ── Overlay elevation ──
+ * The ::after pseudo-element on every VHS image surface sits at
+ * z-index: 5 to paint scanlines / halftone / vignette on top of
+ * the image content. Anything UI-related that should remain
+ * crisp (studio logos, performer labels, hover headshot rows,
+ * action buttons, the favourite heart, sticky chips, etc.) needs
+ * to elevate ABOVE the overlay so it isn't washed by the
+ * effect. */
+html[data-theme="vhs"] .scene-card .scene-studio-logo,
+html[data-theme="vhs"] .scene-card .scene-performer-label,
+html[data-theme="vhs"] .scene-card .scene-headshots-hover,
+html[data-theme="vhs"] .movie-card .scene-headshots-hover,
+html[data-theme="vhs"] .scene-card .scene-wanted-btn,
+html[data-theme="vhs"] .movie-card .scene-wanted-btn,
+html[data-theme="vhs"] .scene-card .scene-fav-heart,
+html[data-theme="vhs"] .movie-card .scene-fav-heart,
+html[data-theme="vhs"] .scene-card .scene-source-pill,
+html[data-theme="vhs"] .scene-card .scene-card-actions,
+html[data-theme="vhs"] .movie-card .scene-card-actions,
+html[data-theme="vhs"] .scene-card .scene-source-logo,
+html[data-theme="vhs"] .fav-card-heart,
+html[data-theme="vhs"] .fav-card-icons,
+html[data-theme="vhs"] .fav-card-lock,
+html[data-theme="vhs"] .fav-overlay-x,
+html[data-theme="vhs"] .fav-path-missing-icon,
+html[data-theme="vhs"] .dl-tile-head,
+html[data-theme="vhs"] .dl-tile-title,
+html[data-theme="vhs"] .dl-tile-chips,
+html[data-theme="vhs"] .dl-bar-headshots,
+html[data-theme="vhs"] .dl-tile-type-badge,
+html[data-theme="vhs"] .dl-tile-pct {
+  z-index: 10 !important;
+}
+
+/* Sticker `::before` on movie posters sits at the SAME layer as
+ * the halftone overlay (`::after` z-index: 5). Bump it above so
+ * it reads as a real sticker stuck ON TOP of the print, not
+ * subjected to the dot pattern. */
+html[data-theme="vhs"] .dl-tile-source-poster:not(.dl-tile-source-poster--scene)::before,
+html[data-theme="vhs"] .movie-card .img-load::before {
+  z-index: 7 !important;
+}
+
+/* ── Auto-scaling title text ──
+ * Card / cell parents become container-query roots so the
+ * titles below their images can scale via `cqi` (1cqi = 1% of
+ * the container's inline size). Each title clamps between a
+ * sensible minimum (so it never gets unreadable) and its
+ * existing px max (so wide cards never inflate the text past
+ * what the layout was designed for). Applied globally — every
+ * theme benefits from "shrink-to-fit instead of ellipsis-
+ * truncate" on tight grids. */
+.scene-card,
+.movie-card,
+.fav-cell,
+.dl-bar {
+  container-type: inline-size;
+}
+.scene-title       { font-size: clamp(8px,  6cqi,   16px) !important; }
+.movie-title       { font-size: clamp(8px,  6cqi,   16px) !important; }
+.fav-cell-title    { font-size: clamp(8px,  6.5cqi, 16px) !important; }
+.dl-bar-name       { font-size: clamp(11px, 5cqi,   17px) !important; }
+/* Meta lines (date / studio / year) ride a tighter range so
+ * they don't overflow the title above them. */
+.scene-date        { font-size: clamp(9px,  4.2cqi, 11px) !important; }
+.movie-meta        { font-size: clamp(9px,  4.2cqi, 11px) !important; }
+.dl-bar-meta       { font-size: clamp(9px,  3.5cqi, 11px) !important; }
+
+/* ── Magenta borders removed ──
+ * VHS theme palette pushes `--brand-purple-rgb` to hot pink, so
+ * every card / panel / input that uses `1px solid rgba(brand,…)`
+ * for its border ends up framed in pink. Strip the border colour
+ * from card-style surfaces, panels, inputs, and form controls.
+ * Buttons keep their borders (deliberate scope: any
+ * `<button>`, `.btn-primary`, `.btn-secondary`, segmented-control
+ * buttons inside `.ts-seg`, and chip-pills). */
+html[data-theme="vhs"] .scene-card,
+html[data-theme="vhs"] .scene-card:hover,
+html[data-theme="vhs"] .scene-card:focus-within,
+html[data-theme="vhs"] .movie-card,
+html[data-theme="vhs"] .movie-card:hover,
+html[data-theme="vhs"] .movie-card:focus-within,
+html[data-theme="vhs"] .fav-cell,
+html[data-theme="vhs"] .fav-cell:hover,
+html[data-theme="vhs"] .fav-cell:focus-within,
+html[data-theme="vhs"] .dl-bar,
+html[data-theme="vhs"] .dl-bar:hover,
+html[data-theme="vhs"] .rss-tile,
+html[data-theme="vhs"] .rss-tile:hover,
+html[data-theme="vhs"] .rss-tile:focus-within,
+html[data-theme="vhs"] .spotlight-tile,
+html[data-theme="vhs"] .spotlight-tile:hover,
+html[data-theme="vhs"] .panel,
+html[data-theme="vhs"] .q-panel,
+html[data-theme="vhs"] .dl-bar-list,
+html[data-theme="vhs"] .table-panel,
+html[data-theme="vhs"] .stat-card,
+html[data-theme="vhs"] .queue-section .queue-item,
+html[data-theme="vhs"] .queue-section .queue-item:hover,
+html[data-theme="vhs"] .modal-box,
+html[data-theme="vhs"] .modal-overlay > .modal,
+html[data-theme="vhs"] .modal,
+html[data-theme="vhs"] .field-input,
+html[data-theme="vhs"] .scenes-srch-input,
+html[data-theme="vhs"] input[type="text"],
+html[data-theme="vhs"] input[type="search"],
+html[data-theme="vhs"] input[type="number"],
+html[data-theme="vhs"] input[type="password"],
+html[data-theme="vhs"] input[type="date"],
+html[data-theme="vhs"] select,
+html[data-theme="vhs"] textarea,
+html[data-theme="vhs"] header.ts-app-header,
+html[data-theme="vhs"] .scenes-toolbar,
+html[data-theme="vhs"] .scenesSearchPanel,
+html[data-theme="vhs"] .panel-header,
+html[data-theme="vhs"] .panel-body,
+html[data-theme="vhs"] .scene-detail,
+html[data-theme="vhs"] .movie-detail,
+html[data-theme="vhs"] .perf-detail,
+html[data-theme="vhs"] .entity-panel,
+html[data-theme="vhs"] .settings-modal,
+html[data-theme="vhs"] .settings-nav,
+html[data-theme="vhs"] .settings-section,
+html[data-theme="vhs"] .toolbar,
+html[data-theme="vhs"] .meta-strip,
+html[data-theme="vhs"] .chip,
+html[data-theme="vhs"] .chip-row,
+html[data-theme="vhs"] .stat-tile,
+html[data-theme="vhs"] .filter-row,
+html[data-theme="vhs"] .pill-row,
+html[data-theme="vhs"] .ts-card,
+html[data-theme="vhs"] .ts-panel,
+html[data-theme="vhs"] .ts-glass-panel {
+  border-color: transparent !important;
+  outline-color: transparent !important;
+}
+
+/* ── VHS sticker ──
+ * Decorative /static/sticker.png stuck onto poster surfaces
+ * only (movie posters on /downloads + /scenes, scene posters on
+ * /scenes — NOT spotlight tiles, headshots, or studio cells).
+ *
+ * The sticker is *colourised* (its internal lights/darks are
+ * preserved, recoloured to a chosen hue) rather than solid-
+ * filled. Two CSS variables drive the variation:
+ *   --sticker-hue     — hue-rotate angle (0–360deg)
+ *   --sticker-rotate  — physical rotation (degrees)
+ *
+ * A 13-bucket `:nth-child` cycle gives each adjacent tile a
+ * different combination so the colour + tilt feel random across
+ * the grid even though the rule is deterministic. */
+html[data-theme="vhs"] .dl-bar,
+html[data-theme="vhs"] .scene-card,
+html[data-theme="vhs"] .movie-card {
+  --sticker-hue: 0deg;
+  --sticker-rotate: -8deg;
+}
+/* 13 buckets — primes against the common 3/4/5-col grids so the
+ * pattern never lines up vertically. */
+html[data-theme="vhs"] .dl-bar:nth-child(13n+1),
+html[data-theme="vhs"] .scene-card:nth-child(13n+1),
+html[data-theme="vhs"] .movie-card:nth-child(13n+1)  { --sticker-hue: 0deg;   --sticker-rotate: -11deg; }
+html[data-theme="vhs"] .dl-bar:nth-child(13n+2),
+html[data-theme="vhs"] .scene-card:nth-child(13n+2),
+html[data-theme="vhs"] .movie-card:nth-child(13n+2)  { --sticker-hue: 28deg;  --sticker-rotate:  6deg; }
+html[data-theme="vhs"] .dl-bar:nth-child(13n+3),
+html[data-theme="vhs"] .scene-card:nth-child(13n+3),
+html[data-theme="vhs"] .movie-card:nth-child(13n+3)  { --sticker-hue: 56deg;  --sticker-rotate: -3deg; }
+html[data-theme="vhs"] .dl-bar:nth-child(13n+4),
+html[data-theme="vhs"] .scene-card:nth-child(13n+4),
+html[data-theme="vhs"] .movie-card:nth-child(13n+4)  { --sticker-hue: 92deg;  --sticker-rotate: 14deg; }
+html[data-theme="vhs"] .dl-bar:nth-child(13n+5),
+html[data-theme="vhs"] .scene-card:nth-child(13n+5),
+html[data-theme="vhs"] .movie-card:nth-child(13n+5)  { --sticker-hue: 130deg; --sticker-rotate: -7deg; }
+html[data-theme="vhs"] .dl-bar:nth-child(13n+6),
+html[data-theme="vhs"] .scene-card:nth-child(13n+6),
+html[data-theme="vhs"] .movie-card:nth-child(13n+6)  { --sticker-hue: 165deg; --sticker-rotate:  9deg; }
+html[data-theme="vhs"] .dl-bar:nth-child(13n+7),
+html[data-theme="vhs"] .scene-card:nth-child(13n+7),
+html[data-theme="vhs"] .movie-card:nth-child(13n+7)  { --sticker-hue: 200deg; --sticker-rotate: -2deg; }
+html[data-theme="vhs"] .dl-bar:nth-child(13n+8),
+html[data-theme="vhs"] .scene-card:nth-child(13n+8),
+html[data-theme="vhs"] .movie-card:nth-child(13n+8)  { --sticker-hue: 235deg; --sticker-rotate: 12deg; }
+html[data-theme="vhs"] .dl-bar:nth-child(13n+9),
+html[data-theme="vhs"] .scene-card:nth-child(13n+9),
+html[data-theme="vhs"] .movie-card:nth-child(13n+9)  { --sticker-hue: 270deg; --sticker-rotate: -10deg; }
+html[data-theme="vhs"] .dl-bar:nth-child(13n+10),
+html[data-theme="vhs"] .scene-card:nth-child(13n+10),
+html[data-theme="vhs"] .movie-card:nth-child(13n+10) { --sticker-hue: 305deg; --sticker-rotate:  4deg; }
+html[data-theme="vhs"] .dl-bar:nth-child(13n+11),
+html[data-theme="vhs"] .scene-card:nth-child(13n+11),
+html[data-theme="vhs"] .movie-card:nth-child(13n+11) { --sticker-hue: 340deg; --sticker-rotate: -13deg; }
+html[data-theme="vhs"] .dl-bar:nth-child(13n+12),
+html[data-theme="vhs"] .scene-card:nth-child(13n+12),
+html[data-theme="vhs"] .movie-card:nth-child(13n+12) { --sticker-hue: 75deg;  --sticker-rotate: 11deg; }
+html[data-theme="vhs"] .dl-bar:nth-child(13n+13),
+html[data-theme="vhs"] .scene-card:nth-child(13n+13),
+html[data-theme="vhs"] .movie-card:nth-child(13n+13) { --sticker-hue: 215deg; --sticker-rotate: -5deg; }
+
+/* The sticker itself — a `::before` pseudo-element rendering
+ * the actual PNG (preserves internal detail) and recolouring it
+ * via a `sepia → saturate → hue-rotate` filter chain. The
+ * `sepia(1)` step pushes a neutral image into a brown-tinted
+ * gamut that hue-rotate can then aim at any colour while
+ * keeping the original pixel-level lights/darks intact —
+ * this is the standard CSS recipe for colourising a monochrome
+ * source.
+ *
+ * Stickers ONLY appear on movie posters: the default-variant
+ * download tile poster (no `--scene` modifier) and the
+ * .movie-card poster on /scenes. Scene posters and scene
+ * thumbnails get nothing. */
+html[data-theme="vhs"] .dl-tile-source-poster:not(.dl-tile-source-poster--scene)::before,
+html[data-theme="vhs"] .movie-card .img-load::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  z-index: 6;
+  pointer-events: none;
+  background-image:
+    linear-gradient(hsl(var(--sticker-hue) 80% 55%), hsl(var(--sticker-hue) 80% 55%)),
+    url('/static/sticker.png');
+  background-size: contain, contain;
+  background-repeat: no-repeat, no-repeat;
+  background-position: center, center;
+  background-blend-mode: multiply;
+  -webkit-mask-image: url('/static/sticker.png');
+          mask-image: url('/static/sticker.png');
+  -webkit-mask-size: contain;
+          mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+          mask-position: center;
+  transform: rotate(var(--sticker-rotate));
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
+}
+/* Headshots and spotlight tiles don't get stickers — they're
+ * not posters. */
+
+/* Respect reduced-motion: kill the tracking-line glitch only.
+ * Don't touch other animations (hover transitions, etc.) so the
+ * UI stays responsive. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="vhs"] body::after {
+    animation: none;
+    display: none;
+  }
+}
+
+/* ── Custom theme ────────────────────────────────────────────
+ *  The 9 solid tokens come from the user's chosen base (light or
+ *  dark) via the [data-base] attribute. The 5 RGB triple tokens
+ *  are injected at runtime by theme-init.js from ui_theme_custom_json.
+ *  (See queue.html Appearance panel + theme-init.js applyCustom().)
+ * ──────────────────────────────────────────────────────────── */
+html[data-theme="custom"] {
+  /* Fallback RGB triples — overridden by the runtime <style> tag. */
+  --brand-purple-rgb: 155, 77, 202;
+  --brand-accent-rgb: 217, 74, 108;
+  --bg-rgb:         12, 12, 14;
+  --panel-hi-rgb:   36, 36, 48;
+  --panel-lo-rgb:   18, 18, 26;
+  --duotone-multiply: #ff4d00;
+  --duotone-lighten:  #5b1d6e;
+  --duotone-filter:   url(#duotone-custom);
+}
+html[data-theme="custom"][data-base="dark"] {
+  --bg:      rgb(var(--bg-rgb));
+  --surface: rgba(var(--panel-lo-rgb), 0.75);
+  --raised:  rgba(var(--panel-hi-rgb), 0.80);
+  --border:  #222228;
+  --muted:   #3a3a44;
+  --text:    #d4cfc4;
+  --dim:     #6b6b7a;
+  /* Derive accent/red/danger from the user's Brand (secondary) picker. */
+  --accent:  rgb(var(--brand-accent-rgb));
+  --red:     rgb(var(--brand-accent-rgb));
+  --danger:  rgb(var(--brand-accent-rgb));
+  --green:   #4ade80;
+  --amber:   #fbbf24;
+  --blue:    #60a5fa;
+  --skyfont-color: #ffffff;
+}
+html[data-theme="custom"][data-base="light"] {
+  --bg:      rgb(var(--bg-rgb));
+  --surface: rgba(var(--panel-hi-rgb), 0.82);
+  --raised:  rgba(var(--panel-hi-rgb), 0.94);
+  --border:  #d8d2c2;
+  --muted:   #b0a992;
+  --text:    #2b2a25;
+  --dim:     #6b6b60;
+  --accent:  rgb(var(--brand-accent-rgb));
+  --red:     rgb(var(--brand-accent-rgb));
+  --danger:  rgb(var(--brand-accent-rgb));
+  --green:   #2e7d32;
+  --amber:   #ed6c02;
+  --blue:    #1976d2;
+  --skyfont-color: #000000;
+  --app-bg-image: url("/static/background_light.jpg");
+}
+
+:root {
+  --shell-radius: 10px;
+  --shell-gap: 16px;
+  --shell-border-soft: rgba(255, 255, 255, 0.08);
+  --shell-page-padding: 20px;
+  --shell-header-padding: 24px;
+  /* Sticker-style labels (scenes library tags, queue phash, history status) */
+  --font-impact-label: "Impact Label", system-ui, sans-serif;
+  /* Segmented tab toggles & settings switch row titles (Impact Label Reversed) */
+  --font-toggle: "Seconds", "DM Mono", ui-monospace, monospace;
+  /* Segmented toggles + settings microcopy floor (Impact Label Reversed / hints) */
+  --font-reversed-min: calc(12px + 2pt);
+  /* Global scrollbars (overlays, panels, body) — Firefox uses scrollbar-color; WebKit uses rules below */
+  --scrollbar-size: 8px;
+  --scrollbar-track: rgba(255, 255, 255, 0.06);
+  --scrollbar-thumb: rgba(var(--brand-purple-rgb), 0.48);
+  --scrollbar-thumb-hover: rgba(var(--brand-purple-rgb), 0.68);
+  --scrollbar-thumb-border: rgba(12, 12, 18, 0.4);
+}
+
+/* Firefox — applies to scrollable elements */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* Chromium / Safari / WebKit — themed scrollbars app-wide */
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 6px;
+}
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    var(--scrollbar-thumb),
+    rgba(139, 92, 200, 0.38)
+  );
+  border-radius: 6px;
+  border: 2px solid var(--scrollbar-thumb-border);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    var(--scrollbar-thumb-hover),
+    rgba(167, 139, 250, 0.48)
+  );
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+/* Remove stepper arrows where WebKit draws them (avoids bright OS-style buttons) */
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+body {
+  letter-spacing: 0.01em;
+}
+
+/* ── Theme-tinted background ──
+ * The shipped `background_dark.jpg` / `background_light.jpg` images
+ * are intentionally greyscale so they can be colourised at runtime
+ * with the active theme's primary brand colour. The tint is applied
+ * to the <html> element (not <body>) so it always covers the full
+ * viewport — applying it to <body> exposed a thin strip of pure
+ * brand-colour along the right edge whenever the body's painting
+ * region differed from the viewport (scrollbar gutter, sub-pixel
+ * rounding under cover sizing, etc.). With the tint on <html>, the
+ * body becomes a transparent pass-through.
+ *
+ * `luminosity` blend takes the tonal range from the image and the
+ * hue+saturation from the colour, giving a colourised greyscale.
+ *
+ * `background-blend-mode` is independent of the `background`
+ * shorthand, so the !important override on body's background just
+ * neutralises any per-page colour layer that would otherwise paint
+ * over the html-level tint. */
+html {
+  background-color: rgb(var(--brand-purple-rgb));
+  background-image: var(--app-bg-image);
+  background-position: center center;
+  background-size: cover;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  background-blend-mode: luminosity;
+}
+html body {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+/* VHS theme uses a pre-coloured synthwave landscape — skip the
+ * luminosity colourise so the artwork's own magenta/cyan palette
+ * stays vivid instead of being tinted to a single hue. */
+html[data-theme="vhs"] {
+  background-color: transparent;
+  background-blend-mode: normal;
+}
+/* Boot-splash spans its own fixed-position layer, so apply the same
+ * tint directly to it (not inherited from the parent). */
+html .boot-splash {
+  background-color: rgb(var(--brand-purple-rgb)) !important;
+  background-blend-mode: luminosity;
+}
+html[data-theme="vhs"] .boot-splash {
+  background-color: transparent !important;
+  background-blend-mode: normal;
+}
+
+/* Full-screen boot splash (background, logo, spinner) — dismissed by app-shell.js */
+.boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  background-color: rgb(var(--bg-rgb));
+  background-image: var(--app-bg-image);
+  background-position: center center;
+  background-size: cover;
+  background-attachment: fixed;
+  transition: opacity 0.4s ease, visibility 0.4s ease;
+}
+
+.boot-splash::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(var(--bg-rgb), 0.82);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.boot-splash__inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+
+.boot-splash__logo {
+  height: 48px;
+  width: auto;
+  max-width: min(200px, 70vw);
+  object-fit: contain;
+  display: block;
+}
+
+.boot-splash__spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid rgba(var(--brand-purple-rgb), 0.22);
+  border-top-color: #d94a6c;
+  animation: boot-splash-spin 0.75s linear infinite;
+}
+
+.boot-splash--hide {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@keyframes boot-splash-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.app {
+  width: 100%;
+  max-width: none !important;
+  margin: 0 !important;
+  padding-left: var(--shell-page-padding) !important;
+  padding-right: var(--shell-page-padding) !important;
+}
+
+header {
+  /* Full-bleed within .app padding — avoid 100vw (scrollbar makes page wider than 100%) */
+  width: calc(100% + var(--shell-page-padding) * 2);
+  margin-left: calc(-1 * var(--shell-page-padding)) !important;
+  margin-right: calc(-1 * var(--shell-page-padding)) !important;
+  max-width: none;
+  box-sizing: border-box;
+  padding-left: var(--shell-header-padding) !important;
+  padding-right: var(--shell-header-padding) !important;
+  /* Per-page stylesheets set `padding: 14px 16px`; override the vertical
+   * pair globally so the taller progress wheel (60 px) fits into the
+   * existing header height band instead of inflating it. */
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-radius: 0 !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: linear-gradient(to bottom, rgba(var(--bg-rgb), 0.9), rgba(var(--bg-rgb), 0.7));
+}
+
+.panel,
+.table-panel,
+.history-panel,
+.stat-card,
+.filter-tab {
+  border-radius: var(--shell-radius);
+  border: 1px solid transparent;
+}
+
+.panel-header,
+.table-header {
+  border-bottom: 1px solid var(--shell-border-soft);
+}
+
+.nav-links {
+  gap: 10px;
+}
+
+/* ── Outer bevel tokens — shared across buttons / toggles / segmented controls ──
+ * Composed as layered box-shadows. Each token is a comma-separated list
+ * so pages can splice it into their own box-shadow rules via `var()`.
+ * The bevel works on any theme because the highlight + shadow colours
+ * are opaque rgb with opacity, not theme-specific.
+ *   --ts-bevel         — resting state (subtle raised)
+ *   --ts-bevel-hover   — hover (lifted + stronger drop shadow)
+ *   --ts-bevel-active  — pressed (inset shadow, flat top) */
+:root {
+  /* Bevel strength halved from the initial roll-out — opacity values on
+   * every layer are now ~50% of where they started. Raise them back if
+   * you want the buttons to feel more tactile. */
+  --ts-bevel:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.19),
+    0 1px 2px rgba(0, 0, 0, 0.15),
+    0 2px 4px rgba(0, 0, 0, 0.08);
+  --ts-bevel-hover:
+    inset 0 1px 0 rgba(255, 255, 255, 0.11),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.24),
+    0 2px 5px rgba(0, 0, 0, 0.19),
+    0 4px 8px rgba(0, 0, 0, 0.11);
+  --ts-bevel-active:
+    inset 0 2px 4px rgba(0, 0, 0, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03),
+    0 1px 1px rgba(0, 0, 0, 0.10);
+}
+
+/* Fallback bevel on any bare `<button>` that didn't opt in via its own
+ * box-shadow. Pages with intentional shadow stacks (e.g. stat cards,
+ * glassy panel buttons) override this naturally because their selectors
+ * have higher specificity. Use `.ts-bevel-off` to opt out explicitly. */
+button:not(.ts-bevel-off):not(:disabled) {
+  box-shadow: var(--ts-bevel);
+}
+button:not(.ts-bevel-off):not(:disabled):hover {
+  box-shadow: var(--ts-bevel-hover);
+}
+button:not(.ts-bevel-off):not(:disabled):active {
+  box-shadow: var(--ts-bevel-active);
+  transform: translateY(1px);
+}
+
+/* .btn-small — compact match-suggestion buttons used by the StashDB
+ * confirmation flow in the manual filing form (/queue + /index setup
+ * wizard). Small padded pill with the brand purple border and an
+ * accent hover tint. Shares the global bevel via the blanket rule
+ * above so it still feels like the rest of the button family. */
+.btn-small {
+  background: rgba(var(--bg-rgb), 0.55);
+  border: 1px solid rgba(var(--brand-purple-rgb), 0.45);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.btn-small:hover {
+  color: var(--accent);
+  border-color: rgba(var(--brand-purple-rgb), 0.75);
+  background: rgba(var(--brand-purple-rgb), 0.22);
+}
+.btn-small:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+/* Kill the bevel on transparent icon-only overlay buttons that sit on top
+ * of poster images. These buttons have no background by design so the
+ * bevel's inset highlight + outer drop-shadow just paints a square box
+ * around the glyph (see /library heart/lock, spotlight exclude, etc.).
+ * The glyphs already have their own drop-shadow filter for legibility. */
+/* Transparent icon-only overlay buttons — zero the bevel but DO NOT zero
+ * transform, because some of these elements (e.g. `.rss-tile-studio-logo`
+ * centres horizontally via `translateX(-50%)`) use transform for layout.
+ * Clobbering transform here once broke the /downloads logo centering. */
+.fav-card-heart,
+.fav-card-lock,
+.fav-card-icon-btn,
+.fav-cell-menu,
+.fav-overlay-x,
+.fav-overlay-lock,
+.spotlight-exclude-btn,
+.spotlight-score-badge,
+.rss-tile-fav-heart,
+.scene-studio-logo,
+.rss-tile-studio-logo {
+  box-shadow: none !important;
+}
+/* Only the icon-only buttons that press-translate should have their
+ * transform zeroed, and only on the non-positioning variants.
+ * `.rss-tile-fav-heart` is intentionally excluded — it uses `transform`
+ * for positioning (centering + offset above the medallion) and is not a
+ * pressable button, so zeroing the transform here would clobber the
+ * layout set by the rss-tile rules. */
+.fav-card-heart,
+.fav-card-lock,
+.fav-card-icon-btn,
+.fav-cell-menu,
+.fav-overlay-x,
+.fav-overlay-lock,
+.spotlight-exclude-btn,
+.spotlight-score-badge {
+  transform: none !important;
+}
+.fav-card-heart:hover,
+.fav-card-lock:hover,
+.fav-card-icon-btn:hover,
+.fav-cell-menu:hover,
+.fav-overlay-x:hover,
+.fav-overlay-lock:hover,
+.spotlight-exclude-btn:hover,
+.rss-tile-fav-heart:hover {
+  box-shadow: none !important;
+}
+.fav-card-heart:active,
+.fav-card-lock:active,
+.fav-card-icon-btn:active,
+.fav-cell-menu:active,
+.fav-overlay-x:active,
+.fav-overlay-lock:active,
+.spotlight-exclude-btn:active {
+  box-shadow: none !important;
+  transform: none !important;
+}
+/* Toggles (the iOS-style on/off pill switch) and segmented-control items. */
+.toggle-slider,
+.ts-seg button {
+  box-shadow: var(--ts-bevel) !important;
+}
+.toggle-slider:hover,
+.ts-seg button:hover {
+  box-shadow: var(--ts-bevel-hover) !important;
+}
+.ts-seg button.active {
+  box-shadow: var(--ts-bevel-active) !important;
+}
+
+/* ── Shared header icon nav + primary CTAs (pages may override for body/panels) ── */
+header .nav-links .btn-secondary,
+header .header-right .btn-secondary {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border, #222228);
+  color: var(--dim, #6b6b7a);
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  font-size: 19px;
+  padding: 0;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.05s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  box-sizing: border-box;
+  box-shadow: var(--ts-bevel);
+}
+header .nav-links .btn-secondary:hover,
+header .header-right .btn-secondary:hover {
+  border-color: var(--muted, #3a3a44);
+  color: var(--text, #d4cfc4);
+  box-shadow: var(--ts-bevel-hover);
+}
+header .nav-links .btn-secondary:active,
+header .header-right .btn-secondary:active {
+  box-shadow: var(--ts-bevel-active);
+  transform: translateY(1px);
+}
+header .nav-links .btn-secondary.active-nav,
+header .header-right .btn-secondary.active-nav {
+  border-color: var(--accent, #d94a6c);
+  color: var(--accent, #d94a6c);
+}
+
+header .nav-links .btn-secondary wa-icon,
+header .header-right .btn-secondary wa-icon {
+  display: block;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.btn-primary {
+  background: var(--accent, #d94a6c);
+  color: #0c0c0e;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: var(--mono, "DM Mono", ui-monospace, monospace);
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter 0.15s, box-shadow 0.15s, transform 0.05s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1.2;
+  box-sizing: border-box;
+  box-shadow: var(--ts-bevel);
+}
+.btn-primary:hover {
+  filter: brightness(1.1);
+  box-shadow: var(--ts-bevel-hover);
+}
+.btn-primary:active {
+  box-shadow: var(--ts-bevel-active);
+  transform: translateY(1px);
+}
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: none;
+  box-shadow: none;
+}
+
+/* Prowlarr: send release to download client (torrent = green, NZB = blue; success = check, green) */
+.btn-prowlarr-grab {
+  flex-shrink: 0;
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 6px;
+  background: var(--green, #4ade80);
+  color: #0c0c0e;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  transition: filter 0.15s, box-shadow 0.15s, transform 0.05s;
+  box-sizing: border-box;
+  box-shadow: var(--ts-bevel);
+}
+.btn-prowlarr-grab:hover:not(:disabled):not(.btn-prowlarr-grab--sent) {
+  filter: brightness(1.08);
+  box-shadow: var(--ts-bevel-hover);
+}
+.btn-prowlarr-grab:active:not(:disabled) {
+  box-shadow: var(--ts-bevel-active);
+  transform: translateY(1px);
+}
+.btn-prowlarr-grab.nzb {
+  background: var(--blue, #60a5fa);
+}
+.btn-prowlarr-grab:disabled {
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.btn-prowlarr-grab--sent,
+.btn-prowlarr-grab.btn-prowlarr-grab--sent:disabled {
+  background: var(--green, #4ade80) !important;
+  color: #0c0c0e !important;
+  opacity: 1 !important;
+  filter: none;
+}
+
+.btn-secondary {
+  min-width: 36px;
+  min-height: 36px;
+}
+
+.btn-secondary:focus-visible,
+.btn-primary:focus-visible,
+.field-input:focus-visible,
+.filter-input:focus-visible {
+  outline: 2px solid rgba(var(--brand-purple-rgb), 0.45);
+  outline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --shell-page-padding: 12px;
+    --shell-header-padding: 12px;
+  }
+
+  .app {
+    padding-left: var(--shell-page-padding) !important;
+    padding-right: var(--shell-page-padding) !important;
+  }
+
+  header {
+    position: static;
+  }
+
+  #tsActivityBanner { display: none !important; }
+}
+
+/* ── Favourite lipstick icon (replaces legacy hearts) ──
+   Uses CSS mask so the SVG's fill doesn't matter — the shape comes
+   from the asset and the colour comes from `currentColor`. Each
+   consumer's parent colour (heart-on=accent, off=dim, etc.) tints
+   the icon automatically. Rendered as a <span>, not <img>, because
+   `<img>` ignores CSS `color`. Fixed pixel size (14px) so the shape
+   stays consistent regardless of the button's font-size context —
+   using `em` let it explode inside large-font buttons like the main
+   /downloads tab toggle. */
+.fav-lips {
+  display: inline-block;
+  width: 24px;
+  height: 21px;
+  vertical-align: -4px;
+  flex-shrink: 0;
+  background-color: currentColor;
+  -webkit-mask-image: url('/static/logos/favourite.svg');
+          mask-image: url('/static/logos/favourite.svg');
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-position: center center;
+          mask-position: center center;
+  -webkit-mask-size: contain;
+          mask-size: contain;
+  pointer-events: none;
+  color: #C0022F;  /* favourite — deep crimson */
+}
+/* Off states — the parent button isn't flagged as on. Fade the
+   colour so the slot reads as "tap to favourite" not an indicator. */
+.fav-card-heart:not(.heart-on) .fav-lips,
+.entity-panel-heart:not(.heart-on) .fav-lips,
+.fav-overlay-heart:not(.heart-on) .fav-lips,
+.fav-filter-ibtn--heart:not(.is-on) .fav-lips {
+  color: var(--dim);
+  opacity: 0.55;
+}
+/* Tri-state filter's "non-favourites only" — use the dim colour so
+   it reads as a distinct mode from the filled red "yes" state. */
+.fav-filter-ibtn--heart.is-on[data-filter-state="no"] .fav-lips {
+  color: var(--dim);
+  opacity: 0.9;
+}
+/* Poster-overlay contexts: RSS tile match indicator and the
+   per-card favourite button on /library sit on top of a poster/
+   thumbnail image, so they need to read at tile scale — 3× the
+   base toggle/button size. */
+.rss-tile-fav-heart .fav-lips,
+.fav-card-heart .fav-lips {
+  width: 48px;
+  height: 42px;
+  vertical-align: 0;
+}
+
+/* ── Hide button text labels in portrait, keep icons ──
+   Wrap the visible text of any button in `<span class="btn-label">` —
+   when the viewport is taller than it is wide (phone in portrait,
+   tablet in portrait, narrow browser window) the label collapses and
+   the preceding <i> / .fav-lips icon carries the meaning. Landscape
+   keeps the full labels, so a rotated phone or a desktop monitor
+   still shows the word. Pair with `title="…"` so long-press or hover
+   still surfaces the label on touch devices. */
+@media (orientation: portrait) {
+  .btn-label { display: none !important; }
+  /* Kill the space an icon reserved for a now-hidden label. */
+  button > i + .btn-label,
+  button > .fav-lips + .btn-label,
+  a > i + .btn-label { margin-left: 0 !important; }
+  /* Collapse any inline gap the icon declared via style="margin-right". */
+  button > i[style*="margin-right"],
+  button > .fav-lips[style*="margin-right"],
+  a > i[style*="margin-right"] { margin-right: 0 !important; }
+}
+
+/* Unified segmented controls (Scenes type + feed + source, Queue mode, Favourites view) */
+.ts-seg {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
+  background: rgba(var(--bg-rgb), 0.92);
+  align-self: center;
+}
+.ts-seg--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.ts-seg--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.ts-seg--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.ts-seg--5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.ts-seg--6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.ts-seg--7 {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.ts-seg button {
+  min-height: 40px;
+  padding: 0 12px;
+  margin: 0;
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  border-right: 1px solid rgba(var(--brand-purple-rgb), 0.28);
+  color: var(--dim, #6b6b7a);
+  font-family: var(--font-toggle);
+  font-size: var(--font-reversed-min);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+.ts-seg button:last-child {
+  border-right: none;
+}
+.ts-seg button:hover {
+  color: var(--text, #d4cfc4);
+  background: rgba(255, 255, 255, 0.08);
+}
+.ts-seg button.active {
+  background: var(--accent, #d94a6c);
+  color: #0c0c0e;
+}
+/* Coloured icons on all toggle-like controls across the app.
+ * Rest = brand purple, hover = accent, active = inherit (flips dark on lit bg).
+ * All three states read from theme tokens so the palette tracks the theme. */
+.ts-seg button i,
+.ts-seg button .fa,
+.ts-seg button svg,
+.filter-tab i,
+.filter-tab .fa,
+.filter-tab svg,
+.history-lib-filter-btn i,
+.history-lib-filter-btn .fa,
+.emb-filter-toggle button i,
+.emb-filter-toggle button .fa,
+.queue-mode-toggle button i,
+.feed-mode-toggle button i,
+.type-toggle button i,
+.source-toggle button i {
+  color: rgba(var(--brand-purple-rgb), 0.95);
+  transition: color 0.15s;
+}
+.ts-seg button:hover i,
+.ts-seg button:hover .fa,
+.ts-seg button:hover svg,
+.filter-tab:hover i,
+.filter-tab:hover .fa,
+.history-lib-filter-btn:hover i,
+.emb-filter-toggle button:hover i {
+  color: var(--accent, #d94a6c);
+}
+.ts-seg button.active i,
+.ts-seg button.active .fa,
+.ts-seg button.active svg,
+.filter-tab.active i,
+.filter-tab.active .fa,
+.history-lib-filter-btn.active i,
+.emb-filter-toggle button.active i {
+  color: inherit;
+}
+.toggle-row > span:not(.field-label) {
+  font-family: var(--font-toggle);
+  font-size: max(var(--font-reversed-min), 1em);
+}
+
+/* Global header: center activity strip (pipeline + notifications) */
+header.ts-app-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 2fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px 16px;
+}
+header.ts-app-header .ts-header-left {
+  justify-self: start;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+header.ts-app-header .header-right {
+  justify-self: end;
+}
+.ts-header-activity {
+  justify-self: stretch;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
+  font-size: calc(12px + 2pt);
+  line-height: 1.35;
+  color: var(--dim, #6b6b7a);
+  /* Fixed height regardless of which state the banner is in (wheel,
+   * two-row note stack, or empty). Anchors the header to a stable
+   * 60 px activity band so the whole bar doesn't shrink when idle or
+   * swell when a notification appears. activity-banner.js renders only
+   * ONE of circles/notes at a time — the container never stacks both. */
+  height: 60px;
+  min-height: 60px;
+  max-height: 60px;
+  overflow: hidden;
+}
+.ts-global-progress-stack {
+  width: 100%;
+  max-width: min(720px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-self: center;
+}
+/* Circular progress indicators — one per running task, grouped center.
+ * Layout: inline-flex chip [icon][ring], tight padding so chips use the
+ * full header panel height rather than stacking. */
+.ts-progress-circles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0;
+}
+.ts-circle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: help;
+  flex-shrink: 0;
+  padding: 0;
+}
+.ts-circle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: rgba(var(--brand-purple-rgb), 0.95);
+  line-height: 1;
+}
+.ts-circle-icon .fav-lips {
+  width: 26px;
+  height: 23px;
+}
+.ts-circle-ring {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.ts-circle-svg {
+  width: 60px;
+  height: 60px;
+  display: block;
+  overflow: visible;
+}
+.ts-circle-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 4;
+}
+.ts-circle-fill {
+  fill: none;
+  stroke: var(--accent, #d94a6c);
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.4s ease;
+}
+.ts-circle-fill.is-indeterminate {
+  stroke: rgba(var(--brand-purple-rgb), 0.95);
+  animation: ts-circle-spin 1.1s linear infinite;
+  transform-origin: center;
+}
+@keyframes ts-circle-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ts-circle-center {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono, monospace);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text, #d4cfc4);
+  line-height: 1;
+  pointer-events: none;
+  text-align: center;
+}
+/* Defensive: hide any label div left over from stale cached JS. */
+.ts-circle-label {
+  display: none !important;
+}
+/* Downloads circle: performer headshot rendered inside the progress
+ * ring instead of the usual percent number. Clipped to a circle so the
+ * portrait sits flush inside the track, with a touch of inset shadow
+ * to separate it from the ring edge. */
+.ts-circle-center-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  box-shadow: inset 0 0 0 1px rgba(var(--brand-purple-rgb), 0.6),
+              0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.ts-circle-center-fallback {
+  font-size: 22px;
+  color: rgba(var(--brand-purple-rgb), 0.75);
+  line-height: 1;
+}
+.ts-circle-tick {
+  color: #22c55e;
+  font-size: 22px;
+  font-weight: 700;
+}
+.ts-circle-dots {
+  color: var(--dim, #6b6b7a);
+  letter-spacing: 0.05em;
+  font-size: 18px;
+}
+/* Notifications render as small round icon buttons alongside the
+ * progress circles. Kept here (instead of the progress-circles block
+ * below) so the JS can share the `.ts-progress-circles` flex row and
+ * each notification occupies a compact 34 px button. Click to dismiss;
+ * hover for the full message via the `title` attribute. */
+.ts-banner-dot {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s, border-color 0.15s, background 0.15s, color 0.15s;
+}
+.ts-banner-dot:hover {
+  transform: scale(1.08);
+  border-color: rgba(var(--brand-purple-rgb), 0.85);
+  background: rgba(var(--panel-hi-rgb), 0.6);
+}
+.ts-banner-dot.ts-banner-error {
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.55);
+}
+.ts-banner-dot.ts-banner-library {
+  color: rgba(var(--brand-purple-rgb), 0.95);
+}
+.ts-banner-dot.ts-banner-pipeline {
+  color: #f472b6;
+  border-color: rgba(244, 114, 182, 0.55);
+}
+.ts-banner-dot-more {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dim, #6b6b7a);
+  background: rgba(var(--brand-purple-rgb), 0.12);
+  border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
+  cursor: help;
+}
+/* Header progress: shorter track, equal-width bar column across rows */
+.ts-header-activity .health-progress-row {
+  display: grid;
+  grid-template-columns: minmax(4.75rem, 6rem) minmax(0, 1fr) minmax(2.5rem, 3.75rem);
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+.ts-header-activity .health-progress-bar-cell {
+  min-width: 0;
+}
+.ts-header-activity .health-progress-track {
+  height: 30px;
+  border-radius: 6px;
+}
+.ts-header-activity .health-progress-count {
+  font-size: calc(11px + 2pt);
+  line-height: 1.15;
+  align-self: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ts-header-activity .health-progress-pct {
+  font-size: calc(12px + 2pt);
+  line-height: 1;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 30px;
+}
+.ts-header-activity .health-progress-filename {
+  font-size: calc(10px + 2pt);
+  letter-spacing: 0.03em;
+}
+.ts-header-activity .ts-progress-log-link {
+  font-size: calc(12px + 2pt);
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+.ts-progress-log-link {
+  font-family: var(--secs, "Impact Label Reversed", sans-serif);
+  font-size: 13px;
+  color: var(--accent, #d94a6c);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.ts-progress-log-link:hover {
+  text-decoration: underline;
+}
+
+/* Shared with Library Health (/health): full-width progress track */
+.health-progress-wrap {
+  width: 100%;
+}
+.health-progress-wrap[aria-hidden="true"] {
+  display: none !important;
+}
+.health-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+.health-progress-count {
+  flex: 0 0 auto;
+  font-family: var(--secs, "Impact Label Reversed", sans-serif);
+  font-size: 15px;
+  line-height: 42px;
+  letter-spacing: 0.02em;
+  color: rgba(212, 207, 196, 0.92);
+  white-space: nowrap;
+}
+.health-progress-count:empty {
+  display: none;
+}
+.health-progress-bar-cell {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.health-progress-track {
+  position: relative;
+  height: 42px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.health-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #5a246d 0%, #8b3a7d 40%, var(--accent, #d94a6c) 75%, #f5a0b4 100%);
+  background-size: 140% 100%;
+  box-shadow: 0 0 14px rgba(var(--brand-purple-rgb), 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition: width 0.22s ease;
+  z-index: 1;
+  pointer-events: none;
+}
+.health-progress-filename {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  font-family: var(--secs, "Impact Label Reversed", sans-serif);
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--text, #d4cfc4);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.95), 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 1);
+}
+.health-progress-filename:empty {
+  opacity: 0;
+}
+.health-progress-pct {
+  flex: 0 0 auto;
+  font-family: var(--secs, "Impact Label Reversed", sans-serif);
+  font-size: 15px;
+  line-height: 42px;
+  letter-spacing: 0.02em;
+  color: var(--accent, #d94a6c);
+  white-space: nowrap;
+  min-width: 2.75em;
+  text-align: right;
+}
+.health-progress-pct:empty {
+  min-width: 0;
+  width: 0;
+  overflow: hidden;
+}
+.health-progress-wrap.is-indeterminate .health-progress-fill {
+  width: 100% !important;
+  background: linear-gradient(
+    90deg,
+    rgba(124, 58, 237, 0.25) 0%,
+    var(--accent, #d94a6c) 42%,
+    rgba(var(--brand-purple-rgb), 0.35) 100%
+  );
+  background-size: 200% 100%;
+  animation: health-progress-shimmer 1.15s linear infinite;
+  box-shadow: 0 0 12px rgba(var(--brand-purple-rgb), 0.35);
+}
+@keyframes health-progress-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .health-progress-wrap.is-indeterminate .health-progress-fill {
+    animation: none;
+  }
+}
+@media (max-width: 900px) {
+  /* Every page defines its own `header.ts-app-header { grid-template-
+   * columns: … }` inline after app-shell.css loads, so plain cascade
+   * would leave the desktop 3-col grid in place at mobile widths.
+   * `!important` forces the single-column stack across all pages. */
+  header.ts-app-header {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto auto auto !important;
+    justify-items: center !important;
+    row-gap: 6px !important;
+  }
+  /* Logo on top, nav-icons directly below it, activity banner last.
+   * Three-column grid (1fr auto 1fr) so the LOGO is the centered
+   * element and the version label sits anchored to its right edge —
+   * the equal side spacers keep the logo on the page centerline
+   * regardless of the version string length. */
+  header.ts-app-header .ts-header-left {
+    order: 1 !important;
+    justify-self: stretch !important;
+    width: 100% !important;
+    display: grid !important;
+    grid-template-columns: 1fr auto 1fr !important;
+    align-items: center !important;
+    gap: 0 !important;
+  }
+  header.ts-app-header .ts-header-left > .logo,
+  header.ts-app-header .ts-header-left > a.logo {
+    grid-column: 2 !important;
+    justify-self: center !important;
+  }
+  header.ts-app-header .ts-header-left > #appVersion {
+    grid-column: 3 !important;
+    justify-self: start !important;
+    margin-left: 10px !important;
+  }
+  header.ts-app-header .nav-links,
+  header.ts-app-header .header-right {
+    order: 2 !important;
+    justify-self: center !important;
+    flex-wrap: wrap;
+    justify-content: center !important;
+  }
+  header.ts-app-header .ts-header-activity {
+    order: 3 !important;
+    justify-self: stretch !important;
+    max-height: none;
+  }
+  /* Hide the /health nav button on mobile — rarely useful on a phone
+   * and takes a slot in the already-tight icon row. */
+  header .nav-links a[href="/health"],
+  header .nav-links a[href^="/health?"] {
+    display: none !important;
+  }
+}
+
+/* ── Site-wide frosted glass for main tiles (panels, stats, grids) ── */
+:root {
+  --ts-glass-bg: linear-gradient(160deg, rgba(var(--panel-hi-rgb), 0.52) 0%, rgba(var(--panel-lo-rgb), 0.4) 100%);
+  --ts-glass-border: rgba(255, 255, 255, 0.1);
+  --ts-glass-blur: 16px;
+  --ts-glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --ts-glass-outer: 0 8px 32px rgba(0, 0, 0, 0.28);
+}
+
+body .app .panel,
+body .app .history-panel,
+body .app .table-panel,
+body .app .downloads-panel,
+body .app .prowlarr-search-panel,
+body .app .stat-card,
+body .app .fav-stage,
+body .app .fav-filter-toolbar-cell,
+body .app .layout-grid .stat-card,
+body .app .layout-grid .panel-queue,
+body .app .layout-grid .panel-log {
+  background: var(--ts-glass-bg) !important;
+  border-color: var(--ts-glass-border) !important;
+  backdrop-filter: blur(var(--ts-glass-blur)) !important;
+  -webkit-backdrop-filter: blur(var(--ts-glass-blur)) !important;
+  box-shadow: var(--ts-glass-inset), var(--ts-glass-outer) !important;
+}
+
+/* Shared card bevel — applied to every tile type that displays a poster
+ * or image: scene cards, movie cards, favourite cells (performers +
+ * studios on /library), spotlight performer tiles on /scenes, and RSS
+ * download tiles on /downloads. All use the same `--ts-bevel` token
+ * pair (resting / hover) so hover state feels consistent across the
+ * app. Rules below fold the bevel into each tile type's existing
+ * drop-shadow so the subtle lift we already had is kept. */
+body .app .scene-card,
+body .app .movie-card {
+  background: linear-gradient(165deg, rgba(var(--panel-hi-rgb), 0.45) 0%, rgba(var(--panel-lo-rgb), 0.32) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  box-shadow: var(--ts-bevel), 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+body .app .scene-card:hover,
+body .app .movie-card:hover {
+  box-shadow: var(--ts-bevel-hover), 0 8px 28px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* Spotlight performer tiles on /scenes — same bevel so the row reads as
+ * part of the same family of raised tiles rather than flat chiclets
+ * against the detail panel. Scoped with the .spotlight-tile class
+ * because it uses its own isolated duotone pipeline. */
+body .app .spotlight-tile {
+  box-shadow: var(--ts-bevel) !important;
+}
+body .app .spotlight-tile:hover {
+  box-shadow: var(--ts-bevel-hover) !important;
+}
+
+/* ── /library (Favourites): grid tiles + stage — local CSS loads after; need high specificity ── */
+body .app .fav-cell {
+  background: linear-gradient(165deg, rgba(var(--panel-hi-rgb), 0.38) 0%, rgba(var(--panel-lo-rgb), 0.26) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(18px) saturate(1.12) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.12) !important;
+  box-shadow: var(--ts-bevel), 0 8px 28px rgba(0, 0, 0, 0.28) !important;
+}
+body .app .fav-cell:hover {
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: var(--ts-bevel-hover), 0 10px 32px rgba(0, 0, 0, 0.34) !important;
+}
+
+/* /downloads RSS tiles — performer + studio poster tiles share the
+ * same bevel. Scoped with body .app so it overrides the local
+ * downloads.html rule if present. */
+body .app .rss-tile {
+  box-shadow: var(--ts-bevel) !important;
+}
+body .app .rss-tile:hover {
+  box-shadow: var(--ts-bevel-hover), 0 6px 24px rgba(0, 0, 0, 0.55) !important;
+}
+body .app .fav-stage {
+  background: linear-gradient(160deg, rgba(var(--panel-hi-rgb), 0.4) 0%, rgba(var(--panel-lo-rgb), 0.3) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  backdrop-filter: blur(18px) saturate(1.08) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.08) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 8px 32px rgba(0, 0, 0, 0.26) !important;
+}
+
+/* ── /history: counter tabs + search strip (classes not covered by generic .panel rules) ── */
+body .app .filter-bar .filter-tab {
+  background: linear-gradient(145deg, rgba(var(--panel-hi-rgb), 0.44) 0%, rgba(var(--panel-lo-rgb), 0.34) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(18px) saturate(1.1) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.1) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 8px 28px rgba(0, 0, 0, 0.28) !important;
+}
+body .app .filter-bar .filter-tab:hover {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+body .app .filter-bar .filter-tab.active {
+  border-color: rgba(var(--brand-accent-rgb), 0.55) !important;
+}
+body .app .filter-bar .filter-tab.active-filed {
+  border-color: rgba(74, 222, 128, 0.65) !important;
+}
+body .app .filter-bar .filter-tab.active-unmatched {
+  border-color: rgba(251, 191, 36, 0.65) !important;
+}
+body .app .filter-bar .filter-tab.active-no_dir {
+  border-color: rgba(96, 165, 250, 0.65) !important;
+}
+body .app .filter-bar .filter-tab.active-error {
+  border-color: rgba(248, 113, 113, 0.65) !important;
+}
+body .app .search-row {
+  background: linear-gradient(145deg, rgba(var(--panel-hi-rgb), 0.4) 0%, rgba(var(--panel-lo-rgb), 0.3) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(16px) saturate(1.08) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.08) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 6px 24px rgba(0, 0, 0, 0.24) !important;
+}
+
+/* ── /health (library.html): right-hand detail / info panel + top stat counters + disk UI ── */
+body .app .detail-panel {
+  background: linear-gradient(160deg, rgba(var(--panel-hi-rgb), 0.44) 0%, rgba(var(--panel-lo-rgb), 0.32) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  backdrop-filter: blur(20px) saturate(1.12) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.12) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 10px 36px rgba(0, 0, 0, 0.3) !important;
+}
+body .app .stats-bar > .stat-card {
+  background: linear-gradient(145deg, rgba(var(--panel-hi-rgb), 0.42) 0%, rgba(var(--panel-lo-rgb), 0.32) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  backdrop-filter: blur(18px) saturate(1.1) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.1) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 8px 28px rgba(0, 0, 0, 0.28) !important;
+}
+body .app .stats-bar > .stat-card:hover {
+  border-color: rgba(var(--brand-purple-rgb), 0.42) !important;
+}
+body .app .stats-bar > .stat-card.is-selected {
+  border-color: rgba(var(--brand-accent-rgb), 0.6) !important;
+  box-shadow: inset 0 0 0 1px rgba(var(--brand-accent-rgb), 0.28), 0 8px 28px rgba(0, 0, 0, 0.32) !important;
+}
+body .app .disk-filter-row,
+body .app .lib-disk-chart-wrap {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.07) 0%, rgba(0, 0, 0, 0.12) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 6px 22px rgba(0, 0, 0, 0.22) !important;
+}
