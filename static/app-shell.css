@@ -2281,15 +2281,18 @@ html[data-theme="vhs"] .scene-performer-label > .perf-hl,
 html[data-theme="vhs"] .spotlight-tile-name {
   background: transparent !important;
 }
-/* Tilt the spotlight name pill ~7° to match the parallelogram's
- * proportional slant of 12% / 100% (`atan(0.12) ≈ 6.84°`). The
- * polygon's left edge tilts so its top is to the RIGHT of its
- * bottom; under the `vertical-rl` + `rotate(180deg)` base that
- * direction is achieved by ADDING ~7° to the 180° base, hence
- * `rotate(187deg)`. Default centre `transform-origin` keeps the
- * rotated bounding box inside the tile's `clip-path`. */
+/* Tilt the spotlight name pill to match the sliver / polygon
+ * diagonal in screen space. The 12% slant is proportional to
+ * tile WIDTH but the angle the eye sees depends on tile
+ * ASPECT — for the spotlight row's portrait tiles the
+ * effective screen-space tilt is ~3–4°, not the 6.84° you'd
+ * get from `atan(0.12)` in unit coords. `rotate(183.5deg)` =
+ * 180° base + 3.5° CW so the text axis runs parallel to the
+ * sliver's hypotenuse and the polygon's slanted left edge.
+ * Default centre `transform-origin` keeps the rotated box
+ * inside the tile's `clip-path`. */
 html[data-theme="vhs"] .spotlight-tile-name {
-  transform: rotate(187deg) !important;
+  transform: rotate(183.5deg) !important;
 }
 /* Move the 'never show again' (✕) button to the top-right.
  * The base CSS pins it at top-left, but the parallelogram
