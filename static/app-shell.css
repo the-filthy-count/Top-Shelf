@@ -1573,9 +1573,16 @@ html[data-theme="vhs"] .spotlight-tile::before {
   inset: 0;
   pointer-events: none;
   z-index: 1;
+  /* Recessed bevel — tighter offsets and smaller blur than the
+   * neumorphic wash, with the alpha balance inverted for dark
+   * mode: a strong dark shadow at top-left ("wall" of the
+   * frame blocking light) and a soft white highlight at
+   * bottom-right ("lip" catching light from the opposite
+   * side). Smaller blur keeps the bevel edge crisp instead of
+   * fogging the centre of the image. */
   box-shadow:
-    inset 11px 11px 41px rgba(0, 0, 0, 0.85),
-    inset -11px -11px 41px rgba(255, 255, 255, 0.10);
+    inset 6px 6px 10px rgba(0, 0, 0, 0.7),
+    inset -6px -6px 10px rgba(255, 255, 255, 0.15);
 }
 
 /* Soft grain on top of the tritone — 60% size (background-size
