@@ -1505,6 +1505,18 @@ html[data-theme="vhs"] .spotlight-tile,
 html[data-theme="vhs"] .fav-grid--perf .fav-cell .fav-perf-ph {
   position: relative;
 }
+/* Settings → Appearance duotone preview. The preview <img> in
+ * queue.html is inlined with `filter: var(--duotone-filter, none)`
+ * so it tracks each theme's duotone live. VHS deliberately
+ * remaps `--duotone-filter` to `grayscale(0)` (a no-op) for
+ * general surfaces, which would leave the preview blank under
+ * VHS. Point the preview at the real `#duotone-vhs` filter so
+ * the user can see palette/midpoint/contrast edits as they
+ * tune them, even on this theme. */
+html[data-theme="vhs"] .duo-preview-img {
+  filter: url(#duotone-vhs) !important;
+}
+
 /* ── Spotlight duotone (rest) ─────────────────────────────────
  * The visible effect is a chain of two SVG filters:
  *
