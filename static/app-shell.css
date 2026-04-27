@@ -1554,39 +1554,28 @@ html[data-theme="vhs"] .spotlight-tile:hover img {
   filter: none !important;
   transform: scale(1);
 }
-/* Recessed-image depth — `::before` paints a frame-cast
- * shadow over the duotone'd image so each face reads as
- * sitting BEHIND the slanted polygon, like an inset
- * photograph. Three stacked gradients:
- *   1. faint highlight along the bottom edge (frame's lower
- *      lip catching light)
- *   2. heavy shadow falling from the top (light-from-above
- *      casting onto the recessed picture)
- *   3. edge vignette wrapping the full polygon
- * Clipped by the parent's `clip-path`, so the gradients hug
- * the parallelogram's slanted edges instead of bleeding past
- * the silhouette — that's what gives the "under the frame"
- * read on the diagonal cuts. z-index 1 sits above the <img>
- * and the ::after grain (z-0) but below the name pill (z-1
- * with later source order), score badge (z-2), and exclude
- * button (z-10). */
+/* Recessed-image depth — neumorphic dual inset shadow on a
+ * `::before` overlay. Top-left receives a heavy dark inset
+ * (the lip of the frame casts a shadow onto the recessed
+ * photo); bottom-right gets a soft white inset (light bouncing
+ * off the opposite frame edge). Together they read as the
+ * image being depressed BELOW the slanted polygon surface.
+ *
+ * The pseudo's box edges are the tile's rectangle; the parent
+ * `clip-path` then trims the shadows to the polygon, so the
+ * dark/light wash hugs the diagonal cuts instead of leaking
+ * past them. z-index 1 sits above the <img> and the ::after
+ * grain (z-0) but below the name pill, score badge, and
+ * exclude button. */
 html[data-theme="vhs"] .spotlight-tile::before {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 1;
-  background:
-    linear-gradient(0deg,
-      rgba(255, 255, 255, 0.07) 0%,
-      transparent 12%),
-    linear-gradient(180deg,
-      rgba(0, 0, 0, 0.55) 0%,
-      rgba(0, 0, 0, 0.18) 8%,
-      transparent 22%),
-    radial-gradient(ellipse 140% 140% at 50% 50%,
-      transparent 55%,
-      rgba(0, 0, 0, 0.4) 100%);
+  box-shadow:
+    inset 11px 11px 41px rgba(0, 0, 0, 0.85),
+    inset -11px -11px 41px rgba(255, 255, 255, 0.10);
 }
 
 /* Soft grain on top of the tritone — 60% size (background-size
