@@ -1512,18 +1512,25 @@ html[data-theme="vhs"] .fav-grid--perf .fav-cell .fav-perf-ph {
  *      style half-strength highlight bleed: extract bright
  *      values, blur, halve, screen-blend onto SourceGraphic.
  *
- *   2. The user's CONFIGURED duotone, picked up via
- *      `--duotone-filter` (set by each theme to its themed
- *      filter; theme-init.js rebuilds `#duotone-custom` live
- *      from the Appearance settings — palette, midpoint,
- *      contrast, balances all flow through). A manual override
- *      lives on `--spotlight-duotone-override`: set it to a
- *      `url(#…)` on a tile / page / theme to bypass the
- *      Appearance settings without touching them.
+ *   2. `#duotone-vhs` — the user's CONFIGURED VHS duotone.
+ *      theme-init.js builds this filter from DUOTONE_PAIRS['vhs']
+ *      at startup AND live-rebuilds it whenever Settings →
+ *      Appearance pushes a new spec via setDuotoneOverride.
+ *
+ * We can't use `var(--duotone-filter)` here because the VHS
+ * theme block reassigns that variable to `grayscale(0)` (a
+ * no-op) so general surfaces fall back to the CRT glitch look
+ * instead of a duotone. Spotlight is the one place under VHS
+ * that wants the duotone, so we reference `#duotone-vhs`
+ * directly.
+ *
+ * `--spotlight-duotone-override`: optional manual override.
+ * Set it to `url(#…)` on a tile / page / theme to bypass the
+ * Appearance settings without touching them.
  *
  * Hover clears the filter chain so the clean photo shows. */
 html[data-theme="vhs"] .spotlight-tile img {
-  filter: url(#spotlight-bloom) var(--spotlight-duotone-override, var(--duotone-filter, none)) !important;
+  filter: url(#spotlight-bloom) var(--spotlight-duotone-override, url(#duotone-vhs)) !important;
   transition: filter 0.3s ease;
 }
 html[data-theme="vhs"] .spotlight-tile:hover img {
