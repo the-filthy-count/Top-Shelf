@@ -1618,13 +1618,32 @@ html[data-theme="vhs"] #spotlightGrid::after {
   content: '';
   flex: 0 0 14px;
   align-self: stretch;
-  background: #0048FF;
+  /* Top-to-bottom gradient through the duotone palette so the
+   * slivers track the user's configured colours. `--duotone-
+   * lighten` is the shadow stop, `--duotone-midtone` (when
+   * enabled) sits at 50%, and `--duotone-multiply` is the
+   * highlight stop. */
+  background: linear-gradient(
+    180deg,
+    var(--duotone-lighten, #0048FF) 0%,
+    var(--duotone-midtone, #6c2683) 50%,
+    var(--duotone-multiply, #D500FF) 100%
+  );
 }
 html[data-theme="vhs"] #spotlightGrid::before {
   margin-right: -12px;
+  /* Triangle widest at the top, narrowing to a point at
+   * bottom-left — mirrors the bottom-left edge slant of the
+   * adjacent tile so the row starts on the same diagonal as
+   * the rest of the strip. */
+  clip-path: polygon(0 0, 100% 0, 0 100%);
 }
 html[data-theme="vhs"] #spotlightGrid::after {
   margin-left: -12px;
+  /* Triangle narrow at the top-right (point), widening to the
+   * bottom — matches the top-right slant of the adjacent tile
+   * so the row ends on the same diagonal. */
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
 }
 html[data-theme="vhs"] .fav-grid--perf:not(.fav-grid--movie) .fav-cell .fav-perf-ph::after,
 html[data-theme="vhs"] .dl-tile-source-poster--scene::after {
@@ -2227,14 +2246,23 @@ html[data-theme="vhs"] .scene-performer-label > .perf-hl,
 html[data-theme="vhs"] .spotlight-tile-name {
   background: transparent !important;
 }
-/* Tilt the spotlight name pill to follow the tile's 12% diagonal
- * left edge. Base CSS sets `transform: rotate(180deg)` to make
- * the vertical-rl writing-mode read bottom-to-top with upright
- * glyphs; we add ~7° of clockwise rotation on top so the text
- * axis runs parallel to the parallelogram's slanted left edge. */
+/* Tilt the spotlight name pill ~7° to follow the parallelogram's
+ * slant. Keep the default `transform-origin` (centre of the
+ * element) — pivoting around `left bottom` shifts the rotated
+ * box leftward/downward by its full size and pushes it outside
+ * the tile's `clip-path`, which hides the labels entirely. With
+ * the centre origin, the pill tilts in place and stays inside
+ * the polygon so the names remain visible. */
 html[data-theme="vhs"] .spotlight-tile-name {
   transform: rotate(187deg) !important;
-  transform-origin: left bottom;
+}
+/* Move the 'never show again' (✕) button to the top-right.
+ * The base CSS pins it at top-left, but the parallelogram
+ * `clip-path` cuts away the top-left triangle, so the button
+ * is hidden. Top-right sits inside the polygon. */
+html[data-theme="vhs"] .spotlight-exclude-btn {
+  left: auto !important;
+  right: 5px !important;
 }
 
 /* Duotone swap buttons are no-ops on the VHS theme — the duotone
