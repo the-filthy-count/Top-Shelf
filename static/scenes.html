@@ -1,0 +1,3503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Scenes</title>
+<link rel="preload" href="/static/background_dark.jpg" as="image">
+<link rel="preload" href="/static/background_light.jpg" as="image">
+<link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
+<link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css">
+<link rel="stylesheet" href="/static/fonts/webawesome/styles/themes/default.css" />
+<script type="importmap">{"imports":{"@shoelace-style/localize":"/static/fonts/webawesome/utilities/localize.js","@shoelace-style/animations":"/static/fonts/webawesome/components/animation/animations.js"}}</script>
+<script type="module" src="/static/fonts/webawesome/webawesome.js"></script>
+<script src="/static/theme-init.js"></script>
+<link rel="stylesheet" href="/static/app-shell.css">
+<script src="/static/ts-utils.js"></script>
+<style>
+  @font-face {
+    font-family: 'Acidoze';
+    src: url('/static/fonts/Tox Typewriter.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'Seconds';
+    src: url('/static/fonts/Impact%20Label%20Reversed.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+  }
+  :root {
+    /* Colour palette lives in /static/app-shell.css (themeable via html[data-theme=...]) */
+    --mono:    'DM Mono', monospace;
+    --acid:    'Acidoze', 'DM Mono', monospace;
+    --secs:    'Seconds', 'DM Mono', monospace;
+  }
+  /* IN-LIBRARY / NOT-IN-LIBRARY (uses --font-impact-label from app-shell.css) */
+  .lib-tag {
+    font-family: var(--font-impact-label);
+    font-size: 20px;
+    letter-spacing: -0.02em;
+  }
+  .lib-tag--in { color: var(--green); }
+  .lib-tag--out { color: var(--red); }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  /* Styled scrollbars */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(var(--brand-purple-rgb),0.35); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(var(--brand-purple-rgb),0.55); }
+  * { scrollbar-width: thin; scrollbar-color: rgba(var(--brand-purple-rgb),0.35) transparent; }
+  body {
+    background: var(--bg) var(--app-bg-image) center center / cover fixed;
+    color: var(--text); font-family: var(--mono); font-size: 13px;
+    line-height: 1.6; min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before { content: ''; position: fixed; inset: 0; background: rgba(var(--bg-rgb),0.72); z-index: 0; }
+  .app { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 24px 12px; }
+
+  header {
+    padding: 14px 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.88) 0%, rgba(var(--panel-lo-rgb),0.78) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.22);
+    margin-bottom: 20px;
+  }
+  header:not(.ts-app-header) {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  header.ts-app-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 2fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 12px 16px;
+  }
+  header.ts-app-header .ts-header-left { justify-self: start; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; min-width: 0; }
+  header.ts-app-header .nav-links { justify-self: end; }
+  .logo img { height: 36px; object-fit: contain; }
+  .nav-links { display: flex; gap: 8px; }
+
+  /* Layout */
+  .layout { display: grid; grid-template-columns: 480px 1fr; gap: 20px; align-items: start; margin-bottom: 8px; }
+  .right-col { display: flex; flex-direction: column; gap: 20px; }
+  .panel-scroll { overflow-y: auto; max-height: 420px; }
+  .search-panel-inner { overflow-y: auto; max-height: 340px; }
+
+  /* Panel */
+  .panel {
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.88) 0%, rgba(var(--panel-lo-rgb),0.78) 100%);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.35); border-radius: 6px; overflow: hidden;
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.25);
+  }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; }
+  .panel-title { font-family: var(--acid); font-size: 28px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text); }
+  .panel-body { padding: 16px 18px; }
+  .layout { align-items: start; }
+  .empty { padding: 32px 18px; text-align: center; color: var(--dim); font-size: 12px; }
+
+  /* Search type / feed / source: chrome from app-shell .ts-seg */
+  .type-toggle { margin: 0; }
+  .scenes-toolbar-feed .type-toggle {
+    pointer-events: auto;
+    width: min(400px, calc(50vw - 80px));
+    flex-shrink: 0;
+  }
+  .source-btn.disabled { opacity: 0.2; cursor: default; pointer-events: none; }
+  .source-btn .src-count { font-family: var(--secs); font-size: calc(13px + 2pt); margin-left: 3px; text-transform: none; letter-spacing: -0.02em; }
+  .scenes-toolbar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 18px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    min-height: 52px;
+  }
+  .scenes-toolbar-side {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+  }
+  .scenes-toolbar-side--start { justify-content: flex-start; }
+  .scenes-toolbar-side--end { justify-content: flex-end; }
+  .scenes-toolbar-feed {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
+    pointer-events: none;
+  }
+  .scenes-toolbar-feed .feed-mode-toggle { pointer-events: auto; }
+  /* Search column is narrow: centered absolute feed would cover the "Search" title */
+  .search-panel-head.scenes-toolbar {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    row-gap: 10px;
+  }
+  .search-panel-head .scenes-toolbar-feed {
+    position: static;
+    transform: none;
+    left: auto;
+    z-index: auto;
+    pointer-events: auto;
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+  .search-panel-head .scenes-toolbar-feed .type-toggle {
+    width: 100%;
+    min-width: 0;
+  }
+  .search-panel-head .scenes-toolbar-side--end {
+    display: none;
+  }
+  .search-panel-head .scenes-toolbar-side--start {
+    flex: 0 0 auto;
+    min-width: min-content;
+  }
+  .feed-mode-toggle {
+    width: min(100vw - 48px, 560px);
+    flex-shrink: 0;
+  }
+  #sceneTabs.source-toggle {
+    width: min(480px, 92vw);
+  }
+
+  /* Search */
+  .search-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 12px; }
+  .field-input { background: var(--raised); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-family: var(--mono); font-size: 12px; width: 100%; outline: none; transition: border-color 0.15s; }
+  .field-input:focus { border-color: var(--accent); }
+  .field-input::placeholder { color: var(--muted); }
+  select.field-input { cursor: pointer; }
+
+  /* Results */
+  /* ── Spotlight performer row ── */
+  .spotlight-row {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    padding: 0 0 8px;
+  }
+.spotlight-tile {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  height: 120px;
+  border-radius: 7px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid rgba(var(--brand-purple-rgb), 0.14);
+  transition: border-color 0.2s, outline-color 0.2s, background-color 0.3s ease;
+  outline: 1px solid transparent;
+  outline-offset: 0;
+  /* Duotone: orange multiply + purple lighten */
+  background: transparent;
+  isolation: isolate;
+}
+
+.spotlight-tile:hover {
+  border-color: rgba(var(--brand-purple-rgb), 0.55);
+  outline-color: rgba(var(--brand-purple-rgb), 0.3);
+}
+
+.spotlight-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* Per-image brightness/contrast/hue are computed in JS (autoLevelSpotlightImage)
+   * from a pixel histogram, then written to these custom properties. The
+   * trailing SVG duotone filter (from theme-init.js) does the luminance-
+   * mapped interpolation between shadow and highlight colours. */
+  filter: brightness(var(--auto-b, 1.06))
+          contrast(var(--auto-c, 1.12))
+          hue-rotate(var(--auto-h, 0deg))
+          var(--duotone-filter, none);
+  transition: filter 0.3s ease;
+}
+
+.spotlight-tile:hover img {
+  /* Hover reveals the clean image with the same auto-levels / white-balance
+   * correction applied so the natural colours read warm and saturated. */
+  filter: brightness(var(--auto-b-hover, 1.04))
+          contrast(var(--auto-c-hover, 1.1))
+          hue-rotate(var(--auto-h, 0deg))
+          saturate(1.22);
+}
+
+/* Legacy blend-mode duotone layers disabled — SVG filter on the img
+ * above does the duotone directly. */
+.spotlight-tile::before,
+.spotlight-tile::after {
+  content: none;
+}
+  .spotlight-tile:hover::before,
+  .spotlight-tile:hover::after {
+    opacity: 0;
+  }
+  .spotlight-score-badge {
+    position: absolute; top: 5px; right: 5px;
+    background: rgba(18,12,28,0.82); border: 1px solid rgba(var(--brand-purple-rgb),0.3);
+    color: var(--accent); font-size: 10px; font-family: var(--mono);
+    padding: 2px 5px; border-radius: 4px; letter-spacing: 0.04em;
+    opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 2;
+  }
+  .spotlight-tile:hover .spotlight-score-badge { opacity: 1; }
+  .spotlight-exclude-btn {
+    position: absolute; top: 5px; left: 5px; z-index: 10;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: rgba(var(--brand-purple-rgb),0.6); border: 1px solid rgba(var(--brand-purple-rgb),0.55);
+    color: #fff; font-size: 13px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; opacity: 0; transition: opacity 0.2s, background 0.15s;
+    pointer-events: none;
+  }
+  .spotlight-tile:hover .spotlight-exclude-btn {
+    opacity: 1; pointer-events: auto;
+  }
+  .spotlight-exclude-btn:hover { background: rgba(var(--brand-purple-rgb),0.7); }
+.spotlight-tile-name {
+    /* Pinned to the bottom-left corner so the duotone pill runs from
+     * the very bottom of the tile upward — no gap below the rotated
+     * text. */
+    position: absolute; bottom: 0; left: 0;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-family: var(--secs);
+    font-size: 18px;
+    color: var(--text);
+    text-shadow: 0 1px 4px rgba(0,0,0,1), 0 2px 12px rgba(0,0,0,0.8);
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    z-index: 1;
+    max-height: 100%;
+    overflow: hidden;
+    line-height: 1.1;
+    /* 85% opacity of the duotone "shadow" tone so the name pill reads
+     * as part of the same colour family as the tile image. Falls back
+     * to the panel dark tone when no duotone is configured. Only the
+     * outer corners get rounded so the pill visually "tabs" out of
+     * the tile's bottom-left corner. */
+    padding: 10px 6px;
+    border-radius: 0 4px 4px 0;
+    background: color-mix(in srgb, var(--duotone-lighten, rgba(var(--panel-lo-rgb), 1)) 85%, transparent);
+    transition: background 0.15s;
+  }
+  /* On hover, drop the pill so the full tile image is unobscured —
+   * the text-shadow on the name carries enough legibility on its own. */
+  .spotlight-tile:hover .spotlight-tile-name { background: transparent; }
+  /* Spotlight tiles inside the detail panel — full height, no radius */
+  #spotlightGrid { display: flex; }
+  #spotlightGrid .spotlight-tile {
+    height: 100%;
+    border-radius: 0;
+    border: none;
+    outline: none;
+    border-right: 1px solid rgba(0,0,0,0.35);
+  }
+  #spotlightGrid .spotlight-tile:last-child { border-right: none; }
+  /* Tighter padding than the base tiles — the rotated name starts
+   * flush at the bottom-left corner rather than floating mid-tile. */
+  #spotlightGrid .spotlight-tile-name { font-size: 22px; padding: 6px 4px; }
+
+  @media (max-width: 768px) {
+    #spotlightGrid { overflow-x: auto; }
+    #spotlightGrid .spotlight-tile { min-width: 180px; flex: 0 0 180px; }
+  }
+
+    .result-item { display: flex; align-items: center; gap: 12px; padding: 10px; min-height: 76px; border-radius: 5px; border: 1px solid rgba(var(--brand-purple-rgb),0.1); cursor: pointer; transition: background 0.15s, border-color 0.15s; margin-bottom: 4px; }
+  .result-item:hover { background: rgba(var(--brand-purple-rgb),0.05); border-color: rgba(var(--brand-purple-rgb),0.65); }
+  .result-item.selected { background: rgba(var(--brand-accent-rgb),0.1); border: 1px solid rgba(var(--brand-purple-rgb),0.4); }
+  .result-thumb-wrap { position: relative; flex-shrink: 0; width: 66px; height: 88px; border-radius: 5px; overflow: hidden; }
+  .result-thumb { width: 100%; height: 100%; object-fit: cover; display: block; background: var(--raised); }
+  .result-thumb-placeholder { width: 66px; height: 88px; border-radius: 5px; flex-shrink: 0; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); }
+  .result-thumb-label {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 18px 4px 4px;
+    background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%);
+    font-family: var(--secs);
+    font-size: 15px;
+    color: var(--text);
+    text-align: center;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+    text-shadow: 0 1px 4px rgba(0,0,0,1), 0 2px 10px rgba(0,0,0,0.9);
+    pointer-events: none;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .result-name { font-size: 13px; color: var(--text); }
+  .result-source { font-family: var(--secs); font-size: calc(11px + 2pt); color: var(--dim); letter-spacing: -0.02em; }
+  /* Studio result: image fills width */
+  .result-item-studio { display: flex; flex-direction: column; padding: 0; min-height: 96px; border-radius: 5px; cursor: pointer; transition: background 0.15s; margin-bottom: 4px; overflow: hidden; }
+  .result-item-studio:hover { background: rgba(255,255,255,0.04); }
+  .result-item-studio.selected { background: rgba(var(--brand-accent-rgb),0.1); border: 1px solid rgba(var(--brand-purple-rgb),0.4); }
+  .result-studio-img { width: 100%; height: 72px; object-fit: contain; display: block; background: var(--raised); }
+
+  /* Detail panel */
+  .detail-poster { width: auto; height: 100%; max-width: 220px; aspect-ratio: 2/3; object-fit: cover; border-radius: 5px; flex-shrink: 0; display: block; position: relative; z-index: 1; }
+  .detail-poster-placeholder { width: auto; height: 100%; max-width: 220px; aspect-ratio: 2/3; min-height: 180px; border-radius: 5px; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 32px; flex-shrink: 0; }
+  /* Studio layout: landscape image on top, text below */
+  .detail-poster-studio { width: 100%; max-height: 240px; object-fit: contain; object-position: left; border-radius: 5px; display: block; }
+  .detail-info { flex: 1; min-width: 0; }
+  .detail-name { font-family: var(--acid); font-size: 28px; color: var(--text); margin-bottom: 8px; }
+  .detail-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 16px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .detail-title-row .detail-name {
+    margin-bottom: 0;
+    flex: 1;
+    min-width: 140px;
+    line-height: 1.15;
+  }
+  .detail-title-row .quick-add {
+    flex-shrink: 0;
+  }
+  .detail-meta { font-size: 12px; color: var(--dim); line-height: 2; position: relative; z-index: 1; }
+  .detail-meta span { color: var(--text); }
+  .detail-bio { font-size: 12px; color: var(--dim); margin-top: 12px; line-height: 1.8; overflow-y: auto; position: relative; z-index: 1; }
+  .detail-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; position: relative; z-index: 1; }
+  .detail-link { font-family: var(--secs); font-size: 14px; letter-spacing: -0.02em; color: var(--accent); background: rgba(var(--brand-purple-rgb),0.1); border: 1px solid rgba(var(--brand-purple-rgb),0.2); border-radius: 4px; padding: 2px 8px; text-decoration: none; transition: all 0.15s; }
+  .detail-link:hover { background: rgba(var(--brand-purple-rgb),0.4); border-color: var(--accent); color: var(--text); }
+  .detail-bg-image { position: absolute; top: 0; right: 0; width: 55%; height: 100%; object-fit: cover; object-position: top center; opacity: 0.22; mask-image: linear-gradient(to left, rgba(0,0,0,0.7) 0%, transparent 100%); -webkit-mask-image: linear-gradient(to left, rgba(0,0,0,0.7) 0%, transparent 100%); pointer-events: none; z-index: 0; }
+  #detailBgImage::after { content: ''; position: absolute; inset: 0; background: linear-gradient(160deg, rgba(var(--panel-lo-rgb),0.82) 0%, rgba(12,10,20,0.55) 100%); pointer-events: none; z-index: 1; }
+
+  /* Dest picker */
+  .dest-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .dest-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin-bottom: 8px; }
+  .dest-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .dest-btn { padding: 8px 12px; background: var(--raised); border: 1px solid var(--border); border-radius: 6px; color: var(--dim); font-family: var(--secs); font-size: calc(13px + 2pt); letter-spacing: -0.02em; cursor: pointer; transition: all 0.15s; text-align: left; }
+  .dest-btn:hover { border-color: var(--muted); color: var(--text); }
+  .dest-btn.selected { border-color: var(--accent); color: var(--accent); background: rgba(var(--brand-purple-rgb),0.1); }
+  .dest-custom { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
+  .quick-add-select {
+    min-width: 240px;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.94) 0%, rgba(var(--panel-lo-rgb),0.9) 100%);
+    color: var(--text);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.15);
+    border-radius: 6px;
+    padding: 8px 34px 8px 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.2;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--accent) 50%),
+      linear-gradient(135deg, var(--accent) 50%, transparent 50%),
+      linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.94) 0%, rgba(var(--panel-lo-rgb),0.9) 100%);
+    background-position:
+      calc(100% - 18px) calc(50% - 2px),
+      calc(100% - 13px) calc(50% - 2px),
+      0 0;
+    background-size: 6px 6px, 6px 6px, 100% 100%;
+    background-repeat: no-repeat;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .quick-add-select:hover { border-color: rgba(var(--brand-purple-rgb),0.65); }
+  .quick-add-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(var(--brand-purple-rgb),0.4);
+  }
+  .quick-add-select option {
+    background: #171720;
+    color: var(--text);
+  }
+  .quick-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+  .quick-add-custom {
+    width: 220px;
+  }
+  .quick-add-btn {
+    white-space: nowrap;
+    padding-inline: 12px;
+  }
+  @media (max-width: 1120px) {
+    .detail-title-row .quick-add {
+      width: 100%;
+      flex-wrap: wrap;
+    }
+    .quick-add-select,
+    .quick-add-custom {
+      flex: 1;
+      min-width: 180px;
+    }
+  }
+
+  /* ── /scenes mobile optimisation (≤640px) ──
+     Stack the two-column Search/Detail row, shrink fixed panel heights
+     (desktop hard-codes 460px), collapse the feed-mode toggle to
+     icons-only via the shared .btn-label utility. */
+  @media (max-width: 640px) {
+    .layout {
+      grid-template-columns: 1fr !important;
+      gap: 12px !important;
+    }
+    .layout > .panel {
+      height: auto !important;
+      max-height: 60vh;
+    }
+    /* Hide the 10-performer spotlight strip on mobile — the user wants
+     * the search panel and its results to be the focus there. The
+     * spotlight detail column still renders the clicked performer's
+     * scene feed; we just drop the row of tiles above it.
+     * NOTE: .scenes-toolbar-feed (the 5-button Movies/Performers/
+     * Studios/Vices/Search category toggle below) MUST stay visible —
+     * without it the feed gets stuck on whatever mode loaded last. */
+    #spotlightRow,
+    .spotlight-row {
+      display: none !important;
+    }
+    /* Also hide the entire detail panel + the spotlight grid that sits
+     * absolutely positioned inside it. On desktop the detail panel
+     * doubles as the spotlight surface, but on mobile any sliver of
+     * it (collapsed height, leftover background image) shows through
+     * as visual noise above the search results. */
+    .layout > .panel:nth-child(2),
+    #spotlightGrid,
+    #spotlightBackBtn,
+    #detailBgImage {
+      display: none !important;
+    }
+    /* Detail panel internal layout: poster + text stack vertically so
+       each has a readable width on a phone. Keep the poster bounded
+       so it doesn't push the text off-screen. */
+    #detailLayout {
+      flex-direction: column !important;
+      gap: 12px !important;
+    }
+    #detailPoster {
+      max-height: 220px;
+      align-self: center !important;
+    }
+    #detailPoster img {
+      max-height: 220px;
+      width: auto;
+    }
+    /* Scenes toolbar: title, feed toggle, source pills stack vertically.
+     * Desktop puts .scenes-toolbar-feed at position:absolute centered
+     * over the toolbar — that overlaps the title once the toolbar
+     * collapses to a column on mobile. Reset to static so the toggle
+     * sits in the normal flow under the title. */
+    .scenes-toolbar {
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 10px !important;
+    }
+    .scenes-toolbar-side,
+    .scenes-toolbar-feed {
+      width: 100% !important;
+      justify-content: center !important;
+      flex-wrap: wrap !important;
+    }
+    /* Source toggle (FansDB / StashDB / TPDB) and the palette /
+     * vice-filter buttons share the toolbar's end side. Without
+     * flex-wrap the source toggle's min(480px, 92vw) plus the two
+     * 40px buttons overflowed; with wrap it drops cleanly to the
+     * next line. Also clamp the source toggle to the viewport. */
+    #sceneTabs.source-toggle {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 0 !important;
+    }
+    .scenes-toolbar-feed {
+      position: static !important;
+      left: auto !important;
+      transform: none !important;
+      pointer-events: auto !important;
+    }
+    /* Feed mode toggle: full viewport width with each of the 5 buttons
+       getting an even 1/5 share. .ts-seg--5 is a grid with
+       repeat(5, minmax(0, 1fr)), so width:100% on the parent + the
+       toggle itself is enough. Override align-self:center from the
+       base .ts-seg rule and the desktop max-width clamp on
+       .feed-mode-toggle so we actually fill the row. */
+    .ts-seg--5,
+    .feed-mode-toggle {
+      min-width: 0 !important;
+      width: 100% !important;
+      max-width: none !important;
+      align-self: stretch !important;
+    }
+    .ts-seg--5 > button,
+    .ts-seg--3 > button {
+      padding: 8px 6px !important;
+      font-size: 13px;
+    }
+    #scenesSection {
+      padding: 0 10px 14px !important;
+    }
+    .scene-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      gap: 10px !important;
+      padding: 10px !important;
+    }
+    /* On mobile, show full scene/movie posters rather than cropping —
+     * desktop uses object-fit:cover for a uniform tile grid, but on
+     * a phone the user is primarily browsing and wants to see the
+     * whole image. Drop the fixed aspect ratio so each thumb keeps
+     * its natural proportions, and use contain so nothing is clipped. */
+    .scene-thumb,
+    .movie-poster {
+      aspect-ratio: auto !important;
+      height: auto !important;
+      width: 100% !important;
+      object-fit: contain !important;
+      background: var(--raised);
+    }
+    /* Tighten the shadowy detail toolbar + spotlight tiles. */
+    .detail-toolbar { padding: 8px 10px !important; }
+    #spotlightGrid .spotlight-tile { min-width: 140px; flex: 0 0 140px; }
+
+    /* Movies grid (search → Movies tab) defaults to 5 per row in
+     * portrait via the rule at line ~1370 (max-width: 1400px). On
+     * actual phones that's ~75px per tile — unreadable. Force 2 per
+     * row at ≤640px. */
+    .movie-grid .movie-card {
+      flex: 0 0 calc((100% - 10px) / 2) !important;
+      width: calc((100% - 10px) / 2) !important;
+      max-width: calc((100% - 10px) / 2) !important;
+    }
+
+    /* Mobile: show clean posters only — strip every overlay (studio
+     * logo, source pill, performer pile, headshot avatars, wanted
+     * action button, top-right hover button strip). The user wants
+     * the grids to read as a poster wall, not a stat-laden tile
+     * dashboard. Title labels under the poster stay so each tile is
+     * still identifiable. */
+    .scene-card .scene-source-logo,
+    .scene-card .scene-studio-logo,
+    .movie-card .scene-studio-logo,
+    .scene-card .scene-performer-label,
+    .scene-card .scene-headshots-hover,
+    .movie-card .scene-headshots-hover,
+    .scene-card .scene-wanted-btn,
+    .movie-card .scene-wanted-btn,
+    .scene-card .scene-source-pill,
+    .scene-card .scene-fav-heart,
+    .movie-card .scene-fav-heart,
+    .scene-card .scene-card-actions,
+    .movie-card .scene-card-actions {
+      display: none !important;
+    }
+  }
+
+  /* Image overlay */
+  .img-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 1000; display: flex; align-items: center; justify-content: center; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .img-overlay img { max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: 5px; box-shadow: 0 32px 80px rgba(0,0,0,0.6); }
+
+  /* Scenes panel */
+  .scene-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; padding: 16px 18px; }
+  @media (max-width: 1500px) { .scene-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 1180px) { .scene-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 860px) { .scene-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  /* Bevel test (scenes only) — combines the existing soft drop-shadow with
+   * the shared --ts-bevel token (inset highlight on top, inset shadow on
+   * bottom, outer drop) so the whole card reads as a slightly raised tile
+   * including the scene-info name plate. Hover swaps to --ts-bevel-hover
+   * for a stronger lift. The `.scene-info` sits inside the card and
+   * inherits the bottom inset shadow — no extra rule needed because the
+   * card's `overflow: hidden` already clips the name plate to the rounded
+   * corners so the bevel wraps cleanly around the whole tile. */
+  .scene-card {
+    cursor: pointer;
+    border-radius: 8px;
+    background: linear-gradient(165deg, rgba(var(--panel-hi-rgb),0.52) 0%, rgba(var(--panel-lo-rgb),0.40) 100%);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    outline: 1px solid transparent; outline-offset: 0;
+    transition: border-color 0.2s, box-shadow 0.2s, outline-color 0.2s;
+    border: 1px solid rgba(var(--brand-purple-rgb),0.55);
+    box-shadow: var(--ts-bevel), 0 4px 16px rgba(0,0,0,0.22);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .scene-card:hover {
+    border-color: rgba(var(--brand-purple-rgb),0.65);
+    box-shadow: var(--ts-bevel-hover), 0 8px 28px rgba(0,0,0,0.45);
+    outline: 1px solid rgba(var(--brand-purple-rgb),0.3); outline-offset: 0;
+  }
+  .detail-links { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; position: relative; z-index: 1; }
+  .detail-link { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.02em; color: var(--dim); background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 3px; padding: 2px 7px; text-decoration: none; transition: all 0.15s; }
+  .detail-link:hover { background: rgba(var(--brand-purple-rgb),0.35); border-color: rgba(var(--brand-purple-rgb),0.4); color: var(--accent); }
+  .detail-link img { width: 14px; height: 14px; border-radius: 2px; }
+  .detail-link.db-link { color: var(--accent); border-color: rgba(var(--brand-purple-rgb),0.35); background: rgba(var(--brand-purple-rgb),0.35); font-weight: 500; }
+  .scene-thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--raised); border-radius: 4px 4px 0 0; overflow: hidden; }
+  .scene-thumb-placeholder { width: 100%; aspect-ratio: 16/9; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); border-radius: 4px 4px 0 0; overflow: hidden; }
+  /* Loading spinners for scene thumbs / skeleton tiles */
+  .img-load { position: relative; overflow: hidden; background: var(--raised); isolation: isolate; transition: background-color 0.3s ease; }
+  /* Duotone hover — natural image at rest, tinted grayscale on card hover */
+  /* OLD: background-color: #0b0414; background: #BB4DFA; */
+  /* Duotone hover — SVG filter does a real luminance-mapped duotone
+   * between the theme's shadow and highlight colours. Defined in
+   * theme-init.js; each theme points --duotone-filter at its own
+   * url(#duotone-<name>). Legacy blend layers disabled below. */
+  .img-load .duo-tint { display: none; }
+  .img-load::after { content: none; }
+  .scene-card:hover .img-load img,
+  .movie-card:hover .img-load img { filter: var(--duotone-filter, none); }
+  /* Studio logo overlay — sits above the duotone tints so it's never tinted.
+   * Top-right corner, capped size, transparent background, dark drop-shadow
+   * for legibility against any underlying art. .scene-studio-logo:hover img
+   * is handled implicitly because the rule that grayscales the scene img
+   * targets `.img-load img` not `.scene-studio-logo` (we exclude it via the
+   * specific class selector below). */
+  /* Source-DB badge (TPDB / StashDB / FansDB) pinned to the TOP-LEFT
+   * corner, visible at rest. Fades out on hover so the top-left
+   * headshot cluster (which fades IN on hover) has the corner to
+   * itself. Only rendered in Search mode — see scene-card template. */
+  .scene-card .scene-source-logo {
+    position: absolute;
+    top: 6px; left: 6px;
+    z-index: 4;
+    height: 20px;
+    width: auto;
+    max-width: 80px;
+    object-fit: contain;
+    pointer-events: none;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.85));
+    transition: opacity 0.2s ease;
+  }
+  .scene-card:hover .scene-source-logo {
+    opacity: 0;
+  }
+  /* Scene card studio logo → top-right, with room reserved on the
+   * right edge for the wanted-eye button to sit beside it. */
+  .scene-card .scene-studio-logo {
+    position: absolute !important;
+    top: 6px !important;
+    right: 46px !important;
+    left: auto !important;
+    bottom: auto !important;
+    z-index: 5;
+    max-height: 45px;
+    max-width: 135px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    pointer-events: none;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.7)) drop-shadow(0 0 3px rgba(0,0,0,0.45));
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+  /* Movie card studio logo → bottom-centre, always visible (not just on
+   * hover), so the user can see which studio the release is from at a
+   * glance without needing to mouseover. */
+  .movie-card .scene-studio-logo {
+    position: absolute !important;
+    bottom: 8px !important;
+    left: 50% !important;
+    top: auto !important;
+    right: auto !important;
+    transform: translateX(-50%);
+    z-index: 5;
+    max-height: 44px;
+    max-width: 72%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    pointer-events: none;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.7)) drop-shadow(0 0 3px rgba(0,0,0,0.45));
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+  /* Make sure the duotone grayscale doesn't apply to the studio-logo overlay. */
+  .scene-card:hover .img-load .scene-studio-logo,
+  .movie-card:hover .img-load .scene-studio-logo,
+  html[data-duotone-inverted="1"] .scene-card .img-load .scene-studio-logo,
+  html[data-duotone-inverted="1"] .scene-card:hover .img-load .scene-studio-logo,
+  html[data-duotone-inverted="1"] .movie-card .img-load .scene-studio-logo,
+  html[data-duotone-inverted="1"] .movie-card:hover .img-load .scene-studio-logo {
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.85)) drop-shadow(0 0 6px rgba(0,0,0,0.55));
+  }
+  /* ── Inverted duotone mode (palette toggle in the "Your Feed" toolbar) ──
+   * Default: clean at rest, duotone on hover.
+   * Inverted: duotone at rest, clean on hover.
+   * Scoped to .scene-card / .movie-card so the .spotlight-tile row stays
+   * locked to its own rest-duotone / hover-clean behaviour regardless of
+   * the toggle. */
+  html[data-duotone-inverted="1"] .scene-card .img-load img,
+  html[data-duotone-inverted="1"] .movie-card .img-load img { filter: var(--duotone-filter, none); }
+  html[data-duotone-inverted="1"] .scene-card:hover .img-load img,
+  html[data-duotone-inverted="1"] .movie-card:hover .img-load img { filter: none; }
+  /* Palette toggle button — themed chrome for the Your Feed toolbar. */
+  .scenes-palette-btn {
+    width: 40px; height: 40px;
+    padding: 0;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(var(--panel-hi-rgb), 0.55);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
+    border-radius: 8px;
+    color: var(--dim);
+    font-size: 15px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  /* Tag-filter variant: needs to fit an icon + count badge, so swap the
+   * fixed square for a pill with horizontal padding. */
+  #tagFilterBtn.scenes-palette-btn {
+    width: auto;
+    min-width: 56px;
+    padding: 0 12px;
+    gap: 6px;
+  }
+  .scenes-srch-label {
+    display: block;
+    font-size: 13px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 6px;
+    font-family: var(--secs);
+  }
+  .scenes-srch-input {
+    width: 100%;
+    background: rgba(14,10,22,0.7);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.25);
+    color: var(--text);
+    padding: 9px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: var(--mono);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .scenes-srch-input:focus { border-color: rgba(var(--brand-purple-rgb),0.7); }
+  /* Native date input calendar icon — recolour to brand purple. The
+   * ::-webkit-calendar-picker-indicator comes from the UA stylesheet
+   * as a dark glyph; an invert + hue-rotate chain shifts it to match
+   * the rest of the search panel without needing a custom SVG. */
+  .scenes-srch-input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.85;
+    filter: invert(62%) sepia(63%) saturate(2000%) hue-rotate(235deg) brightness(100%) contrast(95%);
+    transition: opacity 0.15s, filter 0.15s;
+  }
+  .scenes-srch-input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+  /* Big, clickable source-logo picker cards. The native checkbox is
+   * hidden but remains the source of truth for form state. */
+  .scenes-srch-srclogo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 22px;
+    border-radius: 10px;
+    background: rgba(var(--brand-purple-rgb),0.08);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.30);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, opacity 0.15s, filter 0.15s;
+  }
+  .scenes-srch-srclogo img {
+    height: 28px;
+    width: auto;
+    max-width: 160px;
+    object-fit: contain;
+    display: block;
+  }
+  .scenes-srch-srclogo input { display: none; }
+  .scenes-srch-srclogo:has(input:checked) {
+    border-color: rgba(var(--brand-purple-rgb),0.85);
+    background: rgba(var(--brand-purple-rgb),0.18);
+  }
+  .scenes-srch-srclogo:has(input:not(:checked)) {
+    opacity: 0.40;
+    filter: grayscale(1);
+  }
+  .scenes-srch-srclogo:hover { border-color: rgba(var(--brand-purple-rgb),0.75); }
+  /* Widen the whole feed-mode toggle so each of the 5 equal-sized
+   * grid tiles has enough room for its label + icon without cramping.
+   * The grid enforces equal column widths (`repeat(5, minmax(0,1fr))`),
+   * so bumping the container is the only way to widen every tile
+   * uniformly. ``PERFORMERS`` is the longest label — target ~150px
+   * per tile to keep it comfortably unbroken. */
+  #feedModeToggle {
+    min-width: 780px;
+  }
+  #feedModeToggle .feed-mode-btn {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .scenes-palette-btn:hover {
+    border-color: rgba(var(--brand-purple-rgb), 0.65);
+    color: var(--text);
+    background: rgba(var(--panel-hi-rgb), 0.78);
+  }
+  .scenes-palette-btn.is-active {
+    color: var(--accent);
+    border-color: rgba(var(--brand-accent-rgb), 0.7);
+    background: rgba(var(--brand-accent-rgb), 0.1);
+  }
+  /* Palette toggle button active state (shared generic rule) */
+  [data-duotone-toggle].is-active { outline: 1px solid rgba(var(--brand-accent-rgb),0.65); outline-offset: 1px; color: var(--accent); }
+  .img-load .img-spin,
+  .skeleton-box > .img-spin {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: 22px;
+    height: 22px;
+    margin: -11px 0 0 -11px;
+    border-radius: 50%;
+    border: 2px solid rgba(var(--brand-purple-rgb),0.35);
+    border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .img-load img { position: relative; z-index: 2; opacity: 0; transition: opacity 0.15s ease, filter 0.3s ease; }
+  .img-load.ready img { opacity: 1; }
+  .img-load.ready .img-spin { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .skeleton-box, .skeleton-line {
+    position: relative;
+    overflow: hidden;
+    background: rgba(255,255,255,0.06);
+  }
+  .skeleton-box::after, .skeleton-line::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
+    animation: shimmer 1.25s infinite;
+  }
+  .skeleton-line { height: 12px; border-radius: 999px; margin-bottom: 8px; }
+  .skeleton-chip {
+    display: inline-block;
+    width: 52px;
+    height: 22px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.06);
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton-chip::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.1) 50%, transparent 100%);
+    animation: shimmer 1.25s infinite;
+  }
+  @keyframes shimmer { 100% { transform: translateX(100%); } }
+  /* Performer-name overlay, bottom-centre of the image.
+   * Highlighter-style background at 50% opacity of the theme dark bg,
+   * drawn only behind the text glyphs. Single line, ellipsis on overflow.
+   * No bevel — flat pill. */
+  .scene-performer-label {
+    position: absolute;
+    /* Anchor flush to the bottom edge of the image. Flex layout with
+     * `align-items: flex-end` pins the pill's bottom to the label's
+     * bottom — default `inline-block` + baseline-aligned text leaves
+     * a descender gap that makes the tab float a few pixels above
+     * the image edge. */
+    bottom: 0; left: 0; right: 0;
+    z-index: 5;
+    padding: 0 10px;
+    background: transparent;
+    font-family: var(--secs);
+    font-size: 15px;
+    color: var(--text);
+    letter-spacing: -0.01em;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    pointer-events: none;
+    line-height: 1.2;
+    transition: font-size 0.2s ease, top 0.2s ease, bottom 0.2s ease, transform 0.2s ease;
+  }
+  /* On hover: hide the performer pill so the tag chips own the
+   * lower half of the tile unobstructed. The name was already
+   * visible at rest, and the title strip below the image still
+   * carries the scene/performer context. */
+  .scene-card:hover .scene-performer-label {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .scene-performer-label > .perf-hl {
+    display: inline-block;
+    max-width: 90%;
+    /* Tab shape: rounded top corners, pointy bottom so the pill reads
+     * as a tab whose bottom edge sits flush with the image. Extra
+     * bottom padding keeps text from hugging the image edge. */
+    padding: 4px 10px 5px;
+    border-radius: 4px 4px 0 0;
+    /* 85% opacity of the active theme's duotone "shadow" tone so the
+     * pill takes on the same colour family as the studio/performer
+     * tile duotone overlay. Falls back to the panel dark tone if no
+     * duotone is configured, matching the original neutral look. */
+    background: color-mix(in srgb, var(--duotone-lighten, rgba(var(--panel-lo-rgb), 1)) 85%, transparent);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.85);
+  }
+  /* Scene info block below the image — compact two-line layout:
+   * line 1: title (1 line, ellipsis on overflow)
+   * line 2: date · studio (1 line, ellipsis on overflow) */
+  .scene-info {
+    padding: 8px 10px;
+    flex: 1;
+    text-align: center;
+    min-width: 0;
+  }
+  .scene-title {
+    font-family: var(--secs); font-size: 16px; color: var(--text);
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    text-align: center;
+    /* Shrink-to-fit instead of ellipsis-truncate. Allow up to two
+     * lines via line-clamp; the cqi-driven clamp() in app-shell.css
+     * scales font-size with the card width so long titles drop in
+     * size before wrapping is needed, and `word-break` lets the
+     * remainder break cleanly if the second line is still tight. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+  }
+  .scene-date {
+    font-size: 11px;
+    color: var(--dim);
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  /* When the studio logo overlay loaded, hide the text fallback in the meta
+   * line. When it 404s (img removed on error), the class is never added and
+   * the text name stays visible. */
+  .scene-card.has-studio-logo .meta-studio-fallback,
+  .movie-card.has-studio-logo .meta-studio-fallback { display: none; }
+  /* Hover-only headshot row: circular avatars of library performers matching
+   * the scene's performer names. Fetched lazily on first hover via
+   * /api/performers/headshots-by-name — cached on the card so repeat hovers
+   * don't refetch. Positioned top-right so it doesn't collide with the
+   * top-left studio logo overlay or the bottom-centre performer label. */
+  .scene-headshots-hover {
+    position: absolute;
+    top: 6px; left: 6px;
+    display: flex; flex-direction: row; gap: 4px;
+    z-index: 6;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  /* Wanted eye button — right side of every scene/movie card on hover.
+   * Scene cards: sits just below the top-right studio logo.
+   * Movie cards: top-right corner (no studio logo there to collide with).
+   * Filled pink when already marked wanted, dim outline when not. */
+  .scene-wanted-btn {
+    position: absolute;
+    top: 6px; right: 6px;
+    z-index: 7;
+    width: 32px; height: 32px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(20, 14, 30, 0.72);
+    border: 1px solid rgba(244, 114, 182, 0.45);
+    border-radius: 50%;
+    color: rgba(244, 114, 182, 0.85);
+    font-size: 14px;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.85);
+    transition: opacity 0.2s ease, transform 0.2s ease, background 0.15s, border-color 0.15s, color 0.15s;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  }
+  .scene-card:hover .scene-wanted-btn,
+  .movie-card:hover .scene-wanted-btn {
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1);
+  }
+  .scene-wanted-btn:hover {
+    border-color: rgba(244, 114, 182, 0.9);
+    background: rgba(244, 114, 182, 0.18);
+    color: #f472b6;
+  }
+  .scene-wanted-btn.is-wanted {
+    background: rgba(244, 114, 182, 0.92);
+    border-color: rgba(244, 114, 182, 1);
+    color: rgba(20, 14, 30, 0.95);
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1);
+  }
+  .scene-wanted-btn.is-wanted:hover {
+    background: rgba(244, 114, 182, 1);
+  }
+  /* Scene-card wanted-eye sits TO THE RIGHT of the top-right studio
+   * logo, on the same horizontal band. The logo rule above reserves a
+   * 46px gutter on the right edge for this button. Movie cards keep
+   * the 6px default — their studio logo is at the bottom-centre, so
+   * the top-right eye has no collision. */
+  .scene-card .scene-wanted-btn {
+    top: 6px;
+    right: 6px;
+  }
+  /* Tag chips anchored to the bottom of the scene thumbnail on hover —
+   * only applied to the landscape .scene-card (not .movie-card). The
+   * container grows upward from the bottom with ``align-content: flex-end``
+   * so excess rows clip off the top rather than spilling over the
+   * enlarged performer name. The 10-tag cap + "+N more" chip in the
+   * renderer means overflow is rare, so no soft-fade mask is needed. */
+  .scene-card-tags-hover {
+    position: absolute;
+    left: 6%; right: 6%;
+    bottom: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-content: flex-end;
+    gap: 5px;
+    max-height: 46%;
+    overflow: hidden;
+    z-index: 5;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .scene-card:hover .scene-card-tags-hover { opacity: 1; }
+  .scene-card-tag-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px 3px 16px;
+    background: rgba(244, 114, 182, 0.92);
+    color: rgba(20, 14, 30, 0.95);
+    font-size: 11px;
+    font-family: var(--secs);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    line-height: 1.45;
+    /* Pentagon with a notched point on the left — classic luggage-tag
+     * silhouette. The point is 8px deep; right edge stays rectangular. */
+    clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%);
+    /* Layered drop-shadow reads like a proper cast shadow beneath the
+     * tag — 1px inner edge for definition, 6px soft body for lift. */
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55))
+            drop-shadow(0 4px 8px rgba(0, 0, 0, 0.45));
+  }
+  /* The "string hole" — a small dark circle inside the notched tip.
+   * Positioned to sit on the tag's left edge just inside the point. */
+  .scene-card-tag-chip::before {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: rgba(20, 14, 30, 0.85);
+    pointer-events: none;
+  }
+  .scene-card:hover .scene-headshots-hover,
+  .movie-card:hover .scene-headshots-hover { opacity: 1; }
+  .scene-headshot-avatar {
+    width: 63px; height: 63px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(var(--bg-rgb), 0.85);
+    /* Themed brand-purple ring around the avatar — 50% opacity so it
+     * reads softly against any backdrop on hover. The headshots only
+     * appear on card hover, so this is effectively the hover-state
+     * border too. */
+    box-shadow: 0 2px 6px rgba(0,0,0,0.55), 0 0 0 1px rgba(var(--brand-purple-rgb), 0.5);
+    background: var(--raised);
+  }
+  /* Override the hover grayscale that applies to .img-load img so the
+   * hover headshots stay full-colour even though they live inside .img-load. */
+  .scene-card .img-load .scene-headshot-avatar,
+  .movie-card .img-load .scene-headshot-avatar,
+  .scene-card:hover .img-load .scene-headshot-avatar,
+  .movie-card:hover .img-load .scene-headshot-avatar,
+  html[data-duotone-inverted="1"] .scene-card .img-load .scene-headshot-avatar,
+  html[data-duotone-inverted="1"] .movie-card .img-load .scene-headshot-avatar {
+    filter: none !important;
+  }
+
+  /* ── Movie-card overrides ─────────────────────────────────────────
+   * Movies are portrait posters; performers/logo share the frame
+   * differently than a landscape scene still:
+   *   - Studio logo: hover-only (clean at rest), centered across the
+   *     top so any poster typography has a recognisable banner when
+   *     the user is hunting for a specific studio's release.
+   *   - Headshots: centred in the middle of the poster, bigger than
+   *     the scene cards (90px), wrapping into rows with a subtle
+   *     horizontal overlap so a 15-performer blockbuster still reads
+   *     as a pile instead of spilling into the logo band.
+   */
+  /* Movie-card studio-logo positioning is handled by the base rule
+   * above (bottom-centre, always visible). This block used to swap the
+   * logo to top-centre on hover — no longer needed. */
+  .movie-card .scene-headshots-hover {
+    /* Stretched to fill the full available band (top→bottom of the
+     * poster, minus a strip reserved for the studio logo when one
+     * is present). 2-column CSS Grid with `grid-auto-rows: 1fr`
+     * splits the band into equal-height row tracks; cells fill
+     * each track and clip to a square (see avatar rule below).
+     * Last row's lone odd cell spans both columns so it centres
+     * instead of hugging the left edge. */
+    top: 8px;
+    bottom: 8px;
+    left: 4%;
+    right: 4%;
+    transform: none;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: minmax(0, 1fr);
+    place-content: center;
+    place-items: center;
+    gap: 4%;
+    width: auto;
+    max-width: none;
+    max-height: none;
+  }
+  /* Reserve bottom strip for the studio logo (max-height 44px + 16px
+   * breathing room) when one is present, so the headshots never spill
+   * onto the logo. When absent, the headshots get the full poster. */
+  .movie-card.has-studio-logo .scene-headshots-hover {
+    bottom: 60px;
+  }
+  /* If the cell count is odd, the lone cell on the last row spans
+   * both columns and centres itself — no wasted half-row. */
+  .movie-card .scene-headshots-hover > :nth-child(odd):last-child {
+    grid-column: 1 / -1;
+  }
+  .movie-card .scene-headshots-hover .scene-headshot-avatar {
+    /* `width:100%` + `aspect-ratio:1` makes the avatar square at
+     * the track width; `max-height:100%` then caps to the track
+     * height, which forces aspect-ratio to recompute and shrink
+     * the width to match — net effect is `min(track_w, track_h)`,
+     * so cells stay square AND fit inside their grid track. */
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.75), 0 0 0 2px rgba(var(--brand-purple-rgb), 0.55);
+    border: 2px solid rgba(var(--bg-rgb), 0.95);
+    position: relative;
+    transition: transform 140ms ease;
+  }
+  /* Hover-lift for the individual face the user is inspecting — tiny
+   * affordance that surfaces the name via the browser tooltip. */
+  .movie-card .scene-headshots-hover .scene-headshot-avatar:hover {
+    transform: scale(1.08);
+    z-index: 10;
+  }
+  /* "+N" overflow chip — rendered by ensureCardHeadshots when a movie
+   * has more performers than the layout can show cleanly. Same size
+   * as the avatars, brand-accent tint so it reads as a UI chip rather
+   * than a face. */
+  .movie-card .scene-headshots-hover .scene-headshot-more {
+    /* Same fill-the-track sizing as the avatars above. */
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(var(--brand-purple-rgb), 0.35);
+    color: var(--text);
+    font-family: var(--secs, "Impact Label Reversed", sans-serif);
+    font-size: clamp(11px, 6cqi, 22px);
+    letter-spacing: -0.01em;
+    border: 2px solid rgba(var(--bg-rgb), 0.95);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.75), 0 0 0 2px rgba(var(--brand-purple-rgb), 0.65);
+    user-select: none;
+  }
+
+  /* Search results */
+  .search-result { display: grid; grid-template-columns: 1fr auto auto auto; gap: 12px; align-items: center; padding: 10px 18px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .search-result:last-child { border-bottom: none; }
+  .sr-title { font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sr-meta  { font-size: 11px; color: var(--dim); margin-top: 2px; }
+  .sr-indexer { font-family: var(--secs); font-size: 19px; color: var(--dim); letter-spacing: -0.02em; white-space: nowrap; }
+  .sr-size    { font-size: 11px; color: var(--dim); white-space: nowrap; }
+  .scene-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.84);
+    z-index: 1100;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  .scene-overlay.open { display: flex; }
+  .scene-overlay-card {
+    width: min(1280px, 96vw);
+    max-height: 90vh;
+    overflow-y: auto;
+    border-radius: 8px;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.98) 0%, rgba(var(--panel-lo-rgb),0.95) 100%);
+    border: 1px solid var(--border);
+    box-shadow: 0 32px 80px rgba(0,0,0,0.5);
+  }
+  .scene-overlay-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .scene-overlay-body { padding: 14px; }
+  .add-success-title {
+    font-family: var(--acid);
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    color: var(--text);
+    text-transform: none;
+  }
+  .add-success-prowl-wrap {
+    max-height: min(50vh, 420px);
+    overflow-y: auto;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    background: rgba(0,0,0,0.15);
+  }
+  .scene-overlay-grid { display: grid; grid-template-columns: 520px 1fr; gap: 14px; }
+  .scene-overlay-thumb { width: 100%; border-radius: 6px; object-fit: cover; background: var(--raised); aspect-ratio: 16 / 9; }
+  @media (max-width: 860px) { .scene-overlay-grid { grid-template-columns: 1fr; } }
+  /* Library performer headshots in scene popup */
+  .lib-perfs-row {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start;
+    margin-bottom: 12px;
+  }
+  .lib-perf-hs {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .lib-perf-hs img, .lib-perf-ph {
+    width: 52px; height: 78px; border-radius: 6px; object-fit: cover; object-position: top center;
+    border: 1px solid rgba(var(--brand-purple-rgb),0.35); background: rgba(255,255,255,0.04);
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.2); font-size: 18px; overflow: hidden;
+  }
+  .lib-perf-hs-name {
+    font-size: 9px; color: var(--dim); text-align: center; max-width: 54px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono);
+    opacity: 0; pointer-events: none; transition: opacity 0.15s;
+  }
+  .lib-perf-hs:hover .lib-perf-hs-name { opacity: 1; }
+
+  /* Result message */
+  .result-msg { margin-top: 16px; padding: 12px 16px; border-radius: 5px; font-size: 12px; display: none; }
+  .result-msg.success { background: rgba(74,222,128,0.1); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
+  .result-msg.error   { background: rgba(248,113,113,0.1); color: var(--red);   border: 1px solid rgba(248,113,113,0.2); }
+
+  /* ── Movie grid (feed + search) ── */
+  .movie-grid {
+    display: flex; flex-wrap: wrap; justify-content: flex-start; align-content: flex-start;
+    gap: 10px; width: 100%; box-sizing: border-box; padding: 14px 18px 12px; min-width: 0;
+  }
+  .movie-grid .movie-card {
+    flex: 0 0 calc((100% - 90px) / 10); width: calc((100% - 90px) / 10);
+    max-width: calc((100% - 90px) / 10); min-width: 0; box-sizing: border-box;
+  }
+  .movie-grid .movie-grid-empty { flex: 1 1 100%; width: 100%; max-width: 100%; }
+  .movie-card {
+    cursor: pointer; border-radius: 8px;
+    background: linear-gradient(165deg, rgba(var(--panel-hi-rgb),0.45) 0%, rgba(var(--panel-lo-rgb),0.32) 100%);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    transition: border-color 0.2s, box-shadow 0.2s, outline-color 0.2s;
+    border: 1px solid rgba(var(--brand-purple-rgb),0.55);
+    outline: 1px solid transparent; outline-offset: 0;
+    box-shadow: var(--ts-bevel), 0 4px 16px rgba(0,0,0,0.2);
+    min-width: 0; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .movie-card.loading { pointer-events: none; }
+  .movie-card:hover { border-color: rgba(var(--brand-purple-rgb),0.65); box-shadow: var(--ts-bevel-hover), 0 6px 24px rgba(0,0,0,0.45); outline: 1px solid rgba(var(--brand-purple-rgb),0.3); outline-offset: 0; }
+  /* OLD: background-color: #0b0414; */
+  .movie-card:hover .img-load .duo-tint,
+  .movie-card:hover .img-load::after { opacity: var(--duotone-opacity, 1); }
+  .movie-poster { width: 100%; aspect-ratio: 27/40; object-fit: cover; display: block; background: var(--raised); border-radius: 8px 8px 0 0; overflow: hidden; }
+  .movie-poster-placeholder { width: 100%; aspect-ratio: 27/40; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 28px; border-radius: 8px 8px 0 0; overflow: hidden; }
+  /* Match .scene-info — flat, transparent, no dark strip. */
+  .movie-info { padding: 8px 10px; flex: 1; min-width: 0; text-align: center; }
+  .movie-title {
+    font-family: var(--secs); font-size: 16px; color: var(--text);
+    line-height: 1.2; letter-spacing: -0.01em; text-align: center;
+    /* Allow up to 2 lines, then ellipsis. The cqi-driven clamp()
+     * in app-shell.css scales font-size with card width so long
+     * titles drop in size before wrapping is needed. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+  }
+  .movie-meta {
+    font-size: 11px; color: var(--dim); margin-top: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+  }
+
+  /* Movie search results in search panel */
+  .movie-search-results { overflow-y: auto; flex: 1; min-height: 0; }
+  .movie-search-result { display: flex; gap: 10px; padding: 8px 6px; border-radius: 6px; cursor: pointer; transition: background 0.15s; align-items: flex-start; }
+  .movie-search-result:hover { background: rgba(255,255,255,0.04); }
+  .movie-search-poster { width: 50px; aspect-ratio: 27/40; border-radius: 4px; object-fit: cover; flex-shrink: 0; background: var(--raised); }
+  .movie-search-poster-ph { width: 50px; aspect-ratio: 27/40; border-radius: 4px; background: var(--raised); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 16px; flex-shrink: 0; }
+
+  /* Movie detail overlay */
+  .movie-detail-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1100; align-items: center; justify-content: center; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .movie-detail-overlay.open { display: flex; }
+  .movie-detail-card {
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.98) 0%, rgba(var(--panel-lo-rgb),0.95) 100%);
+    border-radius: 6px; max-width: 1100px; width: 92vw; max-height: 88vh; overflow-y: auto;
+    position: relative; box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+  }
+  .movie-detail-bg { position: absolute; top: 0; left: 0; width: 100%; height: 300px; object-fit: cover; opacity: 0.15;
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, transparent 100%);
+    pointer-events: none; }
+  .movie-detail-inner { position: relative; z-index: 1; padding: 28px; display: flex; gap: 28px; }
+  .movie-detail-poster-wrap {
+    position: relative; width: 300px; min-width: 300px; max-width: 300px; flex-shrink: 0; border-radius: 8px; overflow: hidden;
+    aspect-ratio: 27/40; background: var(--raised); box-shadow: 0 12px 48px rgba(0,0,0,0.55);
+  }
+  .movie-detail-poster-wrap > .img-load { position: absolute; inset: 0; }
+  .movie-detail-poster-wrap > .img-load img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .movie-detail-poster-wrap > .img-load > .movie-poster-placeholder { position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: unset; font-size: 40px; }
+  .movie-detail-text { flex: 1; min-width: 0; }
+  .movie-detail-title { font-family: var(--acid); font-size: 28px; color: var(--text); margin-bottom: 8px; }
+  .movie-detail-meta-line { font-size: 12px; color: var(--dim); line-height: 2; }
+  .movie-detail-meta-line span { color: var(--text); }
+  .movie-detail-synopsis { font-size: 12px; color: var(--dim); line-height: 1.8; margin-top: 12px; max-height: 120px; overflow-y: auto; }
+  .movie-detail-performers { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .movie-perf-tag { font-family: var(--mono); font-size: 10px; color: var(--text); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 3px; padding: 2px 8px; text-decoration: none; display: inline-block; }
+  a.movie-perf-tag:hover { border-color: var(--accent); color: var(--accent); }
+  .movie-detail-actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+  .movie-btn-action { padding: 8px 16px; border-radius: 4px; font-family: var(--mono); font-size: 12px; cursor: pointer; border: none; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+  .movie-btn-prowlarr { background: var(--accent); color: #0c0c0e; }
+  .movie-btn-prowlarr:hover { filter: brightness(1.1); }
+  .movie-btn-link { background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid var(--border); }
+  .movie-btn-link:hover { border-color: var(--muted); }
+  .movie-detail-close { position: absolute; top: 14px; right: 14px; z-index: 2; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--dim); font-size: 13px; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; }
+  .movie-detail-close:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.2); color: var(--text); }
+  .movie-detail-scenes { padding: 16px 28px 24px; border-top: 1px solid var(--border); }
+  .movie-detail-scenes-title { font-family: var(--acid); font-size: 18px; color: var(--text); margin-bottom: 10px; }
+  .movie-detail-scene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+  .movie-detail-scene-card { border-radius: 4px; overflow: hidden; background: var(--raised); min-height: 154px; min-width: 0; }
+  .movie-detail-scene-card .img-load { width: 100%; aspect-ratio: 16/9; }
+  .movie-detail-scene-card .img-load img.movie-detail-scene-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  .movie-detail-scene-thumb-ph { width: 100%; aspect-ratio: 16/9; background: var(--raised); }
+  .movie-detail-scene-info { padding: 6px 8px; font-size: 10px; color: var(--dim); }
+  .lib-perfs-row {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin-bottom: 14px;
+  }
+
+  /* Movie prowlarr overlay */
+  .movie-prowlarr-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1200; align-items: center; justify-content: center; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .movie-prowlarr-overlay.open { display: flex; }
+  .movie-prowlarr-card { background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.98) 0%, rgba(var(--panel-lo-rgb),0.95) 100%); border-radius: 6px; max-width: 700px; width: 90vw; max-height: 80vh; overflow-y: auto; padding: 24px; position: relative; }
+  .movie-prowlarr-close { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--dim); font-size: 13px; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; }
+  .movie-prowlarr-close:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.2); color: var(--text); }
+  .movie-prowlarr-result { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 12px; gap: 8px; }
+  .movie-prowlarr-result:last-child { border-bottom: none; }
+  .movie-prowlarr-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .movie-prowlarr-size { color: var(--dim); white-space: nowrap; }
+  .movie-prowlarr-indexer { font-size: 10px; color: var(--accent); white-space: nowrap; }
+
+  .movie-pagination { display: flex; justify-content: center; gap: 8px; padding: 18px 0; }
+  .movie-page-btn { background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 6px 14px; font-family: var(--mono); font-size: 12px; cursor: pointer; transition: all 0.15s; }
+  .movie-page-btn:hover { border-color: var(--muted); }
+  .movie-page-btn.active { background: var(--accent); color: #0c0c0e; border-color: var(--accent); }
+  .movie-page-btn:disabled { opacity: 0.3; cursor: default; }
+
+  /* Movie search bar in search panel */
+  .movie-search-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+  .movie-search-bar .field-input { flex: 1; }
+
+  @media (max-aspect-ratio: 1/1) and (max-width: 1400px),
+         (orientation: portrait) and (max-width: 1400px) {
+    .movie-grid .movie-card {
+      flex: 0 0 calc((100% - 40px) / 5); width: calc((100% - 40px) / 5);
+      max-width: calc((100% - 40px) / 5);
+    }
+  }
+</style>
+</head>
+<body>
+<!-- Static tritone SVG filter referenced by `.spotlight-tile:hover img`
+     in app-shell.css (VHS theme only). Pipeline:
+       1. Rec.709 luminance reduction → grayscale.
+       2. Linear contrast pre-map (slope 1.45, intercept -0.225).
+       3. 5-entry tritone table at L=[0, 0.25, 0.5, 0.75, 1] mapping
+          to shadow → mix(shadow,mid,30%) → mid → mix(mid,highlight,65%)
+          → highlight, where:
+            shadow    #480DF5  (rgb 0.282, 0.051, 0.961)
+            midtone   #C92FAE  (rgb 0.788, 0.184, 0.682)
+            highlight #FF7621  (rgb 1.000, 0.463, 0.129)
+       Table values precomputed offline so the runtime cost is just
+       the SVG filter pass. -->
+<svg id="spotlight-bloom-svg" width="0" height="0" style="position:absolute;width:0;height:0;pointer-events:none" aria-hidden="true">
+  <defs>
+    <!-- Bloom pre-pass only — the duotone itself comes from the
+         user's Appearance settings via the runtime-built filter
+         that `--duotone-filter` points at. The CSS rule for
+         `.spotlight-tile img` chains the two:
+            filter: url(#spotlight-bloom) var(--duotone-filter, none)
+         so the bloomed pixels feed into whatever palette /
+         midpoint / contrast / balance values the user has
+         configured (or the manual `--spotlight-duotone-override`
+         set on the tile / page if present). -->
+    <filter id="spotlight-bloom" color-interpolation-filters="sRGB">
+      <!-- 1. Extract highlights via a steep linear ramp. -->
+      <feComponentTransfer in="SourceGraphic" result="ts-bright">
+        <feFuncR type="linear" slope="2.6" intercept="-1.3"/>
+        <feFuncG type="linear" slope="2.6" intercept="-1.3"/>
+        <feFuncB type="linear" slope="2.6" intercept="-1.3"/>
+      </feComponentTransfer>
+      <!-- 2. Blur the highlight pass into a soft halo. -->
+      <feGaussianBlur in="ts-bright" stdDeviation="9" result="ts-bloom-full"/>
+      <!-- 3. Halve the halo strength so the glow is moderate. -->
+      <feComponentTransfer in="ts-bloom-full" result="ts-bloom">
+        <feFuncR type="linear" slope="0.5"/>
+        <feFuncG type="linear" slope="0.5"/>
+        <feFuncB type="linear" slope="0.5"/>
+      </feComponentTransfer>
+      <!-- 4. Screen-blend onto SourceGraphic. The final feBlend
+              has no `result`, so its output is the filter's
+              output and feeds into the next chained SVG filter. -->
+      <feBlend in="SourceGraphic" in2="ts-bloom" mode="screen"/>
+    </filter>
+  </defs>
+</svg>
+<div class="app">
+  <header class="ts-app-header">
+    <div class="ts-header-left">
+      <a href="/downloads?view=queue" class="logo" style="text-decoration:none;cursor:pointer" title="Go to Queue"><img src="/static/logo.png" alt="Top-Shelf" style="height:36px; object-fit:contain;"></a>
+      <a href="/health" id="appVersion" title="Library Health" style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.06em;text-decoration:none;cursor:pointer"></a>
+    </div>
+    <div id="tsActivityBanner" class="ts-header-activity" aria-live="polite"></div>
+    <div class="nav-links">
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary" title="Downloads"><i class="fa-solid fa-download"></i></button></a>
+      <a href="/scenes" style="text-decoration:none"><button class="btn-secondary active-nav" title="Scenes"><i class="fa-solid fa-film"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library"><i class="fa-solid fa-ticket"></i></button></a>
+      <a href="/health" style="text-decoration:none"><button class="btn-secondary" title="Health"><i class="fa-solid fa-heart-pulse"></i></button></a>
+      <a href="/settings" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="fa-solid fa-gear"></i></button></a>
+      <button class="btn-secondary" style="margin-left:auto" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>location.href='/login')" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+    </div>
+  </header>
+
+  <!-- Top row: fixed height, two equal columns -->
+  <div class="layout">
+
+    <!-- Search panel -->
+    <div class="panel" style="height:345px;display:flex;flex-direction:column">
+      <div style="flex-shrink:0;border-bottom:1px solid rgba(255,255,255,0.08)">
+        <div class="scenes-toolbar search-panel-head" style="border-bottom:none;padding-bottom:6px">
+          <div class="scenes-toolbar-side scenes-toolbar-side--start">
+            <span class="panel-title">Search</span>
+          </div>
+        </div>
+        <div style="padding:0 18px 10px;display:flex;justify-content:center">
+          <div class="ts-seg ts-seg--3 type-toggle" style="width:100%">
+            <button type="button" id="btnMovie" onclick="setType('movie')" title="Movies"><i class="fa-solid fa-clapperboard" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Movies</span></button>
+            <button type="button" class="active" id="btnPerformer" onclick="setType('performer')" title="Performer"><i class="fa-solid fa-user" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Performer</span></button>
+            <button type="button" id="btnStudio" onclick="setType('studio')" title="Studio"><i class="fa-solid fa-video" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Studio</span></button>
+          </div>
+        </div>
+      </div>
+      <div class="panel-body" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+        <!-- Performer / Studio search -->
+        <div id="entitySearchWrap" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+          <div class="search-row" style="flex-shrink:0">
+            <input class="field-input" id="searchInput" type="text" placeholder="Name..." onkeydown="if(event.key==='Enter')runSearch()">
+            <button class="btn-primary" onclick="runSearch()"><i class="fa-solid fa-magnifying-glass"></i></button>
+          </div>
+          <div id="searchResults" style="flex:1;overflow-y:auto;margin-top:4px">
+            <div class="empty">Search for a performer or studio</div>
+          </div>
+        </div>
+        <!-- Movie search -->
+        <div id="movieSearchWrap" style="display:none;flex:1;overflow:hidden;flex-direction:column">
+          <div class="movie-search-bar" style="flex-shrink:0">
+            <input class="field-input" id="movieSearchInput" type="text" placeholder="Search TPDB movies..." onkeydown="if(event.key==='Enter')searchMovies()">
+            <input class="field-input" id="movieSearchYear" type="text" placeholder="Year" style="width:80px;flex:0 0 80px" onkeydown="if(event.key==='Enter')searchMovies()">
+            <button class="btn-primary" onclick="searchMovies()"><i class="fa-solid fa-magnifying-glass"></i></button>
+          </div>
+          <div id="movieSearchResults" class="movie-search-results" style="flex:1;overflow-y:auto;margin-top:4px">
+            <div class="empty">Search for movies on TPDB</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail panel -->
+    <div class="panel" style="height:345px;display:flex;flex-direction:column;position:relative;overflow:hidden">
+      <div id="detailBgImage"></div>
+      <div id="spotlightGrid" style="display:none;position:absolute;inset:0;z-index:2;gap:2px;"></div>
+      <button id="spotlightBackBtn" onclick="showSpotlightGrid()" title="Back to spotlight" style="display:none;position:absolute;bottom:10px;right:10px;z-index:3;background:rgba(var(--panel-lo-rgb),0.75);border:1px solid rgba(var(--brand-purple-rgb),0.35);color:var(--accent);width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;line-height:1;padding:0;align-items:center;justify-content:center"><i class="fa-solid fa-arrow-rotate-left"></i></button>
+      <div class="panel-body" style="flex:1;overflow:hidden;position:relative;z-index:1;display:flex;flex-direction:column;padding-top:12px">
+        <div id="detailEmpty" class="empty">Select a result to preview details</div>
+        <div id="detailContent" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+          <div id="detailLayout" style="display:flex;gap:20px;flex:1;min-height:0;align-items:stretch">
+            <div id="detailPoster" style="flex-shrink:0;cursor:pointer;display:flex;height:100%;align-self:stretch" onclick="openPosterOverlay()"></div>
+            <div id="detailTextCol" style="flex:1;min-width:0;overflow-y:auto">
+              <div class="detail-title-row">
+                <div class="detail-name" id="detailName"></div>
+                <div id="quickAddBar" class="quick-add">
+                  <select id="quickDestSelect" class="quick-add-select" onchange="handleQuickDestChange()">
+                    <option value="">Choose directory…</option>
+                  </select>
+                  <input class="field-input quick-add-custom" id="quickDestCustom" type="text" placeholder="Custom path…">
+                  <button class="btn-primary quick-add-btn" id="createBtn" onclick="createTvShow()" title="Add to library">
+                    <i class="fa-solid fa-folder-plus"></i> <span class="btn-label">Add</span>
+                  </button>
+                </div>
+              </div>
+              <div id="detailLibStatus" style="margin:2px 0 8px"></div>
+              <div class="detail-meta" id="detailMeta"></div>
+<div class="detail-links" id="detailLinks"></div>
+              <div class="detail-bio" id="detailBio" style="margin-top:6px"></div>
+            </div>
+          </div>
+          <div class="detail-toolbar" id="detailToolbar">
+            <div class="result-msg inline" id="resultMsg" style="display:none"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Scenes panel - full width below -->
+<div id="scenesSection" style="width:100%;padding:0 24px 20px;position:relative;z-index:1">
+  <div class="panel" style="background:linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.55) 0%, rgba(var(--panel-lo-rgb),0.45) 100%);border:1px solid rgba(var(--brand-purple-rgb),0.35);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)">
+    <div class="scenes-toolbar">
+      <div class="scenes-toolbar-side scenes-toolbar-side--start">
+        <span class="panel-title" id="scenesTitle">Your Feed</span>
+      </div>
+      <div class="scenes-toolbar-feed" title="TPDB scene feed source">
+        <div class="ts-seg ts-seg--5 feed-mode-toggle" id="feedModeToggle">
+          <button type="button" class="feed-mode-btn" data-mode="movies" onclick="setScenesFeedMode('movies')" title="Movies"><i class="fa-solid fa-clapperboard" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Movies</span></button>
+          <button type="button" class="feed-mode-btn" data-mode="performers" onclick="setScenesFeedMode('performers')" title="Performers"><i class="fa-solid fa-user" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Performers</span></button>
+          <button type="button" class="feed-mode-btn active" data-mode="studios" onclick="setScenesFeedMode('studios')" title="Studios"><i class="fa-solid fa-video" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Studios</span></button>
+          <button type="button" class="feed-mode-btn" data-mode="tags" onclick="setScenesFeedMode('tags')" title="Vices"><i class="fa-solid fa-fire" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Vices</span></button>
+          <button type="button" class="feed-mode-btn" data-mode="search" onclick="setScenesFeedMode('search')" title="Search"><i class="fa-solid fa-magnifying-glass" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Search</span></button>
+        </div>
+      </div>
+      <div class="scenes-toolbar-side scenes-toolbar-side--end" style="gap:8px">
+        <div id="tagFilterWrap" style="display:none">
+          <button type="button" id="tagFilterBtn" class="scenes-palette-btn" onclick="toggleTagFilterDropdown()" title="Filter by vices"><i class="fa-solid fa-fire"></i><span id="tagFilterBadge" style="display:none;margin-left:6px;padding:1px 7px;border-radius:999px;background:rgba(244,114,182,0.18);color:#f472b6;font-size:11px;font-weight:600">0</span></button>
+        </div>
+        <button type="button" data-duotone-toggle class="scenes-palette-btn" onclick="toggleDuotoneMode()" title="Swap duotone rest/hover on your feed (spotlight unchanged) — show the duotone at rest and the clean image on hover, or vice versa"><i class="fa-solid fa-palette"></i></button>
+        <div id="sceneTabs" style="display:none" class="ts-seg ts-seg--3 source-toggle">
+          <button class="source-btn" data-src="fansdb" onclick="switchSceneSource('fansdb')"><img src="/static/logos/fansdb.png" alt="FansDB" style="height:16px;width:auto;vertical-align:middle;opacity:0.9"></button>
+          <button class="source-btn" data-src="stashdb" onclick="switchSceneSource('stashdb')"><img src="/static/logos/stashdb.png" alt="StashDB" style="height:16px;width:auto;vertical-align:middle;opacity:0.9"></button>
+          <button class="source-btn active" data-src="tpdb" onclick="switchSceneSource('tpdb')"><img src="/static/logos/tpdb.png" alt="TPDB" style="height:16px;width:auto;vertical-align:middle;opacity:0.9"></button>
+        </div>
+      </div>
+    </div>
+    <div id="scenesSearchPanel" style="display:none;padding:20px 24px;border-bottom:1px solid rgba(var(--brand-purple-rgb),0.18);background:rgba(var(--brand-purple-rgb),0.04)">
+      <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+        <!-- Scene search filters by performer, studio, tag and date —
+             scene titles are noisy across DBs and rarely the way users
+             remember a scene. Movies have their own search panel
+             (#movieSearchInput) which still searches by title. -->
+        <div style="display:grid;grid-template-columns:repeat(5, minmax(0, 1fr));gap:10px 14px">
+          <div><label class="scenes-srch-label">Performer</label><input class="scenes-srch-input" id="scenesSrchPerformer" placeholder="Performer name" onkeydown="if(event.key==='Enter')runScenesSearch()"></div>
+          <div><label class="scenes-srch-label">Studio</label><input class="scenes-srch-input" id="scenesSrchStudio" placeholder="Studio / site" onkeydown="if(event.key==='Enter')runScenesSearch()"></div>
+          <div><label class="scenes-srch-label">Tag</label><input class="scenes-srch-input" id="scenesSrchTag" placeholder="Tag name" onkeydown="if(event.key==='Enter')runScenesSearch()"></div>
+          <div><label class="scenes-srch-label">Date from</label><input class="scenes-srch-input" id="scenesSrchDateFrom" type="date"></div>
+          <div><label class="scenes-srch-label">Date to</label><input class="scenes-srch-input" id="scenesSrchDateTo" type="date"></div>
+        </div>
+        <!-- Source picker + Clear / Search on one centred row. The hidden
+             checkbox in each logo card is still the source of truth for
+             the runScenesSearch() payload. -->
+        <div style="display:flex;justify-content:center;align-items:center;gap:24px;padding:4px 0 2px;flex-wrap:wrap">
+          <label class="scenes-srch-srclogo" data-on="true"><input type="checkbox" id="scenesSrchSrcTpdb" checked><img src="/static/logos/tpdb.png" alt="TPDB"></label>
+          <label class="scenes-srch-srclogo" data-on="true"><input type="checkbox" id="scenesSrchSrcStashdb" checked><img src="/static/logos/stashdb.png" alt="StashDB"></label>
+          <label class="scenes-srch-srclogo" data-on="true"><input type="checkbox" id="scenesSrchSrcFansdb" checked><img src="/static/logos/fansdb.png" alt="FansDB"></label>
+          <button type="button" class="scenes-palette-btn" onclick="clearScenesSearch()" title="Clear fields" style="margin-left:16px"><i class="fa-solid fa-xmark"></i></button>
+          <button type="button" class="scenes-palette-btn" onclick="runScenesSearch()" title="Search" style="background:rgba(var(--brand-purple-rgb),0.22);border-color:rgba(var(--brand-purple-rgb),0.6);min-width:56px;padding:0 14px"><i class="fa-solid fa-magnifying-glass"></i></button>
+        </div>
+        <div id="scenesSearchStatus" style="font-size:11px;color:var(--dim);text-align:center"></div>
+      </div>
+    </div>
+    <div id="scenesGrid" class="scene-grid"><div class="empty">Loading...</div></div>
+  </div>
+</div>
+
+<script>
+  let currentType     = 'performer';
+  let selectedResult  = null;
+  let selectedDest    = null;
+  /** Scene objects for the current grid (index matches data-scene-i on .scene-card) */
+  let _sceneGridItems = [];
+  /** Title-case for performer/studio labels (APIs often return all-lowercase). */
+  function capDisplayName(s) {
+    if (s == null || s === '') return '';
+    return String(s).trim().split(/\s+/).map(function (word) {
+      if (!word) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    }).join(' ');
+  }
+  // ── Wanted-list state ─────────────────────────────────────────────
+  // Set of "${kind}:${source}:${external_id}" keys currently in the
+  // user's Wanted list. Populated once on page load, updated in place
+  // when the user toggles the eye icon.
+  const _wantedKeys = new Set();
+  function _wkey(kind, source, externalId) {
+    return `${(kind || 'scene').toLowerCase()}:${(source || '').toLowerCase()}:${externalId || ''}`;
+  }
+  async function _loadWantedKeys() {
+    try {
+      const r = await fetch('/api/wanted/keys');
+      const d = await r.json();
+      (d.keys || []).forEach(k => _wantedKeys.add(_wkey(k.kind, k.source, k.external_id)));
+    } catch (_) {}
+  }
+  function _wantedGuessSource(card) {
+    // Scene cards pulled from TPDB via the performers/studios/tags/feed
+    // paths; movie cards use the same convention. All of these are TPDB
+    // in practice. If we ever surface StashDB cards directly we can
+    // thread a real ``source`` through the card data.
+    return (card.dataset.wantedSource || 'tpdb').toLowerCase();
+  }
+  function _cardWantedButtonHtml(kind, sourceGuess, externalId) {
+    const key = _wkey(kind, sourceGuess, externalId);
+    const on = _wantedKeys.has(key);
+    const title = on ? 'In your Wanted list — click to remove' : 'Add to Wanted';
+    return `<button class="scene-wanted-btn${on ? ' is-wanted' : ''}" data-wanted-kind="${esc(kind)}" data-wanted-source="${esc(sourceGuess)}" data-wanted-id="${esc(externalId)}" title="${esc(title)}" aria-pressed="${on}"><i class="fa-solid fa-eye"></i></button>`;
+  }
+  document.addEventListener('click', function(e) {
+    const btn = e.target && e.target.closest && e.target.closest('.scene-wanted-btn');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const kind = btn.getAttribute('data-wanted-kind') || 'scene';
+    const source = btn.getAttribute('data-wanted-source') || 'tpdb';
+    const externalId = btn.getAttribute('data-wanted-id') || '';
+    if (!externalId) return;
+    // Pull enriching fields from the card so the backend can save a
+    // full record without a follow-up fetch.
+    const card = btn.closest('.scene-card, .movie-card');
+    const scene = (() => {
+      if (!card) return {};
+      const idx = parseInt(card.getAttribute('data-scene-i') || '-1', 10);
+      if (!isNaN(idx) && idx >= 0 && window._sceneGridItems && window._sceneGridItems[idx]) {
+        return window._sceneGridItems[idx];
+      }
+      return null;
+    })();
+    const payload = {
+      kind, source, external_id: externalId,
+      title:    (scene && scene.title)    || card?.querySelector('.scene-title')?.textContent
+               || card?.querySelector('.movie-title')?.textContent || '',
+      studio:   (scene && scene.studio)   || '',
+      date:     (scene && scene.date)     || '',
+      performers: (scene && scene.performer) || '',
+      thumb:    (scene && scene.thumb)    || card?.querySelector('.scene-thumb')?.src
+               || card?.querySelector('.movie-poster')?.src || '',
+      description: (scene && scene.description) || '',
+      tags:     (scene && Array.isArray(scene.tags)) ? scene.tags : [],
+      duration: (scene && scene.duration)  || 0,
+    };
+    btn.disabled = true;
+    fetch('/api/wanted/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(r => r.json()).then(d => {
+      const key = _wkey(kind, source, externalId);
+      if (d && d.wanted) {
+        _wantedKeys.add(key);
+        document.querySelectorAll(`.scene-wanted-btn[data-wanted-id="${CSS.escape(externalId)}"]`).forEach(b => {
+          b.classList.add('is-wanted');
+          b.setAttribute('aria-pressed', 'true');
+          b.setAttribute('title', 'In your Wanted list — click to remove');
+        });
+      } else {
+        _wantedKeys.delete(key);
+        document.querySelectorAll(`.scene-wanted-btn[data-wanted-id="${CSS.escape(externalId)}"]`).forEach(b => {
+          b.classList.remove('is-wanted');
+          b.setAttribute('aria-pressed', 'false');
+          b.setAttribute('title', 'Add to Wanted');
+        });
+      }
+    }).catch(() => {}).finally(() => { btn.disabled = false; });
+  });
+
+  const _FEED_MODES = ['movies', 'performers', 'studios', 'tags', 'search'];
+  let _scenesFeedMode = (function() {
+    try {
+      let v = localStorage.getItem('topShelfScenesFeedMode');
+      if (v == null || v === '' || v === 'library' || v === 'random' || v === 'favourites') v = 'studios';
+      if (v === 'recent') v = 'performers';
+      if (!_FEED_MODES.includes(v)) v = 'studios';
+      return v;
+    } catch (_) { return 'studios'; }
+  })();
+
+  let _monitoredTagsCache = [];
+  // null = never saved (first-ever entry to Tags mode); [] = user explicitly
+  // deselected everything; [...] = persisted selection. The null sentinel
+  // lets us auto-select every monitored tag on first entry while still
+  // honouring an intentionally empty selection afterwards.
+  let _selectedTagIds = (function() {
+    try {
+      const raw = localStorage.getItem('topShelfScenesSelectedTags');
+      if (raw === null) return null;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch(_) { return []; }
+  })();
+
+  function _applyFeedModeToggleUI() {
+    document.querySelectorAll('#feedModeToggle .feed-mode-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-mode') === _scenesFeedMode);
+    });
+    const tagWrap = document.getElementById('tagFilterWrap');
+    if (tagWrap) tagWrap.style.display = (_scenesFeedMode === 'tags') ? 'block' : 'none';
+  }
+
+  async function _ensureMonitoredTagsLoaded() {
+    if (_monitoredTagsCache.length) return _monitoredTagsCache;
+    try {
+      const r = await fetch('/api/settings');
+      const d = await r.json();
+      const raw = (d && d.settings && d.settings.monitored_tags) || '[]';
+      const parsed = JSON.parse(raw);
+      _monitoredTagsCache = Array.isArray(parsed) ? parsed.filter(t => t && t.id && t.name) : [];
+    } catch(_) { _monitoredTagsCache = []; }
+    // First-ever entry to Tags mode: auto-select every monitored tag so
+    // the feed has something to show. User's subsequent deselect/select
+    // choices persist to localStorage and override this default.
+    if (_selectedTagIds === null) {
+      _selectedTagIds = _monitoredTagsCache.map(t => String(t.id));
+      try { localStorage.setItem('topShelfScenesSelectedTags', JSON.stringify(_selectedTagIds)); } catch(_) {}
+      _updateTagFilterBadge();
+    }
+    return _monitoredTagsCache;
+  }
+
+  function _renderTagFilterList() {
+    const list = document.getElementById('tagFilterList');
+    if (!list) return;
+    if (!_monitoredTagsCache.length) {
+      list.innerHTML = '<div style="padding:14px;color:var(--dim);font-size:12px;line-height:1.5">No vices configured. Add some under Settings → Content Filters → Vices.</div>';
+      return;
+    }
+    const header = `
+      <div style="display:flex;gap:6px;padding:4px 6px 8px;border-bottom:1px solid rgba(var(--brand-purple-rgb),0.18);margin-bottom:4px">
+        <button type="button" onclick="selectAllTags()" style="flex:1;padding:4px 8px;border-radius:6px;background:rgba(var(--brand-purple-rgb),0.12);border:1px solid rgba(var(--brand-purple-rgb),0.25);color:var(--text);font-size:11px;cursor:pointer">All</button>
+        <button type="button" onclick="clearSelectedTags()" style="flex:1;padding:4px 8px;border-radius:6px;background:rgba(var(--brand-purple-rgb),0.12);border:1px solid rgba(var(--brand-purple-rgb),0.25);color:var(--text);font-size:11px;cursor:pointer">None</button>
+      </div>`;
+    const sortedTags = _monitoredTagsCache
+      .slice()
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
+    const rows = sortedTags.map(t => {
+      const id = String(t.id);
+      const checked = _selectedTagIds.includes(id);
+      return `
+        <label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text)" onmouseenter="this.style.background='rgba(var(--brand-purple-rgb),0.10)'" onmouseleave="this.style.background=''">
+          <input type="checkbox" ${checked ? 'checked' : ''} data-tag-id="${esc(id)}" onchange="toggleTagSelection('${esc(id)}', this.checked)" style="accent-color:#c084fc">
+          <span>${esc(t.name)}</span>
+        </label>`;
+    }).join('');
+    list.innerHTML = header + rows;
+  }
+
+  function _updateTagFilterBadge() {
+    const badge = document.getElementById('tagFilterBadge');
+    if (!badge) return;
+    // `_selectedTagIds` is intentionally `null` until the user (or
+    // `_ensureMonitoredTagsLoaded`) seeds it — a fresh browser with no
+    // localStorage key hits this path on the initial paint, before the
+    // monitored-tags fetch resolves.
+    const n = Array.isArray(_selectedTagIds) ? _selectedTagIds.length : 0;
+    if (n > 0) {
+      badge.textContent = String(n);
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  function _positionTagFilterDropdown() {
+    const btn = document.getElementById('tagFilterBtn');
+    const dd = document.getElementById('tagFilterDropdown');
+    if (!btn || !dd || dd.style.display !== 'block') return;
+    const r = btn.getBoundingClientRect();
+    const ddW = dd.offsetWidth || 280;
+    const vw = window.innerWidth;
+    // Align the dropdown's right edge to the button's right edge;
+    // clamp to viewport so nothing gets clipped off-screen.
+    let left = r.right - ddW;
+    if (left < 8) left = 8;
+    if (left + ddW > vw - 8) left = vw - ddW - 8;
+    dd.style.top = (r.bottom + 6) + 'px';
+    dd.style.left = left + 'px';
+  }
+
+  function toggleTagFilterDropdown() {
+    const dd = document.getElementById('tagFilterDropdown');
+    if (!dd) return;
+    if (dd.style.display === 'block') {
+      dd.style.display = 'none';
+      return;
+    }
+    _ensureMonitoredTagsLoaded().then(() => {
+      _renderTagFilterList();
+      dd.style.display = 'block';
+      _positionTagFilterDropdown();
+    });
+  }
+
+  window.addEventListener('resize', _positionTagFilterDropdown);
+  window.addEventListener('scroll', _positionTagFilterDropdown, true);
+
+  function toggleTagSelection(id, checked) {
+    const sid = String(id);
+    const idx = _selectedTagIds.indexOf(sid);
+    if (checked && idx === -1) _selectedTagIds.push(sid);
+    if (!checked && idx !== -1) _selectedTagIds.splice(idx, 1);
+    try { localStorage.setItem('topShelfScenesSelectedTags', JSON.stringify(_selectedTagIds)); } catch(_) {}
+    _updateTagFilterBadge();
+    loadFeed();
+  }
+
+  function selectAllTags() {
+    _selectedTagIds = _monitoredTagsCache.map(t => String(t.id));
+    try { localStorage.setItem('topShelfScenesSelectedTags', JSON.stringify(_selectedTagIds)); } catch(_) {}
+    _renderTagFilterList();
+    _updateTagFilterBadge();
+    loadFeed();
+  }
+
+  function clearSelectedTags() {
+    _selectedTagIds = [];
+    try { localStorage.setItem('topShelfScenesSelectedTags', JSON.stringify(_selectedTagIds)); } catch(_) {}
+    _renderTagFilterList();
+    _updateTagFilterBadge();
+    loadFeed();
+  }
+
+  document.addEventListener('click', function(e) {
+    const dd = document.getElementById('tagFilterDropdown');
+    const btn = document.getElementById('tagFilterBtn');
+    if (!dd || dd.style.display !== 'block') return;
+    if (btn && (btn === e.target || btn.contains(e.target))) return;
+    if (dd.contains(e.target)) return;
+    dd.style.display = 'none';
+  });
+
+  function setScenesFeedMode(mode) {
+    const m = _FEED_MODES.includes(mode) ? mode : 'studios';
+    _scenesFeedMode = m;
+    try { localStorage.setItem('topShelfScenesFeedMode', m); } catch (_) {}
+    _applyFeedModeToggleUI();
+    _updateTagFilterBadge();
+    if (m === 'tags') _ensureMonitoredTagsLoaded().then(() => loadFeed());
+    else loadFeed();
+  }
+
+  function clearScenesSearch() {
+    ['scenesSrchPerformer','scenesSrchStudio','scenesSrchTag','scenesSrchDateFrom','scenesSrchDateTo'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    const status = document.getElementById('scenesSearchStatus');
+    if (status) status.textContent = '';
+    const grid = document.getElementById('scenesGrid');
+    if (grid) {
+      grid.innerHTML = '<div class="empty">Fill in the form and search across StashDB, ThePornDB, and FansDB.</div>';
+      delete grid.dataset.searchPopulated;
+    }
+  }
+
+  async function runScenesSearch() {
+    // Scene search keys off performer / studio / tag / date — title
+    // is intentionally not a scene-search field (movies use their own
+    // title-based search panel below). Backend treats absent `title`
+    // as no filter, so we just don't send one.
+    const payload = {
+      performer: document.getElementById('scenesSrchPerformer')?.value.trim() || '',
+      studio:    document.getElementById('scenesSrchStudio')?.value.trim() || '',
+      tag:       document.getElementById('scenesSrchTag')?.value.trim() || '',
+      date_from: document.getElementById('scenesSrchDateFrom')?.value.trim() || '',
+      date_to:   document.getElementById('scenesSrchDateTo')?.value.trim() || '',
+      sources: [],
+      per_page: 30,
+    };
+    if (document.getElementById('scenesSrchSrcTpdb')?.checked) payload.sources.push('tpdb');
+    if (document.getElementById('scenesSrchSrcStashdb')?.checked) payload.sources.push('stashdb');
+    if (document.getElementById('scenesSrchSrcFansdb')?.checked) payload.sources.push('fansdb');
+    if (!payload.sources.length) {
+      const status = document.getElementById('scenesSearchStatus');
+      if (status) status.textContent = 'Select at least one source.';
+      return;
+    }
+    if (!payload.performer && !payload.studio && !payload.tag && !payload.date_from && !payload.date_to) {
+      const status = document.getElementById('scenesSearchStatus');
+      if (status) status.textContent = 'Fill in at least one field.';
+      return;
+    }
+    const grid = document.getElementById('scenesGrid');
+    const status = document.getElementById('scenesSearchStatus');
+    if (status) status.textContent = 'Searching ' + payload.sources.map(s => s.toUpperCase()).join(', ') + '…';
+    grid.innerHTML = sceneGridSkeleton();
+    try {
+      const r = await fetch('/api/scenes/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json();
+      if (d && d.error) {
+        grid.innerHTML = `<div class="empty">${esc(d.error)}</div>`;
+        if (status) status.textContent = '';
+        return;
+      }
+      const scenes = d.scenes || [];
+      if (status) status.textContent = scenes.length
+        ? `${scenes.length} result${scenes.length === 1 ? '' : 's'} from ${(d.sources_queried || payload.sources).join(', ').toUpperCase()}`
+        : 'No scenes matched.';
+      if (!scenes.length) {
+        grid.innerHTML = '<div class="empty">No scenes matched. Try broader search terms.</div>';
+        grid.dataset.searchPopulated = '1';
+        return;
+      }
+      renderSceneGrid(scenes, true);
+      grid.dataset.searchPopulated = '1';
+    } catch (e) {
+      grid.innerHTML = `<div class="empty">Search failed: ${esc(e.message || e)}</div>`;
+      if (status) status.textContent = '';
+    }
+  }
+
+  function _shortIndexer(name) {
+    const map = {
+      'theporndb': 'TPDB', 'the porn db': 'TPDB', 'porndb': 'TPDB',
+      'stashdb': 'StashDB', 'fansdb': 'FansDB',
+    };
+    const lower = (name || '').toLowerCase().trim();
+    return map[lower] || name;
+  }
+
+  function setDetailBg(imageUrl) {
+    const el = document.getElementById('detailBgImage');
+    if (imageUrl) {
+      el.innerHTML = `<img class="detail-bg-image" src="${esc(imageUrl)}" onerror="this.remove()">`;
+    } else {
+      el.innerHTML = '';
+    }
+  }
+
+  const _dbSources = ['TPDB', 'StashDB', 'FansDB'];
+  function detailLoadingSkeleton() {
+    return `
+      <div style="display:flex;gap:20px;flex:1;min-height:0;align-items:stretch">
+        <div class="skeleton-box" style="width:190px;min-height:240px;border-radius:5px;flex-shrink:0"></div>
+        <div style="flex:1;min-width:0">
+          <div class="skeleton-line" style="width:42%"></div>
+          <div class="skeleton-line" style="width:68%"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 16px">
+            <div class="skeleton-chip"></div><div class="skeleton-chip"></div><div class="skeleton-chip"></div>
+          </div>
+          <div class="skeleton-line" style="width:100%"></div>
+          <div class="skeleton-line" style="width:96%"></div>
+          <div class="skeleton-line" style="width:88%"></div>
+          <div class="skeleton-line" style="width:74%"></div>
+        </div>
+      </div>`;
+  }
+
+  function sceneGridSkeleton(count = 30) {
+    return Array.from({length: count}, () => `
+      <div class="scene-card">
+        <div class="skeleton-box" style="width:100%;aspect-ratio:16/9">
+          <div class="img-spin" aria-hidden="true"></div>
+        </div>
+        <div class="scene-info">
+          <div class="skeleton-line" style="width:84%"></div>
+          <div class="skeleton-line" style="width:62%"></div>
+        </div>
+        <div class="scene-actions">
+          <div class="skeleton-box" style="height:28px;border-radius:4px;flex:1"></div>
+          <div class="skeleton-box" style="height:28px;border-radius:4px;flex:1"></div>
+        </div>
+      </div>`).join('');
+  }
+
+  const _LOCAL_LOGOS = { 'TPDB': 'tpdb', 'ThePornDB': 'tpdb', 'StashDB': 'stashdb', 'FansDB': 'fansdb', 'TMDB': 'tmdb', 'Freeones': 'freeones', 'IAFD': 'iafd', 'Babepedia': 'babepedia', 'Coomer': 'coomer' };
+  function renderLinks(links) {
+    if (!links || !links.length) return '';
+    return links.map(l => {
+      const isDb = _dbSources.includes(l.label);
+      const cls = isDb ? 'detail-link db-link' : 'detail-link';
+      const logoKey = _LOCAL_LOGOS[l.label];
+      const iconHtml = logoKey
+        ? `<img src="/static/logos/${logoKey}.png" alt="${esc(l.label)}" style="height:16px;width:auto;vertical-align:middle;opacity:0.9">`
+        : (() => { try { const d = new URL(l.url).hostname.replace('www.',''); return `<img src="https://www.google.com/s2/favicons?domain=${d}&sz=32" onerror="this.remove()">`; } catch { return ''; } })();
+      return `<a class="${cls}" href="${esc(l.url)}" target="_blank" title="${esc(l.label)}">${iconHtml}</a>`;
+    }).join('');
+  }
+
+  function setType(type) {
+    currentType = type;
+    document.getElementById('btnMovie').classList.toggle('active', type === 'movie');
+    document.getElementById('btnPerformer').classList.toggle('active', type === 'performer');
+    document.getElementById('btnStudio').classList.toggle('active', type === 'studio');
+    // Toggle search panels
+    const entityWrap = document.getElementById('entitySearchWrap');
+    const movieWrap = document.getElementById('movieSearchWrap');
+    if (type === 'movie') {
+      entityWrap.style.display = 'none';
+      movieWrap.style.display = 'flex';
+      document.getElementById('movieSearchResults').innerHTML = '<div class="empty">Search for movies on TPDB</div>';
+    } else {
+      entityWrap.style.display = 'flex';
+      movieWrap.style.display = 'none';
+      document.getElementById('searchResults').innerHTML = '<div class="empty">Search for a performer or studio</div>';
+    }
+    clearDetail();
+  }
+
+  async function runSearch() {
+    const q = document.getElementById('searchInput').value.trim();
+    if (!q) return;
+    const el = document.getElementById('searchResults');
+    el.innerHTML = Array.from({length:6}, (_,i)=>`<div class="result-item"><div class="result-thumb-placeholder skeleton-box"></div><div style="flex:1;min-width:0"><div class="skeleton-line" style="width:${70 - (i%3)*10}%"></div><div class="skeleton-line" style="width:32%;margin-bottom:0"></div></div><div style="width:110px" class="skeleton-line"></div></div>`).join('');
+    try {
+      const r = await fetch(`/api/metadata/search?q=${encodeURIComponent(q)}&type=${currentType}&strict=0`);
+      const d = await r.json();
+      if (!d.results?.length) { el.innerHTML = '<div class="empty">No results found</div>'; return; }
+      window._searchResults = d.results;
+      const isStudio = currentType === 'studio';
+      el.innerHTML = d.results.map((item, i) => {
+        if (isStudio && item.image) {
+          // Studio with image: show image only, stretched full width
+          return `<div class="result-item-studio" id="ri-${i}" onclick="selectResult(${i})">
+            <img class="result-studio-img" src="${esc(item.image)}" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+            <div style="display:none;padding:10px"><div class="result-name">${esc(capDisplayName(item.name))}</div></div>
+            <div id="lib-${i}" style="display:none"></div>
+          </div>`;
+        }
+        if (isStudio) {
+          // Studio without image: show text
+          return `<div class="result-item" id="ri-${i}" onclick="selectResult(${i})">
+            <div class="result-thumb-placeholder"><i class="fa-solid fa-clapperboard"></i></div>
+            <div style="flex:1;min-width:0">
+              <div class="result-name">${esc(capDisplayName(item.name))}</div>
+              <div class="result-source">${item.source}</div>
+            </div>
+            <div id="lib-${i}" style="flex-shrink:0;font-size:11px;color:var(--dim)">...</div>
+          </div>`;
+        }
+        // Performer: standard layout
+        return `<div class="result-item" id="ri-${i}" onclick="selectResult(${i})">
+          ${item.image
+            ? `<div class="result-thumb-wrap"><img class="result-thumb" src="${esc(item.image)}" onerror="this.closest('.result-thumb-wrap').outerHTML='<div class=result-thumb-placeholder><i class=fa-solid fa-person></i></div>'"></div>`
+            : `<div class="result-thumb-placeholder"><i class="fa-solid fa-person"></i></div>`}
+          <div style="flex:1;min-width:0">
+            <div class="result-name">${esc(capDisplayName(item.name))}</div>
+            <div class="result-source">${item.source}</div>
+          </div>
+          <div id="lib-${i}" style="flex-shrink:0;font-size:11px;color:var(--dim)">...</div>
+        </div>`;
+      }).join('');
+      // Check library status for each result
+      d.results.forEach((item, i) => {
+        fetch(`/api/library/check?name=${encodeURIComponent(item.name)}`)
+          .then(r => r.json())
+          .then(lib => {
+            const el = document.getElementById(`lib-${i}`);
+            if (!el) return;
+            if (lib.found) {
+              el.innerHTML = '<span class="lib-tag lib-tag--in">IN-LIBRARY</span>';
+              window._searchResults[i]._inLibrary = true;
+              window._searchResults[i]._libraryPath = lib.path;
+            } else {
+              el.innerHTML = '';
+              window._searchResults[i]._inLibrary = false;
+            }
+          }).catch(() => { const el = document.getElementById(`lib-${i}`); if (el) el.innerHTML = ''; });
+      });
+    } catch(e) {
+      el.innerHTML = `<div class="empty">Search failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function selectResult(idx) {
+    document.querySelectorAll('.result-item, .result-item-studio').forEach(el => el.classList.remove('selected'));
+    document.getElementById(`ri-${idx}`)?.classList.add('selected');
+    selectedResult = window._searchResults[idx];
+    // Hide spotlight grid so detail content is visible
+    const sg = document.getElementById('spotlightGrid');
+    if (sg) sg.style.display = 'none';
+    // Show back-to-spotlight button if spotlight performers exist
+    if (window._spotlightPerformers?.length) {
+      document.getElementById('spotlightBackBtn').style.display = 'flex';
+    }
+    showDetail(selectedResult);
+  }
+
+  // ── Poster overlay ───────────────────────────────────────────────────
+
+  function openPosterOverlay() {
+    const img = document.querySelector('#detailPoster img');
+    if (img) openImageOverlay(img.src);
+  }
+
+  // ── Image overlay ────────────────────────────────────────────────────
+
+  function openImageOverlay(url) {
+    if (!url) return;
+    document.getElementById('imgOverlayImg').src = url;
+    document.getElementById('imgOverlay').style.display = 'flex';
+  }
+
+  function closeImageOverlay() {
+    document.getElementById('imgOverlay').style.display = 'none';
+    document.getElementById('imgOverlayImg').src = '';
+  }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeImageOverlay(); closeSceneOverlay(); } });
+
+  // ── Scenes ───────────────────────────────────────────────────────────
+
+  let _sceneSources = {};  // cached scenes by source
+
+  async function loadScenes(item) {
+    const section = document.getElementById('scenesSection');
+    const grid    = document.getElementById('scenesGrid');
+    const title   = document.getElementById('scenesTitle');
+    const tabs    = document.getElementById('sceneTabs');
+    title.textContent = item.name ? ('Recent Scenes — ' + capDisplayName(item.name)) : 'Recent Scenes';
+    tabs.style.display = 'none';
+    _sceneSources = {};
+    section.style.display = 'block';
+    grid.className = 'scene-grid';
+    grid.innerHTML = sceneGridSkeleton();
+    try {
+      const params = new URLSearchParams({
+        type: currentType,
+        source: item.source,
+        id: item.id,
+        slug: item.slug || '',
+        name: item.name || '',
+      });
+      const r = await fetch(`/api/scenes/recent?${params}`);
+      const d = await r.json();
+
+      // Always show source tabs for performer/studio lookup.
+      // Normalize older response shape that returns only d.scenes.
+      _sceneSources = d.sources || { tpdb: [], stashdb: [], fansdb: [] };
+      if (!d.sources && Array.isArray(d.scenes)) {
+        const sourceKey = (String(item.source || '').toLowerCase() === 'stashdb')
+          ? 'stashdb'
+          : (String(item.source || '').toLowerCase() === 'fansdb' ? 'fansdb' : 'tpdb');
+        _sceneSources[sourceKey] = d.scenes;
+      }
+
+      tabs.style.display = 'grid';
+      const available = Object.entries(_sceneSources).filter(([k, v]) => v && v.length > 0);
+      document.querySelectorAll('.source-btn').forEach(btn => {
+        const src = btn.dataset.src;
+        const scenes = _sceneSources[src] || [];
+        const label = src === 'tpdb' ? 'TPDB' : src === 'stashdb' ? 'StashDB' : 'FansDB';
+        btn.innerHTML = `<img src="/static/logos/${src}.png" alt="${label}" style="height:16px;width:auto;vertical-align:middle;opacity:0.9">`;
+        if (scenes.length > 0) {
+          btn.classList.remove('disabled');
+        } else {
+          btn.classList.add('disabled');
+        }
+      });
+
+      if (available.length > 0) {
+        switchSceneSource(available[0][0]);
+      } else {
+        grid.innerHTML = '<div class="empty">No recent scenes found</div>';
+      }
+      return;
+    } catch(e) {
+      grid.innerHTML = `<div class="empty">Failed to load scenes</div>`;
+    }
+  }
+
+  // Tracks which DB source ('tpdb'|'stashdb'|'fansdb') the visible
+  // scene grid was rendered from. When the user clicks Grab on a
+  // search result we tag the download with this so /downloads can
+  // later render the source scene's poster on the tile.
+  let _currentSceneSource = 'tpdb';
+  function switchSceneSource(src) {
+    _currentSceneSource = src || 'tpdb';
+    document.querySelectorAll('.source-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.src === src);
+    });
+    const scenes = _sceneSources[src] || [];
+    if (scenes.length) {
+      renderSceneGrid(scenes, false);
+    } else {
+      document.getElementById('scenesGrid').innerHTML = '<div class="empty">No scenes from this source</div>';
+    }
+  }
+
+  function openSceneOverlay(scene) {
+    if (!scene) return;
+    window._sceneOverlay = scene;
+    document.getElementById('sceneOverlayTitle').textContent = scene.title || 'Scene';
+    document.getElementById('sceneOverlayQuery').value = [scene.performer || '', scene.title || ''].filter(Boolean).join(' ');
+    const sceneTags = Array.isArray(scene.tags) ? scene.tags : [];
+    const tagsHtml = sceneTags.length
+      ? `<div class="scene-tag-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${sceneTags.map(t => `<span class="scene-card-tag-chip">${esc(t)}</span>`).join('')}</div>`
+      : '';
+    const sceneDesc = (scene.description || '').trim();
+    const descHtml = sceneDesc
+      ? `<div class="scene-overlay-synopsis" style="margin-top:10px;font-size:13px;color:var(--text);line-height:1.55;opacity:0.88">${esc(sceneDesc)}</div>`
+      : '';
+    document.getElementById('sceneOverlayMain').innerHTML = `
+      <div class="scene-overlay-grid">
+        <div>
+          <img class="scene-overlay-thumb" src="${esc(scene.thumb || '/static/missing.jpg')}" onerror="this.src='/static/missing.jpg'">
+          ${tagsHtml}
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+            <button class="btn-primary" onclick="runSceneOverlaySearch()"><i class="fa-solid fa-magnifying-glass"></i></button>
+            <button class="btn-secondary" onclick="window.open('${esc(scene.link || ('https://theporndb.net/scenes/' + (scene.id || '')))}','_blank')" style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;padding:6px 12px;cursor:pointer;transition:border-color 0.15s"><img src="/static/logos/tpdb.png" alt="TPDB" style="height:16px;width:auto;vertical-align:middle;opacity:0.9"></button>
+          </div>
+        </div>
+        <div>
+          <div id="sceneLibPerfs"></div>
+          <div style="font-size:12px;color:var(--dim);line-height:1.8">
+            ${scene.date ? `<div>Date: <span style="color:var(--text)">${esc(scene.date)}</span></div>` : ''}
+            ${scene.studio ? `<div>Studio: <span style="color:var(--text)">${esc(capDisplayName(scene.studio))}</span></div>` : ''}
+            ${scene.performer ? `<div>Performer: <span style="color:var(--text)">${esc(capDisplayName(scene.performer))}</span></div>` : ''}
+          </div>
+          ${descHtml}
+        </div>
+      </div>`;
+    document.getElementById('sceneOverlayResults').innerHTML = '';
+    document.getElementById('sceneOverlay').classList.add('open');
+    // Async: fetch library performer headshots
+    if (scene.performer) {
+      const names = scene.performer;
+      fetch(`/api/performers/headshots-by-name?names=${encodeURIComponent(names)}`, { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(d => {
+          const perfs = d.performers || [];
+          const el = document.getElementById('sceneLibPerfs');
+          if (!el || !perfs.length) return;
+          el.innerHTML = `<div class="lib-perfs-row">${perfs.map(p => {
+            const img = p.headshot_url
+              ? `<img src="${esc(p.headshot_url)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'lib-perf-ph',innerHTML:'<i class=\\'fa-solid fa-user\\'></i>'}))">`
+              : `<div class="lib-perf-ph"><i class="fa-solid fa-user"></i></div>`;
+            return `<div class="lib-perf-hs" title="${esc(p.name)}">${img}<div class="lib-perf-hs-name">${esc(p.name)}</div></div>`;
+          }).join('')}</div>`;
+        })
+        .catch(() => {});
+    }
+  }
+
+  function closeSceneOverlay() {
+    document.getElementById('sceneOverlay').classList.remove('open');
+    window._sceneOverlay = null;
+  }
+
+  // ── Prowlarr (overlay) ────────────────────────────────────────────────
+
+  async function runSceneOverlaySearch() {
+    const q = document.getElementById('sceneOverlayQuery').value.trim();
+    if (!q) return;
+    const el = document.getElementById('sceneOverlayResults');
+    el.innerHTML = Array.from({length:6}, (_,i)=>`<div class="result-item"><div class="result-thumb-placeholder skeleton-box"></div><div style="flex:1;min-width:0"><div class="skeleton-line" style="width:${70 - (i%3)*10}%"></div><div class="skeleton-line" style="width:32%;margin-bottom:0"></div></div><div style="width:110px" class="skeleton-line"></div></div>`).join('');
+    try {
+      const r = await fetch(`/api/prowlarr/search?q=${encodeURIComponent(q)}`);
+      const d = await r.json();
+      if (d.error) { el.innerHTML = `<div class="empty">${esc(d.error)}</div>`; return; }
+      if (!d.results?.length) { el.innerHTML = '<div class="empty">No results found</div>'; return; }
+      window._sceneProwlarrResults = d.results;
+      el.innerHTML = d.results.map((r, i) => `
+        <div class="search-result" style="grid-template-columns:auto 1fr auto auto">
+          <button type="button" class="btn-prowlarr-grab ${r.type === 'nzb' ? 'nzb' : ''}" title="Send to download client" onclick="grabResult(event, ${i})"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
+          <div style="min-width:0">
+            <div class="sr-title" title="${esc(r.title)}">${truncateFilename(r.title, 60)}</div>
+            <div class="sr-meta">${r.age ? Math.round(r.age/24) + 'd ago' : ''} ${r.seeders != null && r.seeders !== undefined ? '· ' + r.seeders + ' seeders' : ''}</div>
+          </div>
+          <span class="sr-indexer">${esc(_shortIndexer(r.indexer).replace(/ /g, '-'))}</span>
+          <span class="sr-size">${r.size_mb > 1024 ? (r.size_mb/1024).toFixed(1) + ' GB' : r.size_mb + ' MB'}</span>
+        </div>`).join('');
+    } catch(e) {
+      el.innerHTML = `<div class="empty">Search failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function truncateFilename(name, maxLen) {
+    if (!name || name.length <= maxLen) return esc(name || '');
+    return esc(name.slice(0, maxLen - 3)) + '...';
+  }
+
+  function closeAddSuccessOverlay() {
+    const ov = document.getElementById('addSuccessOverlay');
+    if (ov) ov.classList.remove('open');
+    window._addSuccessProwlarrResults = null;
+  }
+
+  function openAddSuccessOverlay(name) {
+    const raw = (name || '').trim();
+    const label = capDisplayName(raw) || raw;
+    const titleEl = document.getElementById('addSuccessTitle');
+    if (titleEl) titleEl.textContent = 'Successfully Added ' + label;
+    document.getElementById('addSuccessOverlay')?.classList.add('open');
+    runAddSuccessProwlarrSearch(raw);
+  }
+
+  async function runAddSuccessProwlarrSearch(q) {
+    const el = document.getElementById('addSuccessProwlResults');
+    if (!el) return;
+    const query = (q || '').trim();
+    if (!query) {
+      el.innerHTML = '<div class="empty">No name to search</div>';
+      return;
+    }
+    el.innerHTML = '<div class="empty" style="padding:16px">Searching Prowlarr…</div>';
+    try {
+      const r = await fetch(`/api/prowlarr/search?q=${encodeURIComponent(query)}`);
+      const d = await r.json();
+      if (d.error) { el.innerHTML = `<div class="empty">${esc(d.error)}</div>`; return; }
+      if (!d.results?.length) {
+        el.innerHTML = '<div class="empty">No Prowlarr results — check indexers in Settings</div>';
+        return;
+      }
+      window._addSuccessProwlarrResults = d.results;
+      el.innerHTML = d.results.map((rrow, i) => `
+        <div class="search-result" style="grid-template-columns:auto 1fr auto auto">
+          <button type="button" class="btn-prowlarr-grab ${rrow.type === 'nzb' ? 'nzb' : ''}" title="Send to download client" onclick="grabAddSuccessResult(event, ${i})"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
+          <div style="min-width:0">
+            <div class="sr-title" title="${esc(rrow.title)}">${truncateFilename(rrow.title, 60)}</div>
+            <div class="sr-meta">${rrow.age ? Math.round(rrow.age/24) + 'd ago' : ''} ${rrow.seeders != null && rrow.seeders !== undefined ? '· ' + rrow.seeders + ' seeders' : ''}</div>
+          </div>
+          <span class="sr-indexer">${esc(_shortIndexer(rrow.indexer).replace(/ /g, '-'))}</span>
+          <span class="sr-size">${rrow.size_mb > 1024 ? (rrow.size_mb/1024).toFixed(1) + ' GB' : rrow.size_mb + ' MB'}</span>
+        </div>`).join('');
+    } catch (e) {
+      el.innerHTML = `<div class="empty">Search failed: ${esc(e.message)}</div>`;
+    }
+  }
+
+  async function grabAddSuccessResult(ev, idx) {
+    const result = window._addSuccessProwlarrResults && window._addSuccessProwlarrResults[idx];
+    const btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+    if (!btn || !result) return;
+    btn.disabled = true;
+    btn.classList.remove('btn-prowlarr-grab--sent');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>';
+    try {
+      const r = await fetch('/api/prowlarr/grab', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          guid:         result.guid || '',
+          indexer_id:   result.indexer_id != null ? result.indexer_id : null,
+          type:         result.type,
+          download_url: result.type === 'torrent' && result.magnet ? result.magnet : result.download_url,
+        }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        btn.classList.add('btn-prowlarr-grab--sent');
+        btn.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i>';
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-download" aria-hidden="true"></i>';
+        alert(d.error || 'Could not send to download client');
+      }
+    } catch (e) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-download" aria-hidden="true"></i>';
+      alert(e.message || 'Could not send to download client');
+    }
+  }
+
+  async function grabResult(ev, idx) {
+    const result = window._sceneProwlarrResults[idx];
+    const btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+    if (!btn || !result) return;
+    btn.disabled = true;
+    btn.classList.remove('btn-prowlarr-grab--sent');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>';
+    // Tag the grab with the originating scene's metadata so /downloads
+    // can render its poster on the tile and we can match this download
+    // back to the scene in the queue later. The scene currently shown
+    // in the overlay is the one being grabbed.
+    const ovScene = window._sceneOverlay || {};
+    const sourceScene = ovScene && ovScene.id ? {
+      db:         _currentSceneSource || 'tpdb',
+      id:         String(ovScene.id || ''),
+      title:      ovScene.title || '',
+      studio:     ovScene.studio || '',
+      performers: ovScene.performer
+        ? (Array.isArray(ovScene.performer) ? ovScene.performer : [ovScene.performer])
+        : [],
+      poster_url: ovScene.thumb || '',
+      date:       ovScene.date || '',
+    } : null;
+    try {
+      const r = await fetch('/api/prowlarr/grab', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          guid:         result.guid || '',
+          indexer_id:   result.indexer_id != null ? result.indexer_id : null,
+          type:         result.type,
+          download_url: result.type === 'torrent' && result.magnet ? result.magnet : result.download_url,
+          title:        result.title || '',
+          source_scene: sourceScene,
+        }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        btn.classList.add('btn-prowlarr-grab--sent');
+        btn.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i>';
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-download" aria-hidden="true"></i>';
+        alert(d.error || 'Could not send to download client');
+      }
+    } catch(e) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-download" aria-hidden="true"></i>';
+      alert(e.message || 'Could not send to download client');
+    }
+  }
+
+  async function showDetail(item) {
+    document.getElementById('detailEmpty').style.display = 'none';
+    document.getElementById('detailContent').style.display = 'flex';
+    document.getElementById('detailName').textContent = capDisplayName(item.name || '');
+    document.getElementById('detailMeta').innerHTML = `<span style="color:var(--dim);font-size:11px">${item.source}</span>`;
+    setDetailBg(item.image);
+    const libEl = document.getElementById('detailLibStatus');
+    const destEl = document.getElementById('quickAddBar');
+    libEl.innerHTML = '';
+    fetch(`/api/library/check?name=${encodeURIComponent(item.name)}`)
+      .then(r => r.json())
+      .then(lib => {
+        if (lib.found) {
+          libEl.innerHTML = `<span class="lib-tag lib-tag--in">IN-LIBRARY</span>`;
+          if (destEl) destEl.style.display = 'none';
+        } else {
+          libEl.innerHTML = `<span class="lib-tag lib-tag--out">NOT-IN-LIBRARY</span>`;
+          if (destEl) destEl.style.display = 'inline-flex';
+        }
+      }).catch(() => { libEl.innerHTML = ''; if (destEl) destEl.style.display = 'inline-flex'; });
+    document.getElementById('detailBio').textContent = '';
+    document.getElementById('resultMsg').style.display = 'none';
+    document.getElementById('detailMeta').innerHTML = detailLoadingSkeleton();
+    document.getElementById('detailLinks').innerHTML = '';
+
+    // Switch layout based on type
+    const layoutEl = document.getElementById('detailLayout');
+    const posterEl = document.getElementById('detailPoster');
+    const isStudio = currentType === 'studio';
+    const icon = isStudio ? 'clapperboard' : 'person';
+    const posterClass = isStudio ? 'detail-poster-studio' : 'detail-poster';
+
+    if (isStudio) {
+      // Studio: stacked — image on top, text below
+      layoutEl.style.flexDirection = 'column';
+      layoutEl.style.alignItems = 'stretch';
+      layoutEl.style.gap = '12px';
+      posterEl.style.flexShrink = '0';
+      posterEl.style.display = 'block';
+      posterEl.style.height = 'auto';
+    } else {
+      // Performer: side-by-side — image left, text right
+      layoutEl.style.flexDirection = 'row';
+      layoutEl.style.alignItems = 'stretch';
+      layoutEl.style.gap = '20px';
+      posterEl.style.flexShrink = '0';
+      posterEl.style.display = 'flex';
+      posterEl.style.height = '100%';
+    }
+
+    if (item.image) {
+      posterEl.innerHTML = `<img class="${posterClass}" src="${esc(item.image)}" onclick="openImageOverlay('${esc(item.image)}')" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-${icon}></i></div>'">`;
+    } else {
+      posterEl.innerHTML = `<div class="detail-poster-placeholder"><i class="fa-solid fa-${icon}"></i></div>`;
+    }
+
+    loadDirs();
+    loadScenes(item);
+
+    // Use a lightweight preview fetch
+    try {
+      const r = await fetch(`/api/metadata/preview?type=${currentType}&source=${encodeURIComponent(item.source)}&id=${encodeURIComponent(item.id)}`);
+      const d = await r.json();
+      if (d.image) {
+        posterEl.innerHTML = `<img class="${posterClass}" src="${esc(d.image)}" onclick="openImageOverlay('${esc(d.image)}')" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-${icon}></i></div>'">`;
+        setDetailBg(d.image);
+      }
+      document.getElementById('detailBio').textContent = d.bio || '';
+      if (d.meta) document.getElementById('detailMeta').innerHTML = d.meta;
+      // Render links
+      const linksEl = document.getElementById('detailLinks');
+      if (d.links && d.links.length) {
+        linksEl.innerHTML = renderLinks(d.links);
+      } else {
+        linksEl.innerHTML = '';
+      }
+      // Update slug on selected result for better scene lookups
+      if (d.slug && selectedResult) {
+        selectedResult.slug = d.slug;
+        loadScenes(selectedResult);
+      }
+    } catch {
+      document.getElementById('detailBio').textContent = '';
+    }
+  }
+
+  function clearDetail() {
+    selectedResult = null;
+    document.getElementById('detailEmpty').style.display = 'block';
+    document.getElementById('detailContent').style.display = 'none';
+    document.getElementById('detailName').textContent = '';
+    document.getElementById('detailLinks').innerHTML = '';
+    setDetailBg(null);
+    loadFeed();
+  }
+
+  async function loadDirs() {
+    try {
+      const r = await fetch('/api/metadata/dirs');
+      const d = await r.json();
+      const sel = document.getElementById('quickDestSelect');
+      if (!sel) return;
+      const options = ['<option value="">Choose directory…</option>']
+        .concat((d.dirs || []).map(dir => `<option value="${esc(dir.path)}">${esc(dir.label)}</option>`))
+        .concat(['<option value="__custom__">Custom path…</option>']);
+      sel.innerHTML = options.join('');
+      if (selectedDest) sel.value = selectedDest;
+      handleQuickDestChange();
+    } catch {}
+  }
+
+  function handleQuickDestChange() {
+    const sel = document.getElementById('quickDestSelect');
+    const custom = document.getElementById('quickDestCustom');
+    if (!sel || !custom) return;
+    if (sel.value === '__custom__') {
+      selectedDest = null;
+      custom.style.display = 'block';
+    } else {
+      selectedDest = sel.value || null;
+      custom.style.display = 'none';
+      if (sel.value !== '__custom__') custom.value = '';
+    }
+  }
+
+  function clearDest() {
+    selectedDest = null;
+    const sel = document.getElementById('quickDestSelect');
+    const custom = document.getElementById('quickDestCustom');
+    if (sel) sel.value = '';
+    if (custom) { custom.value = ''; custom.style.display = 'none'; }
+  }
+
+  async function createTvShow() {
+    if (!selectedResult) { alert('Select a result first'); return; }
+    const sel = document.getElementById('quickDestSelect');
+    const customEl = document.getElementById('quickDestCustom');
+    const dest = (sel && sel.value === '__custom__' ? customEl.value.trim() : '') || selectedDest;
+    if (!dest) { alert('Choose a destination directory'); return; }
+
+    const btn = document.getElementById('createBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating...';
+
+    try {
+      const r = await fetch('/api/metadata/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          type:     currentType,
+          source:   selectedResult.source,
+          id:       selectedResult.id,
+          name:     selectedResult.name || '',
+          dest_dir: dest,
+        }),
+      });
+      const d = await r.json();
+      const msg = document.getElementById('resultMsg');
+      if (d.success) {
+        if (msg) { msg.style.display = 'none'; msg.textContent = ''; }
+        if (window.TsActivity && window.TsActivity.refresh) window.TsActivity.refresh();
+        openAddSuccessOverlay(d.name);
+        // Auto-exclude from spotlight when added to library
+        if (currentType === 'performer' && selectedResult?.source === 'stashdb' && selectedResult?.id) {
+          fetch('/api/spotlight/exclude', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: selectedResult.id, name: selectedResult.name || ''})
+          }).catch(() => {});
+        }
+        // Update library status and hide dest section
+        document.getElementById('detailLibStatus').innerHTML =
+          `<span class="lib-tag lib-tag--in">IN-LIBRARY</span>`;
+        const ds = document.getElementById('quickAddBar');
+        if (ds) ds.style.display = 'none'; clearDest();
+        // Update search result status if visible
+        if (selectedResult) {
+          window._searchResults?.forEach((item, i) => {
+            if (item.name === selectedResult.name) {
+              const el = document.getElementById(`lib-${i}`);
+              if (el) el.innerHTML = '<span class="lib-tag lib-tag--in">IN-LIBRARY</span>';
+            }
+          });
+        }
+      } else {
+        msg.className = 'result-msg error';
+        msg.textContent = `Error: ${d.error}`;
+        msg.style.display = 'block';
+      }
+    } catch(e) {
+      const msg = document.getElementById('resultMsg');
+      msg.className = 'result-msg error';
+      msg.textContent = `Error: ${e.message}`;
+      msg.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-folder-plus"></i> Add';
+    }
+  }
+
+  // ── Feed (default scenes on page load) ────────────────────────────────
+
+  //: Per-mode feed cache — switching between Your Feed / Vices /
+  //: Studios / Performers / Movies refetches the same data every
+  //: time, which for Movies takes multiple seconds and for the
+  //: scene feeds makes the grid flash blank and rebuild. Keep the
+  //: last response in memory keyed by "mode|filters"; re-render
+  //: from cache when it's fresh, refetch in the background to
+  //: refresh. TTL tuned so quick toggling feels instant but a tab
+  //: left open for a while will re-fetch on next visit.
+  const _FEED_CACHE_TTL_MS = 90 * 1000;
+  const _feedCache = new Map();  // key -> { data, ts, title }
+
+  function _feedCacheKey() {
+    if (_scenesFeedMode === 'tags') {
+      return `tags|${_selectedTagIds.slice().sort().join(',')}`;
+    }
+    return _scenesFeedMode;
+  }
+
+  function _feedCacheGet(key) {
+    const hit = _feedCache.get(key);
+    if (!hit) return null;
+    if (Date.now() - hit.ts > _FEED_CACHE_TTL_MS) {
+      _feedCache.delete(key);
+      return null;
+    }
+    return hit;
+  }
+
+  function _feedCachePut(key, data, titleText) {
+    _feedCache.set(key, { data, ts: Date.now(), title: titleText });
+  }
+
+  function _feedCacheInvalidate(key) {
+    if (key) _feedCache.delete(key);
+    else _feedCache.clear();
+  }
+
+  async function loadFeed(opts) {
+    const force = !!(opts && opts.force);
+    const section = document.getElementById('scenesSection');
+    const grid    = document.getElementById('scenesGrid');
+    const title   = document.getElementById('scenesTitle');
+    const pag     = document.getElementById('movieFeedPagination');
+    _applyFeedModeToggleUI();
+    document.getElementById('sceneTabs').style.display = 'none';
+    _sceneSources = {};
+    section.style.display = 'block';
+
+    //: Cache hit: render instantly, skip fetch. Search mode never
+    //: caches (it's form-driven per request) and force-refresh
+    //: bypasses regardless.
+    const cacheKey = _feedCacheKey();
+    if (!force && _scenesFeedMode !== 'search') {
+      const hit = _feedCacheGet(cacheKey);
+      if (hit) {
+        if (title && hit.title) title.textContent = hit.title;
+        if (pag) pag.style.display = 'none';
+        const searchPanel = document.getElementById('scenesSearchPanel');
+        if (searchPanel) searchPanel.style.display = 'none';
+        if (_scenesFeedMode === 'movies') {
+          grid.className = 'movie-grid';
+          if (hit.data && hit.data.movies) {
+            renderMovieGrid(hit.data.movies, grid);
+          }
+        } else {
+          grid.className = 'scene-grid';
+          if (hit.data && Array.isArray(hit.data.scenes)) {
+            if (!hit.data.scenes.length && hit.data.emptyHtml) {
+              grid.innerHTML = hit.data.emptyHtml;
+            } else if (hit.data.scenes.length) {
+              renderSceneGrid(hit.data.scenes, true);
+            } else {
+              grid.innerHTML = '<div class="empty">No scenes found</div>';
+            }
+          }
+        }
+        return;
+      }
+    }
+
+    // Show/hide the search-form panel based on the active feed mode.
+    const searchPanel = document.getElementById('scenesSearchPanel');
+    if (searchPanel) searchPanel.style.display = (_scenesFeedMode === 'search') ? 'block' : 'none';
+    // Search mode: let the panel drive the grid; don't auto-fetch.
+    if (_scenesFeedMode === 'search') {
+      title.textContent = 'Search';
+      if (pag) pag.style.display = 'none';
+      grid.className = 'scene-grid';
+      if (!grid.dataset.searchPopulated) {
+        grid.innerHTML = '<div class="empty">Fill in the form and search across StashDB, ThePornDB, and FansDB.</div>';
+      }
+      return;
+    }
+
+    // Movies feed mode — show TPDB movie grid
+    if (_scenesFeedMode === 'movies') {
+      title.textContent = 'Latest Movies';
+      if (pag) pag.style.display = 'none';
+      grid.innerHTML = movieGridSkeleton(30);
+      grid.className = 'movie-grid';
+      try {
+        const r = await fetch('/api/movies/tpdb/latest?page=1');
+        const d = await r.json();
+        const movies = (d.results || []).slice(0, 30);
+        if (!movies.length) {
+          let msg = 'No movies found';
+          if (d.error) {
+            if (String(d.error).includes('TPDB returned 401')) {
+              msg += '. TPDB authentication failed (401). Add or update your TPDB API key in Settings.';
+            } else { msg += ' (' + esc(d.error) + ')'; }
+          }
+          grid.innerHTML = `<div class="empty movie-grid-empty">${msg}</div>`;
+          return;
+        }
+        _movieFeedPage = 1;
+        _movieFeedTotalPages = d.total_pages || 1;
+        renderMovieGrid(movies, grid);
+        _feedCachePut(cacheKey, { movies }, 'Latest Movies');
+      } catch(e) {
+        grid.innerHTML = `<div class="empty movie-grid-empty">Error: ${esc(e.message)}</div>`;
+      }
+      return;
+    }
+
+    // Scene feed modes
+    grid.className = 'scene-grid';
+    if (pag) pag.style.display = 'none';
+    grid.innerHTML = sceneGridSkeleton();
+    try {
+      let url = '/api/scenes/feed?mode=' + encodeURIComponent(_scenesFeedMode);
+      if (_scenesFeedMode === 'tags' && _selectedTagIds.length) {
+        url += '&tag_ids=' + encodeURIComponent(_selectedTagIds.join(','));
+      }
+      const r = await fetch(url);
+      const d = await r.json();
+      if (_scenesFeedMode === 'tags') {
+        title.textContent = 'Latest by Vice';
+        if (d && d.error === 'no_tags') {
+          // Distinguish "no vices configured" from "has vices but none
+          // selected on this page".
+          const emptyHtml = !_monitoredTagsCache.length
+            ? '<div class="empty">No vices configured. Add some under Settings &rarr; Content Filters &rarr; Vices.</div>'
+            : '<div class="empty">No vices selected. Click the <i class="fa-solid fa-fire"></i> button above and pick one or more.</div>';
+          grid.innerHTML = emptyHtml;
+          _feedCachePut(cacheKey, { scenes: [], emptyHtml }, 'Latest by Vice');
+          return;
+        }
+        if (!d.scenes?.length) {
+          const emptyHtml = '<div class="empty">No scenes found for the selected tags.</div>';
+          grid.innerHTML = emptyHtml;
+          _feedCachePut(cacheKey, { scenes: [], emptyHtml }, 'Latest by Vice');
+          return;
+        }
+        renderSceneGrid(d.scenes, true);
+        _feedCachePut(cacheKey, { scenes: d.scenes }, 'Latest by Vice');
+        return;
+      }
+      if (_scenesFeedMode === 'studios') {
+        title.textContent = 'Your Feed';
+        if (!d.scenes?.length) {
+          const emptyHtml = '<div class="empty">No studio feed scenes — add studios under Favourites with a TPDB site match, or favourite sites on ThePornDB (same API key). Check Settings for your TPDB key.</div>';
+          grid.innerHTML = emptyHtml;
+          _feedCachePut(cacheKey, { scenes: [], emptyHtml }, 'Your Feed');
+          return;
+        }
+        renderSceneGrid(d.scenes, true);
+        _feedCachePut(cacheKey, { scenes: d.scenes }, 'Your Feed');
+        return;
+      }
+      if (_scenesFeedMode === 'performers') {
+        title.textContent = 'Your Feed';
+        if (!d.scenes?.length) {
+          const emptyHtml = '<div class="empty">No performer feed scenes — check your TPDB API key in Settings, and favourite performers on ThePornDB so the Atom feed can list their new releases, or add performer folders under Settings for a sampled feed.</div>';
+          grid.innerHTML = emptyHtml;
+          _feedCachePut(cacheKey, { scenes: [], emptyHtml }, 'Your Feed');
+          return;
+        }
+        renderSceneGrid(d.scenes, true);
+        _feedCachePut(cacheKey, { scenes: d.scenes }, 'Your Feed');
+        return;
+      }
+      title.textContent = 'Your Feed';
+      if (!d.scenes?.length) {
+        const emptyHtml = '<div class="empty">No feed scenes — check your TPDB API key in Settings</div>';
+        grid.innerHTML = emptyHtml;
+        _feedCachePut(cacheKey, { scenes: [], emptyHtml }, 'Your Feed');
+        return;
+      }
+      renderSceneGrid(d.scenes, true);
+      _feedCachePut(cacheKey, { scenes: d.scenes }, 'Your Feed');
+    } catch(e) {
+      grid.innerHTML = '<div class="empty">Failed to load feed</div>';
+    }
+  }
+
+  // Lazy-fetch library headshots matching a card's performer names on first
+  // hover. Caches via data attribute so a second hover is free. Silently
+  // no-ops when: the card has no performer string, the fetch fails, or no
+  // library matches come back.
+  async function ensureCardHeadshots(card, performerStr) {
+    if (!card || card.dataset.headshotsLoaded === '1') return;
+    card.dataset.headshotsLoaded = '1';
+    const s = (performerStr || '').trim();
+    if (!s) return;
+    try {
+      const r = await fetch('/api/performers/headshots-by-name?names=' + encodeURIComponent(s));
+      const d = await r.json();
+      const perfs = (d && d.performers) || [];
+      if (!perfs.length) return;
+      const imgLoad = card.querySelector('.img-load');
+      if (!imgLoad) return;
+      // Movies fit more performers into their centered middle band
+      // than the landscape scene still does — scene cards tend to
+      // credit 2-3 faces, movies can have ten or more.
+      const isMovie = card.classList.contains('movie-card');
+      const cap = isMovie ? 8 : 4;
+      const shown = perfs.slice(0, cap);
+      const extra = perfs.length - shown.length;
+      const wrap = document.createElement('div');
+      wrap.className = 'scene-headshots-hover';
+      const avatarsHtml = shown.map(p =>
+        `<img class="scene-headshot-avatar" src="${esc(p.headshot_url || '')}" alt="${esc(p.name)}" title="${esc(p.name)}" onerror="this.remove()">`
+      ).join('');
+      // `+N` chip on movies when the cast overflows the visible cap —
+      // gives a sense of how deep the ensemble is without blowing the
+      // layout past the logo band.
+      const moreChip = (isMovie && extra > 0)
+        ? `<span class="scene-headshot-more" title="${extra} more performer${extra === 1 ? '' : 's'}">+${extra}</span>`
+        : '';
+      wrap.innerHTML = avatarsHtml + moreChip;
+      imgLoad.appendChild(wrap);
+    } catch (e) {}
+  }
+
+  function renderSceneGrid(scenes, isFeed) {
+    const grid = document.getElementById('scenesGrid');
+    const visibleScenes = (scenes || []).slice(0, 30); // 6 rows x 5 columns
+    _sceneGridItems = visibleScenes;
+    grid.innerHTML = visibleScenes.map((s, i) => `
+      <div class="scene-card" id="sc-${esc(s.id)}" data-scene-i="${i}" data-performer="${esc(s.performer || '')}" role="button" tabindex="0" aria-label="Open scene details" onmouseenter="ensureCardHeadshots(this, this.dataset.performer)">
+        <div class="img-load">
+          <div class="img-spin" aria-hidden="true"></div>
+          ${s.thumb
+            ? `<img class="scene-thumb" src="${esc(s.thumb)}" loading="lazy" onload="this.closest('.img-load')?.classList.add('ready')" onerror="const w=this.closest('.img-load'); if(this.src.indexOf('missing.jpg')<0){this.src='/static/missing.jpg'}else{w?.classList.add('ready')}">`
+            : `<img class="scene-thumb" src="/static/missing.jpg" loading="lazy" onload="this.closest('.img-load')?.classList.add('ready')" onerror="this.closest('.img-load')?.classList.add('ready')">`}
+          <div class="duo-tint" aria-hidden="true"></div>
+          ${(s.studio || s.title) ? `<img class="scene-studio-logo" src="/api/studio-logo?name=${encodeURIComponent(s.studio || '')}&q=${encodeURIComponent(s.title || '')}" alt="" loading="lazy" onload="this.closest('.scene-card')?.classList.add('has-studio-logo')" onerror="this.remove()">` : ''}
+          ${(() => {
+            // Top-LEFT source-DB badge, only rendered in Search mode
+            // where the source actually varies (TPDB / StashDB / FansDB).
+            // Hidden on hover so the top-left headshot cluster that
+            // fades in has the corner to itself. Other feed modes are
+            // always TPDB, so the badge would be visual noise there.
+            const raw = (s.source || '').toLowerCase();
+            if (!raw.startsWith('search_')) return '';
+            const key = raw.slice(7);
+            const logos = {
+              tpdb:    { src: '/static/logos/tpdb.png',    label: 'TPDB' },
+              stashdb: { src: '/static/logos/stashdb.png', label: 'StashDB' },
+              fansdb:  { src: '/static/logos/fansdb.png',  label: 'FansDB' },
+            };
+            const meta = logos[key];
+            if (!meta) return '';
+            return `<img class="scene-source-logo" src="${esc(meta.src)}" alt="${esc(meta.label)}" title="From ${esc(meta.label)}" onerror="this.remove()">`;
+          })()}
+          ${s.id ? _cardWantedButtonHtml('scene', ((s.source || '').startsWith('search_') ? s.source.slice(7) : ((s.source || '').toLowerCase() === 'stashdb' || (s.source || '').toLowerCase() === 'fansdb' ? (s.source || '').toLowerCase() : 'tpdb')), String(s.id)) : ''}
+          ${(() => {
+            // Performer name overlay, bottom-centre. Single line, highlighter
+            // background, ellipsis on overflow. Prefer the backend's
+            // ``hover_performers`` (gender-filtered to match the user's
+            // Content Filter preferences so mixed scenes surface the
+            // performer they're interested in, not whoever is listed
+            // first). Falls back to all names from ``performer`` when
+            // the gender-filtered list is missing.
+            const list = Array.isArray(s.hover_performers) && s.hover_performers.length
+              ? s.hover_performers
+              : (s.performer || '').split(',').map(x => x.trim()).filter(Boolean);
+            if (!list.length) return '';
+            const display = list.map(n => capDisplayName(n)).join(', ');
+            return `<div class="scene-performer-label"><span class="perf-hl">${esc(display)}</span></div>`;
+          })()}
+          ${(() => {
+            // Tag chips overlaid in the middle of the thumbnail on hover.
+            // In Tags mode the backend annotates ``matched_tags`` (the
+            // intersection of scene tags with the user's selection —
+            // this is the only correct set to display, so we honour it
+            // even when empty). In other modes ``matched_tags`` is
+            // undefined and we fall back to every tag on the scene.
+            const source = Array.isArray(s.matched_tags)
+              ? s.matched_tags
+              : (Array.isArray(s.tags) ? s.tags : []);
+            // Cap at 10 so the overlay comfortably fits ~3-4 rows within
+            // the 46%-height band; the CSS mask fades any overflow at the
+            // top edge. Any extra tags are summarised as a "+N more" chip
+            // so the card still hints at how rich the scene tagging is.
+            const cap = 10;
+            const tags = source.slice(0, cap);
+            const extra = Math.max(0, source.length - tags.length);
+            if (!tags.length) return '';
+            const chips = tags.map(t => `<span class="scene-card-tag-chip">${esc(t)}</span>`).join('');
+            const more = extra > 0
+              ? `<span class="scene-card-tag-chip" style="opacity:0.82">+${extra} more</span>`
+              : '';
+            return `<div class="scene-card-tags-hover">${chips}${more}</div>`;
+          })()}
+        </div>
+        <div class="scene-info">
+          <div class="scene-title" title="${esc(s.title)}">${esc(s.title)}</div>
+          <div class="scene-date" title="${esc((s.date || '') + (s.studio ? ' · ' + s.studio : ''))}"><span class="meta-date">${s.date || ''}</span>${s.studio ? `<span class="meta-studio-fallback">${s.date ? ' · ' : ''}${esc(capDisplayName(s.studio))}</span>` : ''}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  // ── Spotlight performer row ────────────────────────────────────────
+
+  async function loadSpotlightRow() {
+    try {
+      const r = await fetch('/api/metadata/spotlight-performers');
+      const d = await r.json();
+      const performers = d.performers || [];
+      if (!performers.length) {
+        const emptyEl = document.getElementById('detailEmpty');
+        if (emptyEl && d.error === 'no_stashdb_key') {
+          emptyEl.textContent = 'Add a StashDB API key under Settings → Databases to enable the performer spotlight';
+        }
+        return;
+      }
+
+      window._spotlightPerformers = performers;
+
+      const gridEl = document.getElementById('spotlightGrid');
+      gridEl.innerHTML = performers.map((p, i) => `
+        <div class="spotlight-tile" tabindex="0" title="${esc(p.name)}" data-performer-id="${esc(p.id)}"
+             onclick="spotlightTileClick(${i})"
+             onkeydown="if(event.key==='Enter')spotlightTileClick(${i})">
+          <img src="${esc(p.image)}" alt="${esc(p.name)}" loading="lazy"
+               crossorigin="anonymous"
+               onload="autoLevelPosterImage(this)"
+               onerror="this.style.display='none'">
+          <button class="spotlight-exclude-btn" title="Never show again"
+                  onclick="excludeSpotlightPerformer(event,'${esc(p.id)}','${esc(p.name.replace(/'/g,"&#39;"))}')">✕</button>
+          <div class="spotlight-tile-name">${esc(p.name)}</div>
+        </div>`).join('');
+
+      // Show grid, hide empty state
+      gridEl.style.display = 'flex';
+      document.getElementById('detailEmpty').style.display = 'none';
+    } catch(e) {
+      console.error('Spotlight fetch failed:', e);
+    }
+  }
+
+  function showSpotlightGrid() {
+    document.getElementById('detailContent').style.display = 'none';
+    document.getElementById('detailEmpty').style.display = 'none';
+    document.getElementById('spotlightBackBtn').style.display = 'none';
+    const gridEl = document.getElementById('spotlightGrid');
+    if (gridEl) gridEl.style.display = 'flex';
+  }
+
+  async function excludeSpotlightPerformer(evt, id, name) {
+    evt.stopPropagation();
+    const tile = evt.currentTarget.closest('.spotlight-tile');
+    if (tile) { tile.style.opacity = '0.3'; tile.style.pointerEvents = 'none'; }
+    try {
+      await fetch('/api/spotlight/exclude', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id, name}),
+      });
+      // Reload from the buffer — server already filtered this performer out
+      await loadSpotlightRow();
+    } catch(e) {
+      if (tile) { tile.style.opacity = '1'; tile.style.pointerEvents = ''; }
+    }
+  }
+
+  async function spotlightTileClick(idx) {
+    const performers = window._spotlightPerformers || [];
+    const p = performers[idx];
+    if (!p) return;
+
+    // Hide spotlight grid, show detail content
+    const gridEl = document.getElementById('spotlightGrid');
+    if (gridEl) gridEl.style.display = 'none';
+    document.getElementById('detailEmpty').style.display = 'none';
+    document.getElementById('detailContent').style.display = 'flex';
+    document.getElementById('spotlightBackBtn').style.display = 'flex';
+    document.getElementById('detailName').textContent = capDisplayName(p.name || '');
+
+    const layoutEl = document.getElementById('detailLayout');
+    const posterEl = document.getElementById('detailPoster');
+    layoutEl.style.flexDirection = 'row';
+    layoutEl.style.alignItems = 'stretch';
+    layoutEl.style.gap = '20px';
+    posterEl.style.flexShrink = '0';
+    posterEl.style.display = 'flex';
+    posterEl.style.height = '100%';
+
+    if (p.image) {
+      posterEl.innerHTML = `<img class="detail-poster" src="${esc(p.image)}" onclick="openImageOverlay('${esc(p.image)}')" onerror="this.outerHTML='<div class=detail-poster-placeholder><i class=fa-solid fa-person></i></div>'">`;
+      setDetailBg(p.image);
+    } else {
+      posterEl.innerHTML = `<div class="detail-poster-placeholder"><i class="fa-solid fa-person"></i></div>`;
+    }
+
+    // Branch on the performer's source: spotlight rows now merge StashDB +
+    // FansDB candidates, so a tile might be either. `p.source` is stamped
+    // on each candidate by _spotlight_fetch_from_stashbox() in main.py.
+    const srcLabel  = (p.source === 'FansDB') ? 'FansDB' : 'StashDB';
+    const srcHost   = (srcLabel === 'FansDB') ? 'https://fansdb.cc' : 'https://stashdb.org';
+    const srcLogo   = (srcLabel === 'FansDB') ? '/static/logos/fansdb.png' : '/static/logos/stashdb.png';
+    const profileUrl = `${srcHost}/performers/${p.id}`;
+
+    // Build meta using the detected source label
+    const metaParts = [`<span>${srcLabel}</span>`];
+    if (p.birthdate)        metaParts.push(`Born: <span>${esc(p.birthdate)}</span>`);
+    const activeYear = p.career_start_year || p.career_start_inferred;
+    if (activeYear)         metaParts.push(`Active: <span>${esc(String(activeYear))}${p.career_start_inferred ? '*' : ''}</span>`);
+    if (p.ethnicity)        metaParts.push(`Ethnicity: <span>${esc(p.ethnicity)}</span>`);
+    if (p.measurements)     metaParts.push(`Stats: <span>${esc(p.measurements)}</span>`);
+    document.getElementById('detailMeta').innerHTML = metaParts.join(' &middot; ');
+
+    document.getElementById('detailBio').textContent = '';
+    document.getElementById('detailLinks').innerHTML = p.id
+      ? `<a class="detail-link db-link" href="${esc(profileUrl)}" target="_blank" title="View on ${esc(srcLabel)}"><img src="${esc(srcLogo)}" alt="${esc(srcLabel)}" style="height:16px;width:auto;vertical-align:middle;opacity:0.9"></a>`
+      : '';
+
+    // Fetch full detail (bio + links) via preview — pass the right source
+    try {
+      const prev = await fetch(`/api/metadata/preview?type=performer&source=${encodeURIComponent(srcLabel)}&id=${encodeURIComponent(p.id)}`).then(r => r.json());
+      if (prev.bio)   document.getElementById('detailBio').textContent = prev.bio;
+      if (prev.links?.length) document.getElementById('detailLinks').innerHTML = renderLinks(prev.links);
+    } catch(e) {}
+
+    // Library status check
+    const libEl  = document.getElementById('detailLibStatus');
+    const destEl = document.getElementById('quickAddBar');
+    try {
+      const lib = await fetch(`/api/library/check?name=${encodeURIComponent(p.name)}`).then(r => r.json());
+      if (lib.found) {
+        libEl.innerHTML = `<span class="lib-tag lib-tag--in">IN-LIBRARY</span>`;
+        if (destEl) destEl.style.display = 'none';
+      } else {
+        libEl.innerHTML = `<span class="lib-tag lib-tag--out">NOT-IN-LIBRARY</span>`;
+        if (destEl) destEl.style.display = 'inline-flex';
+      }
+    } catch(e) {}
+
+    selectedResult = { name: p.name, id: p.id, slug: '', source: srcLabel, image: p.image };
+    // Ensure type is set to performer for spotlight additions
+    currentType = 'performer';
+    document.getElementById('btnMovie')?.classList.remove('active');
+    document.getElementById('btnPerformer')?.classList.add('active');
+    document.getElementById('btnStudio')?.classList.remove('active');
+    loadDirs();
+  }
+
+  document.getElementById('scenesGrid').addEventListener('click', function (e) {
+    const card = e.target.closest('.scene-card[data-scene-i]');
+    if (!card) return;
+    const i = parseInt(card.getAttribute('data-scene-i'), 10);
+    if (Number.isNaN(i) || !_sceneGridItems[i]) return;
+    openSceneOverlay(_sceneGridItems[i]);
+  });
+  document.getElementById('scenesGrid').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const card = e.target.closest('.scene-card[data-scene-i]');
+    if (!card) return;
+    e.preventDefault();
+    const i = parseInt(card.getAttribute('data-scene-i'), 10);
+    if (Number.isNaN(i) || !_sceneGridItems[i]) return;
+    openSceneOverlay(_sceneGridItems[i]);
+  });
+
+  // ── Movie functions ──────────────────────────────────────────────────
+
+  let _movieFeedPage = 1, _movieFeedTotalPages = 1;
+
+  function movieTitleDisplay(s) { return esc(String(s || '').trim()); }
+
+  function movieGridSkeleton(count = 20) {
+    return Array.from({length: count}, () => `
+      <div class="movie-card loading">
+        <div class="skeleton-box" style="width:100%;aspect-ratio:27/40">
+          <div class="img-spin" aria-hidden="true"></div>
+        </div>
+        <div class="movie-info">
+          <div class="skeleton-line" style="width:82%"></div>
+          <div class="skeleton-line" style="width:58%;margin-bottom:0"></div>
+        </div>
+      </div>`).join('');
+  }
+
+  function movieDetailSkeleton() {
+    return `
+      <div class="movie-detail-inner">
+        <div class="movie-detail-poster-wrap"><div class="skeleton-box" style="position:absolute;inset:0"><div class="img-spin" aria-hidden="true"></div></div></div>
+        <div class="movie-detail-text">
+          <div class="skeleton-line" style="width:45%;height:20px"></div>
+          <div class="skeleton-line" style="width:72%"></div>
+          <div class="skeleton-line" style="width:100%"></div>
+          <div class="skeleton-line" style="width:96%"></div>
+          <div class="skeleton-line" style="width:88%"></div>
+          <div style="display:flex;gap:8px;margin-top:18px">
+            <div class="skeleton-box" style="height:34px;width:170px;border-radius:4px"></div>
+            <div class="skeleton-box" style="height:34px;width:110px;border-radius:4px"></div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderMovieGrid(movies, gridEl) {
+    const posterFallback = '/static/poster.jpg';
+    gridEl.innerHTML = movies.map(m => {
+      const posterUrl = (m.poster && String(m.poster).trim()) ? m.poster : posterFallback;
+      return `
+      <div class="movie-card" data-movie-id="${esc(m.id)}" data-performer="${esc(m.performer || '')}" onmouseenter="ensureCardHeadshots(this, this.dataset.performer)">
+        <div class="img-load"><div class="img-spin" aria-hidden="true"></div><img class="movie-poster" src="${esc(posterUrl)}" loading="lazy" onload="this.closest('.img-load')?.classList.add('ready')" onerror="this.onerror=null;this.src='${posterFallback}';this.closest('.img-load')?.classList.add('ready');"><div class="duo-tint" aria-hidden="true"></div>${(m.studio || m.title) ? `<img class="scene-studio-logo" src="/api/studio-logo?name=${encodeURIComponent(m.studio || '')}&q=${encodeURIComponent(m.title || '')}" alt="" loading="lazy" onload="this.closest('.movie-card')?.classList.add('has-studio-logo')" onerror="this.remove()">` : ''}${m.id ? _cardWantedButtonHtml('movie', 'tpdb', String(m.id)) : ''}</div>
+        <div class="movie-info">
+          <div class="movie-title" title="${esc(m.title)}">${movieTitleDisplay(m.title)}</div>
+          <div class="movie-meta" title="${esc((m.date || '') + (m.studio ? ' · ' + m.studio : ''))}"><span class="meta-date">${m.date || ''}</span>${m.studio ? `<span class="meta-studio-fallback">${m.date ? ' · ' : ''}${esc(m.studio)}</span>` : ''}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  async function searchMovies() {
+    const q = document.getElementById('movieSearchInput').value.trim();
+    const year = document.getElementById('movieSearchYear').value.trim();
+    const el = document.getElementById('movieSearchResults');
+    if (!q && !year) return;
+    el.innerHTML = '<div class="empty">Searching…</div>';
+    try {
+      const params = new URLSearchParams({ page: 1 });
+      if (q) params.set('q', q);
+      if (year) params.set('year', year);
+      const url = (q || year) ? `/api/movies/search?${params}` : `/api/movies/tpdb/latest?${params}`;
+      const r = await fetch(url);
+      const d = await r.json();
+      const movies = (d.results || []).slice(0, 20);
+      if (!movies.length) {
+        let msg = 'No movies found';
+        if (d.error) msg += ' (' + esc(d.error) + ')';
+        el.innerHTML = `<div class="empty">${msg}</div>`;
+        return;
+      }
+      const posterFallback = '/static/poster.jpg';
+      el.innerHTML = movies.map(m => {
+        const posterUrl = (m.poster && String(m.poster).trim()) ? m.poster : posterFallback;
+        return `<div class="movie-search-result" onclick="showMovieDetail('${esc(m.id)}')">
+          <img class="movie-search-poster" src="${esc(posterUrl)}" onerror="this.onerror=null;this.src='${posterFallback}'">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;color:var(--text);font-weight:500">${movieTitleDisplay(m.title)}</div>
+            <div style="font-size:11px;color:var(--dim)">${m.studio ? esc(m.studio) : ''}${m.date ? ' · ' + m.date : ''}</div>
+          </div>
+        </div>`;
+      }).join('');
+    } catch(e) {
+      el.innerHTML = `<div class="empty">Error: ${esc(e.message)}</div>`;
+    }
+  }
+
+  async function showMovieDetail(movieId) {
+    document.getElementById('movieDetailContent').innerHTML = movieDetailSkeleton();
+    document.getElementById('movieDetailOverlay').classList.add('open');
+    try {
+      const r = await fetch(`/api/movies/tpdb/${movieId}`);
+      const m = await r.json();
+      if (m.error) { document.getElementById('movieDetailContent').innerHTML = `<div class="empty">${esc(m.error)}</div>`; return; }
+      // Stash full movie metadata so the prowlarr-grab path can tag
+      // each movie download with its source DB id + poster URL the
+      // same way scene grabs do — without this, /downloads tiles for
+      // movie grabs render with no poster.
+      window._currentMovie = m;
+      const bg = m.background ? `<img class="movie-detail-bg" src="${esc(m.background)}" onerror="this.remove()">` : '';
+      const posterFallback = '/static/poster.jpg';
+      const detailPosterUrl = (m.poster && String(m.poster).trim()) ? m.poster : posterFallback;
+      const overlaySrc = esc((m.poster && String(m.poster).trim()) ? m.poster : posterFallback);
+      const poster = `<div class="img-load"><div class="img-spin" aria-hidden="true"></div><img src="${esc(detailPosterUrl)}" style="cursor:pointer;width:100%;height:100%;object-fit:cover;display:block" onclick="openImageOverlay('${overlaySrc}')" onload="this.closest('.img-load')?.classList.add('ready')" onerror="this.onerror=null;this.src='${posterFallback}';this.closest('.img-load')?.classList.add('ready');"></div>`;
+      const meta = [];
+      if (m.studio) meta.push(`Studio: <span>${esc(m.studio)}</span>`);
+      if (m.date) meta.push(`Released: <span>${esc(m.date)}</span>`);
+      if (m.duration) meta.push(`Duration: <span>${Math.round(m.duration/60)} min</span>`);
+      if (m.directors?.length) {
+        const dirNames = m.directors.map(d => esc(typeof d === 'object' && d !== null ? (d.name || d.full_name || '') : String(d))).filter(Boolean);
+        if (dirNames.length) meta.push(`Director: <span>${dirNames.join(', ')}</span>`);
+      }
+      const libPerfs = m.library_performers || [];
+      const libPerfsHtml = libPerfs.length
+        ? `<div class="lib-perfs-row">${libPerfs.map(p => {
+            const img = p.headshot_url
+              ? `<img src="${esc(p.headshot_url)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'lib-perf-ph',innerHTML:'<i class=\\'fa-solid fa-user\\'></i>'}))">`
+              : `<div class="lib-perf-ph"><i class="fa-solid fa-user"></i></div>`;
+            return `<div class="lib-perf-hs" title="${esc(p.name)}">${img}<div class="lib-perf-hs-name">${esc(p.name)}</div></div>`;
+          }).join('')}</div>`
+        : '';
+      const perfLinks = (m.performer_links || []).map(p => {
+        const name = esc(p.name || '');
+        const href = p.url ? esc(p.url) : '';
+        if (!name) return '';
+        return href
+          ? `<a class="movie-perf-tag" href="${href}" target="_blank" onclick="event.stopPropagation()">${name}</a>`
+          : `<span class="movie-perf-tag">${name}</span>`;
+      }).join('');
+      const perfs = perfLinks || (m.performers||[]).map(p => `<span class="movie-perf-tag">${esc(p)}</span>`).join('');
+      const movieTags = Array.isArray(m.tags) ? m.tags : [];
+      const movieTagsHtml = movieTags.length
+        ? `<div class="movie-detail-tags" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${movieTags.map(t => `<span class="scene-card-tag-chip">${esc(t)}</span>`).join('')}</div>`
+        : '';
+      let scenes = '';
+      if (m.scenes?.length) {
+        scenes = `<div class="movie-detail-scenes"><div class="movie-detail-scenes-title">Scenes (${m.scenes.length})</div><div class="movie-detail-scene-grid">${m.scenes.map(s => `<div class="movie-detail-scene-card">${s.thumb ? `<div class="img-load"><div class="img-spin" aria-hidden="true"></div><img class="movie-detail-scene-thumb" src="${esc(s.thumb)}" loading="lazy" onload="this.closest('.img-load')?.classList.add('ready')" onerror="const w=this.closest('.img-load'); if(w){ this.outerHTML='<div class=\\'movie-detail-scene-thumb-ph\\'></div>'; w.classList.add('ready'); }"></div>` : '<div class="movie-detail-scene-thumb-ph"></div>'}<div class="movie-detail-scene-info">${esc(s.title)}${s.date ? ' · '+s.date : ''}</div></div>`).join('')}</div></div>`;
+      }
+      document.getElementById('movieDetailContent').innerHTML = `${bg}
+        <div class="movie-detail-inner">
+          <div class="movie-detail-poster-wrap">${poster}</div>
+          <div class="movie-detail-text">
+            <div class="movie-detail-title" title="${esc(m.title)}">${movieTitleDisplay(m.title)}</div>
+            ${libPerfsHtml}
+            <div class="movie-detail-meta-line">${meta.join(' &middot; ')}</div>
+            ${perfs ? `<div class="movie-detail-performers">${perfs}</div>` : ''}
+            ${movieTagsHtml}
+            ${m.synopsis ? `<div class="movie-detail-synopsis">${esc(m.synopsis)}</div>` : ''}
+            <div class="movie-detail-actions">
+              <button class="movie-btn-action movie-btn-prowlarr" onclick="event.stopPropagation();searchMovieProwlarr('${esc(m.title)}')" title="Search Prowlarr"><i class="fa-solid fa-magnifying-glass"></i></button>
+              <a class="movie-btn-action movie-btn-link" href="${esc(m.tmdb_url || ('https://www.themoviedb.org/search/movie?query=' + encodeURIComponent(m.title || '')))}" target="_blank" onclick="event.stopPropagation()"><img src="/static/logos/tmdb.png" alt="TMDB" style="height:20px;width:auto;object-fit:contain;vertical-align:middle;opacity:0.9"></a>
+              <a class="movie-btn-action movie-btn-link" href="${esc(m.url)}" target="_blank" onclick="event.stopPropagation()"><img src="/static/logos/tpdb.png" alt="TPDB" style="height:20px;width:auto;object-fit:contain;vertical-align:middle;opacity:0.9"></a>
+            </div>
+          </div>
+        </div>
+        ${scenes}`;
+    } catch(e) { document.getElementById('movieDetailContent').innerHTML = '<div class="empty">Error loading movie</div>'; }
+  }
+
+  function closeMovieDetail() { document.getElementById('movieDetailOverlay').classList.remove('open'); }
+
+  async function searchMovieProwlarr(title) {
+    document.getElementById('movieProwlarrTitle').textContent = `Prowlarr: ${title}`;
+    document.getElementById('movieProwlarrResults').innerHTML = '<div class="empty">Searching indexers...</div>';
+    document.getElementById('movieProwlarrOverlay').classList.add('open');
+    try {
+      const r = await fetch(`/api/prowlarr/search?q=${encodeURIComponent(title)}`);
+      const d = await r.json();
+      const results = d.results || [];
+      if (!results.length) { document.getElementById('movieProwlarrResults').innerHTML = '<div class="empty">No results found</div>'; return; }
+      window._movieProwlarrResults = results;
+      document.getElementById('movieProwlarrResults').innerHTML = results.map((r,i) => `
+        <div class="movie-prowlarr-result">
+          <span class="movie-prowlarr-indexer">${esc(r.indexer||'')}</span>
+          <span class="movie-prowlarr-name" title="${esc(r.title)}">${esc(r.title)}</span>
+          <span class="movie-prowlarr-size">${r.size_mb ? Math.round(r.size_mb)+' MB' : ''}${r.seeders != null ? ' · S:'+r.seeders : ''}</span>
+          <button type="button" class="btn-prowlarr-grab ${r.type === 'nzb' ? 'nzb' : ''}" title="Send to download client" onclick="grabMovieRelease(event, ${i})"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
+        </div>`).join('');
+    } catch(e) { document.getElementById('movieProwlarrResults').innerHTML = `<div class="empty">Search failed: ${esc(e.message)}</div>`; }
+  }
+
+  async function grabMovieRelease(ev, idx) {
+    const r = window._movieProwlarrResults[idx];
+    if (!r) return;
+    const btn = ev && ev.target && ev.target.closest ? ev.target.closest('button') : null;
+    if (btn) {
+      btn.disabled = true;
+      btn.classList.remove('btn-prowlarr-grab--sent');
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>';
+    }
+    // Tag the grab with the originating movie's metadata so
+    // /downloads can render its poster on the tile and we can match
+    // this download back to the movie later. Movies on /scenes
+    // currently come from TPDB only.
+    const m = window._currentMovie || {};
+    const sourceScene = m && m.id ? {
+      db:         'tpdb',
+      id:         String(m.id || ''),
+      title:      m.title || '',
+      studio:     m.studio || '',
+      performers: Array.isArray(m.performers)
+        ? m.performers
+        : (m.performer ? [m.performer] : []),
+      poster_url: m.poster || '',
+      date:       m.date || m.year || '',
+    } : null;
+    try {
+      const resp = await fetch('/api/prowlarr/grab', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({kind: 'movie', guid: r.guid, indexer_id: r.indexer_id, download_url: r.download_url || r.magnet, type: r.type, title: r.title, source_scene: sourceScene}) });
+      const d = await resp.json();
+      if (d.ok || d.success) {
+        if (btn) { btn.classList.add('btn-prowlarr-grab--sent'); btn.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i>'; }
+      } else {
+        alert(d.error || 'Could not send to download client');
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-download" aria-hidden="true"></i>'; }
+      }
+    } catch(e) {
+      alert(e.message || 'Could not send to download client');
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-download" aria-hidden="true"></i>'; }
+    }
+  }
+
+  function closeMovieProwlarr() { document.getElementById('movieProwlarrOverlay').classList.remove('open'); }
+
+  // Handle click on movie cards in the feed grid
+  document.getElementById('scenesGrid').addEventListener('click', function(e) {
+    const movieCard = e.target.closest('.movie-card[data-movie-id]');
+    if (movieCard) {
+      showMovieDetail(movieCard.getAttribute('data-movie-id') || '');
+      return;
+    }
+  });
+
+  // Escape key handling for movie overlays
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { closeMovieDetail(); closeMovieProwlarr(); }
+  });
+
+  // Load feed and spotlight row on page init
+  _applyFeedModeToggleUI();
+  _updateTagFilterBadge();
+  // Load wanted keys before (or concurrent with) the feed so the eye
+  // buttons render in the correct state on first paint. Feed does not
+  // depend on wanted keys — races are fine.
+  _loadWantedKeys();
+  if (_scenesFeedMode === 'tags') _ensureMonitoredTagsLoaded().then(loadFeed);
+  else loadFeed();
+  loadSpotlightRow();
+</script>
+<div id="sceneOverlay" class="scene-overlay" onclick="if(event.target===this)closeSceneOverlay()">
+  <div class="scene-overlay-card">
+    <div class="scene-overlay-head">
+      <span class="panel-title" id="sceneOverlayTitle">Scene</span>
+      <button type="button" onclick="closeSceneOverlay()" style="background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.35);color:var(--red);width:36px;height:36px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:background 0.15s" onmouseover="this.style.background='rgba(248,113,113,0.22)'" onmouseout="this.style.background='rgba(248,113,113,0.12)'"><i class="fa-solid fa-x"></i></button>
+    </div>
+    <div class="scene-overlay-body">
+      <div class="search-row" style="margin-bottom:10px">
+        <input id="sceneOverlayQuery" class="field-input" type="text" placeholder="Search query..." onkeydown="if(event.key==='Enter')runSceneOverlaySearch()">
+        <button class="btn-primary" onclick="runSceneOverlaySearch()"><i class="fa-solid fa-magnifying-glass"></i></button>
+      </div>
+      <div id="sceneOverlayMain" style="margin-bottom:12px"></div>
+      <div id="sceneOverlayResults"></div>
+    </div>
+  </div>
+</div>
+<div id="addSuccessOverlay" class="scene-overlay" onclick="if(event.target===this)closeAddSuccessOverlay()">
+  <div class="scene-overlay-card" style="max-width:920px;width:min(920px,calc(100vw - 32px))">
+    <div class="scene-overlay-head">
+      <span class="add-success-title" id="addSuccessTitle">Successfully Added</span>
+      <button type="button" onclick="closeAddSuccessOverlay()" style="background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.35);color:var(--red);width:36px;height:36px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:background 0.15s" onmouseover="this.style.background='rgba(248,113,113,0.22)'" onmouseout="this.style.background='rgba(248,113,113,0.12)'"><i class="fa-solid fa-x"></i></button>
+    </div>
+    <div class="scene-overlay-body">
+      <p style="font-size:12px;color:var(--dim);margin-bottom:10px">Prowlarr results for this name — use <i class="fa-solid fa-download"></i> to send to your download client.</p>
+      <div id="addSuccessProwlResults" class="add-success-prowl-wrap"><div class="empty" style="padding:16px">Loading…</div></div>
+    </div>
+  </div>
+</div>
+<div id="imgOverlay" class="img-overlay" style="display:none" onclick="closeImageOverlay()">
+  <img id="imgOverlayImg" src="" alt="">
+</div>
+
+<!-- Movie detail overlay -->
+<div class="movie-detail-overlay" id="movieDetailOverlay" onclick="if(event.target===this)closeMovieDetail()">
+  <div class="movie-detail-card" id="movieDetailCard">
+    <button class="movie-detail-close" onclick="closeMovieDetail()"><i class="fa-solid fa-x"></i></button>
+    <div id="movieDetailContent"></div>
+  </div>
+</div>
+
+<!-- Movie prowlarr overlay -->
+<div class="movie-prowlarr-overlay" id="movieProwlarrOverlay" onclick="if(event.target===this)closeMovieProwlarr()">
+  <div class="movie-prowlarr-card">
+    <button class="movie-prowlarr-close" onclick="closeMovieProwlarr()"><i class="fa-solid fa-x"></i></button>
+    <div class="panel-title" style="font-size:20px;margin-bottom:16px" id="movieProwlarrTitle">Search Results</div>
+    <div id="movieProwlarrResults"><div class="empty">Searching...</div></div>
+  </div>
+</div>
+
+<script defer src="/static/activity-banner.js?v=2"></script>
+<div id="tagFilterDropdown" style="display:none;position:fixed;min-width:260px;max-width:320px;max-height:340px;overflow-y:auto;background:linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.96) 0%, rgba(var(--panel-lo-rgb),0.92) 100%);border:1px solid rgba(var(--brand-purple-rgb),0.35);border-radius:10px;padding:8px 6px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,0.5);backdrop-filter:blur(10px)">
+  <div id="tagFilterList"></div>
+</div>
+<script defer src="/static/app-shell.js"></script>
+<script>
+fetch('/api/status').then(r => r.json()).then(d => {
+  const el = document.getElementById('appVersion');
+  if (el && d.version) el.textContent = 'v' + d.version;
+});
+</script>
+</body>
+</html>
