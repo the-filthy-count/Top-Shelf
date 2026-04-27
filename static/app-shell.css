@@ -1543,10 +1543,16 @@ html[data-theme="vhs"] .duo-preview-img {
  * Hover clears the filter chain so the clean photo shows. */
 html[data-theme="vhs"] .spotlight-tile img {
   filter: url(#spotlight-bloom) var(--spotlight-duotone-override, url(#duotone-vhs)) !important;
-  transition: filter 0.3s ease;
+  /* 25% zoom-in at rest, anchored to the top of the tile so the
+   * face stays in frame while the bottom of the image crops out
+   * via the tile's `overflow: hidden`. Hover scales back to 1. */
+  transform: scale(1.25);
+  transform-origin: top center;
+  transition: filter 0.3s ease, transform 0.3s ease;
 }
 html[data-theme="vhs"] .spotlight-tile:hover img {
   filter: none !important;
+  transform: scale(1);
 }
 /* Soft grain on top of the tritone — 60% size (background-size
  * scales the SVG noise tile to 60% of the spotlight-tile so the
@@ -1576,11 +1582,34 @@ html[data-theme="vhs"] .spotlight-tile::after {
 html[data-theme="vhs"] .spotlight-tile:hover::after {
   opacity: 0;
 }
-/* Thin border on every spotlight tile, coloured to match the
- * duotone shadow stop (#0048FF) so the frame agrees with the
- * deep-blue end of the palette painted on each face. */
+/* Spotlight tiles: thin shadow-blue frame plus a 4-cycle of
+ * `clip-path` polygons so the row reads as a collage of skewed
+ * shapes rather than a strip of identical rectangles. Each
+ * polygon trims 6–7% off two opposing corners (parallelograms
+ * leaning either way + two trapezoids), staying inside the
+ * tile's available space so the layout box doesn't change.
+ * The clip cuts run inside the border edge, which means the
+ * border only paints on the straight edges of each polygon —
+ * intentional, the angled cuts between adjacent tiles read as
+ * negative space. */
 html[data-theme="vhs"] #spotlightGrid .spotlight-tile {
   border: 1px solid #0048FF;
+}
+html[data-theme="vhs"] #spotlightGrid .spotlight-tile:nth-child(4n+1) {
+  /* parallelogram leaning right */
+  clip-path: polygon(6% 0, 100% 0, 94% 100%, 0 100%);
+}
+html[data-theme="vhs"] #spotlightGrid .spotlight-tile:nth-child(4n+2) {
+  /* trapezoid — narrower top */
+  clip-path: polygon(7% 0, 93% 0, 100% 100%, 0 100%);
+}
+html[data-theme="vhs"] #spotlightGrid .spotlight-tile:nth-child(4n+3) {
+  /* parallelogram leaning left */
+  clip-path: polygon(0 0, 94% 0, 100% 100%, 6% 100%);
+}
+html[data-theme="vhs"] #spotlightGrid .spotlight-tile:nth-child(4n+4) {
+  /* trapezoid — narrower bottom */
+  clip-path: polygon(0 0, 100% 0, 93% 100%, 7% 100%);
 }
 html[data-theme="vhs"] .fav-grid--perf:not(.fav-grid--movie) .fav-cell .fav-perf-ph::after,
 html[data-theme="vhs"] .dl-tile-source-poster--scene::after {
