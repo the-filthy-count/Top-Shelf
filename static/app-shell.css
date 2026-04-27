@@ -1638,15 +1638,31 @@ html[data-theme="vhs"] #spotlightGrid {
    * how many performers loaded. JS in scenes.html sets
    * `--tile-count` on the element when the row renders. */
   container-type: inline-size;
-  /* Raised-frame surface — shows in the diagonal gaps between
-   * adjacent tile polygons. Solid colour (the duotone shadow
-   * stop) so the inter-tile dividers read as uniform blue
-   * lines that match the tile borders, instead of carrying
-   * the gradient that's reserved for the row-end slivers. */
-  background: var(--duotone-lighten, #0048FF);
+  /* Raised-frame surface for the diagonal gaps between adjacent
+   * tile polygons. Tracks `var(--duotone-lighten)` so the
+   * dividers always match whatever the user has set as the
+   * duotone shadow stop — same token the tile border below
+   * uses, so border + divider stay locked together regardless
+   * of palette retuning.
+   *
+   * A 135° linear-gradient adds a faint bottom-right highlight
+   * + top-left darkening to give the dividers an outset
+   * (raised) read — light source matches the tile bevel
+   * (dark TL, bright BR) so the dividers cast a believable
+   * shadow onto the recessed photos either side of them. */
+  background:
+    linear-gradient(135deg,
+      rgba(0, 0, 0, 0.35) 0%,
+      transparent 28%,
+      transparent 72%,
+      rgba(255, 255, 255, 0.20) 100%),
+    var(--duotone-lighten, #630198);
 }
 html[data-theme="vhs"] #spotlightGrid .spotlight-tile {
-  border: 1px solid #0048FF;
+  /* Border + divider both pull from `--duotone-lighten` so they
+   * stay the same colour as each other (and the duotone shadow
+   * stop) when the palette is retuned. */
+  border: 1px solid var(--duotone-lighten, #630198);
   clip-path: polygon(12% 0, 100% 0, 88% 100%, 0 100%);
 }
 html[data-theme="vhs"] #spotlightGrid .spotlight-tile + .spotlight-tile {

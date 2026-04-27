@@ -165,10 +165,13 @@
     // highlights — gradient inspired by social-feed brand marks
     // (#5b51d8 → #f56040). Legacy ``instagram`` key aliases here.
     'sunset':               [[91,81,216],   [245,96,64],   1.70, 0.45],
-    // VHS: deep purple shadows blooming to hot magenta highlights.
-    // Cyan is reserved for chromatic-aberration accents on the
-    // image surfaces (added in the surface-treatments phase).
-    'vhs':                  [[58,12,94],    [255,54,168],  1.75, 0.45]
+    // VHS: deep purple shadows blooming to hot magenta highlights
+    // with a blue-violet tritone midtone (`#5B51D8`) enabled by
+    // default — see `_defaultSpecForTheme` for the matching
+    // midtone/balance defaults that override the generic 0.5/0.5
+    // fallback. Cyan is reserved for chromatic-aberration accents
+    // on the image surfaces (added in the surface-treatments phase).
+    'vhs':                  [[99,1,152],    [254,67,217],  1.80, 0.50]
   };
   // Rec.709 luminance weights — same as CSS grayscale(1) does internally.
   var _LUM = '0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0';
@@ -359,7 +362,7 @@
   function _defaultSpecForTheme(themeKey) {
     var pair = DUOTONE_PAIRS[themeKey];
     if (!pair) return null;
-    return {
+    var spec = {
       duotone_lighten:           _rgbArrayToHex(pair[0]),
       duotone_multiply:          _rgbArrayToHex(pair[1]),
       duotone_contrast:          pair[2] != null ? pair[2] : 1,
@@ -370,6 +373,17 @@
       duotone_shadow_balance:    0.5,
       duotone_highlight_balance: 0.5
     };
+    // Per-theme overrides for fields that don't fit the 4-element
+    // DUOTONE_PAIRS array (midtone, midtone-enabled, balances).
+    // VHS ships with a blue-violet tritone midtone and asymmetric
+    // shadow/highlight balances tuned for the spotlight look.
+    if (themeKey === 'vhs') {
+      spec.duotone_midtone           = '#5B51D8';
+      spec.duotone_midtone_enabled   = true;
+      spec.duotone_shadow_balance    = 0.00;
+      spec.duotone_highlight_balance = 0.56;
+    }
+    return spec;
   }
 
   // Per-theme CSS-variable overrides. Studios and other surfaces that
