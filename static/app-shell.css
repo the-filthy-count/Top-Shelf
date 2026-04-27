@@ -1611,6 +1611,17 @@ html[data-theme="vhs"] #spotlightGrid .spotlight-tile:nth-child(4n+4) {
   /* trapezoid — narrower bottom */
   clip-path: polygon(0 0, 100% 0, 93% 100%, 7% 100%);
 }
+/* First + last tiles fill their full rectangle so the row's
+ * outer edges align cleanly with the panel. Their inner edges
+ * butt against a slanted neighbour, so the visible silhouette
+ * is rectangle-on-the-outside, angled-on-the-inside —
+ * irregular shapes that frame the slanted strip in the middle.
+ * Placed after the 4n cycle so source order wins on tied
+ * specificity. */
+html[data-theme="vhs"] #spotlightGrid .spotlight-tile:first-child,
+html[data-theme="vhs"] #spotlightGrid .spotlight-tile:last-child {
+  clip-path: none;
+}
 html[data-theme="vhs"] .fav-grid--perf:not(.fav-grid--movie) .fav-cell .fav-perf-ph::after,
 html[data-theme="vhs"] .dl-tile-source-poster--scene::after {
   content: '';
