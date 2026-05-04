@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+imagehash
+numpy
+Pillow
+requests
+python-multipart
+APScheduler
+watchdog
+bcrypt
+cloudscraper
+curl_cffi
+lxml
