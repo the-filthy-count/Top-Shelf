@@ -944,12 +944,17 @@
     const _perfStr = _perfList.join(' ').trim();
     document.getElementById('sceneOverlayQuery').value = [_perfStr, scene.title || ''].filter(Boolean).join(' ');
     const sceneTags = Array.isArray(scene.tags) ? scene.tags : [];
+    // Tags now live in the right column (under the performer info) and
+    // are capped to the image height — see `.scene-overlay-tags-capped`
+    // in scenes.html / discover.html for the hover-to-expand behaviour.
     const tagsHtml = sceneTags.length
-      ? `<div class="scene-tag-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${sceneTags.map(t => `<span class="scene-card-tag-chip">${esc(t)}</span>`).join('')}</div>`
+      ? `<div class="scene-tag-chips scene-overlay-tags-capped">${sceneTags.map(t => `<span class="scene-card-tag-chip">${esc(t)}</span>`).join('')}</div>`
       : '';
     const sceneDesc = (scene.description || '').trim();
+    // Plot now sits under the image in a full-width strip below the
+    // grid so it can run the entire width of the popup.
     const descHtml = sceneDesc
-      ? `<div class="scene-overlay-synopsis" style="margin-top:10px;font-size:13px;color:var(--text);line-height:1.55;opacity:0.88">${esc(sceneDesc)}</div>`
+      ? `<div class="scene-overlay-synopsis scene-overlay-plot-below">${esc(sceneDesc)}</div>`
       : '';
     // TPDB link moved to the static search-row's right-side stack
     // (under the search button) — see #sceneOverlayTpdbLink in the
@@ -957,11 +962,26 @@
     const tpdbHref = scene.link || ('https://theporndb.net/scenes/' + (scene.id || ''));
     const tpdbLinkEl = document.getElementById('sceneOverlayTpdbLink');
     if (tpdbLinkEl) tpdbLinkEl.href = tpdbHref;
+    // Inline the scene-card structure so the popup image picks up the
+    // same theming chain as /scenes tiles (duotone tint, VHS-theme
+    // overrides, studio-logo overlay). `.img-load` wraps the thumb
+    // with the duo-tint sibling that the cascading rules target.
+    const _ovStudio = (scene.studio || '').trim();
+    const _ovTitle  = (scene.title || '').trim();
+    const _ovStudioLogo = (_ovStudio || _ovTitle)
+      ? `<img class="scene-studio-logo" src="/api/studio-logo?name=${encodeURIComponent(_ovStudio)}&q=${encodeURIComponent(_ovTitle)}" alt="" loading="lazy" onload="this.closest('.scene-card')?.classList.add('has-studio-logo')" onerror="this.remove()">`
+      : '';
     document.getElementById('sceneOverlayMain').innerHTML = `
       <div class="scene-overlay-grid">
         <div>
-          <img class="scene-overlay-thumb" src="${esc(scene.thumb || '/static/img/missing.jpg')}" onerror="this.src='/static/img/missing.jpg'">
-          ${tagsHtml}
+          <div class="scene-card scene-overlay-thumb-card">
+            <div class="img-load">
+              <div class="img-spin" aria-hidden="true"></div>
+              <img class="scene-thumb scene-overlay-thumb" src="${esc(scene.thumb || '/static/img/missing.jpg')}" loading="lazy" onload="this.closest('.img-load')?.classList.add('ready')" onerror="this.onerror=null;this.src='/static/img/missing.jpg';this.closest('.img-load')?.classList.add('ready');">
+              <div class="duo-tint" aria-hidden="true"></div>
+              ${_ovStudioLogo}
+            </div>
+          </div>
         </div>
         <div>
           <div id="sceneLibPerfs"></div>
@@ -1000,9 +1020,10 @@
                 : '';
             })()}
           </div>
-          ${descHtml}
+          ${tagsHtml}
         </div>
-      </div>`;
+      </div>
+      ${descHtml}`;
     document.getElementById('sceneOverlayResults').innerHTML = '';
     document.getElementById('sceneOverlay').classList.add('open');
     // Async: fetch library performer headshots
@@ -1033,53 +1054,28 @@
 
   // ── Prowlarr (overlay) ────────────────────────────────────────────────
 
-  async function runSceneOverlaySearch() {
-    const q = document.getElementById('sceneOverlayQuery').value.trim();
-    if (!q) return;
-    const el = document.getElementById('sceneOverlayResults');
-    el.innerHTML = Array.from({length:6}, (_,i)=>`<div class="result-item"><div class="result-thumb-placeholder skeleton-box"></div><div style="flex:1;min-width:0"><div class="skeleton-line" style="width:${70 - (i%3)*10}%"></div><div class="skeleton-line" style="width:32%;margin-bottom:0"></div></div><div style="width:110px" class="skeleton-line"></div></div>`).join('');
-    try {
-      // Fan out: the textbox query (default `performers + title`) plus
-      // a `performers + studio` variant when the scene context has both.
-      // Some indexers tag releases by studio rather than scene title,
-      // so the second query catches releases the first one misses. The
-      // backend dedupes by guid. Performer names come from the
-      // gender-filtered `hover_performers` list when available, so
-      // excluded genders don't leak into the indexer query.
-      const params = new URLSearchParams();
-      params.append('q', q);
-      const _scene = window._sceneOverlay;
-      if (_scene && _scene.studio) {
-        const _perfList2 = (Array.isArray(_scene.hover_performers) && _scene.hover_performers.length)
-          ? _scene.hover_performers
-          : (_scene.performer || '').split(',').map(x => x.trim()).filter(Boolean);
-        const _perfStr2 = _perfList2.join(' ').trim();
-        if (_perfStr2) {
-          const _studioQ = `${_perfStr2} ${_scene.studio}`.trim();
-          if (_studioQ.toLowerCase() !== q.toLowerCase()) {
-            params.append('q', _studioQ);
-          }
-        }
-      }
-      const r = await fetch(`/api/prowlarr/search?${params.toString()}`);
-      const d = await r.json();
-      if (d.error) { el.innerHTML = `<div class="empty">${esc(d.error)}</div>`; return; }
-      if (!d.results?.length) { el.innerHTML = '<div class="empty">No results found</div>'; return; }
-      window._sceneProwlarrResults = d.results;
-      el.innerHTML = d.results.map((r, i) => `
-        <div class="search-result" style="grid-template-columns:auto 1fr auto auto">
-          <button type="button" class="btn-prowlarr-grab ${r.type === 'nzb' ? 'nzb' : ''}" title="Send to download client" onclick="grabResult(event, ${i})"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
-          <div style="min-width:0">
-            <div class="sr-title" title="${esc(r.title)}">${truncateFilename(r.title, 60)}</div>
-            <div class="sr-meta">${r.age ? Math.round(r.age/24) + 'd ago' : ''} ${r.seeders != null && r.seeders !== undefined ? '· ' + r.seeders + ' seeders' : ''}</div>
-          </div>
-          <span class="sr-indexer">${esc(_shortIndexer(r.indexer).replace(/ /g, '-'))}</span>
-          <span class="sr-size">${r.size_mb > 1024 ? (r.size_mb/1024).toFixed(1) + ' GB' : r.size_mb + ' MB'}</span>
-        </div>`).join('');
-    } catch(e) {
-      el.innerHTML = `<div class="empty">Search failed: ${esc(e.message)}</div>`;
-    }
+  // Scene-overlay search button now opens the unified Prowlarr search
+  // popup (window.openProwlarrSearchPopup, defined in ts-utils.js) so
+  // every search across the app shares one results UI / row layout.
+  // Pulls the typed query and the scene's studio/performer context for
+  // the popup's automatic title/studio fan-out.
+  function openSceneOverlayProwlarrPopup() {
+    const q = (document.getElementById('sceneOverlayQuery').value || '').trim();
+    const _scene = window._sceneOverlay || {};
+    const _perfList = (Array.isArray(_scene.hover_performers) && _scene.hover_performers.length)
+      ? _scene.hover_performers
+      : (_scene.performer || '').split(',').map(x => x.trim()).filter(Boolean);
+    if (!q && !_scene.title) return;
+    if (typeof window.openProwlarrSearchPopup !== 'function') return;
+    window.openProwlarrSearchPopup({
+      title:      q || _scene.title || '',
+      studio:     _scene.studio || '',
+      performers: _perfList.join(', '),
+      thumb_url:  _scene.thumb || '',
+      kind:       'scene',
+    });
   }
+  window.openSceneOverlayProwlarrPopup = openSceneOverlayProwlarrPopup;
 
   function truncateFilename(name, maxLen) {
     if (!name || name.length <= maxLen) return esc(name || '');
