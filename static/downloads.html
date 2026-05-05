@@ -230,12 +230,16 @@
   .dl-empty-decor img {
     position: fixed;
     right: 24px;
-    bottom: 24px;
+    bottom: 0;
     width: auto;
-    height: calc(100vh - 220px);
-    max-height: 820px;
-    opacity: 0.18;
-    filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.6));
+    height: calc(100vh - 180px);
+    max-height: 880px;
+    opacity: 0.09;
+    /* Fade the silhouette out toward the bottom edge so it dissolves
+     * into the page rather than ending in a hard line. */
+    -webkit-mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
+            mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
+    pointer-events: none;
     z-index: 0;
   }
 
