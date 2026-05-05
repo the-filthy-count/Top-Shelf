@@ -219,6 +219,12 @@
     position: relative;
     min-height: 60vh;
     pointer-events: none;
+    /* Parent #rows is a CSS grid (.dl-bar-list, auto-fill columns).
+     * Span every column so the empty-state container fills the full
+     * panel width — otherwise it sits in a single ~320px cell on the
+     * left and the bottom-right anchored silhouette ends up on the
+     * left of the page. */
+    grid-column: 1 / -1;
   }
   .dl-empty-decor img {
     position: absolute;
