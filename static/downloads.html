@@ -212,23 +212,21 @@
    * so it reads as faint atmosphere rather than chrome. Sits above
    * the sheen pseudo (z-index 0) but below tile content. */
   .dl-bar .dl-tile-silhouette {
+    /* Explicit pixel dimensions — earlier `aspect-ratio + height: %`
+     * sizing relied on the parent having a definite height, but
+     * `.dl-bar` only declares `min-height`, so the percentage
+     * resolved to 0 and the element rendered with zero size. Hard
+     * px values guarantee a paintable box. */
     position: absolute;
     right: 0;
     bottom: 0;
-    height: 50%;
-    /* silhouette8.png is 426×750; aspect-ratio matches that so the
-     * `contain` background fills the div edge-to-edge with no
-     * letterboxing. */
-    aspect-ratio: 426 / 750;
+    width: 130px;
+    height: 230px;
     background: url('/static/img/silhouette8.png') right bottom / contain no-repeat;
-    /* Stays behind the chips (z-index: 2) and content (z-index: 2)
-     * so it reads as background decoration, but lightens the dark
-     * tile surface via `screen` blend so it actually shows through
-     * the translucent chip gradients instead of being swallowed. */
-    opacity: 0.55;
+    opacity: 0.85;
     mix-blend-mode: screen;
     pointer-events: none;
-    z-index: 0;
+    z-index: 1;
   }
   /* Liquid sheen highlight — a soft, irregular bright glaze along
    * the upper-left arc that suggests light catching wet glass. No
@@ -1484,12 +1482,15 @@
     inset: 0;
     pointer-events: none;
     z-index: 2;
+    /* Inline SVG noise fallbacks so the TV static still renders when
+     * the VHS theme variables (--vhs-noise / --vhs-noise2) aren't set
+     * — e.g. when the user is on the default theme. */
     background-image:
       repeating-linear-gradient(0deg,
         rgba(255, 255, 255, 0.10) 0 1px,
         transparent 1px 3px),
-      var(--vhs-noise),
-      var(--vhs-noise2);
+      var(--vhs-noise,  url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.22 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")),
+      var(--vhs-noise2, url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.45' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.10 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"));
     background-size:
       100% 4px,
       160px 160px,
@@ -5015,7 +5016,7 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
       const items = d.items || [];
       if (!items.length) {
         if (fid !== _downloadsFetchGen) return;
-        tbody.innerHTML = `<div class="empty" style="padding:32px 18px;text-align:center">No items match this filter (or clients not configured).</div>`;
+        tbody.innerHTML = '';
         return;
       }
       if (fid !== _downloadsFetchGen) return;
