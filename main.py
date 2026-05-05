@@ -26194,6 +26194,17 @@ async def prowlarr_search_endpoint(q: list[str] = Query(...)):
                 continue
             seen.add(key)
             merged.append(r)
+    # Honour the shared keyword blacklist used by RSS feeds — same
+    # case-insensitive substring match against the release title — so
+    # the new shared search popup and every legacy Prowlarr caller
+    # respect the user's exclusion list without per-call wiring.
+    raw_blacklist = (db.get_settings().get("rss_keyword_blacklist") or "").strip()
+    blacklist_terms = [t.strip().lower() for t in raw_blacklist.split(",") if t.strip()]
+    if blacklist_terms:
+        merged = [
+            r for r in merged
+            if not any(term in (r.get("title") or "").lower() for term in blacklist_terms)
+        ]
     try:
         studio_idx, perf_idx = db._build_library_match_indexes()
         for r in merged:

@@ -2957,8 +2957,8 @@
       ${tpdbHref ? `<a class="detail-link db-link" href="${tpdbHref}" target="_blank" onclick="event.stopPropagation()" title="TPDB">
         <img src="/static/logos/tpdb.png" alt="TPDB" style="height:14px;width:auto;object-fit:contain;vertical-align:middle"> TPDB
       </a>` : ''}
-      <button class="detail-link db-link" style="border:1px solid rgba(var(--brand-purple-rgb),0.35);background:rgba(var(--brand-purple-rgb),0.35);cursor:pointer" onclick="event.stopPropagation();searchMovieProwlarr('${esc((m.title || '').replace(/'/g, "\\'"))}')" title="Search Prowlarr">
-        <i class="fa-solid fa-magnifying-glass"></i> Prowlarr
+      <button class="detail-link db-link" style="border:1px solid rgba(var(--brand-purple-rgb),0.35);background:rgba(var(--brand-purple-rgb),0.35);cursor:pointer" onclick="event.stopPropagation();window.openProwlarrSearchPopup({title:'${esc((m.title || '').replace(/'/g, "\\'"))}',kind:'movie'})" title="Search Prowlarr">
+        <span class="ts-prowlarr-btn-content"><img class="ts-prowlarr-btn-logo" src="/static/logos/prowlarr.png" alt="Prowlarr"><i class="fa-solid fa-magnifying-glass"></i></span>
       </button>`;
     const linksWrap = perfHtml
       ? `<div class="movie-detail-performers" style="flex-basis:100%;margin:0 0 8px;display:flex;flex-wrap:wrap;gap:6px">${perfHtml}</div>`
@@ -3088,7 +3088,7 @@
             ${movieTagsHtml}
             ${m.synopsis ? `<div class="movie-detail-synopsis">${esc(m.synopsis)}</div>` : ''}
             <div class="movie-detail-actions">
-              <button class="movie-btn-action movie-btn-prowlarr" onclick="event.stopPropagation();searchMovieProwlarr('${esc(m.title)}')" title="Search Prowlarr"><i class="fa-solid fa-magnifying-glass"></i></button>
+              <button class="movie-btn-action movie-btn-prowlarr" onclick="event.stopPropagation();window.openProwlarrSearchPopup({title:'${esc((m.title || '').replace(/'/g, "\\'"))}',kind:'movie'})" title="Search Prowlarr"><span class="ts-prowlarr-btn-content"><img class="ts-prowlarr-btn-logo" src="/static/logos/prowlarr.png" alt="Prowlarr"><i class="fa-solid fa-magnifying-glass"></i></span></button>
               <a class="movie-btn-action movie-btn-link" href="${esc(m.tmdb_url || ('https://www.themoviedb.org/search/movie?query=' + encodeURIComponent(m.title || '')))}" target="_blank" onclick="event.stopPropagation()"><img src="/static/logos/tmdb.png" alt="TMDB" style="height:20px;width:auto;object-fit:contain;vertical-align:middle;opacity:0.9"></a>
               <a class="movie-btn-action movie-btn-link" href="${esc(m.url)}" target="_blank" onclick="event.stopPropagation()"><img src="/static/logos/tpdb.png" alt="TPDB" style="height:20px;width:auto;object-fit:contain;vertical-align:middle;opacity:0.9"></a>
             </div>

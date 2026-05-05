@@ -635,7 +635,7 @@
             ${perfs ? `<div class="detail-performers">${perfs}</div>` : ''}
             ${m.synopsis ? `<div class="detail-synopsis">${esc(m.synopsis)}</div>` : ''}
             <div class="detail-actions">
-              <button class="btn-action btn-prowlarr" onclick="event.stopPropagation();searchProwlarr('${esc(m.title)}')" title="Search Prowlarr"><i class="fa-solid fa-magnifying-glass"></i> <span class="btn-label">Search Prowlarr</span></button>
+              <button class="btn-action btn-prowlarr" onclick="event.stopPropagation();window.openProwlarrSearchPopup({title:'${esc((m.title || '').replace(/'/g, "\\'"))}',kind:'movie'})" title="Search Prowlarr"><span class="ts-prowlarr-btn-content"><img class="ts-prowlarr-btn-logo" src="/static/logos/prowlarr.png" alt="Prowlarr"><i class="fa-solid fa-magnifying-glass"></i></span></button>
               <a class="btn-action btn-tpdb" href="${esc(m.tmdb_url || ('https://www.themoviedb.org/search/movie?query=' + encodeURIComponent(m.title || '')))}" target="_blank" onclick="event.stopPropagation()"><img src="/static/logos/tmdb.png" alt="TMDB" style="height:20px;width:auto;object-fit:contain;vertical-align:middle;opacity:0.9"></a>
               <a class="btn-action btn-tpdb" href="${esc(m.url)}" target="_blank" onclick="event.stopPropagation()"><img src="/static/logos/tpdb.png" alt="TPDB" style="height:20px;width:auto;object-fit:contain;vertical-align:middle;opacity:0.9"></a>
             </div>

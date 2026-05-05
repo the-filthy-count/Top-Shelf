@@ -905,18 +905,24 @@
       </div>`;
     }
 
+    const isDeceased = !!(bio.death_date && String(bio.death_date).trim());
+    const skullHtml = isDeceased
+      ? `<wa-icon name="skull-crossbones" class="pp-headshot-skull" aria-label="Deceased" title="Deceased"></wa-icon>`
+      : '';
     el.innerHTML = `
       <div class="pp-bio-layout">
-        <div class="pp-headshot-wrap">
+        <div class="pp-headshot-wrap${isDeceased ? ' is-deceased' : ''}">
           ${headshot
             ? `<img class="pp-headshot" src="${ESC(headshot)}" alt="${ESC(id.canonical_name)}" onerror="this.parentElement.innerHTML='<div class=pp-headshot-fallback><i class=fa-solid fa-person></i></div>'">`
             : `<div class="pp-headshot-fallback"><i class="fa-solid fa-person"></i></div>`}
+          ${skullHtml}
         </div>
         <div class="pp-bio-text">
           ${aliasHtml}
           <div class="pp-stats">
             ${stat('Gender', bio.gender)}
             ${stat('Born', bio.birthdate)}
+            ${stat('Died', bio.death_date)}
             ${stat('Country', bio.country)}
             ${stat('Ethnicity', bio.ethnicity)}
             ${stat('Hair', bio.hair_color)}

@@ -5627,7 +5627,7 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
         // Search-Prowlarr button lives in the actions group on the
         // right side of the row.
         const searchOverlayBtn = '';
-        const searchActionBtn = `<button type="button" class="wanted-action-btn" data-action="search" data-id="${w.id}" title="Search Prowlarr for this ${_escH(w.kind || 'scene')}"><i class="fa-solid fa-magnifying-glass"></i></button>`;
+        const searchActionBtn = `<button type="button" class="wanted-action-btn" data-action="search" data-id="${w.id}" title="Search Prowlarr for this ${_escH(w.kind || 'scene')}"><span class="ts-prowlarr-btn-content"><img class="ts-prowlarr-btn-logo" src="/static/logos/prowlarr.png" alt="Prowlarr"><i class="fa-solid fa-magnifying-glass"></i></span></button>`;
         const textBlock = `<div class="wanted-text">
             <div class="wanted-title-row">
               <i class="fa-solid ${kindIcon} wanted-kind-ico" style="color:${kindColor}" title="${_escH(w.kind)}"></i>
@@ -5696,7 +5696,20 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
     e.stopPropagation();
     const id = parseInt(btn.getAttribute('data-id'), 10);
     if (!id || isNaN(id)) return;
-    if (action === 'search') searchWantedItem(id);
+    if (action === 'search') {
+      // Route through the shared popup so /downloads, /scenes, /movies
+      // and /favourites all share one search UI.
+      const w = _wantedById.get(id);
+      if (w && w.title) {
+        window.openProwlarrSearchPopup({
+          title: w.title,
+          studio: w.studio || '',
+          performers: w.performers || '',
+          kind: w.kind || 'scene',
+          thumb_url: w.thumb_url || '',
+        });
+      }
+    }
     else if (action === 'remove') removeWantedItem(id);
     else if (action === 'refresh') refreshWantedItem(id, btn);
   });

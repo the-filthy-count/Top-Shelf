@@ -786,3 +786,249 @@ window.countryFlagHtml = function (raw, extraClass) {
   }
   return '';
 };
+
+/* ─────────────────────────────────────────────────────────────────
+ * Shared Prowlarr-search popup
+ * ─────────────────────────────────────────────────────────────────
+ * Single in-browser popup that any page can summon to run a Prowlarr
+ * search for a known title (scene or movie) and grab a release. The
+ * popup auto-injects its own DOM on first use so callers don't need
+ * to drop overlay markup into every page template.
+ *
+ * Usage:
+ *   window.openProwlarrSearchPopup({
+ *     title: 'Tiny Tit Teens 13',
+ *     kind:  'movie' | 'scene',          // optional, defaults to scene
+ *     studio:    'Lethal Hardcore',      // optional, used for fallback query
+ *     performers: 'Jane Doe, Mary Sue',  // optional, used for fallback query
+ *     thumb_url: '/static/img/x.jpg',    // optional
+ *   })
+ */
+(function () {
+  if (window.openProwlarrSearchPopup) return; // already wired by another include
+
+  const _esc = (s) => String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  let _searchToken = 0;
+  let _activeReleases = [];
+  let _activeKind = 'scene';
+
+  function ensureMarkup() {
+    if (document.getElementById('tsProwlarrPopup')) return;
+    const div = document.createElement('div');
+    div.id = 'tsProwlarrPopup';
+    div.className = 'ts-prowlarr-popup-overlay';
+    div.innerHTML = `
+      <div class="ts-prowlarr-popup-shell" role="dialog" aria-modal="true" aria-label="Prowlarr search">
+        <button type="button" class="ts-prowlarr-popup-close" aria-label="Close" title="Close">&times;</button>
+        <div class="ts-prowlarr-popup-header" id="tsProwlarrPopupHeader"></div>
+        <div class="ts-prowlarr-popup-status" id="tsProwlarrPopupStatus"></div>
+        <div class="ts-prowlarr-popup-results" id="tsProwlarrPopupResults"></div>
+      </div>`;
+    document.body.appendChild(div);
+    div.addEventListener('click', (ev) => { if (ev.target === div) closePopup(); });
+    div.querySelector('.ts-prowlarr-popup-close').addEventListener('click', closePopup);
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' && div.classList.contains('open')) closePopup();
+    });
+    div.querySelector('.ts-prowlarr-popup-results').addEventListener('click', onGrabClick);
+  }
+
+  function closePopup() {
+    const o = document.getElementById('tsProwlarrPopup');
+    if (o) o.classList.remove('open');
+    _searchToken++; // invalidate any in-flight search
+  }
+  window.closeProwlarrSearchPopup = closePopup;
+
+  async function onGrabClick(ev) {
+    const btn = ev.target.closest('.ts-prowlarr-grab');
+    if (!btn) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const idx = parseInt(btn.dataset.releaseIdx, 10);
+    const result = _activeReleases[idx];
+    if (!result) return;
+    btn.disabled = true;
+    btn.classList.remove('is-sent');
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    try {
+      const isTor = result.type === 'torrent';
+      const downloadUrl = isTor && result.magnet ? result.magnet : (result.download_url || '');
+      const r = await fetch('/api/prowlarr/grab', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          guid: result.guid,
+          indexer_id: result.indexer_id,
+          type: result.type,
+          download_url: downloadUrl,
+          kind: _activeKind === 'movie' ? 'movie' : 'scene',
+        }),
+      });
+      const d = await r.json();
+      if (d && d.ok) {
+        btn.classList.add('is-sent');
+        btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-download"></i>';
+        alert((d && d.error) || 'Could not send to download client');
+      }
+    } catch (e) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-download"></i>';
+      alert(e.message || 'Failed');
+    }
+  }
+
+  window.openProwlarrSearchPopup = async function (opts) {
+    ensureMarkup();
+    const o = opts || {};
+    const title = (o.title || '').trim();
+    if (!title) return;
+    _activeKind = (o.kind === 'movie') ? 'movie' : 'scene';
+    const overlay = document.getElementById('tsProwlarrPopup');
+    const headerEl = document.getElementById('tsProwlarrPopupHeader');
+    const statusEl = document.getElementById('tsProwlarrPopupStatus');
+    const resultsEl = document.getElementById('tsProwlarrPopupResults');
+    headerEl.innerHTML = `<span class="ts-prowlarr-popup-title">PROWLARR: ${_esc(title)}</span>`;
+    statusEl.textContent = 'Searching Prowlarr…';
+    resultsEl.innerHTML = '<div class="ts-prowlarr-popup-empty">Please wait…</div>';
+    overlay.classList.add('open');
+    const myToken = ++_searchToken;
+    try {
+      const params = new URLSearchParams();
+      params.append('q', title);
+      const perfStr = (o.performers || '').trim();
+      const studio = (o.studio || '').trim();
+      if (perfStr && studio) {
+        const studioQ = `${perfStr} ${studio}`.trim();
+        if (studioQ.toLowerCase() !== title.toLowerCase()) params.append('q', studioQ);
+      }
+      const r = await fetch('/api/prowlarr/search?' + params.toString(), { credentials: 'same-origin' });
+      const d = await r.json();
+      if (myToken !== _searchToken) return;
+      if (d && d.error) {
+        statusEl.textContent = d.error;
+        resultsEl.innerHTML = '';
+        return;
+      }
+      const releases = (d && d.results) || [];
+      _activeReleases = releases.slice(0, 50);
+      statusEl.innerHTML = `<strong>${_activeReleases.length}</strong> release${_activeReleases.length === 1 ? '' : 's'} found`;
+      if (!_activeReleases.length) {
+        resultsEl.innerHTML = '<div class="ts-prowlarr-popup-empty">No releases matched this title on your configured indexers.</div>';
+        return;
+      }
+      // Parse a release title for resolution / quality / image-pack
+      // markers and return ordered pills (highest-fidelity first).
+      const QUALITY_PATTERNS = [
+        { rx: /\b(2160p|4k|uhd)\b/i,                cls: 'ts-q-4k',     label: '4K'    },
+        { rx: /\b1080p\b/i,                         cls: 'ts-q-1080',   label: '1080P' },
+        { rx: /\b720p\b/i,                          cls: 'ts-q-720',    label: '720P'  },
+        { rx: /\b(480p|sd|dvdrip|xvid)\b/i,         cls: 'ts-q-sd',     label: 'SD'    },
+        { rx: /\b(imageset|image[-_ ]?set|imgset|jpg|pics?|photos?)\b/i, cls: 'ts-q-img', label: 'IMG' },
+      ];
+      const buildQualityPills = (title) => {
+        const t = title || '';
+        const seen = new Set();
+        const pills = [];
+        for (const p of QUALITY_PATTERNS) {
+          if (seen.has(p.cls)) continue;
+          if (p.rx.test(t)) {
+            seen.add(p.cls);
+            pills.push(`<span class="ts-prowlarr-q ${p.cls}">${p.label}</span>`);
+          }
+        }
+        return pills.join('');
+      };
+      // Render rows in the same shape as `/downloads` Search-tab results
+      // (studio logo · name+meta · headshots · indexer/type · grab).
+      resultsEl.innerHTML = _activeReleases.map((rel, i) => {
+        const isTor = rel.type === 'torrent';
+        const agePart = rel.age != null ? Math.round(rel.age / 24) + 'd' : '';
+        const seedPart = isTor && rel.seeders != null ? rel.seeders + ' seed' : '';
+        const sizeMb = rel.size_mb || (rel.size ? rel.size / 1024 / 1024 : 0);
+        const sizeLabel = sizeMb >= 1024
+          ? (sizeMb / 1024).toFixed(2) + ' GB'
+          : Math.round(sizeMb) + ' MB';
+        const meta = [agePart, seedPart, sizeLabel].filter(Boolean).join(' · ');
+        const indexer = (rel.indexer || rel.tracker || '').toString();
+        const typeLabel = isTor ? 'Torrent' : 'NZB';
+        const typeLogo = `<img class="ts-prowlarr-typelogo" src="/static/logos/${isTor ? 'torrent' : 'nzb'}.png" alt="${typeLabel}" title="${typeLabel}" onerror="this.style.display='none'">`;
+        const m = rel.match || {};
+        const studio = (m.studio || '').trim();
+        const studioLogo = studio
+          ? `<img class="ts-prowlarr-studiologo" src="/api/studio-logo?name=${encodeURIComponent(studio)}&q=${encodeURIComponent(rel.title || '')}" alt="${_esc(studio)}" title="${_esc(studio)}" onerror="this.style.display='none'">`
+          : '';
+        const performers = (m.performers || []).filter(Boolean).slice(0, 3);
+        const headshotSlot = performers.length
+          ? `<span class="ts-prowlarr-headshots" data-perf-names="${_esc(performers.join('|'))}"></span>`
+          : '';
+        const qualityPills = buildQualityPills(rel.title || '');
+        return `<div class="ts-prowlarr-row">
+          <div class="ts-prowlarr-cell">${studioLogo}</div>
+          <div class="ts-prowlarr-cell-name">
+            <div class="ts-prowlarr-title" title="${_esc(rel.title || '')}">${_esc(rel.title || 'Untitled')}</div>
+            <div class="ts-prowlarr-meta">${qualityPills}<span>${_esc(meta)}</span></div>
+          </div>
+          <div class="ts-prowlarr-cell ts-prowlarr-cell-headshots">${headshotSlot}</div>
+          <div class="ts-prowlarr-cell ts-prowlarr-cell-badges">
+            <span>${typeLogo}</span>
+            <span class="ts-prowlarr-indexer" title="${_esc(indexer)}">${_esc(indexer)}</span>
+          </div>
+          <div class="ts-prowlarr-cell">
+            <button type="button" class="ts-prowlarr-grab ${isTor ? 'is-torrent' : 'is-nzb'}" data-release-idx="${i}" title="Send to download client">
+              <i class="fa-solid fa-download"></i>
+            </button>
+          </div>
+        </div>`;
+      }).join('');
+      // Replace the per-perf placeholder loop with the proven batch
+      // hydrator from /downloads — fetch once, paint up to 3 faces.
+      const slots = Array.from(resultsEl.querySelectorAll('.ts-prowlarr-headshots[data-perf-names]'));
+      if (slots.length) {
+        const allNames = new Set();
+        slots.forEach(slot => {
+          (slot.dataset.perfNames || '').split('|').forEach(n => {
+            const t = (n || '').trim();
+            if (t) allNames.add(t);
+          });
+        });
+        if (allNames.size) {
+          fetch('/api/performers/headshots-by-name?names=' + encodeURIComponent([...allNames].join(',')), { credentials: 'same-origin' })
+            .then(r => r.json())
+            .then(d => {
+              const lookup = {};
+              (d.performers || []).forEach(p => {
+                if (p && p.name) lookup[p.name.toLowerCase()] = p.headshot_url || null;
+              });
+              slots.forEach(slot => {
+                const names = (slot.dataset.perfNames || '').split('|').map(n => n.trim()).filter(Boolean);
+                const imgs = [];
+                for (const n of names) {
+                  const url = lookup[n.toLowerCase()];
+                  if (url) {
+                    imgs.push(`<span class="ts-prowlarr-headshot" title="${_esc(n)}"><img src="${_esc(url)}" alt="${_esc(n)}" onerror="this.parentElement.style.display='none'"></span>`);
+                    if (imgs.length >= 3) break;
+                  }
+                }
+                // Reverse so the primary face stacks on top in the
+                // overlap chain (matches /downloads list).
+                slot.innerHTML = imgs.reverse().join('');
+              });
+            })
+            .catch(() => {});
+        }
+      }
+    } catch (e) {
+      if (myToken !== _searchToken) return;
+      statusEl.textContent = 'Search error: ' + (e.message || e);
+      resultsEl.innerHTML = '';
+    }
+  };
+})();

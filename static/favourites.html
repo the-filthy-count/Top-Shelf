@@ -4322,7 +4322,7 @@
             <div class="fav-scene-meta">${esc(s.date || '')}${s.studio ? ' · ' + esc(s.studio) : ''}</div>
             <div class="fav-scene-actions">
               <a class="fav-scene-link" href="${escAttr(sceneUrl)}" target="_blank" rel="noopener noreferrer">${esc(sl)} <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
-              <button type="button" class="fav-scene-indexer-btn" onclick="favSceneLoadReleases(${si})">Search indexers</button>
+              <button type="button" class="fav-scene-indexer-btn" onclick="window.openProwlarrSearchPopup({title:${JSON.stringify(s.title || '')},studio:${JSON.stringify(s.studio || '')},kind:'scene'})" title="Search Prowlarr"><span class="ts-prowlarr-btn-content"><img class="ts-prowlarr-btn-logo" src="/static/logos/prowlarr.png" alt="Prowlarr"><i class="fa-solid fa-magnifying-glass"></i></span></button>
             </div>
             <div class="fav-scene-releases" id="favSceneRel_${si}" style="display:none"></div>
           </div>
