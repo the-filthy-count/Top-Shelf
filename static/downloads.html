@@ -221,7 +221,12 @@
      * letterboxing. */
     aspect-ratio: 426 / 750;
     background: url('/static/img/silhouette8.png') right bottom / contain no-repeat;
-    opacity: 0.25;
+    /* Stays behind the chips (z-index: 2) and content (z-index: 2)
+     * so it reads as background decoration, but lightens the dark
+     * tile surface via `screen` blend so it actually shows through
+     * the translucent chip gradients instead of being swallowed. */
+    opacity: 0.55;
+    mix-blend-mode: screen;
     pointer-events: none;
     z-index: 0;
   }
