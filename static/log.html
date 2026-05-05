@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Activity log</title>
+<link rel="preload" href="/static/img/background_dark.jpg" as="image">
+<link rel="preload" href="/static/img/background_light.jpg" as="image">
+<link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
+<link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css">
+<link rel="stylesheet" href="/static/fonts/webawesome/styles/themes/default.css" />
+<script type="importmap">{"imports":{"@shoelace-style/localize":"/static/fonts/webawesome/utilities/localize.js","@shoelace-style/animations":"/static/fonts/webawesome/components/animation/animations.js"}}</script>
+<script type="module" src="/static/fonts/webawesome/webawesome.js"></script>
+<script src="/static/theme-init.js"></script>
+<link rel="stylesheet" href="/static/app-shell.css">
+<script src="/static/ts-utils.js"></script>
+<style>
+  @font-face {
+    font-family: 'Acidoze';
+    src: url('/static/fonts/Tox Typewriter.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+  }
+  :root {
+    /* Colour palette lives in /static/app-shell.css (themeable via html[data-theme=...]) */
+    --mono: 'DM Mono', monospace;
+    --acid: 'Acidoze', 'DM Mono', monospace;
+    --glass-panel-bg: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.48) 0%, rgba(var(--panel-lo-rgb),0.36) 100%);
+    --glass-border: rgba(255,255,255,0.12); --glass-blur: 20px;
+    --glass-inset: inset 0 1px 0 rgba(255,255,255,0.12);
+    --glass-shadow: 0 10px 40px rgba(0,0,0,0.28);
+    --glass-header-bg: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.52) 0%, rgba(var(--panel-lo-rgb),0.4) 100%);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg) var(--app-bg-image) center center / cover fixed;
+    color: var(--text); font-family: var(--mono); font-size: 13px; line-height: 1.6;
+    min-height: 100vh; min-height: 100dvh; margin: 0;
+  }
+  body::before { content: ''; position: fixed; inset: 0; background: rgba(var(--bg-rgb),0.72); z-index: 0; }
+  .app { position: relative; z-index: 1; max-width: 1600px; margin: 0 auto; padding: 0 24px 24px;
+    display: flex; flex-direction: column; height: 100dvh; max-height: 100dvh; min-height: 0; overflow: hidden; }
+  header {
+    flex-shrink: 0; padding: 14px 16px; border: 1px solid var(--glass-border); border-radius: 10px;
+    background: var(--glass-header-bg); backdrop-filter: blur(var(--glass-blur));
+    margin-bottom: 16px;
+  }
+  header:not(.ts-app-header) {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  header.ts-app-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 2fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 12px 16px;
+  }
+  header.ts-app-header .ts-header-left { justify-self: start; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; min-width: 0; }
+  header.ts-app-header .nav-links { justify-self: end; }
+  .nav-links { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .btn-secondary {
+    padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); cursor: pointer; font-size: 13px;
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .active-nav { border-color: var(--accent) !important; color: var(--accent) !important; }
+  .panel-log-page {
+    flex: 1 1 0; min-height: 0; display: flex; flex-direction: column;
+    background: var(--glass-panel-bg); border: 1px solid var(--glass-border); border-radius: 10px;
+    overflow: hidden; backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-inset), var(--glass-shadow);
+  }
+  .panel-log-page .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.09); flex-shrink: 0; gap: 10px; flex-wrap: wrap; }
+  .panel-title { font-family: var(--acid); font-size: clamp(22px, 2vw, 30px); font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
+  .log-body { flex: 1 1 0; overflow-y: auto; padding: 14px 18px; font-size: 12px; line-height: 1.8; }
+  .log-line { display: block; }
+  .log-line.file { color: var(--accent); font-weight: 500; margin-top: 6px; }
+  .log-line.done { color: var(--green); }
+  .log-line.warning { color: var(--amber); }
+  .log-line.error { color: var(--red); }
+  .log-line.pipeline { color: var(--dim); }
+  .log-line.sep { opacity: 0.35; }
+  @media (max-width: 900px) {
+    header.ts-app-header { grid-template-columns: 1fr; }
+  }
+
+  /* ── /log mobile optimisation (≤640px) ──
+     Log lines stay monospace and can run long. Tighten horizontal
+     padding so content doesn't disappear off-screen, and let the body
+     wrap instead of growing a horizontal scrollbar. Prune / Clear
+     labels collapse via .btn-label. */
+  @media (max-width: 640px) {
+    .app { padding: 0 10px 12px; }
+    header { padding: 10px 12px; margin-bottom: 10px; }
+    .panel-log-page .panel-header { padding: 10px 12px; }
+    .log-body {
+      padding: 10px 12px !important;
+      font-size: 11px !important;
+      line-height: 1.6 !important;
+      word-break: break-word;
+    }
+    .log-body .log-line { white-space: pre-wrap; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="ts-app-header">
+    <div class="ts-header-left">
+      <div class="logo"><img src="/static/img/logo.png" alt="Top-Shelf" style="height:36px; object-fit:contain;"></div>
+      <span id="appVersion" style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.06em"></span>
+    </div>
+    <div id="tsActivityBanner" class="ts-header-activity" aria-live="polite"></div>
+    <div class="nav-links">
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary" title="Downloads"><i class="fa-solid fa-download"></i></button></a>
+      <a href="/discover" style="text-decoration:none"><button class="btn-secondary" title="Discover"><i class="fa-solid fa-star"></i></button></a><a href="/scenes" style="text-decoration:none"><button class="btn-secondary" title="Scenes"><i class="fa-solid fa-film"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library"><i class="fa-solid fa-ticket"></i></button></a>
+      <a href="/health" style="text-decoration:none"><button class="btn-secondary" title="Health"><i class="fa-solid fa-heart-pulse"></i></button></a>
+      <a href="/settings" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="fa-solid fa-gear"></i></button></a>
+      <button class="btn-secondary" style="margin-left:auto" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>location.href='/login')" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+    </div>
+  </header>
+
+  <div class="panel-log-page">
+    <div class="panel-header">
+      <span class="panel-title">Log</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span id="logMeta" style="font-size:11px;color:var(--dim)"></span>
+        <button type="button" class="btn-secondary" onclick="reloadHistory()" title="Reload from server"><i class="fa-solid fa-arrows-rotate"></i></button>
+        <button type="button" class="btn-secondary" id="pruneLogBtn" onclick="pruneLog()" title="Delete lines older than the retention setting"><i class="fa-solid fa-scissors"></i> <span class="btn-label">Prune</span></button>
+        <button type="button" class="btn-secondary" onclick="clearServerLog()" title="Clear stored log"><i class="fa-solid fa-trash"></i> <span class="btn-label">Clear</span></button>
+      </div>
+    </div>
+    <div class="log-body" id="logBody"><div class="empty" style="color:var(--dim)">Loading…</div></div>
+  </div>
+</div>
+<script>
+  function classifyLine(line) {
+    if (line.startsWith('FILE ')) return 'file';
+    if (line.includes('DONE')) return 'done';
+    if (line.includes('PIPELINE')) return 'pipeline';
+    if (line.startsWith('---')) return 'sep';
+    if (line.includes('WARNING')) return 'warning';
+    if (line.includes('ERROR') || line.includes('FAILED')) return 'error';
+    return 'default';
+  }
+  function appendLine(text) {
+    const body = document.getElementById('logBody');
+    if (!body) return;
+    const empty = body.querySelector('.empty');
+    if (empty) empty.remove();
+    const span = document.createElement('span');
+    span.className = 'log-line ' + classifyLine(text);
+    span.textContent = text;
+    body.appendChild(span);
+    body.appendChild(document.createTextNode('\n'));
+    body.scrollTop = body.scrollHeight;
+  }
+  let eventSource = null;
+  function startSSE() {
+    if (eventSource) eventSource.close();
+    eventSource = new EventSource('/api/log/stream');
+    eventSource.onmessage = function(e) {
+      try {
+        const d = JSON.parse(e.data);
+        if (d.ping) return;
+        appendLine(d);
+      } catch (err) {}
+    };
+  }
+  async function reloadHistory() {
+    const body = document.getElementById('logBody');
+    const meta = document.getElementById('logMeta');
+    try {
+      const r = await fetch('/api/log/history?limit=12000');
+      const d = await r.json();
+      const lines = d.lines || [];
+      body.innerHTML = '';
+      lines.forEach(function(row) {
+        appendLine(row.line);
+      });
+      if (meta) meta.textContent = lines.length ? (lines.length + ' lines') : 'Empty';
+      if (!lines.length) body.innerHTML = '<div class="empty" style="color:var(--dim)">No log lines yet. Run the pipeline or library index.</div>';
+    } catch (e) {
+      body.innerHTML = '<div class="empty" style="color:var(--red)">Failed to load log</div>';
+    }
+  }
+  async function pruneLog() {
+    const btn = document.getElementById('pruneLogBtn');
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/log/prune', { method: 'POST' });
+      const d = await r.json();
+      if (d.removed > 0) {
+        await reloadHistory();
+        document.getElementById('logMeta').textContent = `Pruned ${d.removed} lines older than ${d.retention_days}d`;
+      } else {
+        document.getElementById('logMeta').textContent = `Nothing to prune (retention: ${d.retention_days}d)`;
+      }
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  async function clearServerLog() {
+    if (!confirm('Clear all stored log lines?')) return;
+    try {
+      await fetch('/api/log/clear', { method: 'POST' });
+      document.getElementById('logBody').innerHTML = '<div class="empty" style="color:var(--dim)">Cleared.</div>';
+      document.getElementById('logMeta').textContent = '';
+    } catch (e) {}
+  }
+  reloadHistory();
+  startSSE();
+</script>
+<script defer src="/static/activity-banner.js?v=2"></script>
+<script defer src="/static/app-shell.js"></script>
+<script>
+fetch('/api/status').then(r => r.json()).then(d => {
+  const el = document.getElementById('appVersion');
+  if (el && d.version) el.textContent = 'v' + d.version;
+});
+</script>
+</body>
+</html>

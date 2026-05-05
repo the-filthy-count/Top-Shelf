@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Loading</title>
+<link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
+<script src="/static/theme-init.js"></script>
+<link rel="stylesheet" href="/static/app-shell.css">
+<style>
+  @font-face {
+    font-family: 'Acidoze';
+    src: url('/static/fonts/Tox Typewriter.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg) var(--app-bg-image) center center / cover fixed;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow: hidden;
+  }
+  /* Layered backdrop: dark veil + fine VHS scanlines + slow purple/pink
+   * gradient sweep behind the card to give the page some movement. */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      repeating-linear-gradient(180deg,
+        rgba(255,255,255,0.025) 0 1px,
+        transparent 1px 3px),
+      radial-gradient(900px 600px at 12% 10%, rgba(192,132,252,0.18), transparent 55%),
+      radial-gradient(900px 600px at 92% 92%, rgba(244,114,182,0.16), transparent 55%),
+      rgba(var(--bg-rgb), 0.86);
+    animation: bg-pan 24s linear infinite;
+  }
+  body::after {
+    /* Subtle rolling band — VHS tracking line */
+    content: '';
+    position: fixed; left: 0; right: 0; height: 90px;
+    top: -90px; z-index: 0;
+    background: linear-gradient(180deg,
+      transparent 0%,
+      rgba(255,255,255,0.04) 45%,
+      rgba(192,132,252,0.06) 55%,
+      transparent 100%);
+    animation: vhs-roll 9s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes bg-pan {
+    0%, 100% { background-position: 0 0, 0 0, 0 0, 0 0; }
+    50%      { background-position: 0 -3px, 60px 30px, -60px -30px, 0 0; }
+  }
+  @keyframes vhs-roll {
+    0%   { transform: translateY(0); }
+    100% { transform: translateY(calc(100vh + 90px)); }
+  }
+
+  .card {
+    position: relative; z-index: 1;
+    width: min(640px, 100%);
+    padding: 48px 48px 40px;
+    background:
+      linear-gradient(160deg,
+        rgba(var(--panel-hi-rgb), 0.92) 0%,
+        rgba(var(--panel-lo-rgb), 0.95) 100%);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.32);
+    border-radius: 14px;
+    box-shadow:
+      0 32px 80px rgba(0, 0, 0, 0.55),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      inset 0 0 0 1px rgba(var(--brand-purple-rgb), 0.10);
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    display: flex; flex-direction: column; align-items: center; gap: 22px;
+    overflow: hidden;
+  }
+  /* Card-internal scanline overlay — sits above the gradient but below
+   * content, breaks up flat panels with the same VHS feel. */
+  .card::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      repeating-linear-gradient(180deg,
+        rgba(255,255,255,0.03) 0 1px,
+        transparent 1px 4px);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .card > * { position: relative; z-index: 1; }
+
+  .logo { height: 44px; object-fit: contain; filter: drop-shadow(0 4px 12px rgba(192,132,252,0.4)); }
+
+  h1 {
+    font-family: 'Acidoze', monospace;
+    font-size: 22px; font-weight: 400;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--accent);
+    margin: 0;
+    /* Subtle text-glitch flicker — chromatic-shift shadow + opacity blip */
+    text-shadow:
+      1px 0 0 rgba(192, 132, 252, 0.5),
+      -1px 0 0 rgba(244, 114, 182, 0.5),
+      0 0 20px rgba(192, 132, 252, 0.3);
+    animation: title-flicker 4.5s ease-in-out infinite;
+  }
+  @keyframes title-flicker {
+    0%, 92%, 100% { opacity: 1; transform: translateX(0); }
+    93%           { opacity: 0.55; transform: translateX(-1px); }
+    94%           { opacity: 1; transform: translateX(1px); }
+    95%           { opacity: 0.7; transform: translateX(0); }
+  }
+
+  /* Triple-pulse spinner — concentric rings, expanding/fading, plus a
+   * solid centre dot. Mirrors the popup stage banner so the visual
+   * language is consistent across loading states. */
+  .pulse {
+    position: relative;
+    width: 64px; height: 64px;
+    margin: 4px 0;
+  }
+  .pulse span {
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    border: 2px solid rgba(192, 132, 252, 0.7);
+    animation: pulse-ring 2s ease-out infinite;
+    opacity: 0;
+  }
+  .pulse span:nth-child(1) { animation-delay: 0s; }
+  .pulse span:nth-child(2) { animation-delay: 0.5s; }
+  .pulse span:nth-child(3) { animation-delay: 1.0s; }
+  .pulse span:nth-child(4) {
+    /* Centre dot — solid, doesn't pulse. */
+    animation: none; opacity: 1;
+    inset: auto;
+    margin: auto;
+    width: 14px; height: 14px;
+    background: linear-gradient(135deg, #c084fc, #ec4899);
+    border: none;
+    box-shadow: 0 0 16px rgba(244, 114, 182, 0.55);
+    position: relative;
+  }
+  @keyframes pulse-ring {
+    0%   { transform: scale(0.35); opacity: 0.7; }
+    80%  { opacity: 0; }
+    100% { transform: scale(1.1); opacity: 0; }
+  }
+
+  .step-line {
+    font-family: 'Acidoze', monospace;
+    font-size: 16px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text);
+    text-align: center;
+    min-height: 22px;
+    transition: opacity 0.25s ease;
+  }
+  /* Mono log-style sub-line — terminal feel with leading carat. */
+  .step-sub {
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    color: rgba(192, 132, 252, 0.7);
+    letter-spacing: 0.08em;
+    text-align: center;
+    min-height: 14px;
+    opacity: 0.85;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .step-sub::before { content: '> '; opacity: 0.55; }
+  .step-sub:empty::before { display: none; }
+
+  /* Progress bar — gradient fill plus a moving shimmer band so the
+   * bar feels alive even when the percentage is still. */
+  .progress-outer {
+    width: 100%;
+    height: 8px;
+    background: rgba(var(--brand-purple-rgb), 0.10);
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.18);
+  }
+  .progress-inner {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #a855f7, #ec4899, #a855f7);
+    background-size: 200% 100%;
+    border-radius: 999px;
+    transition: width 0.35s cubic-bezier(0.2, 0.85, 0.2, 1);
+    position: relative;
+    box-shadow: 0 0 10px rgba(192, 132, 252, 0.45);
+    animation: bar-shimmer 1.6s linear infinite;
+  }
+  .progress-inner::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    right: 0;
+    width: 12px;
+    background: linear-gradient(90deg, transparent, #fff);
+    opacity: 0.6;
+    border-radius: 999px;
+    filter: blur(4px);
+  }
+  @keyframes bar-shimmer {
+    0%   { background-position:   0% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  .step-counter {
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .step-counter::before {
+    content: '';
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(192, 132, 252, 0.7);
+    animation: dot-blink 1s ease-in-out infinite;
+  }
+  @keyframes dot-blink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.3; }
+  }
+
+  /* Completed-steps log — ticked list with mono sub-text. */
+  .done-list {
+    width: 100%;
+    list-style: none;
+    padding: 8px 0 0 0;
+    margin: 0;
+    max-height: 138px;
+    overflow-y: auto;
+    font-size: 12px;
+    border-top: 1px solid rgba(var(--brand-purple-rgb), 0.18);
+  }
+  .done-list:empty { display: none; }
+  .done-list li {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 5px 4px;
+    color: var(--text);
+    opacity: 0.7;
+    animation: done-in 0.32s ease-out;
+  }
+  .done-list li::before {
+    content: '✓';
+    color: #4ade80;
+    font-weight: bold;
+    flex-shrink: 0;
+    text-shadow: 0 0 8px rgba(74, 222, 128, 0.45);
+  }
+  .done-list .done-sub {
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+    color: rgba(192, 132, 252, 0.55);
+    margin-left: auto;
+  }
+  @keyframes done-in {
+    from { opacity: 0; transform: translateX(-6px); }
+    to   { opacity: 0.7; transform: translateX(0); }
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <img src="/static/img/logo.png" alt="Top-Shelf" class="logo" onerror="this.remove()">
+  <h1>Warming Up</h1>
+  <div class="pulse" aria-hidden="true">
+    <span></span><span></span><span></span><span></span>
+  </div>
+  <div class="step-line" id="stepLine">Starting up…</div>
+  <div class="step-sub" id="stepSub"></div>
+  <div class="progress-outer"><div class="progress-inner" id="progressInner"></div></div>
+  <div class="step-counter" id="stepCounter">—</div>
+  <ul class="done-list" id="doneList"></ul>
+</div>
+<script>
+  const NEXT_URL = '__NEXT__' || '/scenes';
+  const stepLine = document.getElementById('stepLine');
+  const stepSub = document.getElementById('stepSub');
+  const stepCounter = document.getElementById('stepCounter');
+  const progressInner = document.getElementById('progressInner');
+  const doneList = document.getElementById('doneList');
+
+  let renderedDone = 0;
+
+  async function pollStatus() {
+    try {
+      const r = await fetch('/api/startup/status', { cache: 'no-store' });
+      const d = await r.json();
+      stepLine.textContent = d.current || 'Warming caches…';
+      stepSub.textContent = d.current_subtext || '';
+      const total = d.steps_total || 1;
+      const idx = Math.min(d.step_index || 0, total);
+      stepCounter.textContent = total ? `Step ${idx} of ${total}` : '—';
+      const pct = total ? Math.max(4, Math.min(100, Math.round((idx / total) * 100))) : 4;
+      progressInner.style.width = pct + '%';
+      if (Array.isArray(d.steps_done)) {
+        for (let i = renderedDone; i < d.steps_done.length; i++) {
+          const entry = d.steps_done[i];
+          const label = (entry && typeof entry === 'object') ? (entry.label || '') : String(entry || '');
+          const subtext = (entry && typeof entry === 'object') ? (entry.subtext || '') : '';
+          const li = document.createElement('li');
+          const labelSpan = document.createElement('span');
+          labelSpan.textContent = label;
+          li.appendChild(labelSpan);
+          if (subtext) {
+            const subSpan = document.createElement('span');
+            subSpan.className = 'done-sub';
+            subSpan.textContent = subtext;
+            li.appendChild(subSpan);
+          }
+          doneList.appendChild(li);
+        }
+        renderedDone = d.steps_done.length;
+      }
+      if (d.ready) {
+        progressInner.style.width = '100%';
+        stepLine.textContent = 'Ready — redirecting…';
+        stepSub.textContent = '';
+        setTimeout(() => { window.location.href = NEXT_URL; }, 350);
+        return;
+      }
+    } catch (_) {
+      // Ignore transient errors, just keep polling.
+    }
+    setTimeout(pollStatus, 800);
+  }
+  pollStatus();
+</script>
+</body>
+</html>
