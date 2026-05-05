@@ -1024,7 +1024,6 @@
         </div>
       </div>
       ${descHtml}`;
-    document.getElementById('sceneOverlayResults').innerHTML = '';
     document.getElementById('sceneOverlay').classList.add('open');
     // Async: fetch library performer headshots
     if (scene.performer) {

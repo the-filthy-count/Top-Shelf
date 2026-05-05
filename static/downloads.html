@@ -211,6 +211,26 @@
    * half the tile's height, touching the bottom edge, 25% opacity
    * so it reads as faint atmosphere rather than chrome. Sits above
    * the sheen pseudo (z-index 0) but below tile content. */
+  /* Empty-state decoration — appears when /api/downloads returns no
+   * items so the panel doesn't look broken. Uses silhouette8.png at
+   * low opacity, centred horizontally, anchored near the top so it
+   * doesn't crowd the toolbar. */
+  .dl-empty-decor {
+    position: relative;
+    min-height: 60vh;
+    pointer-events: none;
+  }
+  .dl-empty-decor img {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    height: 60vh;
+    max-height: 720px;
+    opacity: 0.18;
+    filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.6));
+  }
+
   .dl-bar .dl-tile-silhouette {
     /* Explicit pixel dimensions — earlier `aspect-ratio + height: %`
      * sizing relied on the parent having a definite height, but
@@ -5016,7 +5036,12 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
       const items = d.items || [];
       if (!items.length) {
         if (fid !== _downloadsFetchGen) return;
-        tbody.innerHTML = '';
+        // Decorative silhouette fills the empty area so the page
+        // doesn't read as a broken / unstyled void.
+        tbody.innerHTML = `
+          <div class="dl-empty-decor" aria-hidden="true">
+            <img src="/static/img/silhouette8.png" alt="">
+          </div>`;
         return;
       }
       if (fid !== _downloadsFetchGen) return;
