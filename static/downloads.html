@@ -216,25 +216,27 @@
    * low opacity, centred horizontally, anchored near the top so it
    * doesn't crowd the toolbar. */
   .dl-empty-decor {
-    position: relative;
-    min-height: 60vh;
-    pointer-events: none;
     /* Parent #rows is a CSS grid (.dl-bar-list, auto-fill columns).
      * Span every column so the empty-state container fills the full
-     * panel width — otherwise it sits in a single ~320px cell on the
-     * left and the bottom-right anchored silhouette ends up on the
-     * left of the page. */
+     * panel width. */
     grid-column: 1 / -1;
+    pointer-events: none;
+    min-height: 1px;
   }
+  /* Anchor the silhouette to the viewport bottom-right rather than to
+   * the empty-state container — the container otherwise collapses to
+   * the height of its content and the bottom-anchored image lands
+   * mid-page instead of at the bottom of the panel. */
   .dl-empty-decor img {
-    position: absolute;
-    right: 0;
-    bottom: 0;
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
     width: auto;
-    height: 60vh;
-    max-height: 720px;
+    height: calc(100vh - 220px);
+    max-height: 820px;
     opacity: 0.18;
     filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.6));
+    z-index: 0;
   }
 
   .dl-bar .dl-tile-silhouette {

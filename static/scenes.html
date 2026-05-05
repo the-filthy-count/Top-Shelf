@@ -1473,17 +1473,30 @@
     border-radius: 8px;
     background: rgba(0,0,0,0.15);
   }
-  .scene-overlay-grid { display: grid; grid-template-columns: 520px 1fr; gap: 14px; align-items: start; }
-  /* Tags column under the performer info — capped to the height of
-   * the 16:9 thumb (≈292px at 520px wide). On hover the cap drops so
-   * any overflow chips become visible. */
+  /* `stretch` makes the right-side text column equal the image
+   * column's height so the tag list can fill all the way down to
+   * the image bottom. */
+  .scene-overlay-grid { display: grid; grid-template-columns: 520px 1fr; gap: 14px; align-items: stretch; }
+  /* Right column becomes a flex stack so the tag block can claim the
+   * leftover vertical space under the performer info — bounded by
+   * the column's actual height (== image height). */
+  .scene-overlay-grid > :nth-child(2) {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  /* Tags fill all remaining height in the right column. Hover lifts
+   * the implicit cap (column height) by switching to a tall absolute
+   * max-height and revealing any chips that were clipped. */
   .scene-overlay-tags-capped {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     margin-top: 12px;
-    max-height: calc(520px * 9 / 16);
+    flex: 1 1 0;
+    min-height: 0;
     overflow: hidden;
+    align-content: flex-start;
     position: relative;
     transition: max-height 0.25s ease;
   }
@@ -1498,7 +1511,9 @@
     transition: opacity 0.25s ease;
   }
   .scene-overlay-tags-capped:hover {
+    flex: 0 0 auto;
     max-height: 1200px;
+    overflow: visible;
   }
   .scene-overlay-tags-capped:hover::after { opacity: 0; }
   /* Plot strip below the grid — full width of the popup. */

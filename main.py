@@ -26515,8 +26515,15 @@ async def prowlarr_grab_endpoint(payload: dict):
                 # NZBGet AND the on-disk folder after unpack — so we
                 # persist this same string as scene_grab_log.final_name
                 # and exact-match it in the watch handler.
+                # Dots and underscores are scene-tag separators in raw
+                # release names ("Word.Of.Mouth.XXX.1080p"). Convert them
+                # to spaces *before* the non-word-char strip so the
+                # cleaned label reads as words rather than a run-on
+                # string of removed-dot collisions.
+                _raw_nzbget = payload.get("title") or nzb_filename.replace(".nzb", "")
+                _spaced_nzbget = re.sub(r'[._]+', ' ', _raw_nzbget)
                 nzbget_job_name = (
-                    re.sub(r'[^\w\s\-]', '', payload.get("title") or nzb_filename.replace(".nzb", ""))[:120].strip()
+                    re.sub(r'\s+', ' ', re.sub(r'[^\w\s\-]', '', _spaced_nzbget))[:120].strip()
                     or nzb_filename
                 )
                 gr = requests.post(
@@ -26553,7 +26560,12 @@ async def prowlarr_grab_endpoint(payload: dict):
                 # The same string becomes the unpack folder name on disk,
                 # so we persist it as scene_grab_log.final_name and
                 # exact-match it in the watch handler.
-                clean_job_name = re.sub(r'[^\w\s\-]', '', payload.get("title") or nzb_filename.replace(".nzb", ""))[:120].strip() or nzb_filename.replace(".nzb", "")
+                # Dots / underscores → spaces before stripping non-word
+                # chars (matches the NZBGet branch above) so the on-disk
+                # folder reads as words instead of "WordOfMouthXXX1080p".
+                _raw_sab = payload.get("title") or nzb_filename.replace(".nzb", "")
+                _spaced_sab = re.sub(r'[._]+', ' ', _raw_sab)
+                clean_job_name = re.sub(r'\s+', ' ', re.sub(r'[^\w\s\-]', '', _spaced_sab))[:120].strip() or nzb_filename.replace(".nzb", "")
                 emit(f"GRAB SABnzbd → {nzb_host}:{port} nzbname={clean_job_name!r}")
                 gr = requests.post(
                     f"http://{nzb_host}:{port}/sabnzbd/api",
