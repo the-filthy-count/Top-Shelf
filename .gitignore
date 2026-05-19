@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+phash_filer.db
+*.phash
+.env
+favourites_img_cache/
+CLAUDE.md
+run.py
+guides/
+change_list.txt
