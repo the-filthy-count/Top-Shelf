@@ -1,0 +1,11 @@
+__pycache__
+*.pyc
+*.pyo
+phash_filer.db
+*.phash
+.env
+CLAUDE.md
+run.py
+stashfields.txt
+guides/
+change_list.txt
