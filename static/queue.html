@@ -1,0 +1,2467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Queue</title>
+
+<link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
+<link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
+<!-- webawesome bundle previously loaded here. The page uses zero
+     <wa-*> elements, and the bundled localize.js / chunk module
+     ships a self-referencing import cycle that throws on load. -->
+<script src="/static/theme-init.js?v=20260529"></script>
+<link rel="stylesheet" href="/static/app-shell.css?v=14">
+<script src="/static/ts-utils.js?v=20260529"></script>
+<script src="/static/lib-entity-actions.js?v=20260529"></script>
+<script src="/static/popup-loader.js?v=20260529"></script>
+<style>
+  /* Font tokens (--mono / --acid / --secs) live in /static/app-shell.css */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { height: 100%; }
+  body {
+    background: transparent;
+    color: var(--text); font-family: var(--mono); font-size: 13px; line-height: 1.6;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  body::before { content: ''; position: fixed; inset: 0; background: rgba(var(--bg-rgb),0.72); z-index: 0; }
+  .app {
+    position: relative; z-index: 1;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 24px 24px;
+  }
+
+  header {
+    flex-shrink: 0;
+    padding: 14px 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.88) 0%, rgba(var(--panel-lo-rgb),0.78) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.22);
+    margin-bottom: 20px;
+  }
+  header:not(.ts-app-header) {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  header.ts-app-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 2fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 12px 16px;
+  }
+  header.ts-app-header .ts-header-left { justify-self: start; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
+  header.ts-app-header .nav-links { justify-self: end; }
+  .logo img { height: 36px; object-fit: contain; }
+  .nav-links { display: flex; gap: 10px; align-items: center; }
+
+  .panel-header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .panel-title { font-family: var(--acid); font-size: 26px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
+  .field-input {
+    background: var(--raised); border: 1px solid var(--border); border-radius: 4px; color: var(--text);
+    padding: 8px 12px; font-family: var(--mono); font-size: 12px; min-width: 180px;
+  }
+  .field-input:focus { outline: none; border-color: var(--accent); }
+  /* Set by submitVice() (and other client-side validators) when a
+     required field is empty on submit — fades back to default on next
+     focus or successful submit. */
+  .field-input.field-invalid {
+    border-color: rgba(248, 113, 113, 0.65);
+    box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.18);
+  }
+  .field-input.field-invalid:focus { border-color: rgba(248, 113, 113, 0.9); }
+
+  .meta { font-size: 11px; color: var(--dim); }
+  .note { font-size: 11px; color: var(--amber); margin: 8px 18px 0; line-height: 1.5; flex-shrink: 0; }
+  .err { font-size: 11px; color: var(--red); margin: 6px 18px 0; flex-shrink: 0; }
+
+  .empty { text-align: center; color: var(--dim); padding: 32px 18px; font-size: 12px; }
+
+  .prowlarr-search-panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.88) 0%, rgba(var(--panel-lo-rgb),0.78) 100%);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    overflow: hidden;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.25);
+  }
+  .prowlarr-search-panel .panel-header { border-bottom: 1px solid rgba(255,255,255,0.06); }
+
+  /* ── Queue tab ── */
+  .queue-section {
+    --glass-panel-bg: linear-gradient(160deg, rgba(var(--panel-hi-rgb), 0.48) 0%, rgba(var(--panel-lo-rgb), 0.36) 100%);
+    --glass-stat-bg: linear-gradient(145deg, rgba(var(--panel-hi-rgb), 0.44) 0%, rgba(var(--panel-lo-rgb), 0.36) 100%);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-blur: 20px;
+    --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    --glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.28);
+    --counter-value-size: clamp(42px, 5vw, 62px);
+    --counter-label-size: 14px;
+  }
+  .queue-stats-bar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; padding: 14px 18px 0; }
+  .queue-section .stat-card.stat-queue .stat-value { color: var(--skyfont-color, var(--text)); }
+  .queue-section .stat-card { background: var(--glass-stat-bg); border: 1px solid var(--glass-border); border-radius: 10px; padding: 14px 12px; backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90px; box-shadow: var(--glass-inset), var(--glass-shadow); text-decoration: none; container-type: inline-size; transition: border-color 120ms ease, background 120ms ease; }
+  .queue-section .stat-card[onclick]:hover { border-color: rgba(var(--brand-purple-rgb),0.45); background: linear-gradient(160deg, rgba(var(--brand-purple-rgb),0.12) 0%, rgba(var(--brand-purple-rgb),0.06) 100%); }
+  .queue-section .stat-value { font-family: var(--secs); font-size: var(--counter-value-size); font-weight: 400; line-height: 1; display: block; letter-spacing: 0.02em; text-align: center; color: var(--accent); }
+  .queue-section .stat-label { font-family: var(--secs); font-size: var(--counter-label-size); text-transform: uppercase; letter-spacing: -0.02em; color: var(--text); display: block; margin-top: 6px; text-align: center; }
+
+  .queue-section .q-panel { background: var(--glass-panel-bg); border: 1px solid var(--glass-border); border-radius: 10px; overflow: hidden; backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); box-shadow: var(--glass-inset), var(--glass-shadow); display: flex; flex-direction: column; min-height: 0; flex: 1; margin: 12px 18px 14px; }
+  .queue-section .q-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.09); gap: 10px; flex-shrink: 0; }
+
+  /* ── 35mm film-strip — single canonical style ──
+   * Same anatomy as the search-header strip but bigger frames (108px
+   * tall), more generous padding, and double-row sprocket perforations
+   * top + bottom. The strip body is a deep coffee black; the cream
+   * sprocket holes are punched through as rectangles with a thin dark
+   * outline so they read as actual cut-outs rather than painted-on
+   * stripes. The strip casts a soft inset shadow on its inner edge to
+   * suggest celluloid thickness. */
+  .film-strip--suggestions {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 8%, transparent 92%, rgba(0,0,0,0.45) 100%),
+      #120804 !important;
+    padding: 22px 14px !important;
+    border-radius: 3px !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(0, 0, 0, 0.85),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 6px 20px rgba(0, 0, 0, 0.55) !important;
+    position: relative;
+    /* Strip width hugs its frames instead of stretching the full
+     * panel — `width: fit-content` shrinks to content width, then
+     * `margin: 0 auto` centres the resulting block. Stops the strip
+     * from looking 80% empty on either side of the 5 frames.
+     * Block-level + fit-content + auto-margins is the only reliable
+     * combo that respects `margin-auto` centering — `inline-flex`
+     * doesn't honour auto-margins. */
+    display: flex !important;
+    width: fit-content !important;
+    max-width: 100% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+  .film-strip--suggestions::before,
+  .film-strip--suggestions::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 14px;
+    background:
+      /* sprocket holes — cream rectangles punched out of the strip */
+      repeating-linear-gradient(
+        90deg,
+        transparent 0 6px,
+        #e8d8b0 6px 7px,
+        #f5e8c8 7px 17px,
+        #c9b88a 17px 18px,
+        transparent 18px 24px
+      );
+    pointer-events: none;
+    z-index: 1;
+  }
+  .film-strip--suggestions::before {
+    top: 4px;
+    box-shadow:
+      inset 0 1px 0 rgba(0, 0, 0, 0.55),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.55);
+  }
+  .film-strip--suggestions::after {
+    bottom: 4px;
+    box-shadow:
+      inset 0 1px 0 rgba(0, 0, 0, 0.55),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.55);
+  }
+  /* Frame slots: square corners, thin dark gutter so they read as
+   * adjacent emulsion panels rather than floating tiles. Sizing
+   * rules folded in from the (now-deleted) #searchFrameStrip block
+   * so a single class drives both the search and suggestions strips. */
+  .film-strip--suggestions > div {
+    aspect-ratio: 16 / 9;
+    height: 108px;
+    background: #000;
+    border: 1px solid rgba(0, 0, 0, 0.75) !important;
+    border-radius: 0 !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    overflow: hidden;
+    position: relative;
+    z-index: 2;
+    flex: 0 1 auto;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: box-shadow 0.12s ease, transform 0.12s ease;
+  }
+  .film-strip--suggestions > div:hover {
+    box-shadow: inset 0 0 0 2px rgba(var(--brand-accent-rgb), 0.65);
+  }
+  .film-strip--suggestions > div.is-picked {
+    box-shadow: inset 0 0 0 2px rgba(var(--brand-accent-rgb), 0.95);
+  }
+  .film-strip--suggestions > div > img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .queue-section .q-panel-title { font-family: var(--acid); font-size: clamp(22px, 2vw, 30px); font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
+  .queue-section .q-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  /* Scrollbar inherits global accent-themed style from app-shell.css. */
+  /* Queue row — grid mirrors the download bar aesthetic (status · logo ·
+     title+meta · headshots · size · phash · actions) so both views feel
+     part of the same pipeline. Columns are fixed width so the studio
+     logo + headshot stack always land in the same X regardless of
+     filename length. */
+  /* Queue items — chrome mirrors .ts-row in app-shell.css (file-tree look).
+   * Vertical padding is hoisted off the row container and onto the
+   * content cells (`.qi-title-row`, the filename column, etc.) so the
+   * headshot strip can fill the full row height without bleeding past
+   * the row's borders or inflating the grid track via negative margins. */
+  .queue-section .queue-item {
+    display: grid;
+    grid-template-columns:
+      32px                      /* status dot/icon — widened for larger indicator */
+      140px                     /* studio logo */
+      minmax(0, 1fr)            /* filename + meta */
+      200px                     /* headshots */
+      110px                     /* size */
+      28px                      /* phash */
+      auto;                     /* action buttons */
+    align-items: center;
+    gap: 12px;
+    padding: 0 18px;
+    /* Fixed height — row never grows from its content, so the
+     * headshot strip fills it exactly and stays put. Multi-line
+     * filenames are clipped via `overflow: hidden` on the title
+     * cell rather than inflating the row. */
+    height: 84px;
+    min-height: 84px;
+    overflow: hidden;
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    border-radius: 0;
+    background: linear-gradient(145deg,
+      rgba(var(--brand-purple-rgb),0.14) 0%,
+      rgba(var(--panel-hi-rgb),0.5) 55%,
+      rgba(var(--panel-lo-rgb),0.35) 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    margin-bottom: 0;
+    transition: background 120ms ease;
+  }
+  .queue-section .queue-item:last-child { border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .queue-section .queue-item:hover {
+    background: linear-gradient(145deg,
+      rgba(var(--brand-purple-rgb),0.20) 0%,
+      rgba(var(--panel-hi-rgb),0.55) 55%,
+      rgba(var(--panel-lo-rgb),0.40) 100%);
+  }
+  .queue-section .queue-item.active {
+    background: linear-gradient(145deg,
+      rgba(var(--brand-accent-rgb),0.18) 0%,
+      rgba(var(--brand-purple-rgb),0.30) 55%,
+      rgba(var(--panel-lo-rgb),0.40) 100%);
+    border-left: 2px solid var(--accent);
+  }
+  /* Filing-in-progress shimmer — applied while the backend is actively
+     copying/moving this file. Combines a diagonal moving highlight band
+     with a soft pulsing accent border so the row looks "live" without
+     stealing focus from genuinely active rows. */
+  .queue-section .queue-item.qi-filing-active {
+    position: relative;
+    border-left: 2px solid rgba(var(--brand-accent-rgb), 0.85);
+    background: linear-gradient(145deg,
+      rgba(var(--brand-accent-rgb),0.14) 0%,
+      rgba(var(--brand-purple-rgb),0.22) 55%,
+      rgba(var(--panel-lo-rgb),0.40) 100%);
+    animation: qi-filing-pulse 1.6s ease-in-out infinite;
+    overflow: hidden;
+  }
+  .queue-section .queue-item.qi-filing-active::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(110deg,
+      transparent 30%,
+      rgba(var(--brand-accent-rgb), 0.18) 50%,
+      transparent 70%);
+    background-size: 220% 100%;
+    animation: qi-filing-shimmer 1.8s linear infinite;
+  }
+  @keyframes qi-filing-pulse {
+    0%, 100% { box-shadow: inset 2px 0 0 rgba(var(--brand-accent-rgb), 0.85); }
+    50%      { box-shadow: inset 2px 0 0 rgba(var(--brand-accent-rgb), 1),
+                           0 0 14px rgba(var(--brand-accent-rgb), 0.25); }
+  }
+  @keyframes qi-filing-shimmer {
+    0%   { background-position: 220% 0; }
+    100% { background-position: -120% 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .queue-section .queue-item.qi-filing-active { animation: none; }
+    .queue-section .queue-item.qi-filing-active::after { animation: none; opacity: 0.6; }
+  }
+  .queue-section .q-panel-body { padding: 0; }
+
+  /* Queue pager — sits under the rendered rows so jumping pages doesn't
+     require a scroll-to-top. Buttons mirror the .btn-icon family so they
+     feel native next to the row actions. */
+  .queue-section .q-pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 14px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    font-family: var(--secs, "Impact Label Reversed", sans-serif);
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    color: var(--text);
+  }
+  .queue-section .q-pager-btn {
+    background: rgba(var(--panel-hi-rgb), 0.5);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.18);
+    color: var(--text);
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .queue-section .q-pager-btn:hover:not(:disabled) {
+    border-color: rgba(var(--brand-purple-rgb),0.55);
+    color: var(--accent);
+  }
+  .queue-section .q-pager-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+  .queue-section .q-pager-status {
+    min-width: 120px;
+    text-align: center;
+    color: var(--dim);
+  }
+  .queue-section .q-pager-size {
+    background: rgba(var(--panel-hi-rgb), 0.5);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.18);
+    color: var(--text);
+    padding: 3px 6px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 12px;
+    margin-left: 6px;
+  }
+  .queue-section .qi-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+  }
+  .queue-section .qi-cell-headshots {
+    justify-content: flex-end;
+    padding-right: 0;
+    /* Break out of the row's 8px vertical padding so the parallelogram
+     * headshots reach the row's top + bottom edges. align-self: stretch
+     * pairs with the negative margins to make the cell fill floor-to-
+     * ceiling within the queue-item box. */
+    align-self: stretch;
+    margin-block: -8px;
+  }
+  .queue-section .qi-cell-name {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    gap: 2px;
+  }
+  .queue-section .qi-title {
+    font-family: var(--secs, "Impact Label Reversed", sans-serif);
+    font-size: 15px;
+    letter-spacing: 0.02em;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  }
+  .queue-section .qi-title.status-filed      { color: var(--green); }
+  /* Unmatched title uses the default cream text colour — amber was
+     too close to the studio-logo highlight range and read as a
+     warning rather than a neutral state. */
+  .queue-section .qi-title.status-unmatched  { color: var(--text); }
+  .queue-section .qi-title.status-no_dir     { color: var(--blue); }
+  .queue-section .qi-title.status-error      { color: var(--red); }
+  .queue-section .qi-meta {
+    font-family: var(--secs, "Impact Label Reversed", sans-serif);
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    color: var(--text);
+    opacity: 0.75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  }
+  .queue-section .qi-meta-guess {
+    opacity: 0.6;
+    font-style: italic;
+  }
+  .queue-section .qi-studio-logo {
+    flex-shrink: 0;
+    height: 50px;
+    max-width: 120px;
+    width: auto;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7));
+  }
+  .queue-section .qi-headshots {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0;
+    /* Fixed height matches the row's min-height so the strip fills
+     * the row exactly. align-self stays default (center from the
+     * parent's align-items: center) so the strip is vertically
+     * centred when the row is taller than 84px (multi-line title
+     * cells). The earlier `align-self: stretch + height: 100%`
+     * approach didn't work because the image's intrinsic height
+     * (≈ 60px wide × natural aspect ratio) feeds back into the grid
+     * row track sizing — `min-height: 0` couldn't break the cycle.
+     * A fixed height bypasses that loop entirely. */
+    height: 84px;
+    flex-shrink: 0;
+  }
+  /* Soft fade on the outermost slanted edges of the headshot strip.
+   * The container can't carry this — its mask would clip a vertical
+   * band, but each tile's clip-path makes the visible edge diagonal,
+   * so a vertical mask fades empty space and ends abruptly on the
+   * slant. Per-tile masks on first/last children fade only the
+   * actual visible parallelogram edge. Inner tiles overlap each
+   * other (-12px margin) so they need no fade.
+   * The first child's left wedge sits at the bottom-left of its box;
+   * the last child's right wedge sits at the top-right. The
+   * `to right` / `to left` gradients ramp opacity 0→1 across the
+   * outermost 14px of each tile, which is roughly the visible width
+   * of the slanted wedge. */
+  .queue-section .qi-headshot:first-child {
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px);
+    mask-image: linear-gradient(to right, transparent 0, #000 14px);
+  }
+  .queue-section .qi-headshot:last-child {
+    -webkit-mask-image: linear-gradient(to left, transparent 0, #000 14px);
+    mask-image: linear-gradient(to left, transparent 0, #000 14px);
+  }
+  .queue-section .qi-headshot:first-child:last-child {
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px),
+                        linear-gradient(to left,  transparent 0, #000 14px);
+    -webkit-mask-composite: source-in;
+            mask-image: linear-gradient(to right, transparent 0, #000 14px),
+                        linear-gradient(to left,  transparent 0, #000 14px);
+            mask-composite: intersect;
+  }
+  /* Parallelogram tile — fills the row vertically; the 20% horizontal
+   * slant (clip-path polygon) shaves 12px off each diagonal edge of a
+   * 60px wide box. The next-sibling rule pulls the following tile
+   * 12px left so the right diagonal of #1 and the left diagonal of #2
+   * land on the exact same line — no overlap, no gap. clip-path
+   * supersedes border-radius / outset shadows, so those are dropped.
+   * Drop-shadow filter survives the clip and carries the same purple
+   * lift the circular avatars used to have. */
+  .queue-section .qi-headshot {
+    width: 60px;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 20%;
+    clip-path: polygon(20% 0%, 100% 0%, 80% 100%, 0% 100%);
+    background: rgba(var(--panel-lo-rgb),0.9);
+    /* Overlay-blend the headshot into the row's gradient so it reads as
+     * an integrated graphic strip rather than three pasted-on photos.
+     * Full opacity — the overlay blend mode alone provides enough
+     * softening against the row gradient. */
+    mix-blend-mode: overlay;
+    opacity: 1;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));
+    flex-shrink: 0;
+  }
+  .queue-section .qi-headshot + .qi-headshot {
+    margin-left: -12px;
+  }
+  /* Headshots are click targets when carrying `data-performer-link` —
+   * open the universal performer popup. Cursor + subtle scale on hover
+   * mirror the affordance used on poster tiles elsewhere. */
+  .queue-section .qi-headshot-link {
+    cursor: pointer;
+    transition: filter .15s ease, transform .15s ease;
+  }
+  .queue-section .qi-headshot-link:hover {
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,0.7)) brightness(1.08);
+    transform: scale(1.04);
+  }
+  .queue-section .qi-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .queue-section .qi-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .queue-section .qi-title-row .qi-title {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Error chip lives inside the title row, pushed to the right edge
+     of the filename cell so it fills the empty space between the
+     title and the headshot column. Truncates on itself (not the
+     title) when long. */
+  .queue-section .qi-error-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    min-width: 0;
+    flex: 0 1 auto;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.35);
+    color: #f87171;
+    font-size: 11px;
+    font-family: var(--mono);
+  }
+  .queue-section .qi-error-chip .qi-error-chip-msg {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* no_dir chip: file matched a scene but has nowhere to land. Amber
+   * palette to distinguish from the red error chip (real failure) and
+   * the pink TPDB/StashDB match-link badge. */
+  .queue-section .qi-nodir-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 1 auto;
+    min-width: 0;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(251,191,36,0.12);
+    border: 1px solid rgba(251,191,36,0.40);
+    color: #fbbf24;
+    font-size: 11px;
+    font-family: var(--mono);
+    cursor: help;
+  }
+  .queue-section .qi-nodir-chip .qi-nodir-chip-msg {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .queue-section .qi-match-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.25);
+    transition: background 0.15s, border-color 0.15s;
+    flex: 0 0 auto;
+  }
+  .queue-section .qi-match-link:hover {
+    background: rgba(var(--brand-accent-rgb), 0.14);
+    border-color: rgba(var(--brand-accent-rgb), 0.55);
+  }
+  .queue-section .qi-match-link img {
+    height: 12px;
+    max-width: 60px;
+    object-fit: contain;
+    display: block;
+  }
+  .queue-section .qi-match-link-text {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  .queue-section .qi-status-icon {
+    font-size: 18px;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .queue-section .status-dot-queue {
+    width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+  }
+  .queue-section .status-dot-queue.filed      { background: var(--green);  box-shadow: 0 0 10px rgba(34,197,94,0.75); }
+  .queue-section .status-dot-queue.unmatched  { background: var(--amber);  box-shadow: 0 0 10px rgba(251,191,36,0.65); }
+  .queue-section .status-dot-queue.no_dir     { background: var(--blue);   box-shadow: 0 0 10px rgba(96,165,250,0.65); }
+  .queue-section .status-dot-queue.error      { background: var(--red);    box-shadow: 0 0 10px rgba(239,68,68,0.7); }
+  .queue-section .status-dot-queue.none       { background: rgba(255,255,255,0.18); box-shadow: 0 0 6px rgba(255,255,255,0.12); }
+  .queue-section .badge-size {
+    background: none; border: none; color: var(--green);
+    font-family: var(--secs, "Impact Label Reversed", sans-serif);
+    font-size: 14px; letter-spacing: 0.02em;
+    padding: 0; text-align: right;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    white-space: nowrap;
+  }
+  .queue-section .badge-cached { background: none; border: none; color: var(--blue); padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+  .queue-section .badge-cached .queue-phash-fa { font-size: 1.125rem; color: var(--blue); line-height: 1; }
+  .queue-section .btn-icon { background: none; border: none; color: var(--dim); cursor: pointer; padding: 4px 6px; border-radius: 4px; font-size: 14px; transition: color 0.15s; line-height: 1; }
+  .queue-section .btn-icon:hover { color: var(--text); }
+  .queue-section .btn-icon.qi-delete-btn:hover { color: #ef4444; }
+  .queue-section .btn-icon.qi-discover-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+  }
+  .queue-section .btn-icon.qi-discover-btn .ts-nav-icon {
+    width: 18px;
+    height: 18px;
+    -webkit-mask-size: 18px 18px;
+    mask-size: 18px 18px;
+  }
+  .queue-section .btn-icon.qi-discover-btn:hover .ts-nav-icon {
+    background-color: rgba(var(--brand-accent-rgb), 1);
+  }
+  /* Per-row run button — primary action of the row. Sized to match
+   * the neighbouring .btn-icon touch targets, but visually elevated
+   * with an accent-tinted border + translucent accent fill so the
+   * eye lands on it as the "go" affordance. Hover ramps the fill,
+   * not a colour swap, to match the M3 state-layer pattern used
+   * elsewhere (suggestions Accept, search USE THIS, etc.). */
+  .queue-section .btn-run-file {
+    background: rgba(var(--brand-accent-rgb), 0.14);
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.55);
+    color: var(--accent);
+    padding: 0;
+    min-width: var(--icon-btn-min);
+    min-height: var(--icon-btn-min);
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.05s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .queue-section .btn-run-file:hover {
+    background: rgba(var(--brand-accent-rgb), 0.28);
+    border-color: rgba(var(--brand-accent-rgb), 0.85);
+    color: var(--text);
+  }
+  .queue-section .btn-run-file:active { transform: scale(0.97); }
+  .queue-section .btn-run-file:disabled { opacity: 0.3; cursor: not-allowed; }
+  .queue-section .header-actions { display: flex; gap: 8px; align-items: center; flex: 1; }
+  /* Themed clear-search button on the /downloads search panel header.
+   * Matches the close/icon-only pattern used elsewhere in the app:
+   * glass backdrop, purple brand border, red tint on hover so the
+   * destructive intent reads clearly. */
+  .queue-section .q-search-clear {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.4);
+    background: rgba(var(--bg-rgb), 0.6);
+    color: var(--dim);
+    font-size: 14px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: color 0.15s, border-color 0.15s, background 0.15s, transform 0.05s;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .queue-section .q-search-clear:hover {
+    color: var(--red);
+    border-color: rgba(248, 113, 113, 0.55);
+    background: rgba(248, 113, 113, 0.12);
+  }
+  .queue-section .q-search-clear:active {
+    transform: translateY(1px);
+  }
+  .queue-section .queue-filter { background: var(--raised); border: 1px solid rgba(255,255,255,0.08); color: var(--text); padding: 8px 10px; border-radius: 6px; font-family: var(--mono); font-size: 12px; outline: none; min-width: 120px; flex: 1; }
+  .queue-section .queue-filter:focus { border-color: var(--accent); }
+  /* Scenes / Movies — two segments only; keep narrower than the /index
+   * feed-source strip. Scope-free because the toggle lives inside
+   * `.queue-panel-top-header` (not under `.queue-section`). */
+  .queue-mode-toggle { margin-right: 8px; width: min(320px, 44vw); flex-shrink: 0; }
+  /* Matched-only filter toggle — mirrors the Refresh button's shape so
+   * it sits flush next to it, but gains an accent outline + glow when
+   * active so the filter state is obvious at a glance. */
+  .queue-section .queue-matched-toggle {
+    border: 1px solid var(--border);
+    color: var(--dim);
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s, box-shadow 0.15s;
+  }
+  .queue-section .queue-matched-toggle:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .queue-section .queue-matched-toggle.is-active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(var(--brand-purple-rgb), 0.14);
+    box-shadow: 0 0 0 1px rgba(var(--brand-purple-rgb), 0.35);
+  }
+  #btnQueueDuplicates.has-dup {
+    border-color: rgba(251, 191, 36, 0.55);
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.10);
+  }
+  .q-dup-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 6px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.14);
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    vertical-align: middle;
+  }
+  .q-dup-badge i { font-size: 10px; }
+  .queue-dup-group {
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.28);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.22);
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .queue-dup-group--ignored { opacity: 0.55; }
+  .queue-dup-group--review { border-color: rgba(251, 191, 36, 0.45); }
+  .queue-dup-group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(var(--brand-purple-rgb), 0.18);
+    background: rgba(var(--brand-purple-rgb), 0.08);
+  }
+  .queue-dup-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    font-size: 12px;
+  }
+  .queue-dup-row:last-child { border-bottom: none; }
+  .queue-dup-row.is-keeper { background: rgba(var(--brand-accent-rgb), 0.08); }
+  .queue-dup-row-name {
+    min-width: 0;
+    flex: 1;
+    word-break: break-word;
+    font-family: var(--secs);
+    font-size: 13px;
+    color: var(--text);
+  }
+  .queue-dup-row-meta { font-size: 10px; color: var(--dim); margin-top: 3px; }
+  .queue-dup-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .queue-dup-badge--rec { color: #86efac; border: 1px solid rgba(134, 239, 172, 0.35); background: rgba(134, 239, 172, 0.10); }
+  .queue-dup-badge--review { color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.35); background: rgba(251, 191, 36, 0.10); }
+  .queue-dup-badge--ignored { color: var(--dim); border: 1px solid rgba(255, 255, 255, 0.12); }
+  /* Queue counter cards are informational only now — no hover affordance. */
+  .queue-section .queue-stats-bar .stat-card { cursor: default; }
+
+  /* Queue search panels */
+  .queue-section .q-search-panel { background: var(--glass-panel-bg); border: 1px solid var(--glass-border); border-radius: 10px; overflow: hidden; backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); box-shadow: var(--glass-inset), var(--glass-shadow); margin: 0 18px 14px; }
+  /* Headshot pile shared between the manual search rows and the
+   * suggestions modal candidate cards. Hot-pink ring picks up the
+   * accent the rest of the modal uses; missing headshots collapse
+   * to a neutral silhouette so the layout stays balanced. */
+  .ts-perf-pile {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: nowrap;
+    margin-top: 4px;
+  }
+  .ts-perf-pile-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    object-position: center 18%;
+    border: 1.5px solid rgba(var(--brand-accent-rgb), 0.55);
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb), 0.85), rgba(var(--panel-lo-rgb), 0.85));
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(var(--brand-purple-rgb), 0.55);
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  .ts-perf-pile-avatar + .ts-perf-pile-avatar { margin-left: -10px; }
+  .ts-perf-pile-avatar--missing {
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb), 0.6), rgba(var(--panel-lo-rgb), 0.7));
+    color: rgba(var(--brand-purple-rgb), 0.5);
+  }
+  .ts-perf-pile-avatar--more {
+    background: rgba(var(--brand-purple-rgb), 0.35);
+    border-color: rgba(var(--brand-accent-rgb), 0.35);
+    color: var(--text);
+    font-family: var(--secs);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    width: auto;
+    min-width: 32px;
+    padding: 0 8px;
+    border-radius: 999px;
+  }
+
+  /* Modal-mode for the scene search panel: lifts it off the page,
+   * sizes it as a centered overlay, and lets the results body scroll
+   * independently of the header. The overlay backdrop / centering is
+   * handled by `.queue-modal-overlay` further down in this stylesheet. */
+  /* Scene search overlay: when it lived under `.prowlarr-search-panel`,
+   * `backdrop-filter` + `overflow:hidden` on ancestors clipped `position:fixed`
+   * and made the dimmed backdrop / panel height wrong. Keep full-viewport
+   * coverage once moved to `<body>`; `.open` pairs with JS display:flex. */
+  #qSearchOverlay.open {
+    min-height: 100vh;
+    min-height: 100dvh;
+    box-sizing: border-box;
+  }
+  #qSearchOverlay { z-index: 9998; padding: 24px; background: rgba(0,0,0,0.78); }
+  #qMovieSearchOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    padding: 24px;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.78);
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  }
+  #qMovieSearchOverlay.open { display: flex; }
+  #qMovieSearchPanel.q-search-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    position: relative;
+  }
+  .movie-srch-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 100px auto auto;
+    gap: 10px;
+    align-items: end;
+  }
+  .movie-srch-toolbar .field-input { min-width: 0; width: 100%; box-sizing: border-box; }
+  /* openManualSearch() used to set `style.display = ''` on the panel, which
+   * stripped the markup's `display:flex` and broke the #qSearchBody flex row
+   * (modal looked ~half-height). Keep flex in CSS so '' / reset can't
+   * regress layout; inline `display:none` from clearSearch still wins. */
+  #qSearchPanel.q-search-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .q-search-panel--modal {
+    width: min(1400px, 96vw);
+    max-height: 92vh;
+    margin: 0 !important;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.35) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 40px 100px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 60px rgba(var(--brand-purple-rgb),0.18) !important;
+    background: linear-gradient(165deg, rgba(48,32,72,0.96) 0%, rgba(18,12,28,0.97) 100%) !important;
+  }
+  .q-search-panel--modal > .q-panel-header { flex-shrink: 0; padding: 14px 20px; border-bottom: 1px solid rgba(var(--brand-accent-rgb), 0.20); background: linear-gradient(180deg, rgba(var(--brand-accent-rgb), 0.06) 0%, rgba(var(--brand-purple-rgb),0) 100%); }
+  .q-search-panel--modal > .search-panel-filters { flex-shrink: 0; padding: 14px 20px; border-bottom: 1px solid rgba(var(--brand-purple-rgb),0.14); background: rgba(0,0,0,0.18); }
+  .q-search-panel--modal > .q-search-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px 20px; }
+  /* Field-row layout for the search modal. Was scoped to
+   * `.queue-section .field-row` only — but the modal now lives at
+   * body level (escaping the panel's `backdrop-filter` containing
+   * block), so the queue-section selector no longer matches and the
+   * label/input collapsed inline. Re-declare the column layout
+   * scoped to the modal's own filter wrapper. */
+  .q-search-modal-filters .field-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+  .q-search-modal-filters .field-label {
+    font-family: var(--secs);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .q-search-modal-filters .field-input {
+    width: 100%;
+    /* Override the global `.field-input { min-width: 180px }` rule
+     * so the date pair (sharing a 1.4fr column split in two) can
+     * shrink into its grid track instead of overflowing into the
+     * neighbouring input. */
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  /* Per-search source picker pills. Click toggles `is-on`; off-pills
+   * fade to ~30% so the visual carries the state at a glance. The
+   * logos are wide wordmarks (~60-80px), not square icons, so the
+   * pill auto-sizes to its content with consistent padding rather
+   * than being a fixed width. */
+  .qs-source-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.28);
+    background: rgba(var(--brand-accent-rgb), 0.06);
+    cursor: pointer;
+    transition: opacity 0.12s, border-color 0.12s, background 0.12s;
+    opacity: 0.35;
+  }
+  .qs-source-pill img {
+    height: 16px;
+    width: auto;
+    display: block;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.6));
+  }
+  .qs-source-pill:hover { border-color: rgba(var(--brand-accent-rgb), 0.55); }
+  .qs-source-pill.is-on {
+    opacity: 1;
+    border-color: rgba(var(--brand-accent-rgb), 0.65);
+    background: rgba(var(--brand-accent-rgb), 0.18);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+  /* `.qs-match` (search-result word-match highlight) lives in
+   * app-shell.css so /queue picks it up automatically too. */
+  /* Search submit button — give it the same brand-accent themed
+   * look the suggestions modal's Accept buttons use, so the
+   * primary-action affordance matches. The base `.btn-primary` rule
+   * paints with `var(--accent)` (a flat block colour) which doesn't
+   * read as themed inside this dark modal — this gradient + 1px
+   * brand-accent border picks up the active palette and matches the
+   * rest of the modal's chrome. */
+  .q-search-panel--modal .header-actions .btn-primary {
+    background: linear-gradient(135deg,
+      rgba(var(--brand-accent-rgb), 0.32) 0%,
+      rgba(var(--brand-accent-rgb), 0.18) 100%) !important;
+    color: var(--text) !important;
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.55) !important;
+    border-radius: 8px !important;
+    padding: 9px 14px !important;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    box-shadow: var(--ts-bevel) !important;
+    transition: background 0.15s, border-color 0.15s, transform 0.05s;
+  }
+  .q-search-panel--modal .header-actions .btn-primary:hover {
+    background: linear-gradient(135deg,
+      rgba(var(--brand-accent-rgb), 0.46) 0%,
+      rgba(var(--brand-accent-rgb), 0.28) 100%) !important;
+    border-color: rgba(var(--brand-accent-rgb), 0.85) !important;
+    box-shadow: var(--ts-bevel-hover) !important;
+    filter: none;  /* override base .btn-primary's brightness(1.1) */
+  }
+  .q-search-panel--modal .header-actions .btn-primary:active {
+    box-shadow: var(--ts-bevel-active) !important;
+    transform: translateY(1px);
+  }
+  .queue-section .search-panel-filters { padding: 16px 18px; border-bottom: 1px solid rgba(255,255,255,0.09); }
+  /* The base .field-input declares ``min-width: 180px`` which makes
+   * sense for free-floating fields, but inside this filter row it
+   * forces the 5-column grid to overflow its panel because each grid
+   * item also has the default ``min-width: auto``. Reset both so the
+   * inputs honour their grid columns (the date pair becomes a tight
+   * 140px / 140px split, the three free-text fields share the rest). */
+  .queue-section .search-panel-filters .field-row { min-width: 0; }
+  .queue-section .search-panel-filters .field-input {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .queue-section .q-search-body { max-height: 380px; overflow-y: auto; }
+  /* Movie queue manual match — card rows + logo pick buttons (TMDB / TPDB / JAVStash). */
+  .movie-srch-warn {
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    background: rgba(251, 191, 36, 0.08);
+    font-size: 12px;
+    color: var(--dim);
+    line-height: 1.45;
+  }
+  .movie-srch-list { display: flex; flex-direction: column; gap: 6px; }
+  .movie-srch-empty {
+    padding: 12px 10px;
+    font-size: 12px;
+    color: var(--dim);
+    text-align: center;
+  }
+  .movie-srch-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .movie-srch-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(var(--brand-purple-rgb), 0.22);
+  }
+  .movie-srch-row__thumb {
+    flex-shrink: 0;
+    width: 44px;
+    aspect-ratio: 2 / 3;
+    border-radius: 5px;
+    overflow: hidden;
+    background: var(--raised);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .movie-srch-row__thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .movie-srch-row__thumb img.is-broken { display: none; }
+  .movie-srch-thumb-ph {
+    font-size: 14px;
+    color: var(--muted);
+    opacity: 0.7;
+  }
+  .movie-srch-row__body { flex: 1; min-width: 0; }
+  .movie-srch-row__title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .movie-srch-row__meta {
+    font-size: 11px;
+    color: var(--dim);
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .movie-srch-pick {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 40px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.4);
+    background: rgba(var(--brand-purple-rgb), 0.12);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.05s;
+  }
+  .movie-srch-pick:hover:not(:disabled) {
+    background: rgba(var(--brand-accent-rgb), 0.18);
+    border-color: rgba(var(--brand-accent-rgb), 0.65);
+    transform: scale(1.04);
+  }
+  .movie-srch-pick:active:not(:disabled) { transform: scale(0.97); }
+  .movie-srch-pick:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .movie-srch-pick__logo {
+    height: 22px;
+    max-width: 88px;
+  }
+  /* Scrollbar inherits global accent-themed style from app-shell.css. */
+  .queue-section .field-row { display: flex; flex-direction: column; gap: 6px; }
+  .queue-section .field-label { font-size: 13px; color: var(--dim); letter-spacing: 0.05em; }
+
+  /* IAFD-modal + inline scene-pick chrome — these modals use
+     `.queue-modal` without the `.manual-modal` class, so they don't
+     inherit the manual-modal's .btn-secondary / .btn-primary rules. */
+  #qIafdPickerModal .btn-secondary,
+  #qIafdPickerModal .btn-primary,
+  #qIafdResultsModal .btn-secondary,
+  #qIafdResultsModal .btn-primary,
+  #qIafdScanModal .btn-secondary,
+  #qIafdScanModal .btn-primary {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.25);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    line-height: 1.2;
+  }
+  #qIafdPickerModal .btn-secondary:hover,
+  #qIafdPickerModal .btn-primary:hover,
+  #qIafdResultsModal .btn-secondary:hover,
+  #qIafdResultsModal .btn-primary:hover,
+  #qIafdScanModal .btn-secondary:hover,
+  #qIafdScanModal .btn-primary:hover {
+    background: rgba(var(--brand-purple-rgb),0.12);
+    border-color: rgba(var(--brand-purple-rgb),0.55);
+    color: #fff;
+  }
+  #qIafdPickerModal .btn-primary,
+  #qIafdResultsModal .btn-primary,
+  #qIafdScanModal .btn-primary {
+    background: rgba(var(--brand-purple-rgb),0.15);
+    border-color: rgba(var(--brand-purple-rgb),0.55);
+  }
+  #qIafdPickerModal .btn-primary:disabled,
+  #qIafdResultsModal .btn-primary:disabled,
+  #qIafdScanModal .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: rgba(255,255,255,0.02);
+    border-color: rgba(var(--brand-purple-rgb),0.15);
+    color: var(--dim);
+  }
+  #qScenePickInline .qs-select-all-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+  #qIafdPickerModal .qs-perf-list,
+  #qScenePickInline .qs-perf-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  /* Quick-suggestion perf pick rows — chrome mirrors .ts-row in app-shell.css */
+  #qIafdPickerModal .qs-perf-row,
+  #qScenePickInline .qs-perf-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 18px;
+    border-radius: 0;
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    background: linear-gradient(145deg,
+      rgba(var(--brand-purple-rgb),0.14) 0%,
+      rgba(var(--panel-hi-rgb),0.5) 55%,
+      rgba(var(--panel-lo-rgb),0.35) 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+    transition: background 0.12s;
+    user-select: none;
+  }
+  #qIafdPickerModal .qs-perf-row:last-child,
+  #qScenePickInline .qs-perf-row:last-child { border-bottom: 1px solid rgba(255,255,255,0.06); }
+  #qIafdPickerModal .qs-perf-row:hover,
+  #qScenePickInline .qs-perf-row:hover {
+    background: linear-gradient(145deg,
+      rgba(var(--brand-purple-rgb),0.20) 0%,
+      rgba(var(--panel-hi-rgb),0.55) 55%,
+      rgba(var(--panel-lo-rgb),0.40) 100%);
+  }
+  #qIafdPickerModal .qs-perf-row.is-checked,
+  #qScenePickInline .qs-perf-row.is-checked {
+    background: linear-gradient(145deg,
+      rgba(var(--brand-accent-rgb),0.18) 0%,
+      rgba(var(--brand-purple-rgb),0.30) 55%,
+      rgba(var(--panel-lo-rgb),0.40) 100%);
+    border-left: 2px solid var(--accent);
+  }
+  #qIafdPickerModal .qs-perf-row input[type="checkbox"],
+  #qIafdPickerModal .qs-perf-row input[type="radio"],
+  #qScenePickInline .qs-perf-row input[type="checkbox"],
+  #qScenePickInline .qs-perf-row input[type="radio"] {
+    accent-color: rgba(var(--brand-purple-rgb),0.85);
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  #qScenePickInline .qs-perf-empty {
+    font-size: 11px;
+    color: var(--muted);
+    font-style: italic;
+    padding: 6px 2px;
+  }
+
+  /* Queue filmstrip popup. The user wanted "no background, just the
+   * film strip" — backdrop is dimmed but there's no panel chrome
+   * around the frames. Lightbox layer sits on top of the strip with
+   * its own dim and arrow controls. */
+  #qFilmstripOverlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.78);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    /* Above queue-modal-overlay (9999). queueImageOverlay (10002) sits
+     * above the filmstrip so frame-zoom from any popup paints on top. */
+    z-index: 10001;
+    align-items: center; justify-content: center;
+  }
+  #qFilmstripOverlay.open { display: flex; }
+  .qfs-close {
+    position: absolute; top: 18px; right: 18px;
+    width: 38px; height: 38px; border-radius: 50%;
+    background: rgba(20,18,28,0.7);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.55);
+    color: var(--text); font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 3; transition: background 0.15s, border-color 0.15s;
+  }
+  .qfs-close:hover { background: rgba(var(--brand-purple-rgb),0.25); border-color: var(--accent); }
+  #qFilmstripStage {
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    max-width: 96vw;
+  }
+  /* Visual film strip — five thumbs in a row with the perforated
+   * sprocket-hole bands top + bottom so it reads as a strip of film.
+   * No card around it; the dark backdrop IS the panel. */
+  #qFilmstripStrip {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+    padding: 14px 16px;
+    background:
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.10) 0 6px, transparent 6px 18px) top    / 100% 8px no-repeat,
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.10) 0 6px, transparent 6px 18px) bottom / 100% 8px no-repeat,
+      rgba(8,6,12,0.85);
+    border-radius: 4px;
+    width: min(1080px, 92vw);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.55);
+  }
+  .qfs-thumb {
+    aspect-ratio: 16/9;
+    background: rgba(0,0,0,0.6);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.18);
+    border-radius: 3px;
+    overflow: hidden;
+    cursor: zoom-in;
+    position: relative;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .qfs-thumb:hover { transform: translateY(-2px); border-color: rgba(var(--brand-purple-rgb),0.65); }
+  .qfs-thumb img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+    -webkit-user-drag: auto;          /* allow drag-to-search-engine */
+  }
+  .qfs-thumb-empty {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(var(--brand-purple-rgb),0.45);
+    font-size: 22px;
+  }
+  #qFilmstripStatus {
+    font-family: var(--secs); font-size: 11px; letter-spacing: 0.10em;
+    text-transform: uppercase; color: rgba(255,255,255,0.65);
+    text-align: center;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.85);
+  }
+  /* Lightbox for the enlarged single frame. */
+  #qFilmstripLightbox {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.92);
+    z-index: 4;
+    align-items: center; justify-content: center;
+  }
+  #qFilmstripLightbox.open { display: flex; }
+  #qFilmstripBigImg {
+    max-width: 92vw; max-height: 88vh;
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 32px 96px rgba(0,0,0,0.75);
+    cursor: default;
+  }
+  .qfs-nav {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 48px; height: 48px; border-radius: 50%;
+    background: rgba(20,18,28,0.7);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.55);
+    color: var(--text); font-size: 18px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .qfs-nav:hover { background: rgba(var(--brand-purple-rgb),0.25); border-color: var(--accent); }
+  .qfs-nav-prev { left: 24px; }
+  .qfs-nav-next { right: 24px; }
+  #qFilmstripCounter {
+    position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
+    font-family: var(--mono); font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(20,18,28,0.7);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.45);
+    color: var(--text);
+  }
+
+  /* Queue manual modal */
+  /* Queue modals sit ABOVE the queue-page search overlays (qSearchOverlay,
+   * wantedSearchOverlay, suggestionsOverlay — all z=9998). Any of those
+   * can trigger a queue-modal-overlay (suggestions / wanted / IAFD), so
+   * the modal needs to win the stack order. qFilmstripOverlay (10001)
+   * and queueImageOverlay (10002) sit above this for image-zoom / film-
+   * strip overlays — the image overlay needs to be above the filmstrip
+   * too so frame-zoom from the inline strip inside qSearchOverlay paints
+   * over both. */
+  .queue-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 9999; align-items: center; justify-content: center; }
+  .queue-modal-overlay.open { display: flex; }
+  .queue-modal { background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.82) 0%, rgba(var(--panel-lo-rgb),0.78) 100%); border: 1px solid rgba(var(--brand-purple-rgb),0.3); border-radius: 12px; width: 600px; max-width: 96vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.07); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); }
+  /* Scrollbar inherits global accent-themed style from app-shell.css. */
+  .queue-modal .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 28px; border-bottom: 1px solid rgba(var(--brand-purple-rgb),0.35); position: sticky; top: 0; background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.96) 0%, rgba(var(--panel-lo-rgb),0.94) 100%); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); z-index: 1; }
+  .queue-modal .modal-title { font-family: var(--mono); font-size: 16px; font-weight: 700; }
+  /* Progress ring for the IAFD bulk-scan overlay. Fills from 0→100%
+     as the server reports done/total, with a purple glow so it
+     reads as an active element. No spin animation — the fill
+     motion *is* the feedback, and a spinning percent counter is
+     just busy. */
+  .iafd-scan-ring {
+    position: relative; width: 80px; height: 80px; margin: 0 auto 4px;
+    filter: drop-shadow(0 0 12px rgba(var(--brand-purple-rgb),0.28));
+  }
+  .iafd-scan-ring-pct {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--secs, monospace);
+    font-size: 18px; letter-spacing: 0.03em;
+    color: var(--text);
+  }
+  .queue-modal .modal-body { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+  .queue-modal .modal-footer { padding: 18px 28px; border-top: 1px solid rgba(var(--brand-purple-rgb),0.35); display: flex; justify-content: flex-end; gap: 12px; background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.96) 0%, rgba(var(--panel-lo-rgb),0.94) 100%); }
+  /* Manual filing modal — wider, two-column layout */
+  .queue-modal.manual-modal { width: 1040px; max-width: 96vw; }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-body { padding: 22px 28px; gap: 18px; }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-filename {
+    font-family: var(--mono); font-size: 12px; color: var(--dim);
+    padding: 10px 12px; background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.14); border-radius: 6px;
+    word-break: break-all;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-match-banner {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+    background: rgba(var(--brand-accent-rgb), 0.10);
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.35);
+    border-radius: 8px;
+    font-size: 12px; color: var(--text);
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-match-banner img {
+    height: 16px; max-width: 84px; object-fit: contain;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-match-banner .banner-label {
+    font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-match-banner a {
+    margin-left: auto;
+    color: var(--accent); text-decoration: none; font-size: 11px;
+    padding: 4px 8px; border: 1px solid rgba(var(--brand-purple-rgb),0.35); border-radius: 4px;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-match-banner a:hover {
+    background: rgba(var(--brand-purple-rgb),0.14);
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-grid {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 22px;
+    align-items: start;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-thumb-frame {
+    width: 100%; aspect-ratio: 16/9;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.20);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-thumb-frame img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-thumb-empty {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    color: var(--dim); font-size: 12px;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-thumb-empty i { font-size: 28px; opacity: 0.5; }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-form-col {
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .queue-modal.manual-modal .field-row {
+    display: flex; flex-direction: column; gap: 6px;
+    min-width: 0;
+  }
+  .queue-modal.manual-modal .field-label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .queue-modal.manual-modal .field-input {
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  .queue-modal.manual-modal textarea.field-input {
+    min-height: 120px;
+    font-family: var(--mono);
+    line-height: 1.5;
+  }
+  /* Theme every button inside the manual modal — .btn-secondary ships
+     with only min-w/h so unstyled buttons render as browser default
+     grey. Covers Cancel, Random frame, Re-roll, and the dynamically
+     inserted Studio/Performer suggestion chips. */
+  .queue-modal.manual-modal button.btn-secondary {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.25);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    line-height: 1.2;
+  }
+  .queue-modal.manual-modal button.btn-secondary:hover {
+    background: rgba(var(--brand-purple-rgb),0.12);
+    border-color: rgba(var(--brand-purple-rgb),0.55);
+    color: #fff;
+  }
+  .queue-modal.manual-modal button.btn-secondary:active {
+    transform: translateY(1px);
+  }
+  .queue-modal.manual-modal button.btn-secondary i {
+    color: rgba(var(--brand-purple-rgb),0.75);
+  }
+  .queue-modal.manual-modal button.btn-secondary:hover i {
+    color: #fff;
+  }
+  /* Suggestion chips are packed tighter than the header buttons — they
+     carry inline padding overrides from renderResolveResults, but the
+     colour palette flows from the base rule above. */
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-submit-detail button.btn-secondary {
+    padding: 5px 10px;
+    font-size: 11px;
+    min-width: 0;
+    min-height: 0;
+    border-radius: 4px;
+    margin: 2px 3px 2px 0;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-submit-detail button.btn-secondary[onclick*="null"] {
+    border-color: rgba(255,255,255,0.08);
+    color: var(--dim);
+    background: transparent;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-submit-detail button.btn-secondary[onclick*="null"]:hover {
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.2);
+    color: var(--text);
+  }
+  /* Performer autocomplete dropdown */
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-perf-wrap {
+    position: relative;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-perf-suggestions {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 280px;
+    overflow-y: auto;
+    background: linear-gradient(160deg, rgba(40,32,60,0.98) 0%, rgba(20,16,30,0.96) 100%);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.40);
+    border-radius: 8px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    z-index: 20;
+    padding: 4px;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-perf-suggestion {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text);
+    transition: background 0.1s;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-perf-suggestion:hover,
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-perf-suggestion.active {
+    background: rgba(var(--brand-purple-rgb),0.18);
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-perf-suggestion img {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: rgba(255,255,255,0.04);
+    flex-shrink: 0;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-perf-suggestion-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-perf-suggestion-alias {
+    font-size: 10px;
+    color: var(--dim);
+    font-style: italic;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-perf-suggestion-new {
+    color: var(--accent);
+    font-size: 11px;
+    padding: 8px;
+    text-align: center;
+    font-style: italic;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-submit-section {
+    border-top: 1px solid rgba(var(--brand-purple-rgb),0.20);
+    padding-top: 16px; margin-top: 4px;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-submit-header {
+    font-family: var(--secs); font-size: calc(12px + 2pt);
+    color: var(--dim); letter-spacing: 0.04em; text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-submit-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  /* Inside the merged Scene Search popup the manual-extras area is
+     half-width (left column of the split layout), so the submit-card
+     pair no longer fits side-by-side at a useful size. Stack them and
+     give the thumb column more room — also makes the picked frame
+     usefully large instead of a tiny 16:9 thumbnail. */
+  #qSearchPanel .manual-grid {
+    grid-template-columns: 460px 1fr;
+    gap: 26px;
+  }
+  #qSearchPanel .manual-submit-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-submit-card {
+    padding: 12px 14px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.20);
+    border-radius: 8px;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-submit-row {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-submit-logo img {
+    height: 20px; max-width: 100px; object-fit: contain;
+  }
+  :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-submit-detail {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(var(--brand-purple-rgb),0.14);
+  }
+  /* Themed to match the .btn-secondary recipe in app-shell.css —
+   * brand-purple gradient face + accent border at rest, flips to an
+   * accent gradient on check. Mirrors the queue.html / settings-modal
+   * toggles so the look is consistent across every page. */
+  .queue-section .toggle-row { display: flex; align-items: center; justify-content: space-between; }
+  .queue-section .toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
+  .queue-section .toggle input { opacity: 0; width: 0; height: 0; }
+  .queue-section .toggle-slider {
+    position: absolute; inset: 0;
+    background: linear-gradient(160deg,
+      rgba(var(--brand-purple-rgb), 0.20) 0%,
+      rgba(var(--brand-purple-rgb), 0.08) 100%);
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.45);
+    border-radius: 22px;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+  .queue-section .toggle-slider:before {
+    content: ''; position: absolute;
+    width: 16px; height: 16px; left: 2px; bottom: 2px;
+    background: white; border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    transition: transform 0.2s ease;
+  }
+  .queue-section .toggle input:checked + .toggle-slider {
+    background: linear-gradient(160deg,
+      rgba(var(--brand-accent-rgb), 0.42) 0%,
+      rgba(var(--brand-accent-rgb), 0.18) 100%);
+    border-color: rgba(var(--brand-accent-rgb), 0.85);
+  }
+  .queue-section .toggle input:checked + .toggle-slider:before { transform: translateX(18px); }
+  .queue-section .toggle:hover .toggle-slider {
+    border-color: rgba(var(--brand-accent-rgb), 0.85);
+  }
+
+  /* Queue image overlay */
+  /* Above suggestions / search / dup overlays (9998) and filmstrip (10001). */
+  #queueImageOverlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 10050; align-items: center; justify-content: center; cursor: zoom-out; backdrop-filter: blur(8px); }
+  #queueImageOverlay img { max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: 8px; box-shadow: 0 24px 80px rgba(0,0,0,0.8); }
+
+  @media (max-width: 900px) { .queue-stats-bar { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 600px) { .queue-stats-bar { grid-template-columns: repeat(2, 1fr); } }
+
+  /* ── /downloads mobile optimisation (≤640px) ── */
+  @media (max-width: 640px) {
+    /* The 7-button main toggle stretches to the full panel width on
+       mobile and divides evenly across 7 equal columns. The base
+       class already declares repeat(7, minmax(0, 1fr)); we just need
+       to defeat the desktop inline ``min-width:740px`` and let the
+       grid fill its row instead of hugging its content (the desktop
+       rule sets ``align-self: center`` which keeps it intrinsic-sized
+       inside its parent). */
+    .ts-seg--7 {
+      min-width: 0 !important;
+      width: 100% !important;
+      align-self: stretch !important;
+      /* Wanted tab is hidden on mobile — drop the grid to 6 even
+       * columns so the remaining buttons fill the row without leaving
+       * an empty 7th slot. */
+      grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    }
+    .ts-seg--7 > button {
+      padding: 8px 4px !important;
+      font-size: 13px;
+      width: 100%;
+      min-width: 0;
+    }
+    /* Discover panel header: title + 7-button toggle + palette button
+       cram into a 1fr/auto/1fr grid on desktop. On mobile drop the
+       toggle row to a new line so the buttons get the full panel
+       width and the title/palette stay on top. */
+    .index-page-head .ts-page-head__row {
+      grid-template-columns: 1fr auto !important;
+      grid-template-areas:
+        "title palette"
+        "toggle toggle" !important;
+      row-gap: 10px !important;
+    }
+    .index-page-head #indexPageTitle {
+      grid-area: title;
+      justify-self: start !important;
+    }
+    .index-page-head .ts-page-head__center {
+      grid-area: toggle;
+      justify-self: stretch !important;
+      width: 100% !important;
+      min-width: 0 !important;
+      display: block !important;
+      grid-column: 1 / -1;
+    }
+    .index-page-head .ts-page-head__right {
+      grid-area: palette;
+      justify-self: end !important;
+    }
+    /* Stats bar: 6 tiles → 2 cols so each stays readable. */
+    .queue-stats-bar { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
+    .queue-section .stat-card { padding: 10px 12px !important; }
+    .queue-section .stat-value { font-size: 22px !important; }
+    .queue-section .stat-label { font-size: 10px !important; letter-spacing: 0.04em; }
+
+    /* Queue panel header: title + mode toggle + filter stack vertically. */
+    .q-panel-header {
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .q-panel-header .header-actions {
+      flex-wrap: wrap;
+      width: 100%;
+    }
+    .q-panel-header .queue-filter {
+      flex: 1 1 100%;
+      min-width: 0;
+    }
+    /* Mode toggle (Scenes / Movies) takes its own full-width row so
+     * the desktop width clamp doesn't wedge it between title and tools. */
+    .queue-page-head .queue-mode-toggle {
+      flex: 0 1 auto !important;
+      width: auto !important;
+      max-width: 100% !important;
+    }
+    .queue-page-head .ts-page-head__row {
+      grid-template-columns: 1fr auto !important;
+      grid-template-areas:
+        "title ."
+        "toggle toggle" !important;
+    }
+    .queue-page-head #queuePanelTitle {
+      grid-area: title;
+      justify-self: start !important;
+    }
+    .queue-page-head .ts-page-head__center {
+      grid-area: toggle;
+      justify-self: center !important;
+      width: 100% !important;
+      grid-column: 1 / -1;
+    }
+    .queue-section .q-panel-header {
+      justify-content: flex-end;
+    }
+
+    /* Queue row mobile layout: filename gets its own full-width line
+     * at the top, then every other cell (status dot, studio logo,
+     * headshots, size, phash, action buttons) flows below it on a
+     * second wrapping line. The desktop 7-column grid is too narrow
+     * to read on a phone; collapsing to a 2-row stack lets the
+     * filename actually fit and gives the enrichment + actions room
+     * to breathe underneath. Switch the row container from grid to
+     * flex-wrap so we don't have to enumerate grid-areas. */
+    .queue-section .queue-item {
+      display: flex !important;
+      flex-wrap: wrap !important;
+      align-items: center !important;
+      gap: 6px 8px !important;
+      padding: 10px !important;
+    }
+    /* Filename cell is forced to the first row at 100% width. */
+    .queue-section .qi-cell-name {
+      flex: 1 1 100% !important;
+      order: -1 !important;
+      min-width: 0 !important;
+    }
+    .queue-section .qi-title {
+      font-size: 14px !important;
+      white-space: normal !important;
+      overflow: visible !important;
+      text-overflow: clip !important;
+      word-break: break-all !important;
+      line-height: 1.3 !important;
+    }
+    .queue-section .qi-title-row {
+      flex-wrap: wrap !important;
+    }
+    .queue-section .qi-meta {
+      font-size: 11px !important;
+      white-space: normal !important;
+    }
+    /* Re-show the headshots / size / phash cells on the second row
+     * (they were ``display: none`` in the previous mobile rule that
+     * stripped down to status+logo+name+actions). With the filename
+     * on its own line above, there's room for them now. */
+    .queue-section .qi-cell-headshots,
+    .queue-section .queue-item > .qi-cell:nth-child(5),
+    .queue-section .queue-item > .qi-cell:nth-child(6) {
+      display: inline-flex !important;
+    }
+    /* Shrink the studio logo + headshots so the bottom row fits a
+     * narrow viewport without horizontal scroll. */
+    .queue-section .qi-studio-logo {
+      height: 28px !important;
+      max-width: 80px !important;
+    }
+    .queue-section .qi-headshot {
+      width: 32px !important;
+      height: 32px !important;
+    }
+    .queue-section .qi-headshot + .qi-headshot {
+      margin-left: -6px !important;
+    }
+    .queue-section .qi-actions {
+      margin-left: auto !important;
+      flex-wrap: wrap;
+    }
+
+    /* Manual filing modal: drop to single column so the thumb and
+       form stack naturally; let it run near full-width. */
+    .queue-modal.manual-modal { width: 100vw; max-width: 100vw; border-radius: 0; max-height: 100vh; }
+    :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-grid {
+      grid-template-columns: 1fr !important;
+      gap: 14px !important;
+    }
+    :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-thumb-frame { max-width: 320px; margin: 0 auto; }
+    :is(.queue-modal.manual-modal, #qManualExtras, #qSearchPanel) .manual-submit-grid {
+      grid-template-columns: 1fr !important;
+    }
+    .queue-modal.manual-modal .modal-body { padding: 16px 14px !important; }
+    .queue-modal.manual-modal .modal-header,
+    .queue-modal.manual-modal .modal-footer { padding: 14px 16px !important; }
+
+    /* Search panel filter row: grid of 5 → stacked. */
+    .search-panel-filters > div[style*="grid-template-columns"] {
+      grid-template-columns: 1fr !important;
+    }
+  }
+
+  /* ── /queue narrow-phone tightening (≤390px) ──
+   * At 360–390px portrait the q-panel-header tries to fit a filter
+   * input plus nine icon buttons on the same line. Even with wrap,
+   * the buttons end up in 3+ rows at default padding. Compress the
+   * filter row, shrink button padding, and drop stat cards from
+   * 2-up to a denser layout so the page is usable on a phone. */
+  @media (max-width: 390px) {
+    .queue-section { padding: 0 !important; }
+    .queue-page-head .queue-mode-toggle {
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+    /* Filter input drops to its own line; buttons share the next row
+     * as a 5-up wrap-friendly strip (32px tap targets). */
+    .q-panel-header .header-actions {
+      gap: 4px !important;
+      justify-content: flex-start !important;
+    }
+    .q-panel-header .queue-filter {
+      flex: 1 1 100% !important;
+      width: 100% !important;
+      font-size: 13px !important;
+    }
+    .queue-section .queue-matched-toggle,
+    .q-panel-header > button {
+      padding: 6px 8px !important;
+      min-width: 32px !important;
+      font-size: 12px !important;
+    }
+    /* Stat bar at this width: 6 tiles in a denser 3×2 grid so the
+     * numbers still read big without the 2-col version's tall total
+     * column eating half the viewport. */
+    .queue-stats-bar {
+      grid-template-columns: repeat(3, 1fr) !important;
+      gap: 6px !important;
+    }
+    .queue-section .stat-card { padding: 8px 6px !important; }
+    .queue-section .stat-value { font-size: 18px !important; }
+    .queue-section .stat-label {
+      font-size: 9px !important;
+      letter-spacing: 0.02em !important;
+    }
+    /* Suggestion / IAFD / search overlays were already full-viewport
+     * via the ≤640px rules; reinforce here for ≤390 in case any
+     * inline style on the modal still tries to clamp width. */
+    .queue-modal {
+      width: 100vw !important;
+      max-width: 100vw !important;
+      max-height: 100vh !important;
+      border-radius: 0 !important;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="ts-app-header">
+    <div class="ts-header-left">
+      <a href="/queue" class="logo" title="Go to Queue"><img src="/static/img/logo.webp" alt="Top-Shelf" onerror="this.outerHTML='<span style=font-family:var(--acid);font-size:28px;color:var(--text)>TOP-SHELF</span>'"></a>
+      <span class="version" id="appVersion"></span>
+    </div>
+    <div id="tsActivityBanner" class="ts-header-activity" aria-live="polite"></div>
+    <div class="nav-links">
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary" title="Downloads"><i class="ts-nav-icon ts-nav-icon--downloads"></i></button></a>
+      <a href="/scenes" style="text-decoration:none"><button class="btn-secondary" title="Browse — feed grid"><i class="ts-nav-icon ts-nav-icon--scenes"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library"><i class="ts-nav-icon ts-nav-icon--library"></i></button></a><a href="/news" style="text-decoration:none"><button class="btn-secondary" title="News"><i class="ts-nav-icon ts-nav-icon--news"></i></button></a>
+      <a href="/health" style="text-decoration:none"><button class="btn-secondary" title="Health"><i class="ts-nav-icon ts-nav-icon--health"></i></button></a>
+      <a href="/settings" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="ts-nav-icon ts-nav-icon--settings"></i></button></a>
+      <button class="btn-secondary" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>location.href='/login')" title="Logout"><i class="ts-nav-icon ts-nav-icon--logout"></i></button>
+    </div>
+  </header>
+
+  <div class="panel prowlarr-search-panel">
+    <div class="ts-page-head queue-page-head">
+      <div class="ts-page-head__row">
+        <div class="ts-page-head__left">
+          <span class="q-panel-title panel-title ts-page-title" id="queuePanelTitle">
+            <i class="ts-page-title__icon ts-nav-icon ts-nav-icon--queue" aria-hidden="true"></i>
+            <span class="ts-page-title__text">Scene queue</span>
+            <span class="ts-page-title__meta" id="queueCount"></span>
+          </span>
+        </div>
+        <div class="ts-page-head__center">
+          <div class="ts-seg ts-seg--2 queue-mode-toggle">
+            <button type="button" id="btnQueueScenes" class="active" onclick="setQueueMode('scenes')" title="Scenes"><i class="ts-icon-scenes" aria-hidden="true"></i><span class="btn-label">Scenes</span></button>
+            <button type="button" id="btnQueueMovies" onclick="setQueueMode('movies')" title="Movies"><i class="ts-icon-movies" aria-hidden="true"></i><span class="btn-label">Movies</span></button>
+          </div>
+        </div>
+        <div class="fav-sticky-title-spacer" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <!-- Queue section -->
+    <div id="dlSearchModeQueue" class="queue-section" style="display:flex;flex:1;min-height:0;flex-direction:column">
+      <div class="queue-stats-bar">
+        <div class="stat-card stat-queue" id="statCardQueue" style="cursor:pointer" onclick="clearAllQueueFilters()" title="Clear filters">
+          <span class="stat-value sky-counter" id="statQueue">     0</span>
+          <span class="stat-label">Queue</span>
+        </div>
+        <div class="stat-card stat-unmatched" id="statCardUnmatchedScenes" style="cursor:pointer" onclick="filterQueueByStatusScoped('unmatched','scenes')" title="Unmatched">
+          <span class="stat-value sky-counter" id="statUnmatchedScenes">     0</span>
+          <span class="stat-label">Unmatched Scenes</span>
+        </div>
+        <div class="stat-card stat-unmatched" id="statCardUnmatchedMovies" style="cursor:pointer" onclick="filterQueueByStatusScoped('unmatched','movies')" title="Unmatched">
+          <span class="stat-value sky-counter" id="statUnmatchedMovies">     0</span>
+          <span class="stat-label">Unmatched Movies</span>
+        </div>
+        <div class="stat-card stat-no_dir" id="statCardNoDir" style="cursor:pointer" onclick="filterQueueByStatus('no_dir')" title="No directory">
+          <span class="stat-value sky-counter" id="statNoDir">     0</span>
+          <span class="stat-label" id="statLabelNoDir">No Directory</span>
+        </div>
+        <div class="stat-card stat-errors" id="statCardErrors" style="cursor:pointer" onclick="filterQueueByStatus('error')" title="Errors">
+          <span class="stat-value sky-counter" id="statErrors">     0</span>
+          <span class="stat-label">Errors</span>
+        </div>
+        <div class="stat-card stat-suggested" id="statCardSuggested" style="cursor:pointer" onclick="openSuggestionsModal()" title="Suggestions">
+          <span class="stat-value sky-counter" id="statSuggested">     0</span>
+          <span class="stat-label">Suggested</span>
+        </div>
+        <div class="stat-card stat-filed" id="statCardFiled" style="cursor:pointer" onclick="openFiledHistory()" title="Filed history">
+          <span class="stat-value sky-counter" id="statFiled">     0</span>
+          <span class="stat-label">Filed</span>
+        </div>
+      </div>
+
+      <div class="q-panel">
+        <div class="q-panel-header">
+          <div class="header-actions">
+            <input id="queueFilter" class="queue-filter" type="text" placeholder="Filter queue..." oninput="filterActiveQueue()" spellcheck="false">
+            <button class="btn-secondary" onclick="refreshActiveQueue()" title="Refresh" style="border:1px solid var(--border);color:var(--dim);padding:6px 10px;border-radius:6px;background:none;cursor:pointer;transition:border-color 0.15s,color 0.15s"><i class="fa-solid fa-arrows-rotate"></i></button>
+            <button id="btnQueueMatchedOnly" class="btn-secondary queue-matched-toggle" onclick="toggleQueueMatchedOnly()" title="Matched only" aria-pressed="false"><i class="fa-solid fa-circle-check"></i></button>
+            <button id="btnQueueVicesOnly" class="btn-secondary queue-matched-toggle" onclick="toggleQueueVicesOnly()" title="Vice matches" aria-pressed="false"><i class="fa-solid fa-fire"></i></button>
+            <button id="btnQueueErrorsOnly" class="btn-secondary queue-matched-toggle" onclick="toggleQueueErrorsOnly()" title="Errors" aria-pressed="false"><i class="fa-solid fa-triangle-exclamation"></i></button>
+            <button id="btnQueueIafdBulk" class="btn-secondary queue-matched-toggle" onclick="openIafdBulkPicker()" title="IAFD bulk match"><img src="/static/logos/iafd.webp" alt="IAFD" style="height:14px;width:auto;display:block" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'IAFD',style:'font-size:11px;font-weight:600;letter-spacing:0.04em'}))"></button>
+            <button id="btnQueueSuggestions" class="btn-secondary queue-matched-toggle" onclick="openSuggestionsModal()" title="Review suggestions"><i class="fa-solid fa-brain"></i></button>
+            <button id="btnQueueDuplicates" class="btn-secondary queue-matched-toggle" onclick="openQueueDuplicatesModal()" title="Queue duplicates (same phash)"><i class="fa-solid fa-clone"></i></button>
+            <button id="btnRunAll" class="btn-secondary queue-matched-toggle" onclick="runAll()" title="Run All"><i class="fa-solid fa-play"></i></button>
+          </div>
+        </div>
+        <div class="q-panel-body" id="queueList"><div class="empty">Loading…</div></div>
+        <div class="q-pager" id="queuePager" style="display:none">
+          <button type="button" class="q-pager-btn" id="queuePagerFirst" onclick="queuePagerGoto(0)" title="First page"><i class="fa-solid fa-angles-left"></i></button>
+          <button type="button" class="q-pager-btn" id="queuePagerPrev" onclick="queuePagerStep(-1)" title="Previous page"><i class="fa-solid fa-angle-left"></i></button>
+          <span class="q-pager-status" id="queuePagerStatus">Page 1 of 1</span>
+          <button type="button" class="q-pager-btn" id="queuePagerNext" onclick="queuePagerStep(1)" title="Next page"><i class="fa-solid fa-angle-right"></i></button>
+          <button type="button" class="q-pager-btn" id="queuePagerLast" onclick="queuePagerGoto(Infinity)" title="Last page"><i class="fa-solid fa-angles-right"></i></button>
+          <select class="q-pager-size" id="queuePagerSize" onchange="queuePagerSetSize(this.value)" title="Rows per page">
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="200">200</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+<!-- Scene Search — lives outside `.app` so `position:fixed` + `inset:0`
+     cover the full viewport; the downloads panel uses `overflow:hidden`
+     and `backdrop-filter`, which otherwise clip / shrink this overlay. -->
+<div id="qSearchOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);z-index:9998;flex-direction:column" onmousedown="this.dataset.bdDown = (event.target===this) ? '1' : '0'" onmouseup="const fromBackdrop = this.dataset.bdDown === '1'; delete this.dataset.bdDown; if (fromBackdrop && event.target === this) clearSearch()">
+  <div class="panel q-search-shell" id="qSearchPanel" style="display:flex;flex:1;min-height:0;min-width:0;flex-direction:column;background:linear-gradient(165deg, rgba(48,32,72,0.95) 0%, rgba(18,12,28,0.96) 100%);border:none;border-radius:0;box-shadow:none;overflow:hidden;position:relative">
+    <!-- Top decorative glow line — same as the Suggested Matches modal. -->
+    <div aria-hidden="true" style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg, transparent 0%, rgba(var(--brand-accent-rgb), 0.55) 25%, rgba(var(--brand-purple-rgb),0.65) 50%, rgba(var(--brand-accent-rgb), 0.55) 75%, transparent 100%);pointer-events:none"></div>
+    <!-- Compact header: small icon + title + filename inline + close. -->
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 18px;border-bottom:1px solid rgba(var(--brand-accent-rgb), 0.20);background:linear-gradient(180deg, rgba(var(--brand-accent-rgb), 0.06) 0%, rgba(var(--brand-purple-rgb),0) 100%)">
+      <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(145deg, rgba(var(--brand-accent-rgb), 0.18), rgba(var(--brand-purple-rgb),0.12));border:1px solid rgba(var(--brand-accent-rgb), 0.30);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i class="fa-solid fa-magnifying-glass" style="color:var(--accent);font-size:14px"></i>
+      </div>
+      <div style="flex:1;min-width:0;display:flex;align-items:baseline;gap:12px;overflow:hidden">
+        <h1 class="page-title ts-page-title" style="margin:0;flex-shrink:0;font-size:16px">
+          <i class="ts-page-title__icon ts-nav-icon ts-nav-icon--queue" aria-hidden="true"></i>
+          <span class="ts-page-title__text">Scene Search</span>
+        </h1>
+        <div id="searchFileLabel" style="display:none;font-size:11px;color:var(--dim);letter-spacing:0.04em;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto" onclick="clearSelectedFile()" title="Deselect"></div>
+      </div>
+      <button onclick="clearSearch()" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:var(--dim);font-size:14px;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0" title="Close (Esc)">&times;</button>
+    </div>
+    <div id="qSearchBody" style="flex:1 1 0;min-height:0;display:flex;flex-direction:column;overflow:hidden">
+     <div id="qSearchTopRow" style="flex:0 1 auto;min-height:0;display:flex;flex-direction:row;overflow:hidden;max-height:55vh">
+      <div id="qSearchLeftCol" style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;min-height:0;border-right:1px solid rgba(var(--brand-purple-rgb),0.14);overflow-y:auto">
+        <!-- Filmstrip — pulled into the left column now so the right
+             column can split into Search results + Brain matches. -->
+        <div id="searchFrameStrip" class="film-strip film-strip--suggestions" style="display:none;justify-content:center;gap:4px;overflow:hidden;margin:12px 18px 0;flex-shrink:0"></div>
+        <div class="search-panel-filters q-search-modal-filters" style="flex-shrink:0;padding:14px 24px;border-bottom:1px solid rgba(var(--brand-purple-rgb),0.14);background:rgba(0,0,0,0.18)">
+          <div class="field-row" style="margin-bottom:10px">
+            <label class="field-label">Title</label>
+            <input class="field-input" id="srchTitle" type="text" placeholder="Scene title" oninput="if(_qConfirmScene)_qConfirmTitleEdited=true" onkeydown="if(event.key==='Enter')runQueueSearch()">
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:end">
+            <div class="field-row">
+              <label class="field-label">Free text</label>
+              <input class="field-input" id="srchTerm" type="text" placeholder="Any term..." onkeydown="if(event.key==='Enter')runQueueSearch()">
+            </div>
+            <div class="field-row manual-perf-wrap">
+              <label class="field-label">Stars</label>
+              <div class="field-input qs-pill-input" id="srchPerformerPills" style="display:flex;flex-wrap:wrap;gap:6px;min-height:34px;align-items:center;padding:4px 8px;cursor:text" onclick="document.getElementById('srchPerformer').focus()">
+                <span class="qs-pill-chips" id="srchPerformerChips" style="display:contents"></span>
+                <input id="srchPerformer" type="text" placeholder="Type a name…" autocomplete="off" spellcheck="false" style="border:none;background:transparent;outline:none;color:var(--text);font-family:inherit;font-size:inherit;flex:1;min-width:120px;padding:0">
+              </div>
+              <div id="srchPerfSuggestions" class="manual-perf-suggestions" style="display:none"></div>
+            </div>
+            <div class="field-row">
+              <label class="field-label">Studio</label>
+              <input class="field-input" id="srchStudio" type="text" placeholder="Studio name" onkeydown="if(event.key==='Enter')runQueueSearch()">
+            </div>
+            <div class="field-row">
+              <label class="field-label">Date</label>
+              <input class="field-input" id="srchDate" type="text" placeholder="YYYY-MM-DD" onkeydown="if(event.key==='Enter')runQueueSearch()">
+            </div>
+          </div>
+          <div class="field-row" style="margin-top:10px">
+            <label class="field-label">Plot / Description</label>
+            <textarea class="field-input" id="mPlot" rows="4" placeholder="Optional description..." style="resize:none;width:100%;box-sizing:border-box"></textarea>
+          </div>
+          <div class="qs-source-toggle" style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap">
+            <span style="font-family:var(--secs);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--dim);margin-right:4px">Sources</span>
+            <button type="button" class="qs-source-pill is-on" data-source="StashDB" onclick="toggleQSearchSource(this)" title="StashDB"><img src="/static/logos/stashdb.webp" alt="StashDB"></button>
+            <button type="button" class="qs-source-pill is-on" data-source="TPDB" onclick="toggleQSearchSource(this)" title="ThePornDB"><img src="/static/logos/tpdb.webp" alt="TPDB"></button>
+            <button type="button" class="qs-source-pill is-on" data-source="FansDB" onclick="toggleQSearchSource(this)" title="FansDB"><img src="/static/logos/fansdb.webp" alt="FansDB"></button>
+            <button type="button" class="qs-source-pill is-on" data-source="JAVStash" onclick="toggleQSearchSource(this)" title="JAVStash"><img src="/static/logos/javstash.webp" alt="JAVStash"></button>
+            <button type="button" class="qs-source-pill is-on" data-source="IAFD" onclick="toggleQSearchSource(this)" title="IAFD"><img src="/static/logos/iafd.webp" alt="IAFD"></button>
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+              <button class="btn-primary" onclick="runQueueSearch()" title="Search" style="flex-shrink:0"><i class="fa-solid fa-magnifying-glass"></i><span class="btn-label" style="margin-left:6px">Search</span></button>
+            </div>
+          </div>
+        </div>
+        <!-- (Scene-pick "Filing from" panel removed — title/studio/date
+             populate directly into the form fields on row click, cast
+             goes into the Stars pill input, and the right-column STASH
+             toggle is the single submit-to-DB control.) -->
+      </div>
+      <!-- Right column: Manual entry extras (only). -->
+      <div id="qSearchRightCol" style="flex:1 1 0;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden">
+        <div id="qManualExtras" style="flex:1 1 0;min-height:0;background:rgba(0,0,0,0.22);display:flex;flex-direction:column;overflow:hidden">
+          <button type="button" id="qManualExtrasToggle" onclick="toggleManualExtras()" style="flex-shrink:0;display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;padding:10px 24px;color:var(--dim);cursor:pointer;font-family:var(--secs);font-size:11px;letter-spacing:0.06em;text-transform:uppercase">
+            <i class="fa-solid fa-chevron-down" id="qManualExtrasChevron" style="transition:transform 0.15s"></i>
+            <span>Manual entry extras — thumbnail &amp; submit to DB</span>
+            <span id="manualMatchBanner" class="manual-match-banner" style="display:none;margin-left:12px"></span>
+          </button>
+          <div id="qManualExtrasBody" style="display:block;padding:0 24px 18px 24px;flex:1 1 0;min-height:0;overflow-y:auto">
+            <div class="manual-grid" style="align-items:stretch">
+              <div class="manual-thumb-col">
+                <div class="manual-thumb-frame" id="mThumbFrame" onclick="(function(){const im=document.getElementById('mThumbImg');if(im && im.style.display!=='none' && im.src) openQueueImageOverlay(im.src);})()" style="cursor:zoom-in" title="Click to enlarge">
+                  <img id="mThumbImg" alt="" style="display:none">
+                  <div id="mThumbEmpty" class="manual-thumb-empty">
+                    <i class="fa-solid fa-image"></i>
+                    <span>No thumbnail</span>
+                  </div>
+                </div>
+                <div id="mThumbPercent" style="font-size:11px;color:var(--dim);text-align:center;margin-top:4px"></div>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+                  <input class="field-input" id="mImageUrl" type="text" placeholder="Paste image URL..." oninput="mThumbMode='url';mThumbPreview(this.value)" style="width:100%;box-sizing:border-box">
+                  <button class="btn-secondary" id="mRandBtn" onclick="generateThumb()" title="Random frame" style="width:100%;box-sizing:border-box"><i class="fa-solid fa-dice"></i> <span class="btn-label">Random frame</span></button>
+                  <button class="btn-secondary" id="mRegenBtn" onclick="generateThumb()" title="Regenerate" style="display:none;width:100%;box-sizing:border-box"><i class="fa-solid fa-dice"></i><span class="btn-label" style="margin-left:6px">Re-roll</span></button>
+                </div>
+              </div>
+              <div class="manual-form-col" style="display:flex;flex-direction:column;min-height:0">
+                <div class="manual-submit-section" style="border-top:none;padding-top:0;margin-top:0">
+                  <div class="manual-submit-header">Submit to external databases</div>
+                  <div class="manual-submit-grid">
+                    <div class="manual-submit-card">
+                      <div class="manual-submit-row">
+                        <div class="manual-submit-logo"><img src="/static/logos/stashdb.webp" alt="StashDB" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'StashDB',style:'font-weight:600;color:var(--accent)'}))"></div>
+                        <label class="toggle"><input type="checkbox" id="mSubmitStashdb" onchange="toggleSubmitFields('stashdb', this.checked)"><span class="toggle-slider"></span></label>
+                      </div>
+                      <div id="mStashdbFields" class="manual-submit-detail" style="display:none">
+                        <div style="font-size:11px;color:var(--dim);margin-bottom:6px">Name lookup runs on submit</div>
+                        <div id="mStashdbResolveStatus" style="font-size:12px;color:var(--dim)"></div>
+                        <div id="mStashdbResolveResults"></div>
+                      </div>
+                    </div>
+                    <div class="manual-submit-card">
+                      <div class="manual-submit-row">
+                        <div class="manual-submit-logo"><img src="/static/logos/fansdb.webp" alt="FansDB" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'FansDB',style:'font-weight:600;color:#22c55e'}))"></div>
+                        <label class="toggle"><input type="checkbox" id="mSubmitFansdb" onchange="toggleSubmitFields('fansdb', this.checked)"><span class="toggle-slider"></span></label>
+                      </div>
+                      <div id="mFansdbFields" class="manual-submit-detail" style="display:none">
+                        <div style="font-size:11px;color:var(--dim);margin-bottom:6px">Name lookup runs on submit</div>
+                        <div id="mFansdbResolveStatus" style="font-size:12px;color:var(--dim)"></div>
+                        <div id="mFansdbResolveResults"></div>
+                      </div>
+                    </div>
+                    <div class="manual-submit-card">
+                      <div class="manual-submit-row">
+                        <div class="manual-submit-logo"><img src="/static/logos/javstash.webp" alt="JAVStash" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'JAVStash',style:'font-weight:600;color:#fb7185'}))"></div>
+                        <label class="toggle"><input type="checkbox" id="mSubmitJavstash" onchange="toggleSubmitFields('javstash', this.checked)"><span class="toggle-slider"></span></label>
+                      </div>
+                      <div id="mJavstashFields" class="manual-submit-detail" style="display:none">
+                        <div style="font-size:11px;color:var(--dim);margin-bottom:6px">Name lookup runs on submit</div>
+                        <div id="mJavstashResolveStatus" style="font-size:12px;color:var(--dim)"></div>
+                        <div id="mJavstashResolveResults"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+     </div>
+     <!-- Full-width search results — spans both columns under the
+          top-row form/extras. Replaces the prior bottom-left placement
+          and reclaims the bottom-right quadrant the brain panel used
+          to occupy. -->
+     <div id="qSearchResultsWrap" style="flex:1 1 0;min-height:0;display:flex;flex-direction:column;border-top:1px solid rgba(var(--brand-purple-rgb),0.22);overflow:hidden">
+       <div style="flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 18px;border-bottom:1px solid rgba(var(--brand-purple-rgb),0.14);background:rgba(0,0,0,0.18)">
+         <span style="font-family:var(--secs);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--dim)"><i class="fa-solid fa-magnifying-glass" style="margin-right:6px;color:var(--accent);opacity:0.7"></i>Search results</span>
+       </div>
+       <div id="qSearchResults" style="flex:1 1 0;min-height:0;overflow-y:auto;padding:18px 22px">
+         <div class="empty" style="text-align:center;padding:32px;color:var(--dim);font-size:13px"><i class="fa-solid fa-magnifying-glass" style="font-size:22px;display:block;margin-bottom:10px;color:var(--accent);opacity:0.5"></i>Enter search terms above and press Search</div>
+       </div>
+     </div>
+    </div>
+    <div id="qSearchFooter" style="flex-shrink:0;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 18px;border-top:1px solid rgba(var(--brand-purple-rgb),0.18);background:rgba(0,0,0,0.22)">
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;min-width:0">
+        <!-- Flame toggles the inline vice picker. Click again to hide.
+             When a vice is picked and "File" is clicked, the file is
+             routed via /api/file/manual/vice using whatever the user
+             has typed in the search form so they don't re-enter data. -->
+        <button class="btn-secondary" id="qSearchViceBtn" onclick="toggleViceInline()" title="File under a Vice" style="flex-shrink:0"><i class="fa-solid fa-fire"></i></button>
+        <select id="qViceSelectInline" class="field-input" style="display:none;min-width:200px;max-width:280px;flex-shrink:0;height:34px;padding:4px 10px;font-size:13px">
+          <option value="">Loading vices…</option>
+        </select>
+        <button class="btn-primary" id="qViceFileBtn" onclick="submitViceFromSearch()" style="display:none;flex-shrink:0;background:linear-gradient(135deg, rgba(255,140,40,0.32) 0%, rgba(255,140,40,0.18) 100%);border-color:rgba(255,140,40,0.55)" title="File this row under the selected Vice"><i class="fa-solid fa-fire"></i><span class="btn-label" style="margin-left:6px">File</span></button>
+      </div>
+      <button class="btn-primary" id="qSearchManualFileBtn" onclick="submitManual()" title="Submit" style="flex-shrink:0;background:linear-gradient(135deg, rgba(var(--brand-purple-rgb),0.35) 0%, rgba(var(--brand-purple-rgb),0.20) 100%);border-color:rgba(var(--brand-purple-rgb),0.55)"><i class="fa-solid fa-pen"></i><span class="btn-label" style="margin-left:6px">Submit</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- Movie Search — body-level overlay (same pattern as Scene Search). -->
+<div id="qMovieSearchOverlay" onclick="if(event.target===this)closeMovieSearchPanel()">
+  <div class="panel q-search-shell q-search-panel--modal" id="qMovieSearchPanel" role="dialog" aria-labelledby="qMovieSearchTitle">
+    <div aria-hidden="true" style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg, transparent 0%, rgba(var(--brand-accent-rgb), 0.55) 25%, rgba(var(--brand-purple-rgb),0.65) 50%, rgba(var(--brand-accent-rgb), 0.55) 75%, transparent 100%);pointer-events:none"></div>
+    <div style="display:flex;align-items:center;gap:14px;padding:18px 24px;border-bottom:1px solid rgba(var(--brand-accent-rgb), 0.20);background:linear-gradient(180deg, rgba(var(--brand-accent-rgb), 0.06) 0%, rgba(var(--brand-purple-rgb),0) 100%)">
+      <div style="width:42px;height:42px;border-radius:11px;background:linear-gradient(145deg, rgba(var(--brand-accent-rgb), 0.18), rgba(var(--brand-purple-rgb),0.12));border:1px solid rgba(var(--brand-accent-rgb), 0.30);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 12px rgba(var(--brand-accent-rgb), 0.20)">
+        <i class="ts-icon-movies" style="color:var(--accent);font-size:18px" aria-hidden="true"></i>
+      </div>
+      <div style="flex:1;min-width:0;display:flex;align-items:baseline;gap:14px;overflow:hidden">
+        <h1 class="page-title ts-page-title" id="qMovieSearchTitle" style="margin:0;flex-shrink:0">
+          <i class="ts-page-title__icon ts-nav-icon ts-nav-icon--queue" aria-hidden="true"></i>
+          <span class="ts-page-title__text">Movie Search</span>
+        </h1>
+        <div id="movieSearchFileLabel" style="display:none;font-size:12px;color:var(--dim);letter-spacing:0.05em;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto" onclick="clearMovieSearchPick()" title="Clear selection"></div>
+      </div>
+      <button type="button" onclick="closeMovieSearchPanel()" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:var(--dim);font-size:16px;cursor:pointer;width:34px;height:34px;display:flex;align-items:center;justify-content:center;flex-shrink:0" title="Close (Esc)">&times;</button>
+    </div>
+    <div class="search-panel-filters q-search-modal-filters" style="flex-shrink:0;padding:14px 24px;border-bottom:1px solid rgba(var(--brand-purple-rgb),0.14);background:rgba(0,0,0,0.18)">
+      <div class="movie-srch-toolbar">
+        <div class="field-row">
+          <label class="field-label" for="movieSrchQ">Title</label>
+          <input id="movieSrchQ" class="field-input" type="text" placeholder="Movie title…" autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')runMovieSearch()">
+        </div>
+        <div class="field-row">
+          <label class="field-label" for="movieSrchYear">Year</label>
+          <input id="movieSrchYear" class="field-input" type="text" placeholder="Year" onkeydown="if(event.key==='Enter')runMovieSearch()">
+        </div>
+        <button type="button" class="btn-secondary" onclick="closeMovieSearchPanel()" title="Close" style="align-self:end;height:40px"><i class="fa-solid fa-x"></i></button>
+        <button type="button" class="btn-primary" onclick="runMovieSearch()" title="Search" style="align-self:end;height:40px"><i class="fa-solid fa-magnifying-glass"></i><span class="btn-label" style="margin-left:6px">Search</span></button>
+      </div>
+    </div>
+    <div class="q-search-body" id="movieSearchResults" style="flex:1 1 auto;min-height:0;overflow-y:auto;padding:18px 24px">
+      <div class="empty" style="text-align:center;padding:32px;color:var(--dim)">Search TMDB, TPDB, and JAVStash — or use Run on a queue file for auto-match</div>
+    </div>
+  </div>
+</div>
+
+<!-- Queue image overlay -->
+<div id="queueImageOverlay" onclick="closeQueueImageOverlay()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:10050;align-items:center;justify-content:center;cursor:zoom-out;backdrop-filter:blur(8px)">
+  <!-- Prev / next buttons sit over the overlay background. `stopPropagation`
+       on click prevents the zoom-out handler on the parent from closing
+       the overlay when the user just wants to step through frames. -->
+  <button type="button" id="queueOverlayPrev" onclick="event.stopPropagation();queueOverlayStep(-1)" aria-label="Previous frame" style="display:none;position:absolute;left:18px;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.18);color:#fff;cursor:pointer;z-index:3;font-size:18px"><i class="fa-solid fa-angle-left"></i></button>
+  <button type="button" id="queueOverlayNext" onclick="event.stopPropagation();queueOverlayStep(1)" aria-label="Next frame" style="display:none;position:absolute;right:18px;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.18);color:#fff;cursor:pointer;z-index:3;font-size:18px"><i class="fa-solid fa-angle-right"></i></button>
+  <!-- The image itself consumes clicks so clicking the actual frame
+       doesn't trip the overlay-close handler. -->
+  <img id="queueOverlayImg" src="" onclick="event.stopPropagation()" style="max-width:90vw;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 24px 80px rgba(0,0,0,0.8)" loading="lazy">
+  <!-- Frame counter ("2 / 5") — quietly sits at the bottom centre. -->
+  <div id="queueOverlayCounter" style="display:none;position:absolute;left:50%;bottom:22px;transform:translateX(-50%);padding:4px 10px;border-radius:12px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.18);color:#fff;font-size:11px;letter-spacing:0.08em;font-family:var(--mono,monospace);z-index:3;pointer-events:none"></div>
+</div>
+
+<!-- Manual Filing — merged into the Scene Search modal (#qSearchOverlay)
+     above. The standalone manual modal was dissolved on 2026-05-12;
+     openManual() now routes to openManualSearch() and submitManual()
+     reads from the shared srch* filter fields. -->
+
+
+<!-- Vice Filing Modal — shares the Manual modal's layout language
+     (thumb-frame column on the left, form fields on the right) so
+     both modals feel at home on /downloads. Sources the vice list
+     live from /api/vices. -->
+<div class="queue-modal-overlay" id="viceModal">
+  <div class="queue-modal manual-modal">
+    <div class="modal-header">
+      <span class="modal-title"><i class="fa-solid fa-fire" style="margin-right:6px"></i>Sort to Vice</span>
+      <button class="btn-icon" onclick="closeVice()" style="background:none;border:none;color:var(--dim);cursor:pointer;padding:4px 6px;font-size:14px"><i class="fa-solid fa-x"></i></button>
+    </div>
+    <div class="modal-body manual-body">
+      <div id="viceFilename" class="manual-filename"></div>
+      <div class="manual-grid">
+        <div class="manual-thumb-col">
+          <div class="manual-thumb-frame" id="vThumbFrame">
+            <img id="vThumbImg" alt="" style="display:none">
+            <div id="vThumbEmpty" class="manual-thumb-empty">
+              <i class="fa-solid fa-image"></i>
+              <span>No thumbnail</span>
+            </div>
+          </div>
+          <div id="vThumbPercent" style="font-size:11px;color:var(--dim);text-align:center;margin-top:4px"></div>
+          <input class="field-input" id="vImageUrl" type="text" placeholder="Paste image URL..." oninput="vThumbMode='url';vThumbPreview(this.value)" style="margin-top:10px">
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn-secondary" id="vRandBtn" onclick="generateViceThumb()" title="Random frame" style="flex:1"><i class="fa-solid fa-dice"></i> <span class="btn-label">Random frame</span></button>
+            <button class="btn-secondary" id="vRegenBtn" onclick="generateViceThumb()" title="Regenerate" style="display:none;flex:1"><i class="fa-solid fa-dice"></i><span class="btn-label" style="margin-left:6px">Re-roll</span></button>
+          </div>
+        </div>
+        <div class="manual-form-col">
+          <div class="field-row"><label class="field-label">Title *</label><input class="field-input" id="vTitle" type="text" placeholder="Scene title"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="field-row"><label class="field-label">Vice *</label><select class="field-input" id="vViceSelect"></select></div>
+            <div class="field-row"><label class="field-label">Date * (YYYY-MM-DD)</label><input class="field-input" id="vDate" type="text" placeholder="2024-01-15"></div>
+          </div>
+          <div class="field-row">
+            <label class="field-label">Stars</label>
+            <input class="field-input" id="vPerformers" type="text" placeholder="Name, Name" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeVice()" title="Cancel"><i class="fa-solid fa-xmark"></i><span class="btn-label" style="margin-left:6px">Cancel</span></button>
+      <button class="btn-primary" id="vSubmitBtn" onclick="submitVice()" title="File to Vice"><i class="fa-solid fa-fire"></i> <span class="btn-label">File</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- IAFD bulk matcher: performer picker (phase 1) -->
+<div class="queue-modal-overlay" id="qIafdPickerModal" onclick="if(event.target===this)closeIafdBulkPicker()">
+  <div class="queue-modal" style="width:520px">
+    <div class="modal-header">
+      <span class="modal-title"><img src="/static/logos/iafd.webp" alt="IAFD" style="height:18px;vertical-align:middle;margin-right:8px" onerror="this.style.display='none'">Bulk match star</span>
+      <button class="btn-icon" onclick="closeIafdBulkPicker()" style="background:none;border:none;color:var(--dim);cursor:pointer;padding:4px 6px;font-size:14px"><i class="fa-solid fa-x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--dim);line-height:1.5">Pick a star from the current queue. Top-ranked IAFD match will be fetched for every file in the queue that mentions them, and proposed scenes ticked by default where the breakdown cast includes the star or the filename says <code>Scene N</code>.</div>
+      <div id="qIafdPerformerList" style="max-height:50vh;overflow-y:auto"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeIafdBulkPicker()"><i class="fa-solid fa-xmark"></i><span class="btn-label" style="margin-left:6px">Cancel</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- IAFD bulk matcher: grouped results (phase 2) -->
+<div class="queue-modal-overlay" id="qIafdResultsModal" onclick="if(event.target===this)closeIafdBulkResults()">
+  <div class="queue-modal" style="width:1080px;max-width:96vw">
+    <div class="modal-header">
+      <span class="modal-title"><img src="/static/logos/iafd.webp" alt="IAFD" style="height:18px;vertical-align:middle;margin-right:8px" onerror="this.style.display='none'"><span id="qIafdResultsTitle">Results</span></span>
+      <button class="btn-icon" onclick="closeIafdBulkResults()" style="background:none;border:none;color:var(--dim);cursor:pointer;padding:4px 6px;font-size:14px"><i class="fa-solid fa-x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div id="qIafdResultsHint" style="font-size:12px;color:var(--dim);font-style:italic">Tick the matches that look right. Each ticked row files as a scene via IAFD's breakdown cast. Untick anything that looks wrong — the queue stays put.</div>
+      <div id="qIafdResultsGroups" style="display:flex;flex-direction:column;gap:14px"></div>
+      <div id="qIafdResultsEmpty" style="display:none;font-size:13px;color:var(--dim);font-style:italic;padding:24px 0;text-align:center">No IAFD matches found for those filenames.</div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between;gap:12px">
+      <div id="qIafdResultsProgress" style="font-size:11px;color:var(--dim);flex:1;text-align:left"></div>
+      <div style="display:flex;gap:12px">
+        <button class="btn-secondary" onclick="closeIafdBulkResults()"><i class="fa-solid fa-xmark"></i><span class="btn-label" style="margin-left:6px">Close</span></button>
+        <button class="btn-primary" id="qIafdFileSelectedBtn" onclick="iafdBulkFileSelected()"><i class="fa-solid fa-file-arrow-down"></i> <span class="btn-label">File selected</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- IAFD bulk matcher: in-flight scan overlay -->
+<div class="queue-modal-overlay" id="qIafdScanModal">
+  <div class="queue-modal" style="width:420px">
+    <div class="modal-header">
+      <span class="modal-title" style="font-family:var(--secs);letter-spacing:0.02em;text-transform:uppercase">Scanning IAFD</span>
+    </div>
+    <div class="modal-body" style="align-items:center;padding:28px 24px">
+      <div class="iafd-scan-ring" aria-hidden="true">
+        <svg viewBox="0 0 80 80" width="80" height="80">
+          <circle cx="40" cy="40" r="34" stroke="rgba(var(--brand-purple-rgb),0.15)" stroke-width="6" fill="none"></circle>
+          <circle id="qIafdScanArc" cx="40" cy="40" r="34" stroke="rgba(var(--brand-purple-rgb),0.85)" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="213.6" stroke-dashoffset="213.6" transform="rotate(-90 40 40)" style="transition:stroke-dashoffset 260ms ease"></circle>
+        </svg>
+        <div class="iafd-scan-ring-pct" id="qIafdScanPct">0%</div>
+      </div>
+      <div id="qIafdScanCounter" style="font-family:var(--secs);font-size:16px;letter-spacing:0.04em;color:var(--text);text-align:center;margin-top:4px">0 / 0</div>
+      <div id="qIafdScanTarget" style="font-size:11px;color:var(--accent);font-style:italic;text-align:center;word-break:break-all;max-width:100%"></div>
+      <div style="font-size:11px;color:var(--dim);line-height:1.4;text-align:center">Parsing filenames, running IAFD searches, pulling breakdown casts.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="cancelIafdBulkScan()"><i class="fa-solid fa-xmark"></i><span class="btn-label" style="margin-left:6px">Cancel</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- Scene-search IAFD scene picker. Opens when the user clicks an
+     IAFD movie row in the search results and the movie has more
+     than one scene listed in its breakdown. Clicking a scene pins
+     that scene's cast + "Movie - Scene N" title into the manual
+     filing form. Closing without picking treats the row as the
+     whole-movie cast (same behaviour the old toast hinted at). -->
+<div class="queue-modal-overlay" id="qIafdScenePickerOverlay" onclick="if(event.target===this)closeIafdScenePicker()">
+  <div class="queue-modal" style="width:640px;max-width:96vw">
+    <div class="modal-header">
+      <span class="modal-title">
+        <img src="/static/logos/iafd.webp" alt="IAFD" style="height:18px;vertical-align:middle;margin-right:8px" onerror="this.style.display='none'">
+        Pick scene
+      </span>
+      <button class="btn-icon" onclick="closeIafdScenePicker()" style="background:none;border:none;color:var(--dim);cursor:pointer;padding:4px 6px;font-size:14px"><i class="fa-solid fa-x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div id="qIafdScenePickerHint" style="font-size:12px;color:var(--dim);line-height:1.5">IAFD lists the full movie cast — pick the scene that matches this file to narrow the performers.</div>
+      <div id="qIafdScenePickerList" style="display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow-y:auto"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="useThisSceneWholeMovie()" title="File with the full movie cast"><i class="fa-solid fa-film"></i><span class="btn-label" style="margin-left:6px">Use whole movie</span></button>
+      <button class="btn-secondary" onclick="closeIafdScenePicker()"><i class="fa-solid fa-xmark"></i><span class="btn-label" style="margin-left:6px">Cancel</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- Queue filmstrip popup. No background panel — just the strip of
+     5 frames floating over a dimmed page. Click a frame to enlarge,
+     arrow keys (or the side buttons) cycle through, right-click any
+     frame to use the browser's "Search image with…" reverse-image
+     menu. Esc / backdrop click closes the whole thing. -->
+<div id="qFilmstripOverlay" onclick="if(event.target===this)closeQueueFilmstrip()">
+  <button type="button" class="qfs-close" onclick="closeQueueFilmstrip()" title="Close (Esc)" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+  <div id="qFilmstripStage">
+    <div id="qFilmstripStrip"></div>
+    <div id="qFilmstripStatus">Generating filmstrip…</div>
+  </div>
+  <div id="qFilmstripLightbox" onclick="if(event.target===this)closeQueueFilmstripLightbox()">
+    <button type="button" class="qfs-nav qfs-nav-prev" onclick="queueFilmstripStep(-1)" aria-label="Previous"><i class="fa-solid fa-chevron-left"></i></button>
+    <img id="qFilmstripBigImg" alt="">
+    <button type="button" class="qfs-nav qfs-nav-next" onclick="queueFilmstripStep(1)" aria-label="Next"><i class="fa-solid fa-chevron-right"></i></button>
+    <div id="qFilmstripCounter"></div>
+  </div>
+</div>
+
+<script defer src="/static/queue.js?v=1"></script>
+
+<!-- Queue duplicates modal — same phash grouping / keeper rules as Library Health. -->
+<div id="queueDupOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);z-index:9998;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeQueueDuplicatesModal()">
+  <div class="panel" style="width:min(920px,96vw);max-height:90vh;display:flex;flex-direction:column;background:linear-gradient(165deg, rgba(48,32,72,0.95) 0%, rgba(18,12,28,0.96) 100%);border:1px solid rgba(var(--brand-accent-rgb), 0.35);border-radius:18px;box-shadow:0 40px 100px rgba(0,0,0,0.75);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid rgba(var(--brand-accent-rgb), 0.20)">
+      <i class="fa-solid fa-clone" style="font-size:18px;color:#fbbf24"></i>
+      <div style="flex:1;min-width:0">
+        <h2 class="page-title ts-page-title" style="margin:0;font-size:22px">Queue Duplicates</h2>
+        <div id="queueDupSubtitle" style="font-size:11px;color:var(--dim);margin-top:2px"></div>
+      </div>
+      <button type="button" id="queueDupComputeBtn" onclick="queueDupComputePhash()" title="Compute phash for files missing fingerprints" style="display:none;background:rgba(255,255,255,0.04);border:1px solid rgba(var(--brand-purple-rgb),0.30);border-radius:8px;color:var(--text);padding:7px 12px;cursor:pointer;font-size:11px"><i class="fa-solid fa-fingerprint"></i> Compute phash</button>
+      <button type="button" onclick="refreshQueueDuplicatesModal()" title="Refresh" style="background:rgba(255,255,255,0.04);border:1px solid rgba(var(--brand-purple-rgb),0.30);border-radius:8px;color:var(--text);padding:7px 12px;cursor:pointer;font-size:11px"><i class="fa-solid fa-arrows-rotate"></i></button>
+      <button type="button" onclick="closeQueueDuplicatesModal()" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:var(--dim);font-size:16px;cursor:pointer;width:34px;height:34px">&times;</button>
+    </div>
+    <div id="queueDupBody" style="flex:1;min-height:0;overflow-y:auto;padding:16px 20px 20px"></div>
+  </div>
+</div>
+
+<!-- Suggestions modal — opened from the queue Suggested counter tile.
+     Single-file presenter: shows the current unmatched video's
+     filmstrip alongside its top 3 candidate matches so the user can
+     visually compare frames vs scene posters. Prev/Next navigates
+     through the unmatched-with-suggestions list one file at a time. -->
+<div id="suggestionsOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);z-index:9998;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeSuggestionsModal()">
+  <div class="panel suggestions-shell" style="width:min(1400px,98vw);max-height:94vh;display:flex;flex-direction:column;background:linear-gradient(165deg, rgba(48,32,72,0.95) 0%, rgba(18,12,28,0.96) 100%);border:1px solid rgba(var(--brand-accent-rgb), 0.35);border-radius:18px;box-shadow:0 40px 100px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 60px rgba(var(--brand-purple-rgb),0.18);overflow:hidden;position:relative">
+    <!-- Decorative top-edge glow -->
+    <div aria-hidden="true" style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg, transparent 0%, rgba(var(--brand-accent-rgb), 0.55) 25%, rgba(var(--brand-purple-rgb),0.65) 50%, rgba(var(--brand-accent-rgb), 0.55) 75%, transparent 100%);pointer-events:none"></div>
+    <div style="display:flex;align-items:center;gap:14px;padding:18px 24px;border-bottom:1px solid rgba(var(--brand-accent-rgb), 0.20);background:linear-gradient(180deg, rgba(var(--brand-accent-rgb), 0.06) 0%, rgba(var(--brand-purple-rgb),0) 100%)">
+      <div style="width:42px;height:42px;border-radius:11px;background:linear-gradient(145deg, rgba(var(--brand-accent-rgb), 0.18), rgba(var(--brand-purple-rgb),0.12));border:1px solid rgba(var(--brand-accent-rgb), 0.30);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 12px rgba(var(--brand-accent-rgb), 0.20)">
+        <i class="fa-solid fa-brain" style="font-size:18px"></i>
+      </div>
+      <div style="flex:1;min-width:0" title="Review suggestions">
+        <h1 class="page-title ts-page-title" style="margin:0">
+          <i class="ts-page-title__icon ts-nav-icon ts-nav-icon--queue" aria-hidden="true"></i>
+          <span class="ts-page-title__text">Suggested Matches</span>
+          <i class="fa-regular fa-circle-question" style="font-size:13px;color:var(--dim);cursor:help;flex-shrink:0" aria-hidden="true"></i>
+        </h1>
+        <div id="suggestionsCountLabel" style="font-size:11px;color:var(--dim);margin-top:2px;letter-spacing:0.05em"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;background:rgba(0,0,0,0.30);border:1px solid rgba(var(--brand-purple-rgb),0.22);border-radius:10px;padding:4px;flex-shrink:0">
+        <button id="suggestionsPrevBtn" onclick="suggestionsStep(-1)" title="Prev (←)" style="background:transparent;border:none;color:var(--text);width:34px;height:30px;border-radius:6px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:background 0.15s" onmouseover="this.style.background='rgba(var(--brand-purple-rgb),0.18)'" onmouseout="this.style.background='transparent'"><i class="fa-solid fa-chevron-left"></i></button>
+        <span id="suggestionsCounter" style="font-family:var(--secs);font-size:13px;color:var(--text);min-width:60px;text-align:center;letter-spacing:0.04em">— / —</span>
+        <button id="suggestionsNextBtn" onclick="suggestionsStep(1)" title="Next (→)" style="background:transparent;border:none;color:var(--text);width:34px;height:30px;border-radius:6px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:background 0.15s" onmouseover="this.style.background='rgba(var(--brand-purple-rgb),0.18)'" onmouseout="this.style.background='transparent'"><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+      <button id="suggestionsRescanBtn" onclick="runSuggestionScan()" title="Re-run all" style="background:rgba(255,255,255,0.04);border:1px solid rgba(var(--brand-purple-rgb),0.30);border-radius:8px;color:var(--text);padding:7px 14px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:6px;flex-shrink:0"><i class="fa-solid fa-arrows-rotate"></i> Re-scan all</button>
+      <button onclick="closeSuggestionsModal()" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:var(--dim);font-size:16px;cursor:pointer;width:34px;height:34px;display:flex;align-items:center;justify-content:center;flex-shrink:0" title="Close (Esc)">&times;</button>
+    </div>
+    <div id="suggestionsBody" style="flex:1;min-height:0;overflow-y:auto;padding:22px 24px"></div>
+  </div>
+  <!-- Prev / next chevrons live OUTSIDE the modal panel so they sit at
+       the viewport edges and never overlap the candidate cards. -->
+  <button type="button" onclick="suggestionsStep(-1)" title="Prev (←)" aria-label="Previous file" style="position:absolute;left:24px;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;background:rgba(0,0,0,0.55);border:1px solid rgba(var(--brand-purple-rgb),0.32);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:background 0.15s, border-color 0.15s, transform 0.15s;z-index:2" onmouseover="this.style.background='rgba(var(--brand-purple-rgb),0.22)';this.style.borderColor='rgba(var(--brand-accent-rgb), 0.55)';this.style.transform='translateY(-50%) scale(1.06)'" onmouseout="this.style.background='rgba(0,0,0,0.55)';this.style.borderColor='rgba(var(--brand-purple-rgb),0.32)';this.style.transform='translateY(-50%)'"><i class="fa-solid fa-chevron-left"></i></button>
+  <button type="button" onclick="suggestionsStep(1)" title="Next (→)" aria-label="Next file" style="position:absolute;right:24px;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;background:rgba(0,0,0,0.55);border:1px solid rgba(var(--brand-purple-rgb),0.32);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:background 0.15s, border-color 0.15s, transform 0.15s;z-index:2" onmouseover="this.style.background='rgba(var(--brand-purple-rgb),0.22)';this.style.borderColor='rgba(var(--brand-accent-rgb), 0.55)';this.style.transform='translateY(-50%) scale(1.06)'" onmouseout="this.style.background='rgba(0,0,0,0.55)';this.style.borderColor='rgba(var(--brand-purple-rgb),0.32)';this.style.transform='translateY(-50%)'"><i class="fa-solid fa-chevron-right"></i></button>
+</div>
+
+<script defer src="/static/activity-banner.js?v=20260531"></script>
+<script defer src="/static/app-shell.js?v=20260529"></script>
+
+
+
+</body>
+</html>
