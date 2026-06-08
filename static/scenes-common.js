@@ -1028,7 +1028,7 @@
           if (!el || !perfs.length) return;
           el.innerHTML = `<div class="lib-perfs-row">${perfs.map(p => {
             const img = p.headshot_url
-              ? `<img src="${esc(p.headshot_url)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'lib-perf-ph',innerHTML:'<i class=\\'fa-solid fa-user\\' loading="lazy"></i>'}))">`
+              ? `<img src="${esc(p.headshot_url)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'lib-perf-ph',innerHTML:'<i class=\\'fa-solid fa-user\\'></i>'}))">`
               : `<div class="lib-perf-ph"><i class="fa-solid fa-user"></i></div>`;
             const attrs = window.performerLinkAttrs(p.name, { gender: p.gender, libraryRowId: p.row_id || p.id });
             return `<div class="lib-perf-hs" title="${esc(p.name)}"${attrs ? ' ' + attrs : ''}>${img}<div class="lib-perf-hs-name">${esc(p.name)}</div></div>`;
@@ -2115,7 +2115,7 @@
       const libPerfsHtml = libPerfs.length
         ? `<div class="lib-perfs-row">${libPerfs.map(p => {
             const img = p.headshot_url
-              ? `<img src="${esc(p.headshot_url)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'lib-perf-ph',innerHTML:'<i class=\\'fa-solid fa-user\\' loading="lazy"></i>'}))">`
+              ? `<img src="${esc(p.headshot_url)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'lib-perf-ph',innerHTML:'<i class=\\'fa-solid fa-user\\'></i>'}))">`
               : `<div class="lib-perf-ph"><i class="fa-solid fa-user"></i></div>`;
             const attrs = window.performerLinkAttrs(p.name, { gender: p.gender, libraryRowId: p.row_id || p.id });
             return `<div class="lib-perf-hs" title="${esc(p.name)}"${attrs ? ' ' + attrs : ''}>${img}<div class="lib-perf-hs-name">${esc(p.name)}</div></div>`;
@@ -2319,7 +2319,7 @@
             if (!el || !perfsOut.length) return;
             el.innerHTML = `<div class="lib-perfs-row">${perfsOut.map(p => {
               const img = p.headshot_url
-                ? `<img src="${esc(p.headshot_url)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'lib-perf-ph',innerHTML:'<i class=\\'fa-solid fa-user\\' loading="lazy"></i>'}))">`
+                ? `<img src="${esc(p.headshot_url)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'lib-perf-ph',innerHTML:'<i class=\\'fa-solid fa-user\\'></i>'}))">`
                 : `<div class="lib-perf-ph"><i class="fa-solid fa-user"></i></div>`;
               const attrs = window.performerLinkAttrs(p.name, { gender: p.gender, libraryRowId: p.row_id || p.id });
               return `<div class="lib-perf-hs" title="${esc(p.name)}"${attrs ? ' ' + attrs : ''}>${img}<div class="lib-perf-hs-name">${esc(p.name)}</div></div>`;

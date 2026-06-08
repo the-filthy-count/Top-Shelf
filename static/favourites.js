@@ -1734,7 +1734,7 @@
             if (merged.length) {
               castEl.innerHTML = merged.map(p => {
                 const img = p.headshot_url
-                  ? `<img src="${esc(p.headshot_url)}" alt="" onerror="this.outerHTML='<div class=\\'mp-perf-ph\\' loading="lazy"><i class=\\'fa-solid fa-user\\'></i></div>'">`
+                  ? `<img src="${esc(p.headshot_url)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=\\'mp-perf-ph\\'><i class=\\'fa-solid fa-user\\'></i></div>'">`
                   : `<div class="mp-perf-ph"><i class="fa-solid fa-user"></i></div>`;
                 const attrs = (typeof window.performerLinkAttrs === 'function')
                   ? window.performerLinkAttrs(p.name, { gender: p.gender, libraryRowId: p.row_id, stashId: p.stash_id })

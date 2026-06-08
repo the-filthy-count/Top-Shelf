@@ -1057,7 +1057,7 @@
         if (d && d.headshot_url) {
           const slot = document.querySelector('#performerPopupModal .pp-headshot-wrap');
           if (slot) {
-            slot.innerHTML = `<img class="pp-headshot" src="${ESC(d.headshot_url)}&v=${Date.now()}" alt="" onerror="this.parentElement.innerHTML='<div class=pp-headshot-fallback loading="lazy"><i class=fa-solid fa-person></i></div>'">`;
+            slot.innerHTML = `<img class="pp-headshot" src="${ESC(d.headshot_url)}&v=${Date.now()}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div class=pp-headshot-fallback><i class=fa-solid fa-person></i></div>'">`;
           }
           paintBgHero(d);
           return;
@@ -1337,7 +1337,7 @@
       <div class="pp-bio-layout${usePickableAliases ? ' pp-bio-layout--pick-name' : ''}">
         <div class="pp-headshot-wrap${isDeceased ? ' is-deceased' : ''}">
           ${headshot
-            ? `<img class="pp-headshot" src="${ESC(headshot)}" alt="${ESC(id.canonical_name)}" onerror="this.outerHTML='<div class=&quot;pp-headshot-fallback&quot; loading="lazy"><i class=&quot;fa-solid fa-person&quot;></i></div>'">`
+            ? `<img class="pp-headshot" src="${ESC(headshot)}" alt="${ESC(id.canonical_name)}" loading="lazy" onerror="this.outerHTML='<div class=&quot;pp-headshot-fallback&quot;><i class=&quot;fa-solid fa-person&quot;></i></div>'">`
             : `<div class="pp-headshot-fallback"><i class="fa-solid fa-person"></i></div>`}
           ${skullHtml}
         </div>
