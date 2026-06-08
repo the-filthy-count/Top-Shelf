@@ -2437,7 +2437,9 @@
     const type = _favSearchType;
     if (status) { status.hidden = false; status.textContent = 'Searching…'; }
     if (results) {
-      results.innerHTML = Array.from({length: 12}, () =>
+      // Three skeleton tiles is enough to signal "loading" without
+      // flashing 12 empty cells when typical results return 1-5.
+      results.innerHTML = Array.from({length: 3}, () =>
         '<div class="fav-cell fav-cell--skeleton" aria-hidden="true"><div class="fav-cell-visual" style="aspect-ratio:2/3"></div></div>'
       ).join('');
     }
