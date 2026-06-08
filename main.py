@@ -792,14 +792,26 @@ def _startup_step(label: str, subtext: str, index: int, total: int, done: bool =
 
 
 def _run_startup_warmup() -> None:
-    """Sequentially warm the caches users will hit first so the app is
-    ready the moment they land on the login page. Runs in a daemon
-    thread kicked off from the startup event; on completion sets
-    ``_startup_complete`` which releases the /loading gate."""
+    """Warm the caches users hit first, but don't let any single step
+    wedge the boot. Each step runs on its own daemon thread with a
+    wall-time deadline; if it doesn't complete in time we move on so
+    the /loading gate releases — the step keeps working in the
+    background and populates its cache when it eventually finishes.
+
+    A stuck RSS feed (slow TLS handshake that the per-request timeout
+    can't unblock) used to leave the user on the loading screen
+    forever; now it just delays the RSS feed appearing while the rest
+    of the app is usable.
+    """
     with _startup_status_lock:
         _startup_status["started_at"] = time.time()
         _startup_status["current"] = "Warming caches…"
         _startup_status["current_subtext"] = ""
+    # Per-step deadline: long enough for cold external API calls to
+    # complete on a normal connection, short enough that one slow
+    # upstream can't push the whole startup past the loading-page
+    # deadline (120 s in static/loading.html).
+    PER_STEP_DEADLINE_S = 25.0
     steps: list[tuple[str, str, callable]] = [
         ("Setting the mood…",            "> checking_blinds: closed",          _refresh_hourly_content_cache),
         ("Uncovering your indulgences…", "> private_session: active",          _refresh_rss_cache),
@@ -810,10 +822,32 @@ def _run_startup_warmup() -> None:
     for i, (label, subtext, fn) in enumerate(steps):
         _startup_step(label, subtext, i + 1, total)
         emit(f"STARTUP warmup [{i + 1}/{total}]: {label} {subtext}")
-        try:
-            fn()
-        except Exception as e:
-            emit(f"STARTUP warmup '{label}' error: {e}")
+        # Run the step on its own thread so we can wall-time-wait it
+        # without losing the actual work — if the deadline passes, the
+        # thread keeps running in the background and populates the
+        # cache when it eventually completes (or stays stuck without
+        # blocking anything else).
+        done_evt = threading.Event()
+
+        def _runner(_fn=fn, _label=label, _evt=done_evt) -> None:
+            try:
+                _fn()
+            except Exception as e:
+                emit(f"STARTUP warmup '{_label}' error: {e}")
+            finally:
+                _evt.set()
+
+        t = threading.Thread(
+            target=_runner,
+            daemon=True,
+            name=f"warmup-{i + 1}",
+        )
+        t.start()
+        if not done_evt.wait(timeout=PER_STEP_DEADLINE_S):
+            emit(
+                f"STARTUP warmup '{label}' over {PER_STEP_DEADLINE_S:.0f}s — "
+                f"continuing in background, advancing boot."
+            )
         _startup_step(label, subtext, i + 1, total, done=True)
     # Kick off background workers for the hot read endpoints. Each
     # builds its first snapshot immediately so the post-warmup landing
@@ -35534,6 +35568,12 @@ def _refresh_hourly_content_cache():
         # tolerated — `_persist_scenes_feed_display_pool` leaves the
         # stored pool unchanged so a transient upstream failure cannot
         # wipe a previously-good grid.
+        #
+        # Image-cache warming used to run here too, but that pushed
+        # startup over its 120 s deadline on cold libraries — every
+        # /api/scenes/feed call rewrites cache misses on-demand and
+        # queues them on the background pool, so warmth happens
+        # naturally as users browse without blocking the boot sequence.
         for cache_key, fresh in (
             ("studios",    studios_scenes),
             ("performers", perf_scenes),
@@ -35545,19 +35585,6 @@ def _refresh_hourly_content_cache():
                 _persist_scenes_feed_display_pool(cache_key, fk, fresh)
             except Exception as _e:
                 emit(f"CACHE hourly persist {cache_key} error: {_e}")
-
-        # Opportunistically warm the on-disk image cache for every thumb
-        # so the next /api/scenes/feed serves them from the local copy.
-        # Queueing is cheap — already-cached images are a no-op; new ones
-        # land on the background pool with a 4-worker cap.
-        for fresh in (studios_scenes, perf_scenes, scenes_rand, scenes_fav, scenes_jav):
-            for sc in (fresh or []):
-                if not isinstance(sc, dict):
-                    continue
-                for field in ("thumb", "poster", "background", "image"):
-                    v = sc.get(field)
-                    if isinstance(v, str) and v.startswith("http"):
-                        _discover_warm_image_async(v)
 
         movies_payload = _collect_filtered_tpdb_movies({}, page=1, page_size=30)
         with _content_cache_lock:
@@ -35571,14 +35598,6 @@ def _refresh_hourly_content_cache():
             )
         except Exception as _e:
             emit(f"CACHE hourly persist movies error: {_e}")
-        # Warm movie posters/backgrounds too — same opportunistic queue.
-        for m in (_movies_latest_cache.get("results") or []):
-            if not isinstance(m, dict):
-                continue
-            for field in ("poster", "background", "image"):
-                v = m.get(field)
-                if isinstance(v, str) and v.startswith("http"):
-                    _discover_warm_image_async(v)
         emit(
             f"CACHE hourly refresh: studios={len(studios_scenes)} performers={len(perf_scenes)} "
             f"random={len(scenes_rand)} favourites={len(scenes_fav)} jav={len(scenes_jav)} "
