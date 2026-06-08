@@ -969,20 +969,28 @@ class CachedStaticFiles(StaticFiles):
         response = await super().get_response(path, scope)
         if isinstance(response, (Response, NotModifiedResponse)):
             ext = Path(path).suffix.lower()
-            if ext in {".ttf", ".woff", ".woff2", ".ico", ".jpg", ".jpeg", ".png", ".gif"}:
+            if ext in {".ttf", ".woff", ".woff2", ".ico", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".svg"}:
                 #: Binary assets practically never change between deploys —
                 #: keep them immutable so the browser doesn't even ask.
                 response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
             elif ext in {".css", ".js"}:
-                #: CSS / JS DO change with every deploy. The previous
-                #: `max-age=3600` left users staring at an hour-old asset
-                #: that didn't match the freshly-loaded HTML — broken
-                #: layouts and missing handlers until they pressed F5.
-                #: ``no-cache`` keeps the cached bytes but forces a
-                #: conditional revalidation; StaticFiles already serves
-                #: Last-Modified / If-Modified-Since so unchanged files
-                #: come back as a near-zero-cost 304.
-                response.headers["Cache-Control"] = "no-cache, must-revalidate"
+                #: CSS / JS DO change with every deploy, BUT every <script>
+                #: and <link> tag in the templates already carries a
+                #: `?v=...` cache-bust token (queue.js?v=1, app-shell.css?v=14,
+                #: ...). Versioned URLs are immutable by definition —
+                #: when the content changes, the URL changes, and the new
+                #: token forces a fresh download. Without `immutable` the
+                #: browser revalidates every cached script on every page
+                #: navigation, adding one round-trip per asset even when
+                #: the server returns 304. For un-versioned requests
+                #: (legacy callers, dev tools) fall back to the
+                #: conditional-revalidate policy so a stale cached file
+                #: can't outlive a deploy.
+                query = scope.get("query_string") or b""
+                if b"v=" in query:
+                    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+                else:
+                    response.headers["Cache-Control"] = "no-cache, must-revalidate"
         return response
 
 
