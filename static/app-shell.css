@@ -9929,8 +9929,65 @@ html[data-theme="glass"] .ts-prowlarr-popup-filters {
  * Pages can pick any subset of children — every element is optional
  * except the wrapper. */
 
-
-
-
-
-
+/* ── .fav-lips icon (shared chrome) ──────────────────────────
+ * The favourite-bookmark icon uses CSS mask-image; rules live
+ * here so /index's Favourites toggle and the activity banner's
+ * fav chrome render correctly on every page, not just /library.
+ * Other pages have no .fav-lips elements — rules sit dormant. */
+.fav-lips {
+  color: #C0022F !important;
+}
+header .btn-secondary.active-nav .fav-lips,
+.header-right .btn-secondary.active-nav .fav-lips {
+  color: currentColor !important;
+}
+.fav-lips {
+  display: inline-block;
+  width: 24px;
+  height: 21px;
+  vertical-align: -4px;
+  flex-shrink: 0;
+  background-color: currentColor;
+  -webkit-mask-image: url('/static/logos/favourite.svg');
+          mask-image: url('/static/logos/favourite.svg');
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-position: center center;
+          mask-position: center center;
+  -webkit-mask-size: contain;
+          mask-size: contain;
+  pointer-events: none;
+  color: #C0022F;  /* favourite — deep crimson */
+}
+.fav-card-heart:not(.heart-on) .fav-lips,
+.entity-panel-heart:not(.heart-on) .fav-lips,
+.fav-overlay-heart:not(.heart-on) .fav-lips,
+.fav-filter-ibtn--heart:not(.is-on) .fav-lips {
+  color: var(--dim);
+  opacity: 0.55;
+}
+.fav-filter-ibtn--heart.is-on[data-filter-state="no"] .fav-lips {
+  color: var(--dim);
+  opacity: 0.9;
+}
+.fav-card-heart .fav-lips {
+  width: 48px;
+  height: 42px;
+  vertical-align: 0;
+}
+.rss-tile-fav-heart .fav-lips {
+  width: 32px;
+  height: 28px;
+  vertical-align: 0;
+}
+.ts-seg button > .fav-lips {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 28px;
+  margin: 0 !important;
+  pointer-events: none;
+}
+.ts-circle-icon .fav-lips {
+  width: 26px;
+  height: 23px;
+}
