@@ -70,6 +70,7 @@
               <a class="studio-popup-logo-link" id="studioPopupLogoLink" rel="noopener noreferrer" target="_blank">
                 <img class="studio-popup-logo" alt="" referrerpolicy="no-referrer" onerror="this.closest('.studio-popup-logo-box')?.classList.add('is-empty');this.style.display='none'">
               </a>
+              <div class="studio-popup-linked-logos" id="studioPopupLinkedLogos" hidden></div>
             </div>
             <div class="studio-popup-desc-box">
               <div class="studio-popup-desc" id="studioPopupDesc"></div>
@@ -575,9 +576,86 @@
     wireLogoPicker(m);
     applyCellFanart(m.querySelector('.studio-popup-info-cell'), row && row.id);
     renderParentLogoFromApi(null);  // placeholder until /studio-detail returns
+    renderLinkedLogos(row);
     renderLatestScene(scenes[0], name);
     renderScenesGrid(scenes);
     renderProwlarrPanel(name);
+  }
+
+  /** Paint the small linked-studio logos that sit to the right of the
+   * main logo. Each chip is one sibling studio whose ID is stored in
+   * `row.group_ids[source]` (rich `{id, name, image}` entries — written
+   * by the "Link other studios" search picker). Clicking a chip opens
+   * the source DB profile in a new tab; the X button removes the link.
+   * Hidden entirely when the row has no linked studios. */
+  function renderLinkedLogos(row) {
+    const host = document.getElementById('studioPopupLinkedLogos');
+    if (!host) return;
+    const gids = (row && row.group_ids) || {};
+    const items = [];
+    ['tpdb', 'stashdb', 'fansdb', 'javstash'].forEach((src) => {
+      (gids[src] || []).forEach((entry) => {
+        const isObj = entry && typeof entry === 'object';
+        const id    = isObj ? String(entry.id || '')   : String(entry || '');
+        const nm    = isObj ? String(entry.name || '') : '';
+        const img   = isObj ? String(entry.image || ''): '';
+        if (!id) return;
+        items.push({ source: src, id, name: nm, image: img });
+      });
+    });
+    if (!items.length) {
+      host.hidden = true;
+      host.innerHTML = '';
+      return;
+    }
+    host.hidden = false;
+    host.innerHTML = items.map((it) => {
+      const url = studioProfileUrl(it.source, it.id);
+      // Fall back to /api/studio-logo?name= when the source DB didn't
+      // return an image URL on pick. The same endpoint backs the parent
+      // logo box, so any local logo PNG/WebP already cached on disk
+      // resolves without an extra round-trip.
+      const imgSrc = it.image
+        ? it.image
+        : (it.name ? `/api/studio-logo?name=${encodeURIComponent(it.name)}` : '');
+      const initial = (it.name || '').trim().charAt(0).toUpperCase() || '?';
+      const tile = `<div class="studio-popup-linked-tile" data-source="${ATTR(it.source)}" data-id="${ATTR(it.id)}" title="${ATTR((it.name || it.id) + ' · ' + it.source.toUpperCase())}">
+        ${imgSrc
+          ? `<img class="studio-popup-linked-img" src="${ATTR(imgSrc)}" alt="${ATTR(it.name || it.id)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'studio-popup-linked-initial',textContent:'${ESC(initial)}'}))">`
+          : `<span class="studio-popup-linked-initial">${ESC(initial)}</span>`}
+        <button type="button" class="studio-popup-linked-remove" data-source="${ATTR(it.source)}" data-id="${ATTR(it.id)}" title="Unlink ${ATTR(it.name || it.id)}" aria-label="Unlink"><i class="fa-solid fa-xmark"></i></button>
+      </div>`;
+      return url
+        ? `<a class="studio-popup-linked-link" href="${ATTR(url)}" target="_blank" rel="noopener noreferrer">${tile}</a>`
+        : tile;
+    }).join('');
+    // Click the X to unlink without navigating the parent <a>.
+    host.querySelectorAll('.studio-popup-linked-remove').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const src = btn.dataset.source || '';
+        const id  = btn.dataset.id || '';
+        if (!src || !id || !_activeRowId) return;
+        try {
+          const r = await fetch('/api/favourites/group-remove-link', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ row_id: _activeRowId, source: src, ext_id: id }),
+          });
+          if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            toast(d.error || 'Unlink failed');
+            return;
+          }
+          // Re-fetch the popup so group_ids paints fresh.
+          if (window._studioPopupActiveId === _activeRowId) window.refreshStudioPopup();
+        } catch (err) {
+          toast(err.message || 'Unlink failed');
+        }
+      });
+    });
   }
 
   function studioProfileUrl(siteKey, id) {
@@ -1150,4 +1228,186 @@
     });
   };
   document.documentElement.addEventListener('click', _delegatedClick, false);
+
+  /* ── "Link other studios" search modal ───────────────────────────
+   * Triggered from the popup hamburger. Hits /api/metadata/search
+   * with type=studio (which already fans out across TPDB/StashDB/
+   * FansDB/JAVStash). Each pick POSTs to /api/favourites/group-add-link
+   * with the rich payload so the linked-logo header row picks up the
+   * image without an extra fetch. */
+  let _linkSearchToken = 0;
+  let _linkSearchRowId = null;
+  let _linkSearchName  = '';
+
+  function ensureLinkSearchModal() {
+    if (document.getElementById('studioLinkSearchModal')) return;
+    const div = document.createElement('div');
+    div.id = 'studioLinkSearchModal';
+    div.className = 'modal-overlay';
+    // Sit above the studio popup (z=1500) — same trick the logo picker
+    // uses (importance flag wins against the !important rule baked into
+    // the generic .modal-overlay style).
+    div.style.setProperty('z-index', '1800', 'important');
+    div.innerHTML = `
+      <div class="modal-box ts-link-modal-box studio-link-search-box"
+           style="max-width:760px;width:min(760px,calc(100vw - 60px));max-height:calc(100vh - 80px);display:flex;flex-direction:column">
+        <h3 id="studioLinkSearchTitle" style="margin:0 0 6px 0;font-family:var(--font-display, var(--mono));font-size:18px">Link other studios</h3>
+        <div id="studioLinkSearchSub" style="font-size:11px;color:var(--dim);margin-bottom:12px">
+          Find sibling sites to file under this folder. Scenes whose studio matches any linked ID will auto-route here.
+        </div>
+        <input type="search" id="studioLinkSearchInput"
+               placeholder="Search TPDB · StashDB · FansDB · JAVStash…"
+               autocomplete="off"
+               style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text);padding:8px 12px;font-size:13px;font-family:var(--mono);outline:none;margin-bottom:10px">
+        <div id="studioLinkSearchStatus" style="font-size:11px;color:var(--dim);margin-bottom:8px"></div>
+        <div id="studioLinkSearchResults" style="flex:1 1 0;min-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+        <div class="ts-link-modal-foot" style="display:flex;justify-content:flex-end;margin-top:12px">
+          <button type="button" id="studioLinkSearchCloseBtn"
+                  style="background:transparent;border:1px solid rgba(255,255,255,0.15);color:var(--dim);padding:8px 16px;border-radius:6px;font-size:11px;font-family:var(--mono);cursor:pointer;text-transform:uppercase;letter-spacing:0.04em">Close</button>
+        </div>
+      </div>`;
+    document.body.appendChild(div);
+    div.addEventListener('click', (e) => {
+      if (e.target === div) closeLinkSearchModal();
+    });
+    div.querySelector('#studioLinkSearchCloseBtn').addEventListener('click', closeLinkSearchModal);
+    const input = div.querySelector('#studioLinkSearchInput');
+    let debTimer = null;
+    input.addEventListener('input', () => {
+      if (debTimer) clearTimeout(debTimer);
+      debTimer = setTimeout(() => runLinkSearch(input.value), 250);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeLinkSearchModal();
+    });
+  }
+
+  function openLinkSearchModal(rowId, name) {
+    if (!rowId) return;
+    ensureLinkSearchModal();
+    _linkSearchRowId = Number(rowId);
+    _linkSearchName  = String(name || '');
+    const div = document.getElementById('studioLinkSearchModal');
+    const sub = document.getElementById('studioLinkSearchSub');
+    if (sub && _linkSearchName) {
+      sub.innerHTML = 'Find sibling sites to file under <strong>'
+        + ESC(_linkSearchName) + '</strong>. Scenes whose studio matches any linked ID will auto-route here.';
+    }
+    const input = div.querySelector('#studioLinkSearchInput');
+    if (input) {
+      input.value = _linkSearchName || '';
+      setTimeout(() => input.focus(), 0);
+    }
+    document.getElementById('studioLinkSearchResults').innerHTML = '';
+    document.getElementById('studioLinkSearchStatus').textContent = '';
+    div.style.display = 'flex';
+    div.classList.add('open');
+    if (_linkSearchName) runLinkSearch(_linkSearchName);
+  }
+  window.openStudioLinkSearchModal = openLinkSearchModal;
+
+  function closeLinkSearchModal() {
+    const div = document.getElementById('studioLinkSearchModal');
+    if (!div) return;
+    div.classList.remove('open');
+    div.style.display = '';
+    _linkSearchToken++;  // invalidate any in-flight fetches
+  }
+
+  async function runLinkSearch(q) {
+    const query = String(q || '').trim();
+    const status  = document.getElementById('studioLinkSearchStatus');
+    const results = document.getElementById('studioLinkSearchResults');
+    if (!status || !results) return;
+    if (!query) {
+      status.textContent = '';
+      results.innerHTML = '';
+      return;
+    }
+    status.textContent = 'Searching…';
+    results.innerHTML = '';
+    const token = ++_linkSearchToken;
+    try {
+      const r = await fetch('/api/metadata/search?type=studio&q=' + encodeURIComponent(query), {
+        credentials: 'same-origin',
+      });
+      const d = await r.json().catch(() => ({}));
+      if (token !== _linkSearchToken) return;
+      if (!r.ok) {
+        status.textContent = d.error || ('HTTP ' + r.status);
+        return;
+      }
+      const items = Array.isArray(d.results) ? d.results : [];
+      if (!items.length) {
+        status.textContent = 'No matches';
+        return;
+      }
+      status.textContent = `${items.length} match${items.length === 1 ? '' : 'es'}`;
+      results.innerHTML = items.map((it, i) => {
+        const src   = (it.source || '').toUpperCase();
+        const nm    = it.name || '';
+        const id    = String(it.id || '');
+        const img   = it.image || '';
+        const initial = nm.trim().charAt(0).toUpperCase() || '?';
+        return `<button type="button" class="studio-link-search-row"
+                        data-i="${i}"
+                        style="display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);cursor:pointer;text-align:left;color:var(--text);font-family:inherit"
+                        onmouseover="this.style.background='rgba(255,255,255,0.06)'"
+                        onmouseout="this.style.background='rgba(255,255,255,0.02)'">
+          <div style="width:48px;height:48px;border-radius:6px;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">
+            ${img
+              ? `<img src="${ATTR(img)}" alt="" referrerpolicy="no-referrer" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${ESC(initial)}',style:'font-family:var(--mono);font-size:18px;color:var(--dim)'}))">`
+              : `<span style="font-family:var(--mono);font-size:18px;color:var(--dim)">${ESC(initial)}</span>`}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ESC(nm)}</div>
+            <div style="font-size:10px;color:var(--dim);margin-top:2px">${ESC(src)} · ${ESC(id)}</div>
+          </div>
+          <i class="fa-solid fa-link" style="color:var(--accent);font-size:13px"></i>
+        </button>`;
+      }).join('');
+      window._studioLinkSearchResults = items;
+      results.querySelectorAll('.studio-link-search-row').forEach((btn) => {
+        btn.addEventListener('click', () => linkPickedStudio(parseInt(btn.dataset.i, 10)));
+      });
+    } catch (e) {
+      if (token !== _linkSearchToken) return;
+      status.textContent = e.message || 'Search failed';
+    }
+  }
+
+  async function linkPickedStudio(idx) {
+    const it = window._studioLinkSearchResults?.[idx];
+    if (!it || !_linkSearchRowId) return;
+    const source = (it.source || '').toLowerCase();
+    const siteKey = source === 'theporndb' ? 'tpdb' : source;
+    if (!['tpdb', 'stashdb', 'fansdb', 'javstash'].includes(siteKey)) {
+      toast('Unknown source: ' + source);
+      return;
+    }
+    try {
+      const r = await fetch('/api/favourites/group-add-link', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          row_id: _linkSearchRowId,
+          source: siteKey,
+          ext_id: String(it.id || ''),
+          name:   it.name || '',
+          image:  it.image || '',
+        }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        toast(d.error || 'Link failed');
+        return;
+      }
+      toast(`Linked ${it.name || it.id} to ${_linkSearchName || 'this studio'}`);
+      closeLinkSearchModal();
+      if (window._studioPopupActiveId === _linkSearchRowId) window.refreshStudioPopup();
+    } catch (e) {
+      toast(e.message || 'Link failed');
+    }
+  }
 })();

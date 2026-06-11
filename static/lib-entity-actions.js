@@ -524,52 +524,21 @@
     return true;
   }
 
-  /** Edit a studio's aliases (comma-separated list). Mirrors the
-   * performer popup's editAliases flow, but the studio popup doesn't
-   * have a dedicated alias-bio endpoint, so we read the current list
-   * from /api/favourites/row and persist via /api/studios/aliases. */
+  /** Open the studio popup's "Link other studios" search modal. The
+   * modal lives in studio-popup.js; this just dispatches to it. The
+   * picker hits TPDB/StashDB/FansDB/JAVStash via /api/metadata/search
+   * and POSTs each pick to /api/favourites/group-add-link with the full
+   * {source, id, name, image} payload — scenes whose studio carries any
+   * linked ID then auto-route to this folder via the crosswalk lookup
+   * in favourite_find_studio_folder_by_crosswalk. */
   async function editStudioAliases(ctx) {
     if (!ctx || ctx.kind !== 'studio' || ctx.id <= 0) return false;
-    let cur = '';
-    try {
-      const r = await fetch('/api/favourites/row?id=' + ctx.id, { credentials: 'same-origin' });
-      const d = await r.json();
-      const aliases = (d && d.row && d.row.aliases) || [];
-      cur = Array.isArray(aliases) ? aliases.join(', ') : '';
-    } catch (_) { /* fall through */ }
-    const v = window.prompt(
-      'Other studio names to file under "' + (ctx.name || 'this studio') + '"\n(comma-separated):',
-      cur,
-    );
-    if (v === null) return false;
-    const list = v.split(',').map((s) => s.trim()).filter(Boolean);
-    try {
-      const r = await fetch('/api/studios/aliases', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ row_id: ctx.id, aliases: list }),
-      });
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        toast(d.error || 'Save failed', { kind: 'error' });
-        return false;
-      }
-      toast(list.length
-        ? `Linked ${list.length} alias${list.length === 1 ? '' : 'es'} to ${ctx.name || 'this studio'}`
-        : `Cleared aliases for ${ctx.name || 'this studio'}`,
-        { kind: 'info' });
-      // Refresh the studio popup in-place so the user can keep working
-      // (mirrors refreshPerformerPopup for the performer flow).
-      if (typeof window.refreshStudioPopup === 'function'
-          && window._studioPopupActiveId === ctx.id) {
-        window.refreshStudioPopup();
-      }
-      return true;
-    } catch (e) {
-      toast(e.message || 'Save failed', { kind: 'error' });
+    if (typeof window.openStudioLinkSearchModal !== 'function') {
+      toast('Studio link search not loaded', { kind: 'error' });
       return false;
     }
+    window.openStudioLinkSearchModal(ctx.id, ctx.name || '');
+    return true;
   }
 
   function closeMenu(menuEl) {

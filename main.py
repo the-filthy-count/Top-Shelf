@@ -17341,6 +17341,40 @@ def _favourites_row_api(r: dict) -> dict:
         out["aliases"] = json.loads(aj) if aj.strip() else []
     except json.JSONDecodeError:
         out["aliases"] = []
+    # Flatten group_ids_json into a {tpdb, stashdb, fansdb, javstash}
+    # dict. Entries may be plain strings (legacy / performer rows) or
+    # rich dicts ``{id, name, image}`` written by the studio "Link other
+    # studios" flow — the frontend handles both shapes. Used by the
+    # studio popup's linked-logo row + the performer group editor.
+    gij = out.pop("group_ids_json", None) or ""
+    group_ids: dict[str, list] = {"tpdb": [], "stashdb": [], "fansdb": [], "javstash": []}
+    if gij and gij.strip():
+        try:
+            parsed_g = json.loads(gij) or {}
+            if isinstance(parsed_g, dict):
+                for k in ("tpdb", "stashdb", "fansdb", "javstash"):
+                    raw_items = parsed_g.get(k) or []
+                    if not isinstance(raw_items, list):
+                        continue
+                    kept: list = []
+                    for x in raw_items:
+                        if isinstance(x, dict):
+                            xid = str(x.get("id") or "").strip()
+                            if not xid:
+                                continue
+                            kept.append({
+                                "id":    xid,
+                                "name":  str(x.get("name") or "").strip(),
+                                "image": str(x.get("image") or "").strip(),
+                            })
+                        elif isinstance(x, str):
+                            s = x.strip()
+                            if s:
+                                kept.append(s)
+                    group_ids[k] = kept
+        except (json.JSONDecodeError, TypeError):
+            pass
+    out["group_ids"] = group_ids
     gfj = out.pop("gender_filters_json", None) or ""
     try:
         out["gender_filters"] = json.loads(gfj) if gfj.strip() else []
@@ -21185,19 +21219,30 @@ async def api_favourites_set_group(payload: dict = Body(...)):
 
 @app.post("/api/favourites/group-add-link")
 async def api_favourites_group_add_link(payload: dict = Body(...)):
-    """Append an additional crosswalk ID to a group folder."""
+    """Append an additional crosswalk ID to a group folder.
+
+    Studio popup's "Link other studios" picker sends the optional
+    ``name`` + ``image`` fields so the entry is stored as a
+    ``{id, name, image}`` dict and the linked-logo row in the header
+    can render without an extra round-trip. Performer flow omits them
+    and gets the legacy plain-string entry."""
     try:
         row_id = int(payload.get("row_id") or 0)
     except (TypeError, ValueError):
         row_id = 0
     source = (payload.get("source") or "").strip().lower()
     ext_id = (payload.get("ext_id") or "").strip()
+    name   = (payload.get("name") or "").strip()
+    image  = (payload.get("image") or "").strip()
     if not row_id or not source or not ext_id:
         return JSONResponse({"error": "row_id, source, ext_id required"}, status_code=400)
     try:
-        data = db.favourite_group_add_id(row_id, source, ext_id)
+        data = db.favourite_group_add_id(row_id, source, ext_id, name=name or None, image=image or None)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+    # Force the slug index to rebuild so the next /queue file attempt
+    # sees the new link without waiting on the 30s TTL.
+    _favourites_name_index_bump()
     return {"ok": True, "group_ids": data}
 
 

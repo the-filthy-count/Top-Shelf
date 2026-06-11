@@ -9553,6 +9553,83 @@ html[data-theme="glass"] .ts-prowlarr-popup-filters {
  * is roughly half-size because it's a secondary brand mark. */
 .studio-popup-logo { max-height: 130px; }
 .studio-popup-parent-logo { max-height: 72px; }
+
+/* ── Linked-studio logos row (right of main logo) ────────────────
+ * Powered by row.group_ids in /api/favourites/entity-panel. Each tile
+ * is one sibling site whose scenes file under this folder. Click =
+ * open the source DB profile; X (hover-only) unlinks. */
+.studio-popup-linked-logos {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  align-items: center;
+  max-width: 40%;
+  pointer-events: auto;
+}
+.studio-popup-linked-link {
+  display: inline-flex;
+  text-decoration: none;
+  outline: none;
+}
+.studio-popup-linked-tile {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.studio-popup-linked-tile:hover {
+  border-color: rgba(var(--brand-accent-rgb), 0.55);
+  transform: translateY(-1px);
+}
+.studio-popup-linked-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.studio-popup-linked-initial {
+  font-family: var(--mono);
+  font-size: 16px;
+  color: var(--dim);
+}
+.studio-popup-linked-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  background: rgba(20, 14, 30, 0.92);
+  color: #ef4444;
+  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  padding: 0;
+}
+.studio-popup-linked-tile:hover .studio-popup-linked-remove {
+  opacity: 1;
+  pointer-events: auto;
+}
+.studio-popup-linked-remove:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
 .studio-popup-logo-link,
 .studio-popup-parent-link {
   display: inline-flex;

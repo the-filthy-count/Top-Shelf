@@ -2800,8 +2800,31 @@ def _group_ids_load(row_id: int) -> dict:
     }
 
 
-def favourite_group_add_id(row_id: int, source: str, ext_id: str) -> dict:
-    """Append an additional crosswalk ID to a group folder. Returns the resulting group dict."""
+def _entry_id(x) -> str:
+    """Pull the comparable id out of a group_ids_json entry — dicts
+    ({id, name, image}) on the studio side, plain strings elsewhere."""
+    if isinstance(x, dict):
+        return str(x.get("id") or "").strip()
+    if isinstance(x, str):
+        return x.strip()
+    return ""
+
+
+def favourite_group_add_id(
+    row_id: int,
+    source: str,
+    ext_id: str,
+    name: str | None = None,
+    image: str | None = None,
+) -> dict:
+    """Append an additional crosswalk ID to a group folder.
+
+    When ``name``/``image`` are supplied the entry is stored as a
+    ``{id, name, image}`` dict (studio popup writes this so the linked-
+    logo row has display data). Without them the entry is the plain id
+    string (legacy / performer flow). The crosswalk matcher reads both
+    shapes via :func:`_entry_id`. Returns the resulting group dict.
+    """
     src = (source or "").strip().lower()
     if src not in ("tpdb", "stashdb", "fansdb", "javstash"):
         raise ValueError(f"Unknown source: {source}")
@@ -2809,8 +2832,20 @@ def favourite_group_add_id(row_id: int, source: str, ext_id: str) -> dict:
     if not ext:
         raise ValueError("Empty id")
     data = _group_ids_load(row_id)
-    if ext not in data[src]:
-        data[src].append(ext)
+    nm = (name or "").strip()
+    img = (image or "").strip()
+    entry: str | dict = {"id": ext, "name": nm, "image": img} if (nm or img) else ext
+    existing_ids = {_entry_id(x) for x in data[src]}
+    if ext not in existing_ids:
+        data[src].append(entry)
+    else:
+        # Same ID already linked — upgrade any plain-string entry to the
+        # rich shape so a re-add from the studio popup picks up the
+        # display payload without leaving the old bare-id sibling.
+        data[src] = [
+            entry if (_entry_id(x) == ext and isinstance(entry, dict)) else x
+            for x in data[src]
+        ]
     now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:
         conn.execute(
@@ -2822,13 +2857,14 @@ def favourite_group_add_id(row_id: int, source: str, ext_id: str) -> dict:
 
 
 def favourite_group_remove_id(row_id: int, source: str, ext_id: str) -> dict:
-    """Remove a single ID from a group folder. Returns the resulting group dict."""
+    """Remove a single ID from a group folder. Handles both plain-string
+    entries and ``{id, ...}`` dict entries."""
     src = (source or "").strip().lower()
     if src not in ("tpdb", "stashdb", "fansdb", "javstash"):
         raise ValueError(f"Unknown source: {source}")
     ext = (ext_id or "").strip()
     data = _group_ids_load(row_id)
-    data[src] = [x for x in data[src] if x != ext]
+    data[src] = [x for x in data[src] if _entry_id(x) != ext]
     now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:
         conn.execute(
@@ -3084,7 +3120,15 @@ def favourite_find_studio_folder_by_crosswalk(
     stash_id: str | None,
     fans_id: str | None,
 ) -> dict | None:
-    """Resolve Series library folder via entity index by site/studio ids."""
+    """Resolve Series library folder via entity index by site/studio ids.
+
+    Also matches studio folders carrying additional crosswalk IDs in
+    ``group_ids_json`` (set via the studio popup's "Link other studios"
+    flow). This is what lets a scene from a sibling network (e.g.
+    "ManyVids: 2 Drops") file under the master folder ("Pure Mature")
+    without a name match — the master row knows the sibling's TPDB id
+    and short-circuits straight to the canonical path.
+    """
     tid = (tpdb_id or "").strip()
     sid = (stash_id or "").strip()
     fid = (fans_id or "").strip()
@@ -3109,7 +3153,52 @@ def favourite_find_studio_folder_by_crosswalk(
             f"SELECT path, folder_name FROM favourite_entities WHERE kind = 'studio' AND ({where}) LIMIT 1",
             args,
         ).fetchone()
-        return dict(row) if row else None
+        if row:
+            return dict(row)
+        # Fallback: studio folders with additional linked IDs in
+        # group_ids_json. Mirrors the performer-side fallback at
+        # favourite_find_performer_folder_by_crosswalk.
+        group_rows = conn.execute(
+            "SELECT path, folder_name, group_ids_json "
+            "FROM favourite_entities "
+            "WHERE kind = 'studio' AND group_ids_json IS NOT NULL AND group_ids_json != ''"
+        ).fetchall()
+        # Entries in each source list may be plain strings (legacy /
+        # performer-style) OR ``{id, name, image}`` dicts (the studio
+        # popup's rich shape). _ids extracts the comparable string id
+        # from either.
+        def _ids(lst):
+            out: list[str] = []
+            for x in (lst or []):
+                if isinstance(x, dict):
+                    v = str(x.get("id") or "").strip()
+                elif isinstance(x, str):
+                    v = x.strip()
+                else:
+                    v = ""
+                if v:
+                    out.append(v)
+            return out
+
+        for gr in group_rows:
+            try:
+                data = json.loads(gr["group_ids_json"] or "{}") or {}
+            except Exception:
+                continue
+            if not isinstance(data, dict):
+                continue
+            if (
+                (tid and tid in _ids(data.get("tpdb")))
+                or (sid and sid in _ids(data.get("stashdb")))
+                or (fid and fid in _ids(data.get("fansdb")))
+            ):
+                return {
+                    "path": gr["path"],
+                    "folder_name": gr["folder_name"],
+                    "group_ids_json": gr["group_ids_json"],
+                    "_hit_via": "group_ids_json",
+                }
+        return None
 
 
 # --- Processed files ---
