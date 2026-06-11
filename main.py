@@ -4559,20 +4559,22 @@ def _favourites_name_index(kind: str) -> dict[str, dict]:
             _add(normalise(r.get("match_tpdb_name") or ""),    r, "tpdb_name")
             _add(normalise(r.get("match_stashdb_name") or ""), r, "stashdb_name")
             _add(normalise(r.get("match_fansdb_name") or ""),  r, "fansdb_name")
-            # 3. Performer aliases (from aliases_json)
-            if kind == "performer":
-                aj = (r.get("aliases_json") or "").strip()
-                if aj:
-                    try:
-                        aliases = json.loads(aj) or []
-                    except Exception:
-                        aliases = []
-                    if isinstance(aliases, list):
-                        for a in aliases:
-                            if isinstance(a, str):
-                                _add(normalise(a), r, "alias")
-                            elif isinstance(a, dict):
-                                _add(normalise(a.get("name") or ""), r, "alias")
+            # 3. Aliases (from aliases_json). Originally performer-only;
+            # studios now use the same field to map sibling-site names
+            # ("Pure Mature", "Mature NL") to one master folder so the
+            # filing pipeline lands every variant on the canonical row.
+            aj = (r.get("aliases_json") or "").strip()
+            if aj:
+                try:
+                    aliases = json.loads(aj) or []
+                except Exception:
+                    aliases = []
+                if isinstance(aliases, list):
+                    for a in aliases:
+                        if isinstance(a, str):
+                            _add(normalise(a), r, "alias")
+                        elif isinstance(a, dict):
+                            _add(normalise(a.get("name") or ""), r, "alias")
     except Exception as exc:
         _log.debug("favourites name index build failed: %s", exc)
 
@@ -21116,6 +21118,54 @@ async def api_performers_set_aliases(payload: dict = Body(...)):
             break
     aliases_json = json.dumps(cleaned) if cleaned else None
     db.favourite_set_aliases_json(row_id, aliases_json)
+    return {"ok": True, "aliases": cleaned}
+
+
+@app.post("/api/studios/aliases")
+async def api_studios_set_aliases(payload: dict = Body(...)):
+    """Replace the aliases_json list on a studio row.
+
+    Body: ``{"row_id": int, "aliases": ["Pure Mature", "Mature NL", ...]}``
+
+    Sibling-site lumping: a user keeps one local folder for a network
+    that publishes under several names. Aliases here feed
+    ``_favourites_name_index`` so ``find_studio_dir`` resolves a scene
+    whose studio is "Pure Mature" onto the canonical folder even when
+    the folder is called "Mature NL". Same cleaning rules as the
+    performer endpoint (trim, case-insensitive dedupe, cap at 50).
+    """
+    try:
+        row_id = int(payload.get("row_id") or 0)
+    except (TypeError, ValueError):
+        row_id = 0
+    if not row_id:
+        return JSONResponse({"error": "row_id required"}, status_code=400)
+    row = db.favourite_get(row_id)
+    if not row or (row.get("kind") or "").lower() != "studio":
+        return JSONResponse({"error": "studio row not found"}, status_code=404)
+    raw = payload.get("aliases")
+    if not isinstance(raw, list):
+        return JSONResponse({"error": "aliases must be a list"}, status_code=400)
+    seen_keys: set[str] = set()
+    cleaned: list[str] = []
+    for a in raw:
+        if not isinstance(a, str):
+            continue
+        s = a.strip()
+        if not s:
+            continue
+        key = s.lower()
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        cleaned.append(s)
+        if len(cleaned) >= 50:
+            break
+    aliases_json = json.dumps(cleaned) if cleaned else None
+    db.favourite_set_aliases_json(row_id, aliases_json)
+    # Force the slug index to rebuild so the next /queue file attempt
+    # sees the new aliases without the usual 30s TTL wait.
+    _favourites_name_index_bump()
     return {"ok": True, "aliases": cleaned}
 
 

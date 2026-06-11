@@ -524,6 +524,54 @@
     return true;
   }
 
+  /** Edit a studio's aliases (comma-separated list). Mirrors the
+   * performer popup's editAliases flow, but the studio popup doesn't
+   * have a dedicated alias-bio endpoint, so we read the current list
+   * from /api/favourites/row and persist via /api/studios/aliases. */
+  async function editStudioAliases(ctx) {
+    if (!ctx || ctx.kind !== 'studio' || ctx.id <= 0) return false;
+    let cur = '';
+    try {
+      const r = await fetch('/api/favourites/row?id=' + ctx.id, { credentials: 'same-origin' });
+      const d = await r.json();
+      const aliases = (d && d.row && d.row.aliases) || [];
+      cur = Array.isArray(aliases) ? aliases.join(', ') : '';
+    } catch (_) { /* fall through */ }
+    const v = window.prompt(
+      'Other studio names to file under "' + (ctx.name || 'this studio') + '"\n(comma-separated):',
+      cur,
+    );
+    if (v === null) return false;
+    const list = v.split(',').map((s) => s.trim()).filter(Boolean);
+    try {
+      const r = await fetch('/api/studios/aliases', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ row_id: ctx.id, aliases: list }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        toast(d.error || 'Save failed', { kind: 'error' });
+        return false;
+      }
+      toast(list.length
+        ? `Linked ${list.length} alias${list.length === 1 ? '' : 'es'} to ${ctx.name || 'this studio'}`
+        : `Cleared aliases for ${ctx.name || 'this studio'}`,
+        { kind: 'info' });
+      // Refresh the studio popup in-place so the user can keep working
+      // (mirrors refreshPerformerPopup for the performer flow).
+      if (typeof window.refreshStudioPopup === 'function'
+          && window._studioPopupActiveId === ctx.id) {
+        window.refreshStudioPopup();
+      }
+      return true;
+    } catch (e) {
+      toast(e.message || 'Save failed', { kind: 'error' });
+      return false;
+    }
+  }
+
   function closeMenu(menuEl) {
     if (menuEl) menuEl.classList.remove('open');
   }
@@ -535,6 +583,15 @@
         { action: 'refresh-images', label: 'Refresh images', icon: 'fa-arrows-rotate' },
         { action: 'enrich', label: 'Run enrichment', icon: 'fa-wand-magic-sparkles' },
         { action: 'rename', label: 'Rename performer', icon: 'fa-i-cursor' },
+      );
+    }
+    if (ctx.kind === 'studio' && ctx.id > 0) {
+      // Sibling-site lumping: a single local folder for a network that
+      // publishes under several names (e.g. one folder for "Pure Mature"
+      // + "Mature NL"). Aliases here feed find_studio_dir's name index
+      // so the /queue filing step lands every variant on this folder.
+      items.push(
+        { action: 'studio-aliases', label: 'Link other studios', icon: 'fa-link' },
       );
     }
     items.push(
@@ -589,10 +646,18 @@
           if (action === 'refresh-images') ok = await refreshPerformerImages(ctx, item);
           else if (action === 'enrich') ok = await enrichPerformer(ctx);
           else if (action === 'rename') ok = await renamePerformer(ctx);
+          else if (action === 'studio-aliases') ok = await editStudioAliases(ctx);
           else if (action === 'remove') ok = await removeFromLibrary(ctx);
           else if (action === 'delete') ok = await deleteFromDisk(ctx);
           else if (action === 'move') ok = await changeDirectory(ctx);
-          if (ok && action !== 'enrich' && action !== 'refresh-images' && typeof onDone === 'function') onDone(action);
+          if (ok
+              && action !== 'enrich'
+              && action !== 'refresh-images'
+              && action !== 'studio-aliases'
+              && typeof onDone === 'function') onDone(action);
+          // studio-aliases triggers an in-place popup refresh from its
+          // own handler so the user stays on the studio they were
+          // editing — onDone(studio-aliases) would close the popup.
         } catch (err) {
           toast(err.message || 'Action failed', { kind: 'error' });
         }
@@ -618,5 +683,6 @@
     deleteFromDisk,
     changeDirectory,
     renamePerformer,
+    editStudioAliases,
   };
 })();
