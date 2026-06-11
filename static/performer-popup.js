@@ -2555,7 +2555,7 @@
                         style="display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:6px;background:${bg};border:${border};cursor:${cursor};text-align:left;color:var(--text);font-family:inherit">
           <div style="width:48px;height:48px;border-radius:6px;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">
             ${img
-              ? `<img src="${ESC(img)}" alt="" referrerpolicy="no-referrer" style="max-width:100%;max-height:100%;object-fit:cover;width:100%;height:100%" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${ESC(initial)}',style:'font-family:var(--mono);font-size:18px;color:var(--dim)'}))">`
+              ? `<img src="${ESC(img)}" alt="" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;object-position:50% 12%" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${ESC(initial)}',style:'font-family:var(--mono);font-size:18px;color:var(--dim)'}))">`
               : `<span style="font-family:var(--mono);font-size:18px;color:var(--dim)">${ESC(initial)}</span>`}
           </div>
           <div style="flex:1;min-width:0">
