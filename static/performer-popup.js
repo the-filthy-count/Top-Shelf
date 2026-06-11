@@ -1261,11 +1261,11 @@
     const pillsHtml = isGroup ? '' : buildProfilePillsHtml(data);
     let groupBadge = '';
     if (isGroup) {
+      // Collapse group_ids by name so the count reflects logical
+      // members, not raw entries — a single person with TPDB + StashDB
+      // ids is one tile in the modal, so it should show "1" here.
       const gids = id.group_ids || {};
-      let memberCount = 0;
-      ['tpdb', 'stashdb', 'fansdb', 'javstash'].forEach((src) => {
-        memberCount += ((gids[src] || []).length) || 0;
-      });
+      const memberCount = deriveGroupMembers(gids).length;
       const tip = memberCount
         ? `Open ${memberCount} member${memberCount === 1 ? '' : 's'}`
         : 'Group folder · no members yet — click to add';
@@ -2630,7 +2630,7 @@
     div.style.setProperty('z-index', '1750', 'important');
     div.innerHTML = `
       <div class="modal-box pp-group-members-box"
-           style="max-width:760px;width:min(760px,calc(100vw - 60px));max-height:calc(100vh - 80px);display:flex;flex-direction:column">
+           style="max-width:760px;width:min(760px,calc(100vw - 60px));max-height:calc(100vh - 80px);min-height:min(540px,calc(100vh - 80px));display:flex;flex-direction:column">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
           <h3 id="performerGroupMembersTitle" style="margin:0;font-family:var(--font-display, var(--mono));font-size:18px;flex:1">Group members</h3>
           <button type="button" id="performerGroupMembersClose"
@@ -2638,7 +2638,7 @@
         </div>
         <div id="performerGroupMembersHint" style="font-size:11px;color:var(--dim);margin-bottom:14px"></div>
         <div id="performerGroupMembersGrid"
-             style="flex:1 1 0;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px"></div>
+             style="flex:1 1 0;min-height:260px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;align-content:start"></div>
       </div>`;
     document.body.appendChild(div);
     div.addEventListener('click', (e) => {

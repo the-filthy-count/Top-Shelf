@@ -5821,47 +5821,58 @@ body .app .lib-disk-chart-wrap {
 }
 /* Group-folder indicator next to the performer name. Clickable —
  * opens the group-members modal so the user can drill into individual
- * members and link DB profiles to each one separately. */
+ * members and link DB profiles to each one separately. High-contrast
+ * brand-accent treatment so it pops against the dark popup header
+ * regardless of the bg image behind it. */
 button.pp-name-group {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   height: 28px;
-  padding: 0 12px;
+  padding: 0 10px 0 6px;
   border-radius: 14px;
-  background: rgba(var(--brand-purple-rgb), 0.24);
-  border: 1px solid rgba(var(--brand-purple-rgb), 0.7);
-  color: var(--accent);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #1a0f24;
   font-family: var(--mono);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   line-height: 1;
   flex-shrink: 0;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, transform 0.12s;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  transition: background 0.15s, transform 0.12s, box-shadow 0.15s;
 }
 button.pp-name-group:hover {
-  background: rgba(var(--brand-purple-rgb), 0.36);
-  border-color: rgba(var(--brand-purple-rgb), 0.9);
+  background: #fff;
+  border-color: #fff;
+  color: #150a1f;
   transform: translateY(-1px);
+  box-shadow: 0 0 0 2px rgba(var(--brand-accent-rgb), 0.6),
+              0 4px 12px rgba(0, 0, 0, 0.45);
 }
-.pp-name-group i { font-size: 13px; }
+.pp-name-group i { font-size: 13px; color: #1a0f24; }
 .pp-name-group-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 16px;
-  height: 16px;
+  min-width: 18px;
+  height: 18px;
   padding: 0 5px;
-  border-radius: 8px;
-  background: rgba(var(--brand-purple-rgb), 0.6);
-  color: var(--text);
+  border-radius: 9px;
+  background: #1a0f24;
+  color: var(--accent);
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0;
+}
+button.pp-name-group:hover .pp-name-group-count {
+  background: var(--accent);
+  color: #1a0f24;
 }
 
 /* Group-members modal ─ tiles surface the linked DB profiles
