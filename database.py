@@ -2810,6 +2810,18 @@ def favourite_set_is_group(row_id: int, is_group: bool) -> None:
 
 
 def _group_ids_load(row_id: int) -> dict:
+    """Read a row's group_ids_json, preserving both shapes:
+    plain strings (legacy / performer flow) AND ``{id, name, image}``
+    dicts (rich entries written by the link pickers).
+
+    The previous implementation called ``str(x)`` on every entry, which
+    turned a dict into a Python ``repr`` string like
+    ``"{'id': 'F59BB1F1-...', 'name': 'Eveline', 'image': 'https://...'}"``.
+    Saving back through favourite_group_add_id / favourite_group_remove_id
+    then persisted that mangled string, and the popup rendered it
+    verbatim as the member name. Any edit to a group with rich entries
+    progressively corrupted every other entry.
+    """
     with get_conn() as conn:
         row = conn.execute(
             "SELECT group_ids_json FROM favourite_entities WHERE id = ?",
@@ -2823,11 +2835,41 @@ def _group_ids_load(row_id: int) -> dict:
         data = {}
     if not isinstance(data, dict):
         data = {}
+    import ast
+    def _rescue(s: str):
+        # Earlier versions of this function ran ``str(x)`` on dict
+        # entries, persisting Python ``repr`` strings like
+        # ``"{'id': 'abc', 'name': 'Eveline'}"``. Try to undo that
+        # damage so the rich entry resurfaces. ast.literal_eval refuses
+        # anything that isn't a pure Python literal, so it's safe.
+        if not (s.startswith("{") and s.endswith("}")):
+            return None
+        try:
+            v = ast.literal_eval(s)
+        except (ValueError, SyntaxError):
+            return None
+        if isinstance(v, dict) and "id" in v:
+            return v
+        return None
+    def _coerce(items):
+        out: list = []
+        for x in items or []:
+            if isinstance(x, dict):
+                out.append(x)
+            elif x is None:
+                continue
+            else:
+                s = str(x).strip()
+                if not s:
+                    continue
+                rescued = _rescue(s)
+                out.append(rescued if rescued is not None else s)
+        return out
     return {
-        "tpdb": [str(x) for x in (data.get("tpdb") or [])],
-        "stashdb": [str(x) for x in (data.get("stashdb") or [])],
-        "fansdb": [str(x) for x in (data.get("fansdb") or [])],
-        "javstash": [str(x) for x in (data.get("javstash") or [])],
+        "tpdb":     _coerce(data.get("tpdb")),
+        "stashdb":  _coerce(data.get("stashdb")),
+        "fansdb":   _coerce(data.get("fansdb")),
+        "javstash": _coerce(data.get("javstash")),
     }
 
 

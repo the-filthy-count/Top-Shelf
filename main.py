@@ -22246,6 +22246,7 @@ async def api_performer_popup(
     tpdb_id: str | None = None,
     name: str | None = None,
     refresh: int = 0,
+    standalone: int = 0,
 ):
     """Universal performer popup endpoint. Resolves a click on a name into
     a unified payload regardless of which page made the call.
@@ -22272,14 +22273,15 @@ async def api_performer_popup(
     if not (rid_arg or sid_arg or tid_arg or name_arg):
         return JSONResponse({"error": "row_id, stash_id, tpdb_id, or name required"}, status_code=400)
 
+    prefix = "solo_" if standalone else ""
     if rid_arg:
-        cache_key = f"row_{rid_arg}"
+        cache_key = f"{prefix}row_{rid_arg}"
     elif sid_arg:
-        cache_key = f"sb_{_performer_popup_safe_key(sid_arg)}"
+        cache_key = f"{prefix}sb_{_performer_popup_safe_key(sid_arg)}"
     elif tid_arg:
-        cache_key = f"tp_{_performer_popup_safe_key(tid_arg)}"
+        cache_key = f"{prefix}tp_{_performer_popup_safe_key(tid_arg)}"
     else:
-        cache_key = f"nm_{_performer_popup_safe_key(name_arg.lower())}"
+        cache_key = f"{prefix}nm_{_performer_popup_safe_key(name_arg.lower())}"
 
     if not refresh:
         cached = _performer_popup_cache_get(cache_key)
@@ -22287,11 +22289,18 @@ async def api_performer_popup(
             return JSONResponse(cached)
 
     row: dict | None = None
-    if rid_arg:
+    # ``standalone=1`` skips every crosswalk lookup so the popup paints
+    # solely from the source-DB data the caller already has. Used by
+    # the group-members modal: clicking a member tile must show that
+    # member's standalone profile even though the parent group's
+    # group_ids_json contains the same id and would otherwise resolve
+    # the click back to the group row.
+    bypass_library = bool(standalone)
+    if rid_arg and not bypass_library:
         r = db.favourite_get(rid_arg)
         if r and r.get("kind") == "performer":
             row = dict(r)
-    if not row and sid_arg:
+    if not row and sid_arg and not bypass_library:
         r = db.favourite_find_performer_folder_by_crosswalk(None, sid_arg, sid_arg)
         if r:
             full = db.favourite_get(int(r["id"]))
@@ -22305,13 +22314,13 @@ async def api_performer_popup(
                 full = db.favourite_get(int(r["id"]))
                 if full and full.get("kind") == "performer":
                     row = dict(full)
-    if not row and tid_arg:
+    if not row and tid_arg and not bypass_library:
         r = db.favourite_find_performer_folder_by_crosswalk(tid_arg, None, None)
         if r:
             full = db.favourite_get(int(r["id"]))
             if full and full.get("kind") == "performer":
                 row = dict(full)
-    if not row and name_arg:
+    if not row and name_arg and not bypass_library:
         r = db.favourite_lookup_performer_by_name(name_arg)
         if not r:
             r = db.favourite_lookup_performer_by_alias(name_arg)

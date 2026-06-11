@@ -587,7 +587,7 @@
     if (typeof window.tsLoadWantedKeys === 'function') {
       window.tsLoadWantedKeys();
     }
-    _activeOpts = { libraryRowId: opts.libraryRowId, stashId: opts.stashId, tpdbId: opts.tpdbId, name: opts.name };
+    _activeOpts = { libraryRowId: opts.libraryRowId, stashId: opts.stashId, tpdbId: opts.tpdbId, name: opts.name, standalone: !!opts.standalone };
     if (!opts._refresh) _selectedFolderName = '';
 
     // Reset cells to skeleton state (unless this is a soft refresh).
@@ -604,6 +604,7 @@
     if (opts.tpdbId)  params.set('tpdb_id', String(opts.tpdbId));
     if (opts.name) params.set('name', String(opts.name));
     if (opts._refresh) params.set('refresh', '1');
+    if (opts.standalone) params.set('standalone', '1');
 
     let data;
     try {
@@ -2398,17 +2399,23 @@
     div.style.setProperty('z-index', '1800', 'important');
     div.innerHTML = `
       <div class="modal-box ts-link-modal-box performer-link-search-box"
-           style="max-width:760px;width:min(760px,calc(100vw - 60px));max-height:calc(100vh - 80px);display:flex;flex-direction:column">
-        <h3 id="performerLinkSearchTitle" style="margin:0 0 6px 0;font-family:var(--font-display, var(--mono));font-size:18px">Link DB profile</h3>
-        <div id="performerLinkSearchSub" style="font-size:11px;color:var(--dim);margin-bottom:12px">
-          Search the source databases for additional performer profiles. Each pick adds an ID to this group so scenes and Prowlarr searches fan out across every member.
+           style="max-width:760px;width:min(760px,calc(100vw - 60px));max-height:calc(100vh - 80px);min-height:min(520px,calc(100vh - 80px));display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <h3 id="performerLinkSearchTitle"
+              style="margin:0;font-family:var(--font-display, var(--mono));font-size:18px;flex:1"
+              title="Search the source databases for additional performer profiles. Each pick adds an ID to this group so scenes and Prowlarr searches fan out across every member.">Link DB profile</h3>
+          <button type="button" id="performerLinkSearchInfoBtn" aria-label="What does this do?"
+                  title="Search the source databases for additional performer profiles. Each pick adds an ID to this group so scenes and Prowlarr searches fan out across every member."
+                  style="background:transparent;border:1px solid rgba(255,255,255,0.15);color:var(--dim);width:26px;height:26px;border-radius:50%;cursor:default;display:inline-flex;align-items:center;justify-content:center">
+            <i class="fa-solid fa-info" style="font-size:11px"></i>
+          </button>
         </div>
         <input type="search" id="performerLinkSearchInput"
                placeholder="Search TPDB · StashDB · FansDB · JAVStash…"
                autocomplete="off"
                style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text);padding:8px 12px;font-size:13px;font-family:var(--mono);outline:none;margin-bottom:10px">
         <div id="performerLinkSearchStatus" style="font-size:11px;color:var(--dim);margin-bottom:8px"></div>
-        <div id="performerLinkSearchResults" style="flex:1 1 0;min-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+        <div id="performerLinkSearchResults" style="flex:1 1 0;min-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
         <div class="ts-link-modal-foot" style="display:flex;justify-content:flex-end;margin-top:12px">
           <button type="button" id="performerLinkSearchCloseBtn"
                   style="background:transparent;border:1px solid rgba(255,255,255,0.15);color:var(--dim);padding:8px 16px;border-radius:6px;font-size:11px;font-family:var(--mono);cursor:pointer;text-transform:uppercase;letter-spacing:0.04em">Close</button>
@@ -2454,10 +2461,11 @@
     _perfLinkSearchRowId = Number(rowId);
     _perfLinkSearchName  = String(name || '');
     const div = document.getElementById('performerLinkSearchModal');
-    const sub = document.getElementById('performerLinkSearchSub');
-    if (sub && _perfLinkSearchName) {
-      sub.innerHTML = 'Search the source databases for additional profiles to fold under <strong>'
-        + ESC(_perfLinkSearchName) + '</strong>. Scenes whose performer matches any linked ID will file under this group folder.';
+    const title = div.querySelector('#performerLinkSearchTitle');
+    if (title) {
+      title.textContent = _perfLinkSearchName
+        ? `Link DB profile → ${_perfLinkSearchName}`
+        : 'Link DB profile';
     }
     const input = div.querySelector('#performerLinkSearchInput');
     if (input) {
@@ -2731,19 +2739,29 @@
     const grid = document.getElementById('performerGroupMembersGrid');
     if (!grid) return;
     const tiles = members.map((m, i) => {
-      const displayName = m.name || (m._id ? `${SOURCE_LABEL[m._source] || ''} · ${m._id}` : 'Unnamed');
-      const initial = (m.name || displayName).trim().charAt(0).toUpperCase() || '?';
+      // Truncate raw uuid orphans so the chip doesn't overflow its grid
+      // cell when no name has resolved yet. Full id stays in the title
+      // tooltip for the curious.
+      const shortId = (s) => {
+        const v = String(s || '');
+        return v.length > 12 ? v.slice(0, 8) + '…' : v;
+      };
+      const displayName = m.name
+        || (m._id ? `${SOURCE_LABEL[m._source] || ''} · ${shortId(m._id)}` : 'Unnamed');
+      const fullTitle = m.name
+        || (m._id ? `${SOURCE_LABEL[m._source] || ''} · ${m._id}` : 'Unnamed');
+      const initial = (m.name || (SOURCE_LABEL[m._source] || '')).trim().charAt(0).toUpperCase() || '?';
       const srcChips = ['tpdb','stashdb','fansdb','javstash']
         .filter((s) => m.ids[s])
         .map((s) => `<img class="pp-member-src-logo" src="/static/logos/${s}.webp" alt="${SOURCE_LABEL[s]}" title="${SOURCE_LABEL[s]} · ${ESC(m.ids[s])}" onerror="this.replaceWith(document.createTextNode('${SOURCE_LABEL[s]}'))">`)
         .join('');
-      return `<div class="pp-member-tile" data-member-i="${i}">
+      return `<div class="pp-member-tile" data-member-i="${i}" title="${ESC(fullTitle)}">
         <button type="button" class="pp-member-tile-remove" data-action="remove"
-                title="Remove ${ESC(displayName)} from this group" aria-label="Remove member">
+                title="Remove from group" aria-label="Remove member">
           <i class="fa-solid fa-xmark"></i>
         </button>
         <button type="button" class="pp-member-tile-main" data-action="open"
-                title="Open ${ESC(displayName)}'s profile">
+                title="Open profile">
           <span class="pp-member-tile-avatar">
             ${m.image
               ? `<img src="${ESC(m.image)}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'pp-member-tile-initial',textContent:'${ESC(initial)}'}))">`
@@ -2754,7 +2772,7 @@
         </button>
         <div class="pp-member-tile-actions">
           <button type="button" class="pp-member-tile-action" data-action="add-link"
-                  title="Add another DB profile to ${ESC(displayName)}">
+                  title="Link another DB profile to this member">
             <i class="fa-solid fa-link"></i> Add DB link
           </button>
         </div>
@@ -2871,8 +2889,10 @@
   function openMemberPopup(member) {
     // Resolve the best source+id pair for opening the member's
     // standalone popup. TPDB takes priority because it's the most
-    // commonly populated; falls through to other sources.
-    const opts = { name: member.name || '' };
+    // commonly populated; falls through to other sources. `standalone`
+    // tells the backend to skip every library crosswalk so the click
+    // doesn't bounce back to the group row that owns this id.
+    const opts = { name: member.name || '', standalone: true };
     if (member.ids.tpdb)        opts.tpdbId = member.ids.tpdb;
     else if (member.ids.stashdb)  opts.stashId = member.ids.stashdb;
     else if (member.ids.fansdb)   opts.stashId = member.ids.fansdb;

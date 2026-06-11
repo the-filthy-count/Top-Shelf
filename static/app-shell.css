@@ -5960,6 +5960,10 @@ button.pp-name-group:hover .pp-name-group-count {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* Source DBs frequently return full-body promo shots — pin the
+   * focal point to the upper portion of the image so faces aren't
+   * clipped off the top of the circle. */
+  object-position: 50% 12%;
 }
 .pp-member-tile-initial {
   font-family: var(--mono);
@@ -5970,10 +5974,14 @@ button.pp-name-group:hover .pp-name-group-count {
   font-size: 13px;
   color: var(--text);
   font-weight: 600;
+  width: 100%;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* For long ids we still want the tile to stay inside its grid cell. */
+  padding: 0 4px;
+  box-sizing: border-box;
 }
 .pp-member-tile-srcs {
   display: inline-flex;
