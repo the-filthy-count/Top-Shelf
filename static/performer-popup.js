@@ -1250,15 +1250,15 @@
           <i class="fa-regular fa-bookmark"></i>
         </button>`;
     }
+    // Group glyph sits next to the name when this row was promoted to
+    // a group folder (is_group=1). Title attribute calls out the
+    // member count so the reader doesn't need to open the hamburger.
+    const isGroup = !!lib.is_group;
     // Groups don't carry their own DB identity — the per-source pill
     // row would always be "missing" because matches live on individual
     // members. Skip it entirely; the group badge → members modal owns
     // the per-member DB link workflow.
     const pillsHtml = isGroup ? '' : buildProfilePillsHtml(data);
-    // Group glyph sits next to the name when this row was promoted to
-    // a group folder (is_group=1). Title attribute calls out the
-    // member count so the reader doesn't need to open the hamburger.
-    const isGroup = !!lib.is_group;
     let groupBadge = '';
     if (isGroup) {
       const gids = id.group_ids || {};
