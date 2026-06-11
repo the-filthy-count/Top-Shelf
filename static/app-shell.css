@@ -5819,6 +5819,24 @@ body .app .lib-disk-chart-wrap {
   color: var(--text);
   transform: scale(1.06);
 }
+/* Group-folder indicator next to the performer name. Compact pill so
+ * it sits the same height as the age coin / fav / lock buttons but
+ * with the brand purple treatment to call out "this is a group". */
+.pp-name-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(var(--brand-purple-rgb), 0.18);
+  border: 1px solid rgba(var(--brand-purple-rgb), 0.55);
+  color: var(--accent);
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+  cursor: default;
+}
 .pp-name-action.is-on { color: var(--accent); border-color: rgba(var(--brand-accent-rgb), 0.55); background: rgba(var(--brand-accent-rgb), 0.14); }
 .pp-name-action.is-locked { color: #fbbf24; border-color: rgba(251, 191, 36, 0.55); background: rgba(251, 191, 36, 0.12); }
 .pp-name-action--add {

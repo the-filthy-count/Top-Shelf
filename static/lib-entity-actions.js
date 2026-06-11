@@ -862,6 +862,22 @@
     return true;
   }
 
+  /** Open the performer popup's "Link DB profile" search modal. Mirrors
+   * the studio "Link other studios" picker: searches TPDB/StashDB/
+   * FansDB/JAVStash for performers and appends each picked id to the
+   * row's group_ids_json. The popup carousel then fans out across the
+   * new id on its next render and /queue scenes carrying any of those
+   * ids file under this group folder via favourite_find_performer_dir_via_library_index. */
+  async function linkPerformerDbProfile(ctx) {
+    if (!ctx || ctx.kind !== 'performer' || ctx.id <= 0) return false;
+    if (typeof window.openPerformerLinkSearchModal !== 'function') {
+      toast('Performer link search not loaded', { kind: 'error' });
+      return false;
+    }
+    window.openPerformerLinkSearchModal(ctx.id, ctx.name || '');
+    return true;
+  }
+
   function closeMenu(menuEl) {
     if (menuEl) menuEl.classList.remove('open');
   }
@@ -876,12 +892,18 @@
       );
       if (ctx.isGroup) {
         // Already a group: offer to add more members or to dissolve.
+        // "Link DB profile" mirrors the studio popup's "Link other
+        // studios" — search the source DBs and append the picked
+        // performer's id to group_ids_json, so the popup carousel
+        // pulls scenes from that profile too and a /queue file step
+        // hitting the same id routes here automatically.
         // Ungroup is destructive (deletes the row + folder, sends
         // every video back to the queue) so the confirmation step
         // lives in the handler.
         items.push(
-          { action: 'group-add', label: 'Add another performer…', icon: 'fa-user-plus' },
-          { action: 'ungroup',   label: 'Ungroup',                 icon: 'fa-user-minus' },
+          { action: 'group-add',  label: 'Add another performer…', icon: 'fa-user-plus' },
+          { action: 'group-link', label: 'Link DB profile…',       icon: 'fa-link' },
+          { action: 'ungroup',    label: 'Ungroup',                icon: 'fa-user-minus' },
         );
       } else {
         // Solo row: launch the merge picker to fold this performer
@@ -953,9 +975,10 @@
           else if (action === 'enrich') ok = await enrichPerformer(ctx);
           else if (action === 'rename') ok = await renamePerformer(ctx);
           else if (action === 'studio-aliases') ok = await editStudioAliases(ctx);
-          else if (action === 'merge')     ok = await openPerformerMergeModal(ctx, 'merge');
-          else if (action === 'group-add') ok = await openPerformerMergeModal(ctx, 'group-add');
-          else if (action === 'ungroup')   ok = await ungroupPerformer(ctx);
+          else if (action === 'merge')      ok = await openPerformerMergeModal(ctx, 'merge');
+          else if (action === 'group-add')  ok = await openPerformerMergeModal(ctx, 'group-add');
+          else if (action === 'group-link') ok = await linkPerformerDbProfile(ctx);
+          else if (action === 'ungroup')    ok = await ungroupPerformer(ctx);
           else if (action === 'remove') ok = await removeFromLibrary(ctx);
           else if (action === 'delete') ok = await deleteFromDisk(ctx);
           else if (action === 'move') ok = await changeDirectory(ctx);
@@ -965,13 +988,14 @@
               && action !== 'studio-aliases'
               && action !== 'merge'
               && action !== 'group-add'
+              && action !== 'group-link'
               && action !== 'ungroup'
               && typeof onDone === 'function') onDone(action);
-          // studio-aliases / merge / group-add trigger an in-place popup
-          // refresh from their own handlers (so the user stays on the
-          // performer they were editing) — onDone() would close it.
-          // ungroup destroys the row entirely, so it closes the popup
-          // itself.
+          // studio-aliases / merge / group-add / group-link trigger an
+          // in-place popup refresh from their own handlers (so the user
+          // stays on the performer they were editing) — onDone() would
+          // close it. ungroup destroys the row entirely, so it closes
+          // the popup itself.
         } catch (err) {
           toast(err.message || 'Action failed', { kind: 'error' });
         }
@@ -998,6 +1022,7 @@
     changeDirectory,
     renamePerformer,
     editStudioAliases,
+    linkPerformerDbProfile,
     openPerformerMergeModal,
     ungroupPerformer,
   };

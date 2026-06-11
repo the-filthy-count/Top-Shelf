@@ -1231,6 +1231,24 @@
         </button>`;
     }
     const pillsHtml = buildProfilePillsHtml(data);
+    // Group glyph sits next to the name when this row was promoted to
+    // a group folder (is_group=1). Title attribute calls out the
+    // member count so the reader doesn't need to open the hamburger.
+    const isGroup = !!lib.is_group;
+    let groupBadge = '';
+    if (isGroup) {
+      const gids = id.group_ids || {};
+      let memberCount = 0;
+      ['tpdb', 'stashdb', 'fansdb', 'javstash'].forEach((src) => {
+        memberCount += ((gids[src] || []).length) || 0;
+      });
+      const tip = memberCount
+        ? `Group folder · ${memberCount} linked profile${memberCount === 1 ? '' : 's'}`
+        : 'Group folder';
+      groupBadge = `<span class="pp-name-group" aria-label="${ESC(tip)}" title="${ESC(tip)}">
+        <i class="fa-solid fa-people-group"></i>
+      </span>`;
+    }
     // Don't blow away the toolbar (which is now a permanent flex
     // child of the header). Replace only the name + pills slots,
     // creating them on first render.
@@ -1243,6 +1261,7 @@
     nameEl.innerHTML = `
       <span class="pp-lib-entity-actions"></span>
       <span class="pp-name-text">${ESC(id.canonical_name || 'Unknown')}</span>
+      ${groupBadge}
       ${flag}
       ${ageHtml}
       ${nameIcons}`;
@@ -1560,7 +1579,11 @@
     // group_ids_json shouldn't cost an extra round-trip.
     const idSets = { tpdb: new Set(), stashdb: new Set(), fansdb: new Set(), javstash: new Set() };
     const pushId = (src, v) => {
-      const s = String(v || '').trim();
+      // ``v`` may be a bare string (legacy) or ``{id, name, image}`` —
+      // both shapes coexist in group_ids_json since the "Link DB
+      // profile" picker started writing rich entries. Coerce to the id.
+      const raw = (v && typeof v === 'object') ? (v.id || '') : v;
+      const s = String(raw || '').trim();
       if (s) idSets[src].add(s);
     };
     pushId('tpdb',     id.tpdb_id);
@@ -2262,5 +2285,196 @@
         <i class="fa-solid fa-download"></i>
       </span>
     </div>`;
+  }
+
+  /* ── "Link DB profile" search modal ─────────────────────────────
+   * Mirrors studio-popup.js's openStudioLinkSearchModal. Lets the user
+   * search TPDB / StashDB / FansDB / JAVStash for additional performer
+   * profiles and append each pick to the row's group_ids_json. The
+   * popup carousel then fans out scenes across the new id, and /queue
+   * scenes carrying that id route here automatically via the library
+   * index lookup. */
+  let _perfLinkSearchToken  = 0;
+  let _perfLinkSearchRowId  = null;
+  let _perfLinkSearchName   = '';
+  let _perfLinkSearchResults = [];
+
+  function ensurePerformerLinkSearchModal() {
+    if (document.getElementById('performerLinkSearchModal')) return;
+    const div = document.createElement('div');
+    div.id = 'performerLinkSearchModal';
+    div.className = 'modal-overlay';
+    // Sit above the performer popup (which is z=1500ish).
+    div.style.setProperty('z-index', '1800', 'important');
+    div.innerHTML = `
+      <div class="modal-box ts-link-modal-box performer-link-search-box"
+           style="max-width:760px;width:min(760px,calc(100vw - 60px));max-height:calc(100vh - 80px);display:flex;flex-direction:column">
+        <h3 id="performerLinkSearchTitle" style="margin:0 0 6px 0;font-family:var(--font-display, var(--mono));font-size:18px">Link DB profile</h3>
+        <div id="performerLinkSearchSub" style="font-size:11px;color:var(--dim);margin-bottom:12px">
+          Search the source databases for additional performer profiles. Each pick adds an ID to this group so scenes and Prowlarr searches fan out across every member.
+        </div>
+        <input type="search" id="performerLinkSearchInput"
+               placeholder="Search TPDB · StashDB · FansDB · JAVStash…"
+               autocomplete="off"
+               style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text);padding:8px 12px;font-size:13px;font-family:var(--mono);outline:none;margin-bottom:10px">
+        <div id="performerLinkSearchStatus" style="font-size:11px;color:var(--dim);margin-bottom:8px"></div>
+        <div id="performerLinkSearchResults" style="flex:1 1 0;min-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+        <div class="ts-link-modal-foot" style="display:flex;justify-content:flex-end;margin-top:12px">
+          <button type="button" id="performerLinkSearchCloseBtn"
+                  style="background:transparent;border:1px solid rgba(255,255,255,0.15);color:var(--dim);padding:8px 16px;border-radius:6px;font-size:11px;font-family:var(--mono);cursor:pointer;text-transform:uppercase;letter-spacing:0.04em">Close</button>
+        </div>
+      </div>`;
+    document.body.appendChild(div);
+    div.addEventListener('click', (e) => {
+      if (e.target === div) closePerformerLinkSearchModal();
+    });
+    div.querySelector('#performerLinkSearchCloseBtn').addEventListener('click', closePerformerLinkSearchModal);
+    const input = div.querySelector('#performerLinkSearchInput');
+    let debTimer = null;
+    input.addEventListener('input', () => {
+      if (debTimer) clearTimeout(debTimer);
+      debTimer = setTimeout(() => runPerformerLinkSearch(input.value), 250);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closePerformerLinkSearchModal();
+    });
+  }
+
+  function openPerformerLinkSearchModal(rowId, name) {
+    if (!rowId) return;
+    ensurePerformerLinkSearchModal();
+    _perfLinkSearchRowId = Number(rowId);
+    _perfLinkSearchName  = String(name || '');
+    const div = document.getElementById('performerLinkSearchModal');
+    const sub = document.getElementById('performerLinkSearchSub');
+    if (sub && _perfLinkSearchName) {
+      sub.innerHTML = 'Search the source databases for additional profiles to fold under <strong>'
+        + ESC(_perfLinkSearchName) + '</strong>. Scenes whose performer matches any linked ID will file under this group folder.';
+    }
+    const input = div.querySelector('#performerLinkSearchInput');
+    if (input) {
+      input.value = _perfLinkSearchName || '';
+      setTimeout(() => input.focus(), 0);
+    }
+    document.getElementById('performerLinkSearchResults').innerHTML = '';
+    document.getElementById('performerLinkSearchStatus').textContent = '';
+    div.style.display = 'flex';
+    div.classList.add('open');
+    if (_perfLinkSearchName) runPerformerLinkSearch(_perfLinkSearchName);
+  }
+  window.openPerformerLinkSearchModal = openPerformerLinkSearchModal;
+
+  function closePerformerLinkSearchModal() {
+    const div = document.getElementById('performerLinkSearchModal');
+    if (!div) return;
+    div.classList.remove('open');
+    div.style.display = '';
+    _perfLinkSearchToken++;  // invalidate any in-flight fetches
+  }
+
+  async function runPerformerLinkSearch(q) {
+    const query = String(q || '').trim();
+    const status  = document.getElementById('performerLinkSearchStatus');
+    const results = document.getElementById('performerLinkSearchResults');
+    if (!status || !results) return;
+    if (!query) {
+      status.textContent = '';
+      results.innerHTML = '';
+      return;
+    }
+    status.textContent = 'Searching…';
+    results.innerHTML = '';
+    const token = ++_perfLinkSearchToken;
+    try {
+      // strict=0 so a partial query still surfaces hits — the picker
+      // wants the user to find candidates by typing part of a name.
+      const r = await fetch('/api/metadata/search?type=performer&strict=0&q=' + encodeURIComponent(query), {
+        credentials: 'same-origin',
+      });
+      const d = await r.json().catch(() => ({}));
+      if (token !== _perfLinkSearchToken) return;
+      if (!r.ok) {
+        status.textContent = d.error || ('HTTP ' + r.status);
+        return;
+      }
+      const items = Array.isArray(d.results) ? d.results : [];
+      if (!items.length) {
+        status.textContent = 'No matches';
+        return;
+      }
+      status.textContent = `${items.length} match${items.length === 1 ? '' : 'es'}`;
+      _perfLinkSearchResults = items;
+      results.innerHTML = items.map((it, i) => {
+        const src   = (it.source || '').toUpperCase();
+        const nm    = it.name || '';
+        const id    = String(it.id || '');
+        const img   = it.image || '';
+        const initial = nm.trim().charAt(0).toUpperCase() || '?';
+        return `<button type="button" class="performer-link-search-row"
+                        data-i="${i}"
+                        style="display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);cursor:pointer;text-align:left;color:var(--text);font-family:inherit"
+                        onmouseover="this.style.background='rgba(255,255,255,0.06)'"
+                        onmouseout="this.style.background='rgba(255,255,255,0.02)'">
+          <div style="width:48px;height:48px;border-radius:6px;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">
+            ${img
+              ? `<img src="${ESC(img)}" alt="" referrerpolicy="no-referrer" style="max-width:100%;max-height:100%;object-fit:cover;width:100%;height:100%" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${ESC(initial)}',style:'font-family:var(--mono);font-size:18px;color:var(--dim)'}))">`
+              : `<span style="font-family:var(--mono);font-size:18px;color:var(--dim)">${ESC(initial)}</span>`}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ESC(nm)}</div>
+            <div style="font-size:10px;color:var(--dim);margin-top:2px">${ESC(src)} · ${ESC(id)}</div>
+          </div>
+          <i class="fa-solid fa-link" style="color:var(--accent);font-size:13px"></i>
+        </button>`;
+      }).join('');
+      results.querySelectorAll('.performer-link-search-row').forEach((btn) => {
+        btn.addEventListener('click', () => linkPickedPerformer(parseInt(btn.dataset.i, 10)));
+      });
+    } catch (e) {
+      if (token !== _perfLinkSearchToken) return;
+      status.textContent = e.message || 'Search failed';
+    }
+  }
+
+  async function linkPickedPerformer(idx) {
+    const it = _perfLinkSearchResults[idx];
+    if (!it || !_perfLinkSearchRowId) return;
+    const source = (it.source || '').toLowerCase();
+    // The metadata search returns TheporndB labelled "TPDB" already,
+    // but accept the long form too for safety.
+    const siteKey = source === 'theporndb' ? 'tpdb' : source;
+    if (!['tpdb', 'stashdb', 'fansdb', 'javstash'].includes(siteKey)) {
+      if (window.toast) window.toast('Unknown source: ' + source, { kind: 'error' });
+      return;
+    }
+    try {
+      const r = await fetch('/api/favourites/group-add-link', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          row_id: _perfLinkSearchRowId,
+          source: siteKey,
+          ext_id: String(it.id || ''),
+          name:   it.name || '',
+          image:  it.image || '',
+        }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        if (window.toast) window.toast(d.error || 'Link failed', { kind: 'error' });
+        return;
+      }
+      if (window.toast) {
+        window.toast(`Linked ${it.name || it.id} to ${_perfLinkSearchName || 'this group'}`);
+      }
+      closePerformerLinkSearchModal();
+      if (typeof window.refreshPerformerPopup === 'function'
+          && window._performerPopupActiveId === _perfLinkSearchRowId) {
+        window.refreshPerformerPopup();
+      }
+    } catch (e) {
+      if (window.toast) window.toast(e.message || 'Link failed', { kind: 'error' });
+    }
   }
 })();

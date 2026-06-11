@@ -670,10 +670,9 @@
   function srcLogoHtml(key, label) {
     // Reuse the performer-popup pill logo class so the studio header
     // pills are the same compact size (16px tall) as on the performer
-    // popup. The bare ``.pp-profile-pill`` styling alone leaves the
-    // contained <img> at intrinsic resolution — hence the previous
-    // gigantic logos.
-    const file = key + '.png';
+    // popup. Files in /static/logos/ ship as .webp — the old .png
+    // suffix here resolved to a 404 and the pills fell back to text.
+    const file = key + '.webp';
     return `<img class="pp-src-logo" src="/static/logos/${ESC(file)}" alt="${ESC(label)}" title="${ESC(label)}" onerror="this.replaceWith(document.createTextNode('${ESC(label)}'))">`;
   }
 
