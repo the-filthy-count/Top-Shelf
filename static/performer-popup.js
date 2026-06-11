@@ -2672,6 +2672,57 @@
     renderGroupMembersGrid(members);
     div.style.display = 'flex';
     div.classList.add('open');
+
+    // If any orphan (bare-id) members exist, transparently fire the
+    // backend enrich endpoint so their names + images get filled in.
+    // The re-render then collapses ones with the same resolved name
+    // into a single tile (legacy 4-orphan groups become 2 tiles once
+    // both members are recognised across TPDB + StashDB).
+    const hasOrphans = members.some((m) => !m.name);
+    if (hasOrphans) {
+      maybeEnrichGroupMembers();
+    }
+  }
+
+  /** Background-fire the enrich endpoint for the active group. While
+   * in flight, show a small status line so the user knows tiles will
+   * repaint. Re-renders the grid on completion (collapsed by name). */
+  async function maybeEnrichGroupMembers() {
+    if (!_groupMembersRowId) return;
+    const div = document.getElementById('performerGroupMembersModal');
+    if (!div || !div.classList.contains('open')) return;
+    const hint = div.querySelector('#performerGroupMembersHint');
+    const priorHint = hint ? hint.innerHTML : '';
+    if (hint) {
+      hint.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i> Resolving member names from source DBs…';
+    }
+    try {
+      const r = await fetch('/api/favourites/group-enrich-members', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ row_id: _groupMembersRowId }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        if (hint) hint.innerHTML = priorHint;
+        return;
+      }
+      const groupIds = (d && d.group_ids) || {};
+      const refreshed = deriveGroupMembers(groupIds);
+      // Modal could be closed by the time the fetch returns.
+      if (!div.classList.contains('open')) return;
+      if (hint) hint.innerHTML = priorHint;
+      renderGroupMembersGrid(refreshed);
+      // Repaint the popup behind too so its badge count reflects the
+      // post-dedupe member count.
+      if (typeof window.refreshPerformerPopup === 'function'
+          && window._performerPopupActiveId === _groupMembersRowId) {
+        window.refreshPerformerPopup();
+      }
+    } catch (_) {
+      if (hint) hint.innerHTML = priorHint;
+    }
   }
 
   const SOURCE_LABEL = { tpdb: 'TPDB', stashdb: 'StashDB', fansdb: 'FansDB', javstash: 'JAVStash' };

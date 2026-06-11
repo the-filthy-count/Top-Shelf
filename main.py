@@ -21265,6 +21265,107 @@ async def api_favourites_group_remove_link(payload: dict = Body(...)):
     return {"ok": True, "group_ids": data}
 
 
+@app.post("/api/favourites/group-enrich-members")
+async def api_favourites_group_enrich_members(payload: dict = Body(...)):
+    """Look up name + image for every bare-id entry in a row's
+    group_ids_json and upgrade it in place to the rich
+    ``{id, name, image}`` shape. The merge / group-add flow stored
+    plain strings, so existing groups render as nameless orphan tiles
+    until something fills in the metadata — this is the something.
+
+    Walks each source's id list, calls :func:`fetch_performer_detail`,
+    keeps the first image url if any, and writes back via the existing
+    :func:`db.favourite_group_add_id` upgrade path (same ID with
+    name/image supplied = bare entry promoted in place). Returns the
+    refreshed group_ids dict so the client can re-render without a
+    second round-trip.
+    """
+    try:
+        row_id = int(payload.get("row_id") or 0)
+    except (TypeError, ValueError):
+        row_id = 0
+    if not row_id:
+        return JSONResponse({"error": "row_id required"}, status_code=400)
+    row = db.favourite_get(row_id)
+    if not row:
+        return JSONResponse({"error": "row not found"}, status_code=404)
+    if int(row.get("is_group") or 0) != 1:
+        return JSONResponse({"error": "row is not a group"}, status_code=400)
+    raw = (row.get("group_ids_json") or "").strip()
+    if not raw:
+        return {"ok": True, "group_ids": {"tpdb": [], "stashdb": [], "fansdb": [], "javstash": []}, "upgraded": 0}
+    try:
+        parsed = json.loads(raw) or {}
+    except (json.JSONDecodeError, TypeError):
+        return JSONResponse({"error": "group_ids_json malformed"}, status_code=500)
+
+    SOURCE_MAP = {"tpdb": "TPDB", "stashdb": "StashDB", "fansdb": "FansDB", "javstash": "JAVStash"}
+    upgraded = 0
+    for src_key, label in SOURCE_MAP.items():
+        for entry in (parsed.get(src_key) or []):
+            if isinstance(entry, dict):
+                # Already rich, but if name is empty we still want to
+                # fill it in — the studio popup writes nm="" when the
+                # search row had no name. Only skip if both are present.
+                if entry.get("name") and entry.get("image"):
+                    continue
+                xid = str(entry.get("id") or "").strip()
+            else:
+                xid = str(entry or "").strip()
+            if not xid:
+                continue
+            try:
+                detail = fetch_performer_detail(label, xid)
+            except Exception as e:
+                emit(f"group-enrich-members: {label} {xid} failed: {e}")
+                detail = None
+            if not detail:
+                continue
+            new_name = str(detail.get("name") or "").strip()
+            # Pull the first image URL from whatever shape the source returned.
+            img_url = ""
+            images = detail.get("images") or []
+            if isinstance(images, list) and images:
+                first = images[0]
+                if isinstance(first, dict):
+                    img_url = str(first.get("url") or "").strip()
+                else:
+                    img_url = str(first or "").strip()
+            if not new_name and not img_url:
+                continue
+            try:
+                db.favourite_group_add_id(row_id, src_key, xid, name=new_name or None, image=img_url or None)
+                upgraded += 1
+            except ValueError:
+                continue
+
+    # Re-read so we return the final state to the client.
+    fresh = db.favourite_get(row_id) or {}
+    raw2 = (fresh.get("group_ids_json") or "").strip()
+    out: dict[str, list[dict]] = {"tpdb": [], "stashdb": [], "fansdb": [], "javstash": []}
+    if raw2:
+        try:
+            parsed2 = json.loads(raw2) or {}
+        except (json.JSONDecodeError, TypeError):
+            parsed2 = {}
+        if isinstance(parsed2, dict):
+            for k in ("tpdb", "stashdb", "fansdb", "javstash"):
+                rich: list[dict] = []
+                for x in (parsed2.get(k) or []):
+                    if isinstance(x, dict):
+                        rich.append({
+                            "id":    str(x.get("id") or "").strip(),
+                            "name":  str(x.get("name") or "").strip(),
+                            "image": str(x.get("image") or "").strip(),
+                        })
+                    else:
+                        rich.append({"id": str(x or "").strip(), "name": "", "image": ""})
+                out[k] = [r for r in rich if r["id"]]
+    if upgraded:
+        _favourites_name_index_bump()
+    return {"ok": True, "group_ids": out, "upgraded": upgraded}
+
+
 # ── Performer merge / group-add / ungroup ────────────────────────────
 #
 # Workflow:
