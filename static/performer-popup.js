@@ -1275,7 +1275,7 @@
       // point stays consistent regardless of group state.
       groupBadge = `<button type="button" class="pp-name-group" data-pp-open-members="1"
               aria-label="${ESC(tip)}" title="${ESC(tip)}">
-        <i class="fa-solid fa-people-group"></i>
+        <i class="fa-solid fa-users"></i>
         <span class="pp-name-group-count">${memberCount}</span>
       </button>`;
     }
