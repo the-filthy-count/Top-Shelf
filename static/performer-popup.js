@@ -2751,10 +2751,16 @@
       const fullTitle = m.name
         || (m._id ? `${SOURCE_LABEL[m._source] || ''} · ${m._id}` : 'Unnamed');
       const initial = (m.name || (SOURCE_LABEL[m._source] || '')).trim().charAt(0).toUpperCase() || '?';
-      const srcChips = ['tpdb','stashdb','fansdb','javstash']
-        .filter((s) => m.ids[s])
-        .map((s) => `<img class="pp-member-src-logo" src="/static/logos/${s}.webp" alt="${SOURCE_LABEL[s]}" title="${SOURCE_LABEL[s]} · ${ESC(m.ids[s])}" onerror="this.replaceWith(document.createTextNode('${SOURCE_LABEL[s]}'))">`)
-        .join('');
+      // Named members are people, not DB links — the source the id came
+      // from is implementation detail. Only render the source row for
+      // orphan tiles where the (source · id) tuple is the only label.
+      const hasName = !!m.name;
+      const srcChips = hasName
+        ? ''
+        : ['tpdb','stashdb','fansdb','javstash']
+            .filter((s) => m.ids[s])
+            .map((s) => `<img class="pp-member-src-logo" src="/static/logos/${s}.webp" alt="${SOURCE_LABEL[s]}" title="${SOURCE_LABEL[s]} · ${ESC(m.ids[s])}" onerror="this.replaceWith(document.createTextNode('${SOURCE_LABEL[s]}'))">`)
+            .join('');
       return `<div class="pp-member-tile" data-member-i="${i}" title="${ESC(fullTitle)}">
         <button type="button" class="pp-member-tile-remove" data-action="remove"
                 title="Remove from group" aria-label="Remove member">
@@ -2768,7 +2774,9 @@
               : `<span class="pp-member-tile-initial">${ESC(initial)}</span>`}
           </span>
           <span class="pp-member-tile-name">${ESC(displayName)}</span>
-          <span class="pp-member-tile-srcs">${srcChips || '<span class="pp-member-tile-orphan">orphan ID</span>'}</span>
+          ${hasName
+            ? ''
+            : `<span class="pp-member-tile-srcs">${srcChips || '<span class="pp-member-tile-orphan">orphan ID</span>'}</span>`}
         </button>
         <div class="pp-member-tile-actions">
           <button type="button" class="pp-member-tile-action" data-action="add-link"
