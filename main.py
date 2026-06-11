@@ -21300,13 +21300,14 @@ async def api_favourites_group_enrich_members(payload: dict = Body(...)):
         return JSONResponse({"error": "group_ids_json malformed"}, status_code=500)
 
     SOURCE_MAP = {"tpdb": "TPDB", "stashdb": "StashDB", "fansdb": "FansDB", "javstash": "JAVStash"}
+    REV_SOURCE = {"TPDB": "tpdb", "StashDB": "stashdb", "FansDB": "fansdb", "JAVStash": "javstash"}
     upgraded = 0
+
+    # Phase 1 — resolve any bare-id entry to {id, name, image} via that
+    # source's detail endpoint.
     for src_key, label in SOURCE_MAP.items():
         for entry in (parsed.get(src_key) or []):
             if isinstance(entry, dict):
-                # Already rich, but if name is empty we still want to
-                # fill it in — the studio popup writes nm="" when the
-                # search row had no name. Only skip if both are present.
                 if entry.get("name") and entry.get("image"):
                     continue
                 xid = str(entry.get("id") or "").strip()
@@ -21322,7 +21323,6 @@ async def api_favourites_group_enrich_members(payload: dict = Body(...)):
             if not detail:
                 continue
             new_name = str(detail.get("name") or "").strip()
-            # Pull the first image URL from whatever shape the source returned.
             img_url = ""
             images = detail.get("images") or []
             if isinstance(images, list) and images:
@@ -21335,6 +21335,68 @@ async def api_favourites_group_enrich_members(payload: dict = Body(...)):
                 continue
             try:
                 db.favourite_group_add_id(row_id, src_key, xid, name=new_name or None, image=img_url or None)
+                upgraded += 1
+            except ValueError:
+                continue
+
+    # Phase 2 — for every named member, cross-DB-search by name and
+    # link any other-source profiles we don't already have. So a member
+    # known to TPDB also picks up their StashDB / FansDB / JAVStash
+    # profile automatically, and the per-member popup paints every DB
+    # pill clickable.
+    fresh_row = db.favourite_get(row_id) or {}
+    cur_raw = (fresh_row.get("group_ids_json") or "").strip()
+    cur_parsed: dict = {}
+    if cur_raw:
+        try:
+            cur_parsed = json.loads(cur_raw) or {}
+        except (json.JSONDecodeError, TypeError):
+            cur_parsed = {}
+    members_by_key: dict[str, dict] = {}
+    for src_key in SOURCE_MAP:
+        for entry in (cur_parsed.get(src_key) or []):
+            if not isinstance(entry, dict):
+                continue
+            nm = str(entry.get("name") or "").strip()
+            if not nm:
+                continue
+            key = nm.lower()
+            m = members_by_key.setdefault(key, {"name": nm, "sources": set(), "image": ""})
+            m["sources"].add(src_key)
+            if not m["image"] and entry.get("image"):
+                m["image"] = str(entry.get("image") or "")
+
+    for member in members_by_key.values():
+        missing = [s for s in SOURCE_MAP if s not in member["sources"]]
+        if not missing:
+            continue
+        try:
+            hits = search_performers(member["name"], strict_name_match=True)
+        except Exception as e:
+            emit(f"group-enrich-members cross-search '{member['name']}' failed: {e}")
+            hits = []
+        # First hit per source wins.
+        by_src: dict[str, dict] = {}
+        for h in hits or []:
+            src_raw = str(h.get("source") or "").strip()
+            src_norm = REV_SOURCE.get(src_raw)
+            if not src_norm or src_norm in by_src:
+                continue
+            by_src[src_norm] = h
+        for src_key in missing:
+            hit = by_src.get(src_key)
+            if not hit:
+                continue
+            new_id = str(hit.get("id") or "").strip()
+            if not new_id:
+                continue
+            new_img = str(hit.get("image") or "").strip()
+            try:
+                db.favourite_group_add_id(
+                    row_id, src_key, new_id,
+                    name=member["name"],
+                    image=new_img or None,
+                )
                 upgraded += 1
             except ValueError:
                 continue
@@ -22244,6 +22306,8 @@ async def api_performer_popup(
     row_id: int | None = None,
     stash_id: str | None = None,
     tpdb_id: str | None = None,
+    fansdb_id: str | None = None,
+    javstash_id: str | None = None,
     name: str | None = None,
     refresh: int = 0,
     standalone: int = 0,
@@ -22268,10 +22332,12 @@ async def api_performer_popup(
     """
     rid_arg     = int(row_id) if row_id else None
     sid_arg     = (stash_id or "").strip() or None
+    fans_arg    = (fansdb_id or "").strip() or None
+    jav_id_arg  = (javstash_id or "").strip() or None
     tid_arg     = (tpdb_id or "").strip() or None
     name_arg    = (name or "").strip() or None
-    if not (rid_arg or sid_arg or tid_arg or name_arg):
-        return JSONResponse({"error": "row_id, stash_id, tpdb_id, or name required"}, status_code=400)
+    if not (rid_arg or sid_arg or tid_arg or fans_arg or jav_id_arg or name_arg):
+        return JSONResponse({"error": "row_id, stash_id, tpdb_id, fansdb_id, javstash_id, or name required"}, status_code=400)
 
     prefix = "solo_" if standalone else ""
     if rid_arg:
@@ -22576,10 +22642,10 @@ async def api_performer_popup(
     }
 
     sources_block = {
-        "stashdb": bool((row and row.get("match_stashdb_id")) or (sb_bio and (sb_bio.get("_source") == "StashDB"))),
-        "fansdb":  bool((row and row.get("match_fansdb_id"))  or (sb_bio and (sb_bio.get("_source") == "FansDB"))),
+        "stashdb": bool((row and row.get("match_stashdb_id")) or sid_arg or (sb_bio and (sb_bio.get("_source") == "StashDB"))),
+        "fansdb":  bool((row and row.get("match_fansdb_id"))  or fans_arg or (sb_bio and (sb_bio.get("_source") == "FansDB"))),
         "tpdb":    bool((row and row.get("match_tpdb_id")) or tid_arg),
-        "javstash": bool((row and row.get("match_javstash_id")) or jav_data or (sb_bio and (sb_bio.get("_source") == "JAVStash"))),
+        "javstash": bool((row and row.get("match_javstash_id")) or jav_id_arg or jav_data or (sb_bio and (sb_bio.get("_source") == "JAVStash"))),
         "iafd":    bool(perf_url),
     }
     ext_links: dict = _performer_ext_links_from_row(dict(row), iafd_url=perf_url) if row else {}
@@ -22599,6 +22665,25 @@ async def api_performer_popup(
                 "label": "JAVStash",
                 "url": f"https://javstash.org/performers/{quote(jid, safe='')}",
             }
+    # Standalone-popup fill: when caller supplied a known DB id but no
+    # library row to crosswalk through, build the corresponding pill so
+    # it paints as linked instead of missing. Used by the group-members
+    # modal which knows every linked id for a member.
+    if "stashdb" not in ext_links and sid_arg:
+        ext_links["stashdb"] = {
+            "label": "StashDB",
+            "url": f"https://stashdb.org/performers/{quote(sid_arg, safe='')}",
+        }
+    if "fansdb" not in ext_links and fans_arg:
+        ext_links["fansdb"] = {
+            "label": "FansDB",
+            "url": f"https://fansdb.cc/performers/{quote(fans_arg, safe='')}",
+        }
+    if "javstash" not in ext_links and jav_id_arg:
+        ext_links["javstash"] = {
+            "label": "JAVStash",
+            "url": f"https://javstash.org/performers/{quote(jav_id_arg, safe='')}",
+        }
     if perf_url:
         ext_links["iafd"] = {"label": "IAFD", "url": perf_url}
 
@@ -22616,6 +22701,13 @@ async def api_performer_popup(
         javstash_id_out = javstash_id_out or str(jav_data.get("id") or "").strip() or (
             (sid_arg or "").strip() if not sb_bio else ""
         )
+    # Standalone callers supply each source id explicitly; honour them.
+    if not stash_id_out and sid_arg:
+        stash_id_out = sid_arg
+    if not fansdb_id_out and fans_arg:
+        fansdb_id_out = fans_arg
+    if not javstash_id_out and jav_id_arg:
+        javstash_id_out = jav_id_arg
 
     social_links = _performer_popup_social_links(sb_bio, tpdb_data, jav_data, iafd_meta, ext_links)
 

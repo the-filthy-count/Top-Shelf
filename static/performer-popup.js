@@ -587,7 +587,15 @@
     if (typeof window.tsLoadWantedKeys === 'function') {
       window.tsLoadWantedKeys();
     }
-    _activeOpts = { libraryRowId: opts.libraryRowId, stashId: opts.stashId, tpdbId: opts.tpdbId, name: opts.name, standalone: !!opts.standalone };
+    _activeOpts = {
+      libraryRowId: opts.libraryRowId,
+      stashId: opts.stashId,
+      tpdbId: opts.tpdbId,
+      fansdbId: opts.fansdbId,
+      javstashId: opts.javstashId,
+      name: opts.name,
+      standalone: !!opts.standalone,
+    };
     if (!opts._refresh) _selectedFolderName = '';
 
     // Reset cells to skeleton state (unless this is a soft refresh).
@@ -600,8 +608,10 @@
 
     const params = new URLSearchParams();
     if (opts.libraryRowId) params.set('row_id', String(opts.libraryRowId));
-    if (opts.stashId) params.set('stash_id', String(opts.stashId));
-    if (opts.tpdbId)  params.set('tpdb_id', String(opts.tpdbId));
+    if (opts.stashId)    params.set('stash_id',    String(opts.stashId));
+    if (opts.tpdbId)     params.set('tpdb_id',     String(opts.tpdbId));
+    if (opts.fansdbId)   params.set('fansdb_id',   String(opts.fansdbId));
+    if (opts.javstashId) params.set('javstash_id', String(opts.javstashId));
     if (opts.name) params.set('name', String(opts.name));
     if (opts._refresh) params.set('refresh', '1');
     if (opts.standalone) params.set('standalone', '1');
@@ -2895,19 +2905,23 @@
   }
 
   function openMemberPopup(member) {
-    // Resolve the best source+id pair for opening the member's
-    // standalone popup. TPDB takes priority because it's the most
-    // commonly populated; falls through to other sources. `standalone`
-    // tells the backend to skip every library crosswalk so the click
-    // doesn't bounce back to the group row that owns this id.
+    // Pass EVERY id this member owns so the standalone popup can paint
+    // each DB pill as a clickable linked profile, not a missing-search
+    // affordance. `standalone` tells the backend to skip the library
+    // crosswalk so the click doesn't bounce back to the parent group
+    // row that owns the same ids.
     const opts = { name: member.name || '', standalone: true };
-    if (member.ids.tpdb)        opts.tpdbId = member.ids.tpdb;
-    else if (member.ids.stashdb)  opts.stashId = member.ids.stashdb;
-    else if (member.ids.fansdb)   opts.stashId = member.ids.fansdb;
-    else if (member.ids.javstash) opts.stashId = member.ids.javstash;
-    else if (member._id) {
-      if (member._source === 'tpdb') opts.tpdbId = member._id;
-      else opts.stashId = member._id;
+    if (member.ids.tpdb)     opts.tpdbId     = member.ids.tpdb;
+    if (member.ids.stashdb)  opts.stashId    = member.ids.stashdb;
+    if (member.ids.fansdb)   opts.fansdbId   = member.ids.fansdb;
+    if (member.ids.javstash) opts.javstashId = member.ids.javstash;
+    // Orphan fallback when nothing was clustered: at least open with
+    // the single (source, id) we do know.
+    if (!opts.tpdbId && !opts.stashId && !opts.fansdbId && !opts.javstashId && member._id) {
+      if (member._source === 'tpdb')          opts.tpdbId     = member._id;
+      else if (member._source === 'fansdb')   opts.fansdbId   = member._id;
+      else if (member._source === 'javstash') opts.javstashId = member._id;
+      else                                     opts.stashId   = member._id;
     }
     closeGroupMembersModal();
     if (typeof window.openPerformerPopup === 'function') {

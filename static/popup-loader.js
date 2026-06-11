@@ -24,7 +24,7 @@
   'use strict';
 
   /** Cache-bust token kept in sync with the rest of the static JS. */
-  var V = '20260612j';
+  var V = '20260612k';
 
   /** Per-popup script lists. link-modals.js is shared by both. */
   var SCRIPTS = {
