@@ -363,6 +363,12 @@
     const m = document.getElementById('studioPopupModal');
     if (m.style.display) m.style.display = '';
     m.classList.add('open');
+    // Warm the shared wanted-keys cache so the eye on each scene tile
+    // can paint its `.is-wanted` state on first render. Cheap, fires
+    // once per session.
+    if (typeof window.tsLoadWantedKeys === 'function') {
+      window.tsLoadWantedKeys();
+    }
     _activeRowId = opts.libraryRowId || null;
     _activeName = opts.name || '';
     _activeOpts = { ...opts };
@@ -1034,6 +1040,9 @@
             <i class="fa-solid fa-download" aria-hidden="true"></i>
           </button>`;
         const blacklistBtn = `<button type="button" class="scene-card-blacklist-btn" data-title="${ATTR(title || '')}" onclick="event.stopPropagation();sceneCardBlacklist(this)" title="Blacklist this title" aria-label="Blacklist title"><i class="fa-solid fa-ban"></i></button>`;
+        const wantedBtn = (typeof window.tsBuildWantedBtnHtml === 'function')
+          ? window.tsBuildWantedBtnHtml(s, 'scene')
+          : '';
         return `<div class="scene-card" tabindex="0" title="${ATTR(title)}">
           <div class="img-load">
             ${img
@@ -1041,6 +1050,7 @@
               : `<div class="scene-static-noise" aria-hidden="true"></div><div class="scene-static-label">NO SIGNAL</div>`}
             ${sourceLink}
             ${prowlarrBtn}
+            ${wantedBtn}
             ${blacklistBtn}
           </div>
           <div class="scene-meta" style="padding:6px 4px">

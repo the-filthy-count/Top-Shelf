@@ -73,100 +73,21 @@
     }).join(' ');
   }
   // ── Wanted-list state ─────────────────────────────────────────────
-  // Set of "${kind}:${source}:${external_id}" keys currently in the
-  // user's Wanted list. Populated once on page load, updated in place
-  // when the user toggles the eye icon.
-  const _wantedKeys = new Set();
-  function _wkey(kind, source, externalId) {
-    return `${(kind || 'scene').toLowerCase()}:${(source || '').toLowerCase()}:${externalId || ''}`;
-  }
-  async function _loadWantedKeys() {
-    try {
-      const r = await fetch('/api/wanted/keys');
-      const d = await r.json();
-      (d.keys || []).forEach(k => _wantedKeys.add(_wkey(k.kind, k.source, k.external_id)));
-    } catch (_) {}
-  }
-  function _wantedGuessSource(card) {
-    // Fallback when the wanted button isn't the direct target. Scene
-    // cards usually carry ``data-wanted-source`` on the button; feed
-    // cards may be TPDB, StashDB (performers tab), etc. via ``s.source``.
-    return (card.dataset.wantedSource || 'tpdb').toLowerCase();
-  }
+  // Shared singleton state + click handler live in ts-utils.js
+  // (window.tsWantedKeys / window.tsLoadWantedKeys / document-level
+  // toggle handler) so studio + performer popups can render the same
+  // watch eye without re-implementing the wiring. Local references
+  // below stay because the rest of this file calls _wantedKeys.has()
+  // inline for the overlay button.
+  const _wantedKeys = window.tsWantedKeys;
+  const _wkey = window.tsWantedKey;
+  const _loadWantedKeys = window.tsLoadWantedKeys;
   function _cardWantedButtonHtml(kind, sourceGuess, externalId) {
     const key = _wkey(kind, sourceGuess, externalId);
     const on = _wantedKeys.has(key);
     const title = on ? 'In your Wanted list — click to remove' : 'Add to Wanted';
     return `<button class="scene-wanted-btn${on ? ' is-wanted' : ''}" data-wanted-kind="${esc(kind)}" data-wanted-source="${esc(sourceGuess)}" data-wanted-id="${esc(externalId)}" title="${esc(title)}" aria-pressed="${on}"><i class="fa-solid fa-eye"></i></button>`;
   }
-  document.addEventListener('click', function(e) {
-    const btn = e.target && e.target.closest && e.target.closest('.scene-wanted-btn');
-    if (!btn) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const kind = btn.getAttribute('data-wanted-kind') || 'scene';
-    const source = btn.getAttribute('data-wanted-source') || 'tpdb';
-    const externalId = btn.getAttribute('data-wanted-id') || '';
-    if (!externalId) return;
-    // Pull enriching fields from the card so the backend can save a
-    // full record without a follow-up fetch.
-    const card = btn.closest('.scene-card, .movie-card');
-    const scene = (() => {
-      if (!card) return {};
-      const idx = parseInt(card.getAttribute('data-scene-i') || '-1', 10);
-      if (!isNaN(idx) && idx >= 0 && window._sceneGridItems && window._sceneGridItems[idx]) {
-        return window._sceneGridItems[idx];
-      }
-      return null;
-    })();
-    const payload = {
-      kind, source, external_id: externalId,
-      title:    (scene && scene.title)    || card?.querySelector('.scene-title')?.textContent
-               || card?.querySelector('.movie-title')?.textContent || '',
-      studio:   (scene && scene.studio)   || '',
-      date:     (scene && scene.date)     || '',
-      performers: (scene && scene.performer) || '',
-      thumb:    (scene && scene.thumb)    || card?.querySelector('.scene-thumb')?.src
-               || card?.querySelector('.movie-poster')?.src || '',
-      description: (scene && scene.description) || '',
-      tags:     (scene && Array.isArray(scene.tags)) ? scene.tags : [],
-      duration: (scene && scene.duration)  || 0,
-    };
-    // Optimistic flip: paint the new state across every matching wanted
-    // button on the page before firing the request. The /api/wanted/toggle
-    // call is a tiny SQLite insert/delete (~10–40 ms locally) so users
-    // perceive the toggle as instant. If the server disagrees we re-apply
-    // the authoritative state from the response. Button stays clickable —
-    // a per-id flag below blocks rapid re-clicks during the in-flight
-    // window without disabling the visual.
-    const wkey = _wkey(kind, source, externalId);
-    const wasOn = _wantedKeys.has(wkey);
-    const _inflightWanted = (window._inflightWantedToggles = window._inflightWantedToggles || new Set());
-    if (_inflightWanted.has(wkey)) return;
-    _inflightWanted.add(wkey);
-    const _applyState = (on) => {
-      if (on) _wantedKeys.add(wkey); else _wantedKeys.delete(wkey);
-      document.querySelectorAll(`.scene-wanted-btn[data-wanted-id="${CSS.escape(externalId)}"]`).forEach(b => {
-        b.classList.toggle('is-wanted', !!on);
-        b.setAttribute('aria-pressed', on ? 'true' : 'false');
-        b.setAttribute('title', on ? 'In your Wanted list — click to remove' : 'Add to Wanted');
-      });
-    };
-    _applyState(!wasOn);
-    fetch('/api/wanted/toggle', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).then(r => r.json()).then(d => {
-      // Reconcile with the authoritative server state in case the
-      // backend rejected (e.g. row already gone) or the toggle landed
-      // out of order with another tab's request.
-      if (d && typeof d.wanted === 'boolean') _applyState(d.wanted);
-    }).catch(() => {
-      // Network failure → roll back to the pre-click state.
-      _applyState(wasOn);
-    }).finally(() => { _inflightWanted.delete(wkey); });
-  });
 
   const _FEED_MODES = ['movies', 'jav', 'performers', 'studios', 'tags', 'search'];
 

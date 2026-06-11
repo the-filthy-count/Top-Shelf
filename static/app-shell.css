@@ -9991,3 +9991,65 @@ header .btn-secondary.active-nav .fav-lips,
   width: 26px;
   height: 23px;
 }
+
+/* ── Wanted "watch" eye (shared across pages) ─────────────────────
+ * Was scoped to scenes.css (loaded only on /scenes). Moved here so
+ * the same button styles on every surface that drops a `.scene-card`
+ * or `.movie-card` tile — studio popup, performer popup, etc.
+ *
+ * Scene cards: sits at the top-right; the studio-logo rule on
+ *   .scene-card reserves a 46px gutter so the eye doesn't collide.
+ * Movie cards: top-right corner (studio logo is bottom-centre).
+ * Filled pink when already marked wanted, dim outline otherwise. */
+.scene-wanted-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 7;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 14, 30, 0.72);
+  border: 1px solid rgba(var(--brand-accent-rgb), 0.45);
+  border-radius: 50%;
+  color: rgba(var(--brand-accent-rgb), 0.85);
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.85);
+  transition: opacity 0.2s ease, transform 0.2s ease, background 0.15s, border-color 0.15s, color 0.15s;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+.scene-card:hover .scene-wanted-btn,
+.movie-card:hover .scene-wanted-btn {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+.scene-wanted-btn:hover {
+  border-color: rgba(var(--brand-accent-rgb), 0.9);
+  background: rgba(var(--brand-accent-rgb), 0.18);
+  color: var(--accent);
+}
+.scene-wanted-btn.is-wanted {
+  background: rgba(var(--brand-accent-rgb), 0.92);
+  border-color: rgba(var(--brand-accent-rgb), 1);
+  color: rgba(20, 14, 30, 0.95);
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+.scene-wanted-btn.is-wanted:hover {
+  background: rgba(var(--brand-accent-rgb), 1);
+}
+/* Scene-card wanted-eye sits in the top-right band. Movie cards keep
+ * the same 6px inset — their studio logo is at the bottom, no collision. */
+.scene-card .scene-wanted-btn {
+  top: 6px;
+  right: 6px;
+}

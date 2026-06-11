@@ -1167,61 +1167,8 @@
     pointer-events: none;
     transition: opacity 0.2s ease, top 0.2s ease, left 0.2s ease;
   }
-  /* Wanted eye button — right side of every scene/movie card on hover.
-   * Scene cards: sits just below the top-right studio logo.
-   * Movie cards: top-right corner (no studio logo there to collide with).
-   * Filled pink when already marked wanted, dim outline when not. */
-  .scene-wanted-btn {
-    position: absolute;
-    top: 6px; right: 6px;
-    z-index: 7;
-    width: 32px; height: 32px;
-    display: inline-flex; align-items: center; justify-content: center;
-    background: rgba(20, 14, 30, 0.72);
-    border: 1px solid rgba(var(--brand-accent-rgb), 0.45);
-    border-radius: 50%;
-    color: rgba(var(--brand-accent-rgb), 0.85);
-    font-size: 14px;
-    cursor: pointer;
-    opacity: 0;
-    pointer-events: none;
-    transform: scale(0.85);
-    transition: opacity 0.2s ease, transform 0.2s ease, background 0.15s, border-color 0.15s, color 0.15s;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  }
-  .scene-card:hover .scene-wanted-btn,
-  .movie-card:hover .scene-wanted-btn {
-    opacity: 1;
-    pointer-events: auto;
-    transform: scale(1);
-  }
-  .scene-wanted-btn:hover {
-    border-color: rgba(var(--brand-accent-rgb), 0.9);
-    background: rgba(var(--brand-accent-rgb), 0.18);
-    color: var(--accent);
-  }
-  .scene-wanted-btn.is-wanted {
-    background: rgba(var(--brand-accent-rgb), 0.92);
-    border-color: rgba(var(--brand-accent-rgb), 1);
-    color: rgba(20, 14, 30, 0.95);
-    opacity: 1;
-    pointer-events: auto;
-    transform: scale(1);
-  }
-  .scene-wanted-btn.is-wanted:hover {
-    background: rgba(var(--brand-accent-rgb), 1);
-  }
-  /* Scene-card wanted-eye sits TO THE RIGHT of the top-right studio
-   * logo, on the same horizontal band. The logo rule above reserves a
-   * 46px gutter on the right edge for this button. Movie cards keep
-   * the 6px default — their studio logo is at the bottom-centre, so
-   * the top-right eye has no collision. */
-  .scene-card .scene-wanted-btn {
-    top: 6px;
-    right: 6px;
-  }
+  /* .scene-wanted-btn rules moved to app-shell.css so the watch eye
+   * styles outside /scenes too (studio popup, performer popup, etc). */
   /* Tag chips anchored to the bottom of the scene thumbnail on hover —
    * only applied to the landscape .scene-card (not .movie-card). The
    * container grows upward from the bottom with ``align-content: flex-end``

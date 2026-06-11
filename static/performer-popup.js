@@ -582,6 +582,11 @@
     if (m.style.display) m.style.display = '';
     m.classList.add('open');
     m.setAttribute('lang', 'en');
+    // Warm the shared wanted-keys cache so each tile's eye paints its
+    // `.is-wanted` state on first render.
+    if (typeof window.tsLoadWantedKeys === 'function') {
+      window.tsLoadWantedKeys();
+    }
     _activeOpts = { libraryRowId: opts.libraryRowId, stashId: opts.stashId, tpdbId: opts.tpdbId, name: opts.name };
     if (!opts._refresh) _selectedFolderName = '';
 
@@ -1676,6 +1681,9 @@
           <i class="fa-solid fa-download" aria-hidden="true"></i>
         </button>`;
       const blacklistBtn = `<button type="button" class="scene-card-blacklist-btn" data-title="${ESC(title || '')}" onclick="event.stopPropagation();sceneCardBlacklist(this)" title="Blacklist this title" aria-label="Blacklist title"><i class="fa-solid fa-ban"></i></button>`;
+      const wantedBtn = (typeof window.tsBuildWantedBtnHtml === 'function')
+        ? window.tsBuildWantedBtnHtml(s, 'scene')
+        : '';
       return `
         <div class="scene-card discover-info-scene-card discover-info-scene-card--performer${isNameMatch ? ' is-name-match' : ''}" tabindex="0" title="${ESC(title)}">
           <div class="img-load">
@@ -1686,6 +1694,7 @@
             ${nameBadge}
             ${sourceLink}
             ${prowlarrBtn}
+            ${wantedBtn}
             ${blacklistBtn}
           </div>
           <div class="scene-meta" style="padding:6px 4px">

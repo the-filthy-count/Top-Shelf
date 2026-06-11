@@ -2449,3 +2449,154 @@ window.tsConfirm = function (message, opts) {
     }, 0);
   });
 };
+
+/* ── Shared Wanted-list helpers ──────────────────────────────────────
+ * Used to be scoped to scenes-common.js (loaded only on /scenes); now
+ * lives in ts-utils.js so every page that renders scene/movie tiles
+ * (studio popup, performer popup, movie popup, …) can drop a hover
+ * "watch" eye onto each tile without duplicating state.
+ *
+ * Surface:
+ *   window.tsWantedKeys           — Set of "${kind}:${source}:${id}"
+ *   window.tsWantedKey(k, s, id)  — normalise to that key shape
+ *   window.tsLoadWantedKeys()     — populate from /api/wanted/keys (once)
+ *   window.tsDeriveWantedAttrs(scene, defaultKind)
+ *   window.tsBuildWantedBtnHtml(scene, defaultKind)
+ *
+ * One document-level click handler debounces concurrent toggles per key
+ * and optimistically flips state for every matching button on the page.
+ */
+(function () {
+  if (window._tsWantedInit) return;
+  window._tsWantedInit = true;
+
+  window.tsWantedKeys = new Set();
+  window.tsWantedKey = function (kind, source, externalId) {
+    return (
+      (kind || 'scene').toLowerCase() + ':' +
+      (source || '').toLowerCase() + ':' +
+      (externalId || '')
+    );
+  };
+
+  var _wantedLoaded = false;
+  var _wantedLoadPromise = null;
+  window.tsLoadWantedKeys = function (force) {
+    if (_wantedLoaded && !force) return Promise.resolve();
+    if (_wantedLoadPromise && !force) return _wantedLoadPromise;
+    _wantedLoadPromise = fetch('/api/wanted/keys')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        (d && d.keys || []).forEach(function (k) {
+          window.tsWantedKeys.add(window.tsWantedKey(k.kind, k.source, k.external_id));
+        });
+        _wantedLoaded = true;
+      })
+      .catch(function () {});
+    return _wantedLoadPromise;
+  };
+
+  /** Pull kind/source/externalId out of a scene-like row. Returns null
+   * when we can't resolve an external_id — caller should skip rendering
+   * the button in that case (toggling without an id is meaningless). */
+  window.tsDeriveWantedAttrs = function (scene, defaultKind) {
+    if (!scene) return null;
+    var rawSrc = String(scene.source || '').toLowerCase();
+    var norm = rawSrc.indexOf('search_') === 0 ? rawSrc.slice(7) : rawSrc;
+    var source = norm.indexOf('tpdb') !== -1 ? 'tpdb'
+      : norm === 'stashdb' ? 'stashdb'
+      : norm === 'fansdb' ? 'fansdb'
+      : norm === 'javstash' ? 'javstash'
+      : 'tpdb';
+    var externalId = (
+      source === 'stashdb'  ? (scene.stash_id    || scene.id || '') :
+      source === 'fansdb'   ? (scene.fansdb_id   || scene.id || '') :
+      source === 'javstash' ? (scene.javstash_id || scene.id || '') :
+                              (scene.tpdb_id     || scene.id || '')
+    );
+    if (!externalId) return null;
+    var kind = defaultKind || 'scene';
+    return { kind: kind, source: source, externalId: String(externalId) };
+  };
+
+  window.tsBuildWantedBtnHtml = function (scene, defaultKind) {
+    var attrs = window.tsDeriveWantedAttrs(scene, defaultKind);
+    if (!attrs) return '';
+    var wkey = window.tsWantedKey(attrs.kind, attrs.source, attrs.externalId);
+    var on = window.tsWantedKeys.has(wkey);
+    var title = on ? 'In your Wanted list — click to remove' : 'Add to Wanted';
+    return '<button class="scene-wanted-btn' + (on ? ' is-wanted' : '') +
+      '" data-wanted-kind="' + esc(attrs.kind) +
+      '" data-wanted-source="' + esc(attrs.source) +
+      '" data-wanted-id="' + esc(attrs.externalId) +
+      '" title="' + esc(title) +
+      '" aria-pressed="' + (on ? 'true' : 'false') +
+      '" onclick="event.stopPropagation()"><i class="fa-solid fa-eye"></i></button>';
+  };
+
+  /** One document-level click handler — runs on every page that loads
+   * ts-utils.js. Scenes-common.js no longer registers its own. */
+  var _inflightWanted = new Set();
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest && e.target.closest('.scene-wanted-btn');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var kind = btn.getAttribute('data-wanted-kind') || 'scene';
+    var source = btn.getAttribute('data-wanted-source') || 'tpdb';
+    var externalId = btn.getAttribute('data-wanted-id') || '';
+    if (!externalId) return;
+    var wkey = window.tsWantedKey(kind, source, externalId);
+    if (_inflightWanted.has(wkey)) return;
+    _inflightWanted.add(wkey);
+
+    var card = btn.closest('.scene-card, .movie-card');
+    var grid = window._sceneGridItems;
+    var idx = card ? parseInt(card.getAttribute('data-scene-i') || '-1', 10) : -1;
+    var scene = (!isNaN(idx) && idx >= 0 && grid && grid[idx]) ? grid[idx] : null;
+    var titleFromCard = card
+      ? (card.querySelector('.scene-title')?.textContent
+         || card.querySelector('.movie-title')?.textContent
+         || '')
+      : '';
+    var thumbFromCard = card
+      ? (card.querySelector('.scene-thumb')?.src
+         || card.querySelector('.movie-poster')?.src
+         || '')
+      : '';
+    var payload = {
+      kind: kind, source: source, external_id: externalId,
+      title:       (scene && scene.title)       || titleFromCard,
+      studio:      (scene && scene.studio)      || '',
+      date:        (scene && scene.date)        || '',
+      performers:  (scene && scene.performer)   || '',
+      thumb:       (scene && scene.thumb)       || thumbFromCard,
+      description: (scene && scene.description) || '',
+      tags:        (scene && Array.isArray(scene.tags)) ? scene.tags : [],
+      duration:    (scene && scene.duration)    || 0,
+    };
+
+    var wasOn = window.tsWantedKeys.has(wkey);
+    var applyState = function (on) {
+      if (on) window.tsWantedKeys.add(wkey); else window.tsWantedKeys.delete(wkey);
+      document.querySelectorAll('.scene-wanted-btn[data-wanted-id="' + CSS.escape(externalId) + '"]').forEach(function (b) {
+        b.classList.toggle('is-wanted', !!on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        b.setAttribute('title', on ? 'In your Wanted list — click to remove' : 'Add to Wanted');
+      });
+    };
+    applyState(!wasOn);
+
+    fetch('/api/wanted/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && typeof d.wanted === 'boolean') applyState(d.wanted);
+      })
+      .catch(function () { applyState(wasOn); })
+      .finally(function () { _inflightWanted.delete(wkey); });
+  });
+})();
