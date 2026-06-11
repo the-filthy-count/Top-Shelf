@@ -1545,51 +1545,68 @@
   }
 
   async function renderCarousel(el, data) {
-    // Hits /api/scenes/recent with the per-source IDs from
-    // `data.identity`. Strict-ID only — if the performer has zero linked
-    // DB IDs we render an empty static grid rather than ask the backend
-    // to guess by name (alias collisions like Crystal Rose → "Crystal
-    // Rose Knight" produced the wrong performer's scenes).
+    // Hits /api/scenes/recent for each distinct (source, id) pair the
+    // popup identity carries. For solo performers that's the primary
+    // tpdb/stash/fans/jav id; for group folders ("Fox Twins") we also
+    // fan out across every linked id in `identity.group_ids`, then
+    // merge + dedupe so the grid surfaces scenes from every member.
+    // Strict-ID only — name-search would cross-pollute groups with
+    // unrelated performers who happen to share a token.
     const id = data.identity || {};
-    const tpdbId = String(id.tpdb_id || '').trim();
-    const stashId = String(id.stash_id || '').trim();
-    const fansId = String(id.fansdb_id || '').trim();
-    const javId = String(id.javstash_id || '').trim();
-    const hasAnyId = !!(tpdbId || stashId || fansId || javId);
-    let primarySource = 'TPDB', primaryId = '';
-    if (tpdbId)       { primarySource = 'TPDB';     primaryId = tpdbId; }
-    else if (stashId) { primarySource = 'StashDB';  primaryId = stashId; }
-    else if (fansId)  { primarySource = 'FansDB';   primaryId = fansId; }
-    else if (javId)   { primarySource = 'JAVStash'; primaryId = javId; }
-    // No `name` param — backend strict-id mode then can never fall into
-    // the name-search branch for buckets we didn't supply an ID for.
-    const params = new URLSearchParams({
-      source:      primarySource,
-      id:          primaryId,
-      type:        'performer',
-      slug:        '',
-      name:        '',
-      tpdb_id:     tpdbId,
-      stashdb_id:  stashId,
-      fansdb_id:   fansId,
-      javstash_id: javId,
+    const groupIds = id.group_ids || {};
+    // Build a per-source set of ids: primary first, then group entries.
+    // Stripped + deduped per source — a primary id duplicated in
+    // group_ids_json shouldn't cost an extra round-trip.
+    const idSets = { tpdb: new Set(), stashdb: new Set(), fansdb: new Set(), javstash: new Set() };
+    const pushId = (src, v) => {
+      const s = String(v || '').trim();
+      if (s) idSets[src].add(s);
+    };
+    pushId('tpdb',     id.tpdb_id);
+    pushId('stashdb',  id.stash_id);
+    pushId('fansdb',   id.fansdb_id);
+    pushId('javstash', id.javstash_id);
+    ['tpdb', 'stashdb', 'fansdb', 'javstash'].forEach((src) => {
+      (groupIds[src] || []).forEach((v) => pushId(src, v));
     });
+    // Flat list of (source, id) tuples. Each becomes one /api/scenes/recent
+    // call — small N (1-4 for solo, ~4-12 for a 2-3 member group).
+    const fetchPlan = [];
+    const SOURCE_LABEL = { tpdb: 'TPDB', stashdb: 'StashDB', fansdb: 'FansDB', javstash: 'JAVStash' };
+    Object.entries(idSets).forEach(([src, set]) => {
+      set.forEach((extId) => fetchPlan.push({ source: SOURCE_LABEL[src], srcKey: src, id: extId }));
+    });
+    const hasAnyId = fetchPlan.length > 0;
     el.innerHTML = `<div class="pp-loading"><span class="loader" role="status" aria-label="Loading"></span></div>`;
     let merged = [];
     if (hasAnyId) {
       try {
-        const r = await fetch('/api/scenes/recent?' + params.toString(), { credentials: 'same-origin' });
-        const d = await r.json();
-        // Merge all four buckets (each row already carries `s.source`
-        // and `s.match` set by the backend, so per-tile link routing
-        // works without a single global sceneSource).
-        const buckets = (d && d.sources) || {};
-        for (const k of ['tpdb', 'stashdb', 'fansdb', 'javstash']) {
-          if (Array.isArray(buckets[k])) merged = merged.concat(buckets[k]);
+        // Fire all plan items in parallel and union the buckets. Each
+        // call sends only the one id pair it knows so the backend can
+        // strict-match without cross-source leakage.
+        const responses = await Promise.all(fetchPlan.map((p) => {
+          const params = new URLSearchParams({
+            source:      p.source,
+            id:          p.id,
+            type:        'performer',
+            slug:        '',
+            name:        '',
+            tpdb_id:     p.srcKey === 'tpdb'     ? p.id : '',
+            stashdb_id:  p.srcKey === 'stashdb'  ? p.id : '',
+            fansdb_id:   p.srcKey === 'fansdb'   ? p.id : '',
+            javstash_id: p.srcKey === 'javstash' ? p.id : '',
+          });
+          return fetch('/api/scenes/recent?' + params.toString(), { credentials: 'same-origin' })
+            .then((r) => r.json())
+            .catch(() => ({}));
+        }));
+        for (const d of responses) {
+          const buckets = (d && d.sources) || {};
+          for (const k of ['tpdb', 'stashdb', 'fansdb', 'javstash']) {
+            if (Array.isArray(buckets[k])) merged = merged.concat(buckets[k]);
+          }
+          if (!merged.length && Array.isArray(d && d.scenes)) merged = merged.concat(d.scenes);
         }
-        // Legacy response shape (flat `scenes` only, no `sources` map)
-        // — keep the popup working if an older backend is in play.
-        if (!merged.length && Array.isArray(d && d.scenes)) merged = d.scenes;
       } catch (e) {
         el.innerHTML = `<div class="pp-error">${ESC(e.message || 'Error')}</div>`;
         return;

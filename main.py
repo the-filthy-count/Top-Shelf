@@ -22181,6 +22181,30 @@ async def api_performer_popup(
 
     social_links = _performer_popup_social_links(sb_bio, tpdb_data, jav_data, iafd_meta, ext_links)
 
+    # Surface group_ids_json so the popup carousel can fan out scene
+    # lookups across every linked profile, not just the primary. A
+    # group performer (e.g. "Fox Twins" with two members) has zero or
+    # one primary id but the real performers' ids live here.
+    group_ids_payload: dict[str, list[str]] = {"tpdb": [], "stashdb": [], "fansdb": [], "javstash": []}
+    if row:
+        raw_gids = (row.get("group_ids_json") or "").strip()
+        if raw_gids:
+            try:
+                parsed_g = json.loads(raw_gids) or {}
+            except (json.JSONDecodeError, TypeError):
+                parsed_g = {}
+            if isinstance(parsed_g, dict):
+                for k in ("tpdb", "stashdb", "fansdb", "javstash"):
+                    out_list: list[str] = []
+                    for x in (parsed_g.get(k) or []):
+                        if isinstance(x, dict):
+                            xid = str(x.get("id") or "").strip()
+                        else:
+                            xid = str(x or "").strip()
+                        if xid:
+                            out_list.append(xid)
+                    group_ids_payload[k] = out_list
+
     payload = {
         "identity": {
             "stash_id":         stash_id_out,
@@ -22190,6 +22214,8 @@ async def api_performer_popup(
             "library_row_id":   int(row["id"]) if row else None,
             "canonical_name":   canonical_name,
             "aliases":          aliases,
+            "is_group":         bool(int(row.get("is_group") or 0)) if row else False,
+            "group_ids":        group_ids_payload,
         },
         "bio":            bio,
         "headshot_url":   headshot_url,
