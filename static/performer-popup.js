@@ -2638,7 +2638,7 @@
         </div>
         <div id="performerGroupMembersHint" style="font-size:11px;color:var(--dim);margin-bottom:14px"></div>
         <div id="performerGroupMembersGrid"
-             style="flex:1 1 0;min-height:260px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;align-content:start"></div>
+             style="flex:1 1 0;min-height:260px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:20px;padding:6px 4px 16px;align-content:start"></div>
       </div>`;
     document.body.appendChild(div);
     div.addEventListener('click', (e) => {
@@ -2738,6 +2738,10 @@
         .map((s) => `<img class="pp-member-src-logo" src="/static/logos/${s}.webp" alt="${SOURCE_LABEL[s]}" title="${SOURCE_LABEL[s]} · ${ESC(m.ids[s])}" onerror="this.replaceWith(document.createTextNode('${SOURCE_LABEL[s]}'))">`)
         .join('');
       return `<div class="pp-member-tile" data-member-i="${i}">
+        <button type="button" class="pp-member-tile-remove" data-action="remove"
+                title="Remove ${ESC(displayName)} from this group" aria-label="Remove member">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
         <button type="button" class="pp-member-tile-main" data-action="open"
                 title="Open ${ESC(displayName)}'s profile">
           <span class="pp-member-tile-avatar">
@@ -2801,6 +2805,67 @@
         }
       });
     });
+    grid.querySelectorAll('.pp-member-tile-remove').forEach((btn) => {
+      btn.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const wrap = btn.closest('[data-member-i]');
+        const idx = parseInt(wrap && wrap.dataset.memberI, 10);
+        const member = members[idx];
+        if (!member || !_groupMembersRowId) return;
+        const displayName = member.name
+          || (member._id ? `${SOURCE_LABEL[member._source] || ''} · ${member._id}` : 'this member');
+        if (!window.confirm(
+          `Remove ${displayName} from this group?\n\n` +
+          `Their linked DB ids are unlinked from the group folder — videos already filed under the group stay where they are, but new /queue scenes carrying their ids will no longer auto-route here.`
+        )) return;
+        await removeMemberFromGroup(member);
+      });
+    });
+  }
+
+  /** Strip every (source, id) pair belonging to a derived member from
+   * the group's group_ids_json. Issues one /api/favourites/group-remove-link
+   * call per (source, id) since the existing endpoint is single-target —
+   * fine because a member rarely owns more than 4 ids. */
+  async function removeMemberFromGroup(member) {
+    if (!_groupMembersRowId) return;
+    // Build the flat (source, id) list this member contributes.
+    const pairs = [];
+    ['tpdb', 'stashdb', 'fansdb', 'javstash'].forEach((s) => {
+      if (member.ids && member.ids[s]) pairs.push({ source: s, id: member.ids[s] });
+    });
+    // Orphan tile: the bare id wasn't projected into ids[] until
+    // deriveGroupMembers added it, but cover the case anyway via _id.
+    if (!pairs.length && member._id && member._source) {
+      pairs.push({ source: member._source, id: member._id });
+    }
+    if (!pairs.length) return;
+    try {
+      for (const p of pairs) {
+        await fetch('/api/favourites/group-remove-link', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ row_id: _groupMembersRowId, source: p.source, ext_id: p.id }),
+        });
+      }
+      if (window.toast) window.toast('Member removed from group');
+      // Refresh group_ids via the popup endpoint and re-render the grid.
+      const r = await fetch('/api/performer/popup?row_id=' + encodeURIComponent(_groupMembersRowId) + '&refresh=1',
+        { credentials: 'same-origin' });
+      const d = await r.json().catch(() => ({}));
+      const gids = (d && d.identity && d.identity.group_ids) || {};
+      const refreshed = deriveGroupMembers(gids);
+      renderGroupMembersGrid(refreshed);
+      // Update parent popup so the badge count flips.
+      if (typeof window.refreshPerformerPopup === 'function'
+          && window._performerPopupActiveId === _groupMembersRowId) {
+        window.refreshPerformerPopup();
+      }
+    } catch (e) {
+      if (window.toast) window.toast(e.message || 'Remove failed', { kind: 'error' });
+    }
   }
 
   function openMemberPopup(member) {
