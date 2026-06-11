@@ -891,18 +891,16 @@
         { action: 'rename', label: 'Rename performer', icon: 'fa-i-cursor' },
       );
       if (ctx.isGroup) {
-        // Already a group: offer to add more members or to dissolve.
-        // "Link DB profile" mirrors the studio popup's "Link other
-        // studios" — search the source DBs and append the picked
-        // performer's id to group_ids_json, so the popup carousel
-        // pulls scenes from that profile too and a /queue file step
-        // hitting the same id routes here automatically.
+        // Already a group: offer to fold in another library performer
+        // or to dissolve. Per-member DB link management lives in the
+        // group-members modal (click the group badge in the popup
+        // header) — no hamburger item needed since the badge IS the
+        // entry point and it's far more discoverable.
         // Ungroup is destructive (deletes the row + folder, sends
         // every video back to the queue) so the confirmation step
         // lives in the handler.
         items.push(
           { action: 'group-add',  label: 'Add another performer…', icon: 'fa-user-plus' },
-          { action: 'group-link', label: 'Link DB profile…',       icon: 'fa-link' },
           { action: 'ungroup',    label: 'Ungroup',                icon: 'fa-user-minus' },
         );
       } else {
@@ -977,7 +975,6 @@
           else if (action === 'studio-aliases') ok = await editStudioAliases(ctx);
           else if (action === 'merge')      ok = await openPerformerMergeModal(ctx, 'merge');
           else if (action === 'group-add')  ok = await openPerformerMergeModal(ctx, 'group-add');
-          else if (action === 'group-link') ok = await linkPerformerDbProfile(ctx);
           else if (action === 'ungroup')    ok = await ungroupPerformer(ctx);
           else if (action === 'remove') ok = await removeFromLibrary(ctx);
           else if (action === 'delete') ok = await deleteFromDisk(ctx);
@@ -988,14 +985,13 @@
               && action !== 'studio-aliases'
               && action !== 'merge'
               && action !== 'group-add'
-              && action !== 'group-link'
               && action !== 'ungroup'
               && typeof onDone === 'function') onDone(action);
-          // studio-aliases / merge / group-add / group-link trigger an
-          // in-place popup refresh from their own handlers (so the user
-          // stays on the performer they were editing) — onDone() would
-          // close it. ungroup destroys the row entirely, so it closes
-          // the popup itself.
+          // studio-aliases / merge / group-add trigger an in-place
+          // popup refresh from their own handlers (so the user stays on
+          // the performer they were editing) — onDone() would close it.
+          // ungroup destroys the row entirely, so it closes the popup
+          // itself.
         } catch (err) {
           toast(err.message || 'Action failed', { kind: 'error' });
         }

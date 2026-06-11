@@ -737,6 +737,26 @@
       });
     });
 
+    // Group-badge click → open the members modal so the user can drill
+    // into individual members and edit their DB links separately. Re-
+    // bound on every render since renderHeader rewrites the name HTML.
+    m.querySelectorAll('[data-pp-open-members]').forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const lib = (_activeData && _activeData.library_status) || {};
+        const ident = (_activeData && _activeData.identity) || {};
+        if (!lib.row_id) return;
+        if (typeof window.openPerformerGroupMembersModal === 'function') {
+          window.openPerformerGroupMembersModal(
+            lib.row_id,
+            ident.canonical_name || '',
+            ident.group_ids || {},
+          );
+        }
+      });
+    });
+
     // Profile-pill action wiring — change link / remove link
     m.querySelectorAll('.pp-profile-action-btn').forEach((btn) => {
       btn.addEventListener('click', (ev) => {
@@ -1230,7 +1250,11 @@
           <i class="fa-regular fa-bookmark"></i>
         </button>`;
     }
-    const pillsHtml = buildProfilePillsHtml(data);
+    // Groups don't carry their own DB identity — the per-source pill
+    // row would always be "missing" because matches live on individual
+    // members. Skip it entirely; the group badge → members modal owns
+    // the per-member DB link workflow.
+    const pillsHtml = isGroup ? '' : buildProfilePillsHtml(data);
     // Group glyph sits next to the name when this row was promoted to
     // a group folder (is_group=1). Title attribute calls out the
     // member count so the reader doesn't need to open the hamburger.
@@ -1243,11 +1267,17 @@
         memberCount += ((gids[src] || []).length) || 0;
       });
       const tip = memberCount
-        ? `Group folder · ${memberCount} linked profile${memberCount === 1 ? '' : 's'}`
-        : 'Group folder';
-      groupBadge = `<span class="pp-name-group" aria-label="${ESC(tip)}" title="${ESC(tip)}">
+        ? `Open ${memberCount} member${memberCount === 1 ? '' : 's'}`
+        : 'Group folder · no members yet — click to add';
+      // Clickable so the user can drill into individual members. Even
+      // an empty group surfaces the modal (which shows "no members yet
+      // — add one" with the picker as the only tile) so the entry
+      // point stays consistent regardless of group state.
+      groupBadge = `<button type="button" class="pp-name-group" data-pp-open-members="1"
+              aria-label="${ESC(tip)}" title="${ESC(tip)}">
         <i class="fa-solid fa-people-group"></i>
-      </span>`;
+        <span class="pp-name-group-count">${memberCount}</span>
+      </button>`;
     }
     // Don't blow away the toolbar (which is now a permanent flex
     // child of the header). Replace only the name + pills slots,
@@ -1289,15 +1319,71 @@
       }
     }
     let pillsEl = el.querySelector('.pp-profiles-grid--header');
-    if (!pillsEl) {
-      pillsEl = document.createElement('div');
-      pillsEl.className = 'pp-profiles-grid pp-profiles-grid--header';
-      // Insert before the toolbar so it sits between name and toolbar.
-      const toolbar = el.querySelector('.performer-popup-toolbar');
-      if (toolbar) el.insertBefore(pillsEl, toolbar);
-      else el.appendChild(pillsEl);
+    if (isGroup) {
+      // Pull the empty pill row from the DOM so the header tightens up
+      // without a dead band where the pills used to live.
+      if (pillsEl) pillsEl.remove();
+    } else {
+      if (!pillsEl) {
+        pillsEl = document.createElement('div');
+        pillsEl.className = 'pp-profiles-grid pp-profiles-grid--header';
+        // Insert before the toolbar so it sits between name and toolbar.
+        const toolbar = el.querySelector('.performer-popup-toolbar');
+        if (toolbar) el.insertBefore(pillsEl, toolbar);
+        else el.appendChild(pillsEl);
+      }
+      pillsEl.innerHTML = pillsHtml;
     }
-    pillsEl.innerHTML = pillsHtml;
+
+    // The group-members modal owns member visibility now — drop any
+    // legacy chip row left behind by an earlier render.
+    const legacyChips = el.querySelector('.pp-group-links');
+    if (legacyChips) legacyChips.remove();
+  }
+
+  /** Collapse group_ids_json entries into one logical row per member.
+   * Entries are keyed by name (case-insensitive); legacy bare-ID rows
+   * have no name so each becomes its own "orphan" member. The result
+   * is what the members modal renders.
+   *
+   * Each member ends up with:
+   *   { name, image, ids: { tpdb, stashdb, fansdb, javstash } }
+   * where ids[src] is the FIRST id seen for that source under the
+   * member name. Multi-id-per-source is rare and the popup only needs
+   * one to resolve a profile, so we don't keep extras.
+   */
+  function deriveGroupMembers(groupIds) {
+    const byKey = new Map();
+    const orphans = [];
+    ['tpdb', 'stashdb', 'fansdb', 'javstash'].forEach((src) => {
+      (groupIds[src] || []).forEach((entry) => {
+        const isObj = entry && typeof entry === 'object';
+        const xid   = isObj ? String(entry.id || '')    : String(entry || '');
+        const nm    = isObj ? String(entry.name || '')  : '';
+        const img   = isObj ? String(entry.image || '') : '';
+        if (!xid) return;
+        if (nm) {
+          const k = nm.trim().toLowerCase();
+          let m = byKey.get(k);
+          if (!m) {
+            m = { name: nm, image: img, ids: { tpdb: '', stashdb: '', fansdb: '', javstash: '' } };
+            byKey.set(k, m);
+          }
+          if (!m.ids[src]) m.ids[src] = xid;
+          if (!m.image && img) m.image = img;
+        } else {
+          // Orphan — surface as its own member tile so the user can
+          // still drill into it.
+          orphans.push({
+            name: '', image: '',
+            ids: { tpdb: '', stashdb: '', fansdb: '', javstash: '' },
+            _source: src, _id: xid,
+          });
+          orphans[orphans.length - 1].ids[src] = xid;
+        }
+      });
+    });
+    return [...byKey.values(), ...orphans];
   }
 
   function renderBio(el, data) {
@@ -2298,6 +2384,10 @@
   let _perfLinkSearchRowId  = null;
   let _perfLinkSearchName   = '';
   let _perfLinkSearchResults = [];
+  // Set of "{source}:{id}" already linked on the active row, refreshed
+  // every time the modal opens (and after each pick) so the result list
+  // can grey-out already-linked entries instead of double-linking.
+  let _perfLinkSearchLinkedSet = new Set();
 
   function ensurePerformerLinkSearchModal() {
     if (document.getElementById('performerLinkSearchModal')) return;
@@ -2340,6 +2430,24 @@
     });
   }
 
+  async function refreshPerfLinkSearchLinkedSet() {
+    _perfLinkSearchLinkedSet = new Set();
+    if (!_perfLinkSearchRowId) return;
+    try {
+      const r = await fetch('/api/performer/popup?row_id=' + encodeURIComponent(_perfLinkSearchRowId),
+        { credentials: 'same-origin' });
+      const d = await r.json().catch(() => ({}));
+      const gids = (d && d.identity && d.identity.group_ids) || {};
+      ['tpdb', 'stashdb', 'fansdb', 'javstash'].forEach((src) => {
+        (gids[src] || []).forEach((entry) => {
+          const xid = (entry && typeof entry === 'object') ? (entry.id || '') : entry;
+          const s = String(xid || '').trim();
+          if (s) _perfLinkSearchLinkedSet.add(src + ':' + s);
+        });
+      });
+    } catch (_) { /* leave empty set on failure */ }
+  }
+
   function openPerformerLinkSearchModal(rowId, name) {
     if (!rowId) return;
     ensurePerformerLinkSearchModal();
@@ -2360,7 +2468,11 @@
     document.getElementById('performerLinkSearchStatus').textContent = '';
     div.style.display = 'flex';
     div.classList.add('open');
-    if (_perfLinkSearchName) runPerformerLinkSearch(_perfLinkSearchName);
+    // Pull the current linked-set, THEN fire the prefilled search — so
+    // the first render correctly greys out already-linked rows.
+    refreshPerfLinkSearchLinkedSet().then(() => {
+      if (_perfLinkSearchName) runPerformerLinkSearch(_perfLinkSearchName);
+    });
   }
   window.openPerformerLinkSearchModal = openPerformerLinkSearchModal;
 
@@ -2405,16 +2517,24 @@
       status.textContent = `${items.length} match${items.length === 1 ? '' : 'es'}`;
       _perfLinkSearchResults = items;
       results.innerHTML = items.map((it, i) => {
+        const srcRaw = (it.source || '').toLowerCase();
+        const srcKey = srcRaw === 'theporndb' ? 'tpdb' : srcRaw;
         const src   = (it.source || '').toUpperCase();
         const nm    = it.name || '';
         const id    = String(it.id || '');
         const img   = it.image || '';
         const initial = nm.trim().charAt(0).toUpperCase() || '?';
-        return `<button type="button" class="performer-link-search-row"
+        const alreadyLinked = _perfLinkSearchLinkedSet.has(srcKey + ':' + id);
+        const bg = alreadyLinked ? 'rgba(74,222,128,0.08)' : 'rgba(255,255,255,0.02)';
+        const border = alreadyLinked ? '1px solid rgba(74,222,128,0.45)' : '1px solid rgba(255,255,255,0.06)';
+        const cursor = alreadyLinked ? 'default' : 'pointer';
+        const rightAction = alreadyLinked
+          ? `<span style="display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:#4ade80;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.45);padding:3px 8px;border-radius:999px"><i class="fa-solid fa-check"></i> Linked</span>`
+          : `<i class="fa-solid fa-link" style="color:var(--accent);font-size:13px"></i>`;
+        return `<button type="button" class="performer-link-search-row${alreadyLinked ? ' is-linked' : ''}"
                         data-i="${i}"
-                        style="display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:6px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);cursor:pointer;text-align:left;color:var(--text);font-family:inherit"
-                        onmouseover="this.style.background='rgba(255,255,255,0.06)'"
-                        onmouseout="this.style.background='rgba(255,255,255,0.02)'">
+                        ${alreadyLinked ? 'disabled' : ''}
+                        style="display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:6px;background:${bg};border:${border};cursor:${cursor};text-align:left;color:var(--text);font-family:inherit">
           <div style="width:48px;height:48px;border-radius:6px;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">
             ${img
               ? `<img src="${ESC(img)}" alt="" referrerpolicy="no-referrer" style="max-width:100%;max-height:100%;object-fit:cover;width:100%;height:100%" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${ESC(initial)}',style:'font-family:var(--mono);font-size:18px;color:var(--dim)'}))">`
@@ -2424,10 +2544,13 @@
             <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ESC(nm)}</div>
             <div style="font-size:10px;color:var(--dim);margin-top:2px">${ESC(src)} · ${ESC(id)}</div>
           </div>
-          <i class="fa-solid fa-link" style="color:var(--accent);font-size:13px"></i>
+          ${rightAction}
         </button>`;
       }).join('');
       results.querySelectorAll('.performer-link-search-row').forEach((btn) => {
+        if (btn.classList.contains('is-linked')) return;
+        btn.addEventListener('mouseover', () => { btn.style.background = 'rgba(255,255,255,0.06)'; });
+        btn.addEventListener('mouseout',  () => { btn.style.background = 'rgba(255,255,255,0.02)'; });
         btn.addEventListener('click', () => linkPickedPerformer(parseInt(btn.dataset.i, 10)));
       });
     } catch (e) {
@@ -2468,7 +2591,13 @@
       if (window.toast) {
         window.toast(`Linked ${it.name || it.id} to ${_perfLinkSearchName || 'this group'}`);
       }
-      closePerformerLinkSearchModal();
+      // Keep the modal open so the user can link several profiles in
+      // one session. Refresh the linked-set + re-render results so the
+      // just-picked row flips to "LINKED" without a manual re-search.
+      _perfLinkSearchLinkedSet.add(siteKey + ':' + String(it.id || ''));
+      const input = document.getElementById('performerLinkSearchInput');
+      if (input && input.value.trim()) runPerformerLinkSearch(input.value);
+      // Repaint the popup behind the modal so chips appear immediately.
       if (typeof window.refreshPerformerPopup === 'function'
           && window._performerPopupActiveId === _perfLinkSearchRowId) {
         window.refreshPerformerPopup();
@@ -2477,4 +2606,172 @@
       if (window.toast) window.toast(e.message || 'Link failed', { kind: 'error' });
     }
   }
+
+  /* ── Group members modal ─────────────────────────────────────────
+   * Clicked from the group badge on a is_group performer popup. Each
+   * tile is one logical member (collapsed from group_ids_json by name).
+   * Two actions per tile:
+   *   • Open — drills into that member's standalone performer popup
+   *     so the user can see their bio, scenes, etc.
+   *   • Add DB link — opens the link-search picker with the member's
+   *     name pre-filled, so each new pick attaches THIS member's name
+   *     and clusters under the same tile on the next render.
+   * The trailing "+" tile opens the picker with no pre-filled name so
+   * a brand-new member can be added.
+   */
+  let _groupMembersRowId = null;
+  let _groupMembersGroupName = '';
+
+  function ensureGroupMembersModal() {
+    if (document.getElementById('performerGroupMembersModal')) return;
+    const div = document.createElement('div');
+    div.id = 'performerGroupMembersModal';
+    div.className = 'modal-overlay';
+    div.style.setProperty('z-index', '1750', 'important');
+    div.innerHTML = `
+      <div class="modal-box pp-group-members-box"
+           style="max-width:760px;width:min(760px,calc(100vw - 60px));max-height:calc(100vh - 80px);display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+          <h3 id="performerGroupMembersTitle" style="margin:0;font-family:var(--font-display, var(--mono));font-size:18px;flex:1">Group members</h3>
+          <button type="button" id="performerGroupMembersClose"
+                  style="background:transparent;border:1px solid rgba(255,255,255,0.15);color:var(--dim);padding:6px 12px;border-radius:6px;font-size:11px;font-family:var(--mono);cursor:pointer;text-transform:uppercase;letter-spacing:0.04em">Close</button>
+        </div>
+        <div id="performerGroupMembersHint" style="font-size:11px;color:var(--dim);margin-bottom:14px"></div>
+        <div id="performerGroupMembersGrid"
+             style="flex:1 1 0;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px"></div>
+      </div>`;
+    document.body.appendChild(div);
+    div.addEventListener('click', (e) => {
+      if (e.target === div) closeGroupMembersModal();
+    });
+    div.querySelector('#performerGroupMembersClose').addEventListener('click', closeGroupMembersModal);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && div.classList.contains('open')) closeGroupMembersModal();
+    });
+  }
+
+  function closeGroupMembersModal() {
+    const div = document.getElementById('performerGroupMembersModal');
+    if (!div) return;
+    div.classList.remove('open');
+    div.style.display = '';
+  }
+
+  function openGroupMembersModal(rowId, groupName, members) {
+    ensureGroupMembersModal();
+    _groupMembersRowId = Number(rowId);
+    _groupMembersGroupName = String(groupName || '');
+    const div = document.getElementById('performerGroupMembersModal');
+    div.querySelector('#performerGroupMembersTitle').textContent =
+      `Members of ${groupName || 'this group'}`;
+    const hint = div.querySelector('#performerGroupMembersHint');
+    const count = members.length;
+    hint.innerHTML = count
+      ? `Click a tile to open that member's profile. Use <strong>+ Add DB link</strong> on any tile to link more source profiles to that specific member, or the “Add new member” tile to bring in someone fresh.`
+      : `This group has no linked profiles yet. Use the “Add new member” tile to pull one in from TPDB / StashDB / FansDB / JAVStash.`;
+    renderGroupMembersGrid(members);
+    div.style.display = 'flex';
+    div.classList.add('open');
+  }
+
+  const SOURCE_LABEL = { tpdb: 'TPDB', stashdb: 'StashDB', fansdb: 'FansDB', javstash: 'JAVStash' };
+
+  function renderGroupMembersGrid(members) {
+    const grid = document.getElementById('performerGroupMembersGrid');
+    if (!grid) return;
+    const tiles = members.map((m, i) => {
+      const displayName = m.name || (m._id ? `${SOURCE_LABEL[m._source] || ''} · ${m._id}` : 'Unnamed');
+      const initial = (m.name || displayName).trim().charAt(0).toUpperCase() || '?';
+      const srcChips = ['tpdb','stashdb','fansdb','javstash']
+        .filter((s) => m.ids[s])
+        .map((s) => `<img class="pp-member-src-logo" src="/static/logos/${s}.webp" alt="${SOURCE_LABEL[s]}" title="${SOURCE_LABEL[s]} · ${ESC(m.ids[s])}" onerror="this.replaceWith(document.createTextNode('${SOURCE_LABEL[s]}'))">`)
+        .join('');
+      return `<div class="pp-member-tile" data-member-i="${i}">
+        <button type="button" class="pp-member-tile-main" data-action="open"
+                title="Open ${ESC(displayName)}'s profile">
+          <span class="pp-member-tile-avatar">
+            ${m.image
+              ? `<img src="${ESC(m.image)}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'pp-member-tile-initial',textContent:'${ESC(initial)}'}))">`
+              : `<span class="pp-member-tile-initial">${ESC(initial)}</span>`}
+          </span>
+          <span class="pp-member-tile-name">${ESC(displayName)}</span>
+          <span class="pp-member-tile-srcs">${srcChips || '<span class="pp-member-tile-orphan">orphan ID</span>'}</span>
+        </button>
+        <div class="pp-member-tile-actions">
+          <button type="button" class="pp-member-tile-action" data-action="add-link"
+                  title="Add another DB profile to ${ESC(displayName)}">
+            <i class="fa-solid fa-link"></i> Add DB link
+          </button>
+        </div>
+      </div>`;
+    }).join('');
+    const addNewTile = `<button type="button" class="pp-member-tile pp-member-tile--add" data-action="add-new"
+            title="Add a new member to this group">
+      <span class="pp-member-tile-avatar"><i class="fa-solid fa-plus"></i></span>
+      <span class="pp-member-tile-name">Add new member</span>
+      <span class="pp-member-tile-srcs"><span class="pp-member-tile-add-hint">Search TPDB · StashDB · FansDB · JAVStash</span></span>
+    </button>`;
+    grid.innerHTML = tiles + addNewTile;
+
+    grid.querySelectorAll('.pp-member-tile-main').forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        const wrap = btn.closest('[data-member-i]');
+        const idx = parseInt(wrap && wrap.dataset.memberI, 10);
+        const member = members[idx];
+        if (!member) return;
+        openMemberPopup(member);
+      });
+    });
+    grid.querySelectorAll('.pp-member-tile-action[data-action="add-link"]').forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const wrap = btn.closest('[data-member-i]');
+        const idx = parseInt(wrap && wrap.dataset.memberI, 10);
+        const member = members[idx];
+        if (!member) return;
+        // Open the picker with this member's name pre-filled so new
+        // picks inherit the same name and cluster under their tile.
+        closeGroupMembersModal();
+        if (typeof window.openPerformerLinkSearchModal === 'function') {
+          window.openPerformerLinkSearchModal(_groupMembersRowId, member.name || _groupMembersGroupName);
+        }
+      });
+    });
+    grid.querySelectorAll('.pp-member-tile--add').forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        closeGroupMembersModal();
+        if (typeof window.openPerformerLinkSearchModal === 'function') {
+          // Empty name → user types whoever they want. The picker's
+          // result will write its own DB-supplied name into group_ids.
+          window.openPerformerLinkSearchModal(_groupMembersRowId, '');
+        }
+      });
+    });
+  }
+
+  function openMemberPopup(member) {
+    // Resolve the best source+id pair for opening the member's
+    // standalone popup. TPDB takes priority because it's the most
+    // commonly populated; falls through to other sources.
+    const opts = { name: member.name || '' };
+    if (member.ids.tpdb)        opts.tpdbId = member.ids.tpdb;
+    else if (member.ids.stashdb)  opts.stashId = member.ids.stashdb;
+    else if (member.ids.fansdb)   opts.stashId = member.ids.fansdb;
+    else if (member.ids.javstash) opts.stashId = member.ids.javstash;
+    else if (member._id) {
+      if (member._source === 'tpdb') opts.tpdbId = member._id;
+      else opts.stashId = member._id;
+    }
+    closeGroupMembersModal();
+    if (typeof window.openPerformerPopup === 'function') {
+      window.openPerformerPopup(opts);
+    }
+  }
+  window.openPerformerGroupMembersModal = function (rowId, groupName, groupIds) {
+    const members = deriveGroupMembers(groupIds || {});
+    openGroupMembersModal(rowId, groupName, members);
+  };
 })();
