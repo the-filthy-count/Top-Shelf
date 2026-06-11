@@ -2529,6 +2529,37 @@ def favourite_update_path(row_id: int, path: str) -> None:
         conn.commit()
 
 
+def favourite_promote_to_group(
+    row_id: int,
+    *,
+    folder_name: str,
+    path: str,
+    group_ids_json: str,
+) -> None:
+    """Atomically rename + relocate + group-promote a favourites row.
+
+    Used by the performer merge flow: the primary row inherits the
+    new group folder name + path and is flipped to is_group=1, with
+    the merged-in performers' crosswalk IDs baked into group_ids_json
+    so future scenes match via crosswalk."""
+    now = _iso_now()
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE favourite_entities SET
+                folder_name = ?,
+                path = ?,
+                is_group = 1,
+                group_ids_json = ?,
+                path_missing = 0,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (folder_name, path, group_ids_json, now, int(row_id)),
+        )
+        conn.commit()
+
+
 def favourite_refresh_all_path_existence() -> None:
     """Set path_missing from ``Path(path).is_dir()`` for every row. Ignores matches_locked."""
     now = datetime.now(timezone.utc).isoformat()

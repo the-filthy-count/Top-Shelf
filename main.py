@@ -21261,7 +21261,334 @@ async def api_favourites_group_remove_link(payload: dict = Body(...)):
         data = db.favourite_group_remove_id(row_id, source, ext_id)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+    _favourites_name_index_bump()
     return {"ok": True, "group_ids": data}
+
+
+# ── Performer merge / group-add / ungroup ────────────────────────────
+#
+# Workflow:
+#   • Add two or more performers to the library normally.
+#   • Open one performer's popup → hamburger → "Merge into group…".
+#   • Pick the other performer(s), give the group a name, choose a
+#     destination dir, confirm.
+#   • Merge moves video files into a new group folder, promotes the
+#     primary row to is_group=1 with the others' crosswalk IDs in
+#     group_ids_json, deletes the now-empty merged-in rows + folders.
+#
+# Once grouped: "Add another performer…" appends to the existing group;
+# "Ungroup" moves the video files back to source_dir (queue) so the
+# pipeline re-files them, then deletes the group row + folder.
+
+def _video_files_in(directory: Path) -> list[Path]:
+    """Recursively collect every video file under ``directory``.
+    Used by the merge / ungroup flows to move only media (posters,
+    NFOs, sprites, etc. stay behind so the destination folder doesn't
+    inherit stale chrome from the source)."""
+    out: list[Path] = []
+    if not directory.is_dir():
+        return out
+    for p in directory.rglob("*"):
+        try:
+            if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS:
+                out.append(p)
+        except OSError:
+            continue
+    return out
+
+
+def _safe_remove_empty_tree(directory: Path) -> bool:
+    """Delete an empty directory tree (any sub-tree with no remaining
+    files). Returns True when the directory itself was removed.
+    Leaves the tree intact and logs once if non-empty — caller's
+    decision whether that's an error or expected (the user may have
+    kept artwork they don't want auto-deleted)."""
+    if not directory.is_dir():
+        return False
+    try:
+        # Bottom-up rmdir — only succeeds when the dir is genuinely empty.
+        for sub in sorted(
+            (p for p in directory.rglob("*") if p.is_dir()),
+            key=lambda p: len(p.parts),
+            reverse=True,
+        ):
+            try:
+                sub.rmdir()
+            except OSError:
+                pass
+        directory.rmdir()
+        return True
+    except OSError as e:
+        emit(f"  MERGE: cannot remove '{directory}' — {e}")
+        return False
+
+
+@app.post("/api/performers/merge")
+async def api_performers_merge(payload: dict = Body(...)):
+    """Merge two or more performer rows into a new group folder.
+
+    Body:
+      primary_row_id   — int, the row whose popup launched the merge.
+      secondary_row_ids — list[int], performers to fold in.
+      group_name       — str, the new group folder name.
+      dest_dir         — str, absolute path of one of the configured
+                         performer roots (must match an entry from
+                         /api/metadata/dirs?kind=performer).
+    """
+    try:
+        primary_id = int(payload.get("primary_row_id") or 0)
+    except (TypeError, ValueError):
+        primary_id = 0
+    secondaries_raw = payload.get("secondary_row_ids") or []
+    if not isinstance(secondaries_raw, list):
+        return JSONResponse({"error": "secondary_row_ids must be a list"}, status_code=400)
+    try:
+        secondary_ids = [int(x) for x in secondaries_raw if int(x) and int(x) != primary_id]
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "secondary_row_ids must contain integers"}, status_code=400)
+    group_name = _sanitize_fs_component((payload.get("group_name") or "").strip())
+    dest_dir = (payload.get("dest_dir") or "").strip()
+    if not primary_id or not secondary_ids or not group_name or not dest_dir:
+        return JSONResponse(
+            {"error": "primary_row_id, secondary_row_ids, group_name, dest_dir required"},
+            status_code=400,
+        )
+    # Whitelist dest_dir against the configured performer roots so a
+    # malicious payload can't drop files anywhere on the filesystem.
+    allowed_dirs = {d["path"] for d in db.get_directories("performer") if d.get("path")}
+    if dest_dir not in allowed_dirs:
+        return JSONResponse({"error": "dest_dir is not a configured performer root"}, status_code=400)
+    primary_row = db.favourite_get(primary_id)
+    if not primary_row or (primary_row.get("kind") or "").lower() != "performer":
+        return JSONResponse({"error": "Primary performer not found"}, status_code=404)
+    secondary_rows: list[dict] = []
+    for sid in secondary_ids:
+        r = db.favourite_get(sid)
+        if not r or (r.get("kind") or "").lower() != "performer":
+            return JSONResponse({"error": f"Secondary row {sid} not found"}, status_code=404)
+        secondary_rows.append(r)
+
+    dest_parent = Path(dest_dir).expanduser()
+    dest_folder = dest_parent / group_name
+    if dest_folder.exists() and dest_folder != Path((primary_row.get("path") or "").strip()):
+        return JSONResponse(
+            {"error": f"'{dest_folder}' already exists — pick a different name or destination"},
+            status_code=409,
+        )
+
+    try:
+        dest_parent.mkdir(parents=True, exist_ok=True)
+
+        # Stage 1: relocate the primary's folder to the new group path.
+        primary_path_raw = (primary_row.get("path") or "").strip()
+        primary_path = Path(primary_path_raw).expanduser() if primary_path_raw else None
+        if primary_path and primary_path.is_dir() and primary_path != dest_folder:
+            # shutil.move handles cross-device renames + falls back to copy+rm.
+            shutil.move(str(primary_path), str(dest_folder))
+        elif not dest_folder.exists():
+            dest_folder.mkdir(parents=True, exist_ok=True)
+
+        # Stage 2: move every video from each secondary into the group.
+        for srow in secondary_rows:
+            spath = (srow.get("path") or "").strip()
+            if not spath:
+                continue
+            src = Path(spath).expanduser()
+            for vf in _video_files_in(src):
+                target = dest_folder / vf.name
+                # Collide-safe: suffix `(2)` etc on filename match.
+                if target.exists() and target.resolve() != vf.resolve():
+                    stem, ext = target.stem, target.suffix
+                    n = 2
+                    while True:
+                        cand = dest_folder / f"{stem} ({n}){ext}"
+                        if not cand.exists():
+                            target = cand
+                            break
+                        n += 1
+                safe_move(str(vf), str(target))
+            # Clean up the now-empty source folder. Posters / NFOs are
+            # left behind intentionally — they were per-performer and
+            # don't belong in the group folder.
+            _safe_remove_empty_tree(src)
+
+        # Stage 3: union every crosswalk ID we have for primary +
+        # secondaries into group_ids_json. The matcher's crosswalk
+        # check resolves any scene whose performer matches any of these.
+        group_ids = {"tpdb": [], "stashdb": [], "fansdb": [], "javstash": []}
+        def _push_ids(src_row: dict) -> None:
+            for src_key, col in (
+                ("tpdb",     "match_tpdb_id"),
+                ("stashdb",  "match_stashdb_id"),
+                ("fansdb",   "match_fansdb_id"),
+                ("javstash", "match_javstash_id"),
+            ):
+                v = (src_row.get(col) or "").strip()
+                if v and v not in [_id if isinstance(_id, str) else _id.get("id") for _id in group_ids[src_key]]:
+                    group_ids[src_key].append(v)
+            existing_gj = (src_row.get("group_ids_json") or "").strip()
+            if existing_gj:
+                try:
+                    parsed = json.loads(existing_gj) or {}
+                except (json.JSONDecodeError, TypeError):
+                    parsed = {}
+                if isinstance(parsed, dict):
+                    for src_key in ("tpdb", "stashdb", "fansdb", "javstash"):
+                        for x in (parsed.get(src_key) or []):
+                            xid = x if isinstance(x, str) else (x.get("id") if isinstance(x, dict) else "")
+                            xid = str(xid or "").strip()
+                            if xid and xid not in [
+                                _id if isinstance(_id, str) else _id.get("id") for _id in group_ids[src_key]
+                            ]:
+                                group_ids[src_key].append(xid)
+        _push_ids(primary_row)
+        for srow in secondary_rows:
+            _push_ids(srow)
+
+        db.favourite_promote_to_group(
+            primary_id,
+            folder_name=group_name,
+            path=str(dest_folder),
+            group_ids_json=json.dumps(group_ids),
+        )
+
+        # Stage 4: delete the secondary rows. Their match IDs already
+        # live in primary's group_ids_json so future filing still works.
+        for srow in secondary_rows:
+            db.favourite_delete(int(srow["id"]))
+
+        _favourites_name_index_bump()
+        return {
+            "ok": True,
+            "row_id": primary_id,
+            "path": str(dest_folder),
+            "folder_name": group_name,
+        }
+    except OSError as e:
+        emit(f"MERGE error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/performers/group-add")
+async def api_performers_group_add(payload: dict = Body(...)):
+    """Add one or more performer rows into an already-grouped folder.
+
+    Same body shape as merge minus group_name/dest_dir — the group's
+    name and location don't change. Moves every secondary's videos
+    into the group folder, merges their match IDs into group_ids_json,
+    deletes the secondary rows.
+    """
+    try:
+        row_id = int(payload.get("row_id") or 0)
+    except (TypeError, ValueError):
+        row_id = 0
+    secondaries_raw = payload.get("secondary_row_ids") or []
+    try:
+        secondary_ids = [int(x) for x in (secondaries_raw or []) if int(x) and int(x) != row_id]
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "secondary_row_ids must contain integers"}, status_code=400)
+    if not row_id or not secondary_ids:
+        return JSONResponse({"error": "row_id and secondary_row_ids required"}, status_code=400)
+    primary_row = db.favourite_get(row_id)
+    if not primary_row or (primary_row.get("kind") or "").lower() != "performer":
+        return JSONResponse({"error": "Group performer not found"}, status_code=404)
+    if not int(primary_row.get("is_group") or 0):
+        return JSONResponse({"error": "Target row is not a group — use /api/performers/merge"}, status_code=400)
+    secondary_rows = []
+    for sid in secondary_ids:
+        r = db.favourite_get(sid)
+        if not r or (r.get("kind") or "").lower() != "performer":
+            return JSONResponse({"error": f"Secondary row {sid} not found"}, status_code=404)
+        secondary_rows.append(r)
+    dest_folder = Path((primary_row.get("path") or "").strip()).expanduser()
+    if not dest_folder.is_dir():
+        return JSONResponse({"error": "Group folder is missing on disk"}, status_code=409)
+
+    try:
+        for srow in secondary_rows:
+            spath = (srow.get("path") or "").strip()
+            if not spath:
+                continue
+            src = Path(spath).expanduser()
+            for vf in _video_files_in(src):
+                target = dest_folder / vf.name
+                if target.exists() and target.resolve() != vf.resolve():
+                    stem, ext = target.stem, target.suffix
+                    n = 2
+                    while True:
+                        cand = dest_folder / f"{stem} ({n}){ext}"
+                        if not cand.exists():
+                            target = cand
+                            break
+                        n += 1
+                safe_move(str(vf), str(target))
+            _safe_remove_empty_tree(src)
+            for src_key, col in (
+                ("tpdb",     "match_tpdb_id"),
+                ("stashdb",  "match_stashdb_id"),
+                ("fansdb",   "match_fansdb_id"),
+                ("javstash", "match_javstash_id"),
+            ):
+                v = (srow.get(col) or "").strip()
+                if v:
+                    db.favourite_group_add_id(row_id, src_key, v)
+            db.favourite_delete(int(srow["id"]))
+
+        _favourites_name_index_bump()
+        return {"ok": True, "row_id": row_id}
+    except OSError as e:
+        emit(f"GROUP-ADD error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/performers/ungroup")
+async def api_performers_ungroup(payload: dict = Body(...)):
+    """Dissolve a group performer.
+
+    Moves every video file from the group folder back to ``source_dir``
+    (the queue) so the filing pipeline re-sorts them. Then deletes the
+    group folder + the row. The user re-adds individual performers as
+    the queue refiles each scene.
+    """
+    try:
+        row_id = int(payload.get("row_id") or 0)
+    except (TypeError, ValueError):
+        row_id = 0
+    if not row_id:
+        return JSONResponse({"error": "row_id required"}, status_code=400)
+    row = db.favourite_get(row_id)
+    if not row or (row.get("kind") or "").lower() != "performer":
+        return JSONResponse({"error": "Performer not found"}, status_code=404)
+    if not int(row.get("is_group") or 0):
+        return JSONResponse({"error": "Row is not a group"}, status_code=400)
+    settings = db.get_settings()
+    source_dir = Path((settings.get("source_dir") or "").strip()).expanduser()
+    if not source_dir.is_dir():
+        return JSONResponse({"error": "Configured source_dir does not exist"}, status_code=409)
+    group_dir = Path((row.get("path") or "").strip()).expanduser()
+    moved = 0
+    try:
+        if group_dir.is_dir():
+            for vf in _video_files_in(group_dir):
+                target = source_dir / vf.name
+                if target.exists() and target.resolve() != vf.resolve():
+                    stem, ext = target.stem, target.suffix
+                    n = 2
+                    while True:
+                        cand = source_dir / f"{stem} ({n}){ext}"
+                        if not cand.exists():
+                            target = cand
+                            break
+                        n += 1
+                safe_move(str(vf), str(target))
+                moved += 1
+            _safe_remove_empty_tree(group_dir)
+        db.favourite_delete(row_id)
+        _favourites_name_index_bump()
+        return {"ok": True, "moved_videos": moved, "source_dir": str(source_dir)}
+    except OSError as e:
+        emit(f"UNGROUP error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 _IAFD_ENRICH_RUNNING = threading.Event()
@@ -22135,6 +22462,7 @@ async def api_performer_popup(
         "folder_path": row.get("path") if row else "",
         "is_favourite": bool(row and row.get("is_favourite")),
         "matches_locked": bool(row and row.get("matches_locked")),
+        "is_group":    bool(row and int(row.get("is_group") or 0)),
     }
 
     sources_block = {

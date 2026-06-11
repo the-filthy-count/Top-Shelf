@@ -524,6 +524,327 @@
     return true;
   }
 
+  /* ── Performer merge / group-add / ungroup ───────────────────────
+   * Three flows wired here:
+   *   merge      — solo row → multi-pick others → new group folder
+   *   group-add  — group row → multi-pick others → folded into group
+   *   ungroup    — group row → confirm → files → queue, row + folder gone
+   */
+
+  let _mergeLibraryCache = null;
+  let _mergeLibraryCacheAt = 0;
+  /** Pull every library performer once per ~30s. Cached because the
+   * modal opens repeatedly during a merge session and the result set
+   * doesn't change in the middle of the flow. */
+  async function _mergeFetchLibraryPerformers() {
+    const now = Date.now();
+    if (_mergeLibraryCache && (now - _mergeLibraryCacheAt) < 30000) {
+      return _mergeLibraryCache;
+    }
+    const r = await fetch('/api/favourites', { credentials: 'same-origin' });
+    const d = await r.json().catch(() => ({}));
+    const perfs = (d && d.performers) || [];
+    _mergeLibraryCache = perfs;
+    _mergeLibraryCacheAt = now;
+    return perfs;
+  }
+
+  function _ensureMergeModal() {
+    if (document.getElementById('performerMergeModal')) return;
+    const div = document.createElement('div');
+    div.id = 'performerMergeModal';
+    div.className = 'modal-overlay';
+    div.style.setProperty('z-index', '1800', 'important');
+    div.innerHTML = `
+      <div class="modal-box ts-link-modal-box perf-merge-box"
+           style="max-width:840px;width:min(840px,calc(100vw - 60px));max-height:calc(100vh - 80px);display:flex;flex-direction:column">
+        <h3 id="perfMergeTitle" style="margin:0 0 6px 0;font-family:var(--font-display, var(--mono));font-size:18px">Merge performers</h3>
+        <div id="perfMergeSub" style="font-size:11px;color:var(--dim);margin-bottom:12px"></div>
+
+        <div id="perfMergeNameRow" style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+          <label style="font-size:11px;color:var(--dim);font-family:var(--mono);min-width:90px">Group name</label>
+          <input type="text" id="perfMergeName"
+                 placeholder="e.g. Fox Twins"
+                 style="flex:1;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text);padding:8px 12px;font-size:13px;font-family:var(--mono);outline:none">
+        </div>
+        <div id="perfMergeDestRow" style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+          <label style="font-size:11px;color:var(--dim);font-family:var(--mono);min-width:90px">Destination</label>
+          <select id="perfMergeDest"
+                  style="flex:1;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text);padding:8px 12px;font-size:13px;font-family:var(--mono);outline:none"></select>
+        </div>
+
+        <input type="search" id="perfMergeSearch"
+               placeholder="Filter library performers…"
+               autocomplete="off"
+               style="background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text);padding:8px 12px;font-size:13px;font-family:var(--mono);outline:none;margin-bottom:8px">
+        <div id="perfMergeStatus" style="font-size:11px;color:var(--dim);margin-bottom:6px"></div>
+        <div id="perfMergeResults"
+             style="flex:1 1 0;min-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:6px"></div>
+
+        <div class="ts-link-modal-foot" style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:12px">
+          <div id="perfMergeSelected" style="font-size:11px;color:var(--dim);font-family:var(--mono)"></div>
+          <div style="display:flex;gap:8px">
+            <button type="button" id="perfMergeCancelBtn"
+                    style="background:transparent;border:1px solid rgba(255,255,255,0.15);color:var(--dim);padding:8px 16px;border-radius:6px;font-size:11px;font-family:var(--mono);cursor:pointer;text-transform:uppercase;letter-spacing:0.04em">Cancel</button>
+            <button type="button" id="perfMergeConfirmBtn" disabled
+                    style="background:rgba(var(--brand-purple-rgb),0.4);border:1px solid rgba(var(--brand-purple-rgb),0.65);color:var(--accent);padding:8px 16px;border-radius:6px;font-size:11px;font-family:var(--mono);cursor:pointer;text-transform:uppercase;letter-spacing:0.04em;opacity:0.55">Merge</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(div);
+    div.addEventListener('click', (e) => {
+      if (e.target === div) _closeMergeModal();
+    });
+    div.querySelector('#perfMergeCancelBtn').addEventListener('click', _closeMergeModal);
+    const search = div.querySelector('#perfMergeSearch');
+    let debTimer = null;
+    search.addEventListener('input', () => {
+      if (debTimer) clearTimeout(debTimer);
+      debTimer = setTimeout(() => _renderMergeList(search.value), 100);
+    });
+    search.addEventListener('keydown', (e) => { if (e.key === 'Escape') _closeMergeModal(); });
+    div.querySelector('#perfMergeName').addEventListener('input', _refreshMergeConfirmState);
+    div.querySelector('#perfMergeConfirmBtn').addEventListener('click', _submitMerge);
+  }
+
+  // Modal session state — only valid while the modal is open.
+  const _mergeState = {
+    mode: 'merge',          // 'merge' or 'group-add'
+    ctx:  null,
+    selected: new Set(),
+    items: [],
+  };
+
+  function _closeMergeModal() {
+    const div = document.getElementById('performerMergeModal');
+    if (!div) return;
+    div.classList.remove('open');
+    div.style.display = '';
+    _mergeState.ctx = null;
+    _mergeState.selected.clear();
+    _mergeState.items = [];
+  }
+
+  async function openPerformerMergeModal(ctx, mode) {
+    if (!ctx || ctx.kind !== 'performer' || ctx.id <= 0) return false;
+    _ensureMergeModal();
+    const div = document.getElementById('performerMergeModal');
+    _mergeState.mode = mode;
+    _mergeState.ctx  = ctx;
+    _mergeState.selected.clear();
+    // Title + subline change with the mode. group-add hides the name/
+    // dest rows since the group already has both.
+    const title  = div.querySelector('#perfMergeTitle');
+    const sub    = div.querySelector('#perfMergeSub');
+    const nameRow= div.querySelector('#perfMergeNameRow');
+    const destRow= div.querySelector('#perfMergeDestRow');
+    const nameInput = div.querySelector('#perfMergeName');
+    const destSel   = div.querySelector('#perfMergeDest');
+    const confirmBtn= div.querySelector('#perfMergeConfirmBtn');
+    if (mode === 'group-add') {
+      title.textContent = 'Add another performer';
+      sub.innerHTML = 'Folds the picked performer(s) into <strong>' + esc(ctx.name)
+        + '</strong> — videos move into this group folder, original rows are removed.';
+      nameRow.style.display = 'none';
+      destRow.style.display = 'none';
+      confirmBtn.textContent = 'Add';
+    } else {
+      title.textContent = 'Merge into group';
+      sub.innerHTML = 'Creates a new group folder containing <strong>' + esc(ctx.name)
+        + '</strong> plus the picked performer(s). Videos move into the group, original folders are removed.';
+      nameRow.style.display = '';
+      destRow.style.display = '';
+      confirmBtn.textContent = 'Merge';
+      nameInput.value = '';
+    }
+    // Populate destination dropdown from configured performer roots.
+    if (mode === 'merge') {
+      destSel.innerHTML = '<option>Loading…</option>';
+      try {
+        const r = await fetch('/api/metadata/dirs?kind=performer', { credentials: 'same-origin' });
+        const d = await r.json().catch(() => ({}));
+        const dirs = (d && d.dirs) || [];
+        if (!dirs.length) {
+          destSel.innerHTML = '<option value="">No performer roots configured</option>';
+        } else {
+          destSel.innerHTML = dirs.map((d) =>
+            `<option value="${esc(d.path)}">${esc(d.label || d.path)} — ${esc(d.path)}</option>`
+          ).join('');
+        }
+      } catch (_) {
+        destSel.innerHTML = '<option value="">Failed to load dirs</option>';
+      }
+    }
+
+    div.querySelector('#perfMergeSearch').value = '';
+    div.querySelector('#perfMergeStatus').textContent = 'Loading library…';
+    div.querySelector('#perfMergeResults').innerHTML = '';
+    div.style.display = 'flex';
+    div.classList.add('open');
+    try {
+      const perfs = await _mergeFetchLibraryPerformers();
+      _mergeState.items = perfs.filter((p) => Number(p.id) !== Number(ctx.id));
+      _renderMergeList('');
+    } catch (e) {
+      div.querySelector('#perfMergeStatus').textContent = 'Failed to load library performers';
+    }
+    setTimeout(() => div.querySelector('#perfMergeSearch').focus(), 0);
+    // Return true so the dispatcher doesn't trigger onDone() and close
+    // the popup — the modal owns the user's next move from here.
+    return true;
+  }
+
+  function _renderMergeList(filterText) {
+    const status  = document.getElementById('perfMergeStatus');
+    const results = document.getElementById('perfMergeResults');
+    if (!status || !results) return;
+    const q = String(filterText || '').toLowerCase().trim();
+    const matches = _mergeState.items.filter((p) => {
+      if (!q) return true;
+      const name = (p.folder_name || p.name || '').toLowerCase();
+      return name.includes(q);
+    });
+    if (!matches.length) {
+      status.textContent = q ? 'No matches' : 'Library is empty';
+      results.innerHTML = '';
+      _refreshMergeConfirmState();
+      return;
+    }
+    status.textContent = `${matches.length} performer${matches.length === 1 ? '' : 's'}`
+      + (_mergeState.selected.size ? ` · ${_mergeState.selected.size} selected` : '');
+    results.innerHTML = matches.map((p) => {
+      const selected = _mergeState.selected.has(p.id);
+      const name = p.folder_name || p.name || '(unnamed)';
+      const path = p.path || '';
+      const groupBadge = p.is_group
+        ? '<span style="font-size:9px;background:rgba(var(--brand-purple-rgb),0.25);color:var(--accent);padding:1px 5px;border-radius:3px;margin-left:6px">GROUP</span>'
+        : '';
+      return `<button type="button" class="perf-merge-row" data-id="${p.id}"
+              style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;background:${selected ? 'rgba(var(--brand-purple-rgb),0.18)' : 'rgba(255,255,255,0.02)'};border:1px solid ${selected ? 'rgba(var(--brand-purple-rgb),0.6)' : 'rgba(255,255,255,0.06)'};cursor:pointer;text-align:left;color:var(--text);font-family:inherit">
+        <div style="width:18px;height:18px;border:1px solid ${selected ? 'rgba(var(--brand-purple-rgb),0.85)' : 'rgba(255,255,255,0.2)'};border-radius:3px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:${selected ? 'rgba(var(--brand-purple-rgb),0.4)' : 'transparent'}">
+          ${selected ? '<i class="fa-solid fa-check" style="font-size:10px;color:var(--accent)"></i>' : ''}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}${groupBadge}</div>
+          <div style="font-size:10px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(path)}</div>
+        </div>
+      </button>`;
+    }).join('');
+    results.querySelectorAll('.perf-merge-row').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = Number(btn.dataset.id);
+        if (_mergeState.selected.has(id)) _mergeState.selected.delete(id);
+        else _mergeState.selected.add(id);
+        _renderMergeList(document.getElementById('perfMergeSearch').value);
+      });
+    });
+    _refreshMergeConfirmState();
+  }
+
+  function _refreshMergeConfirmState() {
+    const btn = document.getElementById('perfMergeConfirmBtn');
+    const sel = document.getElementById('perfMergeSelected');
+    if (!btn || !sel) return;
+    const n = _mergeState.selected.size;
+    const name = (document.getElementById('perfMergeName')?.value || '').trim();
+    const needName = _mergeState.mode === 'merge';
+    const canSubmit = n > 0 && (!needName || name.length > 0);
+    btn.disabled = !canSubmit;
+    btn.style.opacity = canSubmit ? '1' : '0.55';
+    btn.style.cursor  = canSubmit ? 'pointer' : 'not-allowed';
+    if (n === 0) {
+      sel.textContent = 'Pick at least one performer';
+    } else if (needName && !name) {
+      sel.textContent = `${n} selected · enter a group name to continue`;
+    } else {
+      sel.textContent = `${n} selected`;
+    }
+  }
+
+  async function _submitMerge() {
+    if (!_mergeState.ctx) return;
+    const ctx = _mergeState.ctx;
+    const ids = Array.from(_mergeState.selected);
+    if (!ids.length) return;
+    const btn = document.getElementById('perfMergeConfirmBtn');
+    btn.disabled = true;
+    btn.style.opacity = '0.55';
+    btn.textContent = 'Working…';
+    try {
+      if (_mergeState.mode === 'merge') {
+        const name = (document.getElementById('perfMergeName').value || '').trim();
+        const dest = document.getElementById('perfMergeDest').value || '';
+        const r = await fetch('/api/performers/merge', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            primary_row_id:    ctx.id,
+            secondary_row_ids: ids,
+            group_name:        name,
+            dest_dir:          dest,
+          }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { toast(d.error || 'Merge failed', { kind: 'error' }); btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'Merge'; return; }
+        toast(`Merged ${ids.length + 1} performers into ${name}`);
+      } else {
+        const r = await fetch('/api/performers/group-add', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ row_id: ctx.id, secondary_row_ids: ids }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { toast(d.error || 'Add failed', { kind: 'error' }); btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'Add'; return; }
+        toast(`Added ${ids.length} performer${ids.length === 1 ? '' : 's'} to ${ctx.name}`);
+      }
+      _mergeLibraryCache = null;  // invalidate so re-open sees the changes
+      _closeMergeModal();
+      if (typeof window.refreshPerformerPopup === 'function'
+          && window._performerPopupActiveId === ctx.id) {
+        window.refreshPerformerPopup();
+      }
+    } catch (e) {
+      toast(e.message || 'Failed', { kind: 'error' });
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.textContent = _mergeState.mode === 'merge' ? 'Merge' : 'Add';
+    }
+  }
+
+  async function ungroupPerformer(ctx) {
+    if (!ctx || ctx.kind !== 'performer' || ctx.id <= 0) return false;
+    if (!confirm(
+      `Ungroup "${ctx.name}"?\n\n`
+      + `Every video file in the group folder moves back to the queue source `
+      + `directory and the pipeline re-files them as individual performers. `
+      + `The group folder and library row are removed.\n\n`
+      + `This cannot be undone.`
+    )) return false;
+    try {
+      const r = await fetch('/api/performers/ungroup', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ row_id: ctx.id }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        toast(d.error || 'Ungroup failed', { kind: 'error' });
+        return false;
+      }
+      toast(`Ungrouped ${ctx.name} — ${d.moved_videos || 0} file(s) sent back to queue`);
+      _mergeLibraryCache = null;
+      // The row is gone — close the performer popup.
+      if (typeof window.closePerformerPopup === 'function') window.closePerformerPopup();
+      return true;
+    } catch (e) {
+      toast(e.message || 'Ungroup failed', { kind: 'error' });
+      return false;
+    }
+  }
+
   /** Open the studio popup's "Link other studios" search modal. The
    * modal lives in studio-popup.js; this just dispatches to it. The
    * picker hits TPDB/StashDB/FansDB/JAVStash via /api/metadata/search
@@ -553,6 +874,22 @@
         { action: 'enrich', label: 'Run enrichment', icon: 'fa-wand-magic-sparkles' },
         { action: 'rename', label: 'Rename performer', icon: 'fa-i-cursor' },
       );
+      if (ctx.isGroup) {
+        // Already a group: offer to add more members or to dissolve.
+        // Ungroup is destructive (deletes the row + folder, sends
+        // every video back to the queue) so the confirmation step
+        // lives in the handler.
+        items.push(
+          { action: 'group-add', label: 'Add another performer…', icon: 'fa-user-plus' },
+          { action: 'ungroup',   label: 'Ungroup',                 icon: 'fa-user-minus' },
+        );
+      } else {
+        // Solo row: launch the merge picker to fold this performer
+        // into a new group folder alongside one or more others.
+        items.push(
+          { action: 'merge', label: 'Merge into group…', icon: 'fa-object-group' },
+        );
+      }
     }
     if (ctx.kind === 'studio' && ctx.id > 0) {
       // Sibling-site lumping: a single local folder for a network that
@@ -616,6 +953,9 @@
           else if (action === 'enrich') ok = await enrichPerformer(ctx);
           else if (action === 'rename') ok = await renamePerformer(ctx);
           else if (action === 'studio-aliases') ok = await editStudioAliases(ctx);
+          else if (action === 'merge')     ok = await openPerformerMergeModal(ctx, 'merge');
+          else if (action === 'group-add') ok = await openPerformerMergeModal(ctx, 'group-add');
+          else if (action === 'ungroup')   ok = await ungroupPerformer(ctx);
           else if (action === 'remove') ok = await removeFromLibrary(ctx);
           else if (action === 'delete') ok = await deleteFromDisk(ctx);
           else if (action === 'move') ok = await changeDirectory(ctx);
@@ -623,10 +963,15 @@
               && action !== 'enrich'
               && action !== 'refresh-images'
               && action !== 'studio-aliases'
+              && action !== 'merge'
+              && action !== 'group-add'
+              && action !== 'ungroup'
               && typeof onDone === 'function') onDone(action);
-          // studio-aliases triggers an in-place popup refresh from its
-          // own handler so the user stays on the studio they were
-          // editing — onDone(studio-aliases) would close the popup.
+          // studio-aliases / merge / group-add trigger an in-place popup
+          // refresh from their own handlers (so the user stays on the
+          // performer they were editing) — onDone() would close it.
+          // ungroup destroys the row entirely, so it closes the popup
+          // itself.
         } catch (err) {
           toast(err.message || 'Action failed', { kind: 'error' });
         }
@@ -653,5 +998,7 @@
     changeDirectory,
     renamePerformer,
     editStudioAliases,
+    openPerformerMergeModal,
+    ungroupPerformer,
   };
 })();

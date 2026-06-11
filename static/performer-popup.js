@@ -1256,6 +1256,7 @@
           name: id.canonical_name || 'this performer',
           viceId: '',
           canChangeDirectory: Number(lib.row_id) > 0,
+          isGroup: !!lib.is_group,
         }, (action) => {
           // Rename leaves the row in place; refresh so the new name
           // and aliases reflect immediately. Everything else (delete,
