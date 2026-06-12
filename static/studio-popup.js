@@ -47,7 +47,10 @@
           <h2 class="pp-name">
             <span class="pp-lib-entity-actions" id="studioPopupMenuSlot"></span>
             <span class="pp-name-text" id="studioPopupTitle">Loading…</span>
-            <span class="pp-name-count" id="studioPopupVideoCount" hidden></span>
+            <span class="pp-name-count" id="studioPopupVideoCount" hidden>
+              <span class="pp-name-count-val" id="studioPopupVideoCountVal"></span>
+              <i class="fa-solid fa-video pp-name-count-icon" aria-hidden="true"></i>
+            </span>
           </h2>
           <div class="pp-profiles-grid pp-profiles-grid--header" id="studioPopupPills"></div>
           <div class="performer-popup-toolbar">
@@ -552,20 +555,22 @@
     _activeName = name;
     // Video-count LED badge — only shown for library-tracked studios
     // (external-mode renderRow callers pass row.id === 0 with no
-    // video_count). Padded to 4 chars with leading spaces.
+    // video_count). Padding uses U+2007 (FIGURE SPACE) so the LED
+    // font renders the pad slots instead of collapsing them.
     const vcEl = document.getElementById('studioPopupVideoCount');
+    const vcValEl = document.getElementById('studioPopupVideoCountVal');
     if (vcEl) {
       const hasCount = typeof row.video_count === 'number' && row.id;
       if (hasCount) {
         const vc = Number(row.video_count || 0);
-        vcEl.textContent = String(vc).padStart(4, ' ');
+        if (vcValEl) vcValEl.textContent = String(vc).padStart(4, ' ');
         const tip = `${vc} video${vc === 1 ? '' : 's'} in this folder`;
         vcEl.setAttribute('title', tip);
         vcEl.setAttribute('aria-label', tip);
         vcEl.hidden = false;
       } else {
         vcEl.hidden = true;
-        vcEl.textContent = '';
+        if (vcValEl) vcValEl.textContent = '';
       }
     }
     // Header pill row mirrors the performer popup: one chip per DB

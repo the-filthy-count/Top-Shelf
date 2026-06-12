@@ -5878,30 +5878,44 @@ button.pp-name-group:hover .pp-name-group-count {
 /* Video-count badge — LED-style mini counter that sits alongside the
  * other name-row icons. Mirrors the `.sky-counter` font used on
  * /health stat tiles but sized for a 4-char strip in the popup
- * header. `white-space: pre` preserves the leading-space pad so
- * "   7" right-aligns identically to "  84" / "1024". */
+ * header.
+ *
+ * Padding is rendered via U+2007 (FIGURE SPACE — same advance as a
+ * digit in monospace fonts) wrapped in `.pp-name-count-val`. Plain
+ * ASCII spaces would either collapse (the count text is the only
+ * anonymous child of the inline-flex container, and flex strips
+ * leading whitespace) or render at the LED font's narrower
+ * space-glyph width and break right-alignment. */
 .pp-name-count {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
+  gap: 6px;
   height: 28px;
-  padding: 0 8px;
+  padding: 0 10px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.10);
   color: var(--accent);
+  line-height: 1;
+  user-select: none;
+  flex-shrink: 0;
+}
+.pp-name-count-val {
   font-family: "LedCounter", "VCRMono", ui-monospace, monospace;
   font-size: 16px;
-  line-height: 1;
   letter-spacing: 0;
   white-space: pre;
   font-variant-numeric: tabular-nums;
-  user-select: none;
-  flex-shrink: 0;
-  /* Width sized for 4 monospace LED glyphs at 16px so " 234" /
-   * "1234" hold the same footprint. */
-  min-width: 4ch;
   text-align: right;
+  /* 4-glyph strip width so " 234" / "1234" hold the same footprint
+   * regardless of digit count. */
+  min-width: 4ch;
+  display: inline-block;
+}
+.pp-name-count-icon {
+  font-size: 12px;
+  color: rgba(var(--brand-accent-rgb), 0.85);
+  line-height: 1;
 }
 
 /* Group-members modal ─ tiles surface the linked DB profiles
