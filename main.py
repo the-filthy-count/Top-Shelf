@@ -27371,12 +27371,17 @@ async def api_performers_poster_roles(row_id: int):
         return JSONResponse({"error": "Not a performer row"}, status_code=404)
     md = _metadata_dir_for("performer", row_id)
     def _role_url(role: str) -> str | None:
-        for name in (f"{row_id}_poster_{role}.jpg",
-                     f"{row_id}_poster_{1 if role == 'primary' else 2}.jpg"):
-            p = md / name
-            if p.is_file() and p.stat().st_size > 500:
-                return (f"/api/performers/poster-role-image?row_id={row_id}"
-                        f"&role={role}&v={int(p.stat().st_mtime)}")
+        # Hand off to `_perf_poster_resolve` so we find both `.webp`
+        # (canonical write target since the WebP migration) and legacy
+        # `.jpg`, plus the numbered fallback names. The original
+        # hard-coded `.jpg` list missed WebP files entirely, which is
+        # why the manage-posters modal said "NOT SET" even when the
+        # popup's right rail was painting the saved poster.
+        legacy_role = "poster_1" if role == "primary" else "poster_2"
+        p = _perf_poster_resolve(row_id, f"poster_{role}", legacy_role)
+        if p is not None:
+            return (f"/api/performers/poster-role-image?row_id={row_id}"
+                    f"&role={role}&v={int(p.stat().st_mtime)}")
         return None
     candidates = _favourites_matched_link_image_items(row) or []
     # Prepend the local library poster.jpg if present. The image URL is a
@@ -27423,19 +27428,16 @@ async def api_performers_poster_role_image(row_id: int, role: str, v: int = 0):
     role = (role or "").strip().lower()
     if role not in ("primary", "secondary"):
         return JSONResponse({"error": "role must be primary or secondary"}, status_code=400)
-    md = _metadata_dir_for("performer", row_id)
-    for name in (
-        f"{row_id}_poster_{role}.jpg",
-        f"{row_id}_poster_{1 if role == 'primary' else 2}.jpg",
-    ):
-        p = md / name
-        if p.is_file() and p.stat().st_size > 500:
-            return FileResponse(
-                p,
-                media_type="image/jpeg",
-                headers={"Cache-Control": "private, max-age=60"},
-            )
-    return JSONResponse({"error": "Not found"}, status_code=404)
+    legacy_role = "poster_1" if role == "primary" else "poster_2"
+    p = _perf_poster_resolve(row_id, f"poster_{role}", legacy_role)
+    if p is None:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    media = "image/webp" if p.suffix.lower() == ".webp" else "image/jpeg"
+    return FileResponse(
+        p,
+        media_type=media,
+        headers={"Cache-Control": "private, max-age=60"},
+    )
 
 
 @app.post("/api/performers/set-poster-role")
