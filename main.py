@@ -16000,6 +16000,11 @@ async def retry_status():
 async def run_all(background_tasks: BackgroundTasks):
     if processing_state["running"]:
         return JSONResponse({"error": "Pipeline already running"}, status_code=409)
+    # Flip running=True synchronously so the next /api/status poll cannot
+    # race ahead of run_pipeline and miss the running→idle transition that
+    # triggers the queue refresh in the UI. run_pipeline sets this again
+    # inside its own try block — idempotent.
+    processing_state["running"] = True
     background_tasks.add_task(run_pipeline, None)
     return {"started": True}
 
@@ -16008,6 +16013,14 @@ async def run_all(background_tasks: BackgroundTasks):
 async def run_file(filename: str, background_tasks: BackgroundTasks):
     if processing_state["running"]:
         return JSONResponse({"error": "Pipeline already running"}, status_code=409)
+    # Flip running=True synchronously so the next /api/status poll cannot
+    # race ahead of run_pipeline and miss the running→idle transition that
+    # triggers the queue refresh in the UI. run_pipeline sets this again
+    # inside its own try block — idempotent.
+    processing_state["running"] = True
+    processing_state["pipeline_total"] = 1
+    processing_state["pipeline_done"] = 0
+    processing_state["current_file"] = filename
     background_tasks.add_task(run_pipeline, [filename])
     return {"started": True, "filename": filename}
 
@@ -16534,12 +16547,16 @@ async def file_manual(payload: dict, background_tasks: BackgroundTasks):
     if iafd_url and not (scene.get("performers") or []):
         scene["performers"] = _iafd_scene_detail_performers(iafd_url)
 
+    # Flip running=True synchronously so the next /api/status poll cannot
+    # race ahead of the background task and miss the running→idle
+    # transition that triggers the queue refresh in the UI.
+    processing_state["running"] = True
+    processing_state["log"] = []
+    processing_state["pipeline_total"] = 1
+    processing_state["pipeline_done"] = 0
+    processing_state["current_file"] = filename
+
     def run():
-        processing_state["running"] = True
-        processing_state["log"] = []
-        processing_state["pipeline_total"] = 1
-        processing_state["pipeline_done"] = 0
-        processing_state["current_file"] = filename
         try:
             db.upsert_file(filename)
             emit(f"FILE {filename}")
@@ -22393,6 +22410,12 @@ async def api_performer_popup(
         if r and r.get("kind") == "performer":
             row = dict(r)
 
+    # Parallelize every external DB lookup. Each helper is a sync
+    # `requests.get` (TPDB) or sync GraphQL (StashDB/FansDB/JAVStash);
+    # left sequential they would chain 3–5 round trips at ~200–500 ms
+    # each, blocking the FastAPI event loop. `asyncio.gather` fires
+    # them concurrently; the slowest one sets the latency floor.
+    #
     # When click came from a TPDB-sourced scene and there's no library
     # match, scrape the TPDB performer profile to fill the popup. If no
     # tpdb_id was passed (cast click came from a CSV-only or stashbox
@@ -22400,58 +22423,110 @@ async def api_performer_popup(
     # no library/stashbox identity will resolve, fall back to a TPDB
     # name search so the popup still has bio + headshot + posters
     # rather than an empty stub.
-    tpdb_data: dict | None = None
-    if tid_arg and not row:
-        tpdb_data = _tpdb_performer_fetch(tid_arg)
-    if not tpdb_data and not row and not sid_arg and name_arg:
-        tpdb_data = _tpdb_performer_fetch_by_name(name_arg)
+    row_stashdb_id  = (row.get("match_stashdb_id")  or "").strip() if row else ""
+    row_fansdb_id   = (row.get("match_fansdb_id")   or "").strip() if row else ""
+    row_javstash_id = (row.get("match_javstash_id") or "").strip() if row else ""
 
-    sb_bio: dict | None = None
-    if sid_arg:
-        sb_bio = _performer_popup_stashbox_bio(sid_arg)
+    async def _gather_tpdb_by_id() -> dict | None:
+        if tid_arg and not row:
+            return await run_in_threadpool(_tpdb_performer_fetch, tid_arg)
+        return None
+
+    async def _gather_tpdb_by_name() -> dict | None:
+        # The original code only ran name search when id lookup
+        # returned None. Run it eagerly when id lookup wouldn't fire
+        # at all, otherwise leave to the post-gather conditional.
+        if (not tid_arg) and (not row) and (not sid_arg) and name_arg:
+            return await run_in_threadpool(_tpdb_performer_fetch_by_name, name_arg)
+        return None
+
+    async def _gather_sb_from_sid() -> dict | None:
+        if sid_arg:
+            return await run_in_threadpool(_performer_popup_stashbox_bio, sid_arg)
+        return None
+
+    async def _gather_sb_from_row_stashdb() -> dict | None:
+        # Skip when sid_arg already fetches the same source; the
+        # sb_from_sid call covers it.
+        if not sid_arg and row and row_stashdb_id:
+            return await run_in_threadpool(
+                _performer_popup_stashbox_bio, row_stashdb_id, False,
+            )
+        return None
+
+    async def _gather_sb_from_row_fansdb() -> dict | None:
+        if not sid_arg and row and row_fansdb_id:
+            return await run_in_threadpool(
+                _performer_popup_stashbox_bio, row_fansdb_id, True,
+            )
+        return None
+
+    async def _gather_jav_from_row() -> dict | None:
+        if row_javstash_id:
+            try:
+                return await run_in_threadpool(fetch_performer_detail, "JAVStash", row_javstash_id)
+            except Exception:
+                return None
+        return None
+
+    async def _gather_jav_from_sid() -> dict | None:
+        # Speculatively try sid_arg as a JAVStash id — JAV scene UIs
+        # carry only data-stash-id. We sort out precedence below.
+        if sid_arg:
+            try:
+                return await run_in_threadpool(fetch_performer_detail, "JAVStash", sid_arg)
+            except Exception:
+                return None
+        return None
+
+    (
+        tpdb_by_id,
+        tpdb_by_name_eager,
+        sb_from_sid,
+        sb_from_row_sdb,
+        sb_from_row_fdb,
+        jav_from_row,
+        jav_from_sid,
+    ) = await asyncio.gather(
+        _gather_tpdb_by_id(),
+        _gather_tpdb_by_name(),
+        _gather_sb_from_sid(),
+        _gather_sb_from_row_stashdb(),
+        _gather_sb_from_row_fansdb(),
+        _gather_jav_from_row(),
+        _gather_jav_from_sid(),
+    )
+
+    # Resolve precedence — preserves original cascade semantics.
+    tpdb_data: dict | None = tpdb_by_id or tpdb_by_name_eager
+    if (not tpdb_data) and (not row) and (not sid_arg) and tid_arg and name_arg:
+        # tpdb_by_id was attempted but missed; fall back to name search.
+        tpdb_data = await run_in_threadpool(_tpdb_performer_fetch_by_name, name_arg)
+
+    sb_bio: dict | None = sb_from_sid
     if not sb_bio and row:
-        for cand_id in (row.get("match_stashdb_id"), row.get("match_fansdb_id")):
-            cand = (cand_id or "").strip()
-            if cand:
-                sb_bio = _performer_popup_stashbox_bio(
-                    cand,
-                    prefer_fansdb=(cand == (row.get("match_fansdb_id") or "").strip()),
-                )
-                if sb_bio:
-                    break
+        # Match original order: stashdb_id first, then fansdb_id.
+        sb_bio = sb_from_row_sdb or sb_from_row_fdb
 
-    jav_data: dict | None = None
-    jav_arg = ""
-    if row:
-        jav_arg = (row.get("match_javstash_id") or "").strip()
-    if jav_arg:
-        try:
-            jav_data = fetch_performer_detail("JAVStash", jav_arg)
-        except Exception:
-            jav_data = None
+    jav_data: dict | None = jav_from_row
     # JAV scene/detail UIs pass the JAVStash performer UUID in ``stash_id``
     # (``performerLinkAttrs`` only has data-stash-id). StashDB/FansDB
-    # ``findPerformer`` misses those IDs — try JAVStash when we still
-    # have no jav_data.  Skip only when ``sb_bio`` was resolved *from
-    # this same* ``sid_arg`` (it is a real StashDB/FansDB id).  If the
-    # user has a library row, ``sb_bio`` may instead come from the row's
-    # *different* crosswalk id while ``sid_arg`` is still the JAV id from
-    # the scene card — we must not gate on ``not sb_bio`` or JAV never
-    # hydrates.
+    # ``findPerformer`` misses those IDs — adopt the speculative JAV
+    # fetch when sb_bio did not resolve from the same sid_arg.
     sb_from_same_sid = bool(
         sid_arg
         and sb_bio
         and str(sb_bio.get("id") or "").strip() == (sid_arg or "").strip()
     )
     if not jav_data and sid_arg and not sb_from_same_sid:
-        try:
-            cand = fetch_performer_detail("JAVStash", sid_arg)
-        except Exception:
-            cand = None
+        cand = jav_from_sid
         if cand and isinstance(cand, dict) and (
             str(cand.get("id") or "").strip() or str(cand.get("name") or "").strip()
         ):
             jav_data = cand
+
+    # `jav_arg` retained for downstream references (back-compat).
+    jav_arg = row_javstash_id
 
     # TPDB extras dict — only populated when click came from a TPDB
     # scene and no library/stash-box data was found. Provides bio
@@ -22631,6 +22706,17 @@ async def api_performer_popup(
             if perf_url:
                 filmography = db.iafd_get_filmography(perf_url)
 
+    # Video-count badge in the popup header — counts indexed videos
+    # under the row's destination directory. Same data source as /health.
+    video_count = 0
+    if row:
+        try:
+            row_path = (row.get("path") or "").strip()
+            if row_path:
+                video_count = db.library_files_count_under_destination(row_path)
+        except Exception:
+            video_count = 0
+
     library_status = {
         "in_library":  bool(row),
         "row_id":      int(row["id"]) if row else None,
@@ -22639,6 +22725,7 @@ async def api_performer_popup(
         "is_favourite": bool(row and row.get("is_favourite")),
         "matches_locked": bool(row and row.get("matches_locked")),
         "is_group":    bool(row and int(row.get("is_group") or 0)),
+        "video_count": int(video_count),
     }
 
     sources_block = {
@@ -25698,6 +25785,15 @@ async def api_favourites_entity_panel(row_id: int):
     if not row:
         return JSONResponse({"error": "Not found"}, status_code=404)
     r = _favourites_row_api(dict(row))
+    # Surface the count of indexed videos under this entity's directory
+    # so the studio popup header can render a small LED-style badge.
+    try:
+        row_path = (dict(row).get("path") or "").strip()
+        r["video_count"] = (
+            db.library_files_count_under_destination(row_path) if row_path else 0
+        )
+    except Exception:
+        r["video_count"] = 0
     scenes: list[dict] = []
     src: str | None = None
     if r.get("kind") in ("movie", "jav"):
@@ -25705,7 +25801,9 @@ async def api_favourites_entity_panel(row_id: int):
     else:
         # Studio panel renders these as a 12-tile grid (matches the
         # /scenes detail panel's 4-col layout, scaled up for studios).
-        scenes, src = favourites_recent_scenes(dict(row), 12)
+        # `favourites_recent_scenes` makes sync `requests` calls — push
+        # it off the event loop so concurrent popup opens don't queue.
+        scenes, src = await run_in_threadpool(favourites_recent_scenes, dict(row), 12)
     return {"row": r, "tpdb_scenes": scenes, "scenes_source": src}
 
 
@@ -28427,12 +28525,16 @@ async def file_manual_metadata(payload: dict, background_tasks: BackgroundTasks)
         "_thumb_data_url": thumb_data_url,
     }
 
+    # Flip running=True synchronously so the next /api/status poll cannot
+    # race ahead of the background task and miss the running→idle
+    # transition that triggers the queue refresh in the UI.
+    processing_state["running"] = True
+    processing_state["log"] = []
+    processing_state["pipeline_total"] = 1
+    processing_state["pipeline_done"] = 0
+    processing_state["current_file"] = filename
+
     def run():
-        processing_state["running"] = True
-        processing_state["log"] = []
-        processing_state["pipeline_total"] = 1
-        processing_state["pipeline_done"] = 0
-        processing_state["current_file"] = filename
         try:
             db.upsert_file(filename)
             emit(f"FILE {filename}")
@@ -28564,12 +28666,16 @@ async def file_manual_vice(payload: dict, background_tasks: BackgroundTasks):
         "_force_vice":     vice_name,  # overrides all studio/performer routing
     }
 
+    # Flip running=True synchronously so the next /api/status poll cannot
+    # race ahead of the background task and miss the running→idle
+    # transition that triggers the queue refresh in the UI.
+    processing_state["running"] = True
+    processing_state["log"] = []
+    processing_state["pipeline_total"] = 1
+    processing_state["pipeline_done"] = 0
+    processing_state["current_file"] = filename
+
     def run():
-        processing_state["running"] = True
-        processing_state["log"] = []
-        processing_state["pipeline_total"] = 1
-        processing_state["pipeline_done"] = 0
-        processing_state["current_file"] = filename
         try:
             db.upsert_file(filename)
             emit(f"FILE {filename}")

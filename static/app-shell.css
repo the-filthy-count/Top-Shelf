@@ -5875,6 +5875,35 @@ button.pp-name-group:hover .pp-name-group-count {
   color: #1a0f24;
 }
 
+/* Video-count badge — LED-style mini counter that sits alongside the
+ * other name-row icons. Mirrors the `.sky-counter` font used on
+ * /health stat tiles but sized for a 4-char strip in the popup
+ * header. `white-space: pre` preserves the leading-space pad so
+ * "   7" right-aligns identically to "  84" / "1024". */
+.pp-name-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: var(--accent);
+  font-family: "LedCounter", "VCRMono", ui-monospace, monospace;
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: pre;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  flex-shrink: 0;
+  /* Width sized for 4 monospace LED glyphs at 16px so " 234" /
+   * "1234" hold the same footprint. */
+  min-width: 4ch;
+  text-align: right;
+}
+
 /* Group-members modal ─ tiles surface the linked DB profiles
  * collapsed by name. Click → drills into that member's standalone
  * popup; "Add DB link" pre-fills the picker with the member's name so
@@ -9104,6 +9133,16 @@ html[data-theme="glass"] .ts-prowlarr-popup-filters {
   background: rgba(18, 10, 28, 0.95);
   border-color: var(--accent);
   transform: translate(-50%, -50%) scale(1.08);
+}
+/* The global `button:active` rule applies `transform: translateY(1px)`
+ * for press feedback — that wipes out this button's centering
+ * translate(-50%, -50%) and the click target slides diagonally out
+ * from under the cursor, so the click never registers. Re-state the
+ * centering here (with the press nudge added in) so the active state
+ * stays anchored. !important wins over the global rule's specificity
+ * without us having to rewrite the global one. */
+.pp-scene-prowlarr-center:active {
+  transform: translate(-50%, calc(-50% + 1px)) scale(1.08) !important;
 }
 .pp-scene-prowlarr-center i {
   font-size: 22px;

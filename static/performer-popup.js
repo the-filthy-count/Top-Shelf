@@ -1299,13 +1299,24 @@
       nameEl.className = 'pp-name';
       el.insertBefore(nameEl, el.firstChild);
     }
+    // Video-count LED badge — only shown when the performer is in the
+    // library (no folder = no videos to count). Padded to 4 chars with
+    // leading spaces so the cell width is stable as the count grows.
+    let countHtml = '';
+    if (lib.in_library) {
+      const vc = Number(lib.video_count || 0);
+      const padded = String(vc).padStart(4, ' ');
+      const tip = `${vc} video${vc === 1 ? '' : 's'} in this folder`;
+      countHtml = `<span class="pp-name-count" aria-label="${ESC(tip)}" title="${ESC(tip)}">${padded}</span>`;
+    }
     nameEl.innerHTML = `
       <span class="pp-lib-entity-actions"></span>
       <span class="pp-name-text">${ESC(id.canonical_name || 'Unknown')}</span>
       ${groupBadge}
       ${flag}
       ${ageHtml}
-      ${nameIcons}`;
+      ${nameIcons}
+      ${countHtml}`;
     const actionsEl = nameEl.querySelector('.pp-lib-entity-actions');
     if (actionsEl) {
       actionsEl.innerHTML = '';
