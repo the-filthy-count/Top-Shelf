@@ -555,15 +555,15 @@
     _activeName = name;
     // Video-count LED badge — only shown for library-tracked studios
     // (external-mode renderRow callers pass row.id === 0 with no
-    // video_count). Padding uses U+2007 (FIGURE SPACE) so the LED
-    // font renders the pad slots instead of collapsing them.
+    // video_count). Padded to 4 leading zeros so the pill width stays
+    // constant ("0007" vs "0234").
     const vcEl = document.getElementById('studioPopupVideoCount');
     const vcValEl = document.getElementById('studioPopupVideoCountVal');
     if (vcEl) {
       const hasCount = typeof row.video_count === 'number' && row.id;
       if (hasCount) {
         const vc = Number(row.video_count || 0);
-        if (vcValEl) vcValEl.textContent = String(vc).padStart(4, ' ');
+        if (vcValEl) vcValEl.textContent = String(vc).padStart(4, '0');
         const tip = `${vc} video${vc === 1 ? '' : 's'} in this folder`;
         vcEl.setAttribute('title', tip);
         vcEl.setAttribute('aria-label', tip);

@@ -1300,14 +1300,12 @@
       el.insertBefore(nameEl, el.firstChild);
     }
     // Video-count LED badge — only shown when the performer is in the
-    // library (no folder = no videos to count). Padding uses U+2007
-    // (FIGURE SPACE — digit-width in monospace fonts) so the LED font
-    // actually renders the pad slots; plain ASCII spaces collapse on
-    // the leading edge of an anonymous flex child.
+    // library (no folder = no videos to count). Padded to 4 leading
+    // zeros so the pill width stays constant ("0007" vs "0234").
     let countHtml = '';
     if (lib.in_library) {
       const vc = Number(lib.video_count || 0);
-      const padded = String(vc).padStart(4, ' ');
+      const padded = String(vc).padStart(4, '0');
       const tip = `${vc} video${vc === 1 ? '' : 's'} in this folder`;
       countHtml = `<span class="pp-name-count" aria-label="${ESC(tip)}" title="${ESC(tip)}">`
         + `<span class="pp-name-count-val">${padded}</span>`

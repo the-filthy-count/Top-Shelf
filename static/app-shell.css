@@ -5878,14 +5878,9 @@ button.pp-name-group:hover .pp-name-group-count {
 /* Video-count badge — LED-style mini counter that sits alongside the
  * other name-row icons. Mirrors the `.sky-counter` font used on
  * /health stat tiles but sized for a 4-char strip in the popup
- * header.
- *
- * Padding is rendered via U+2007 (FIGURE SPACE — same advance as a
- * digit in monospace fonts) wrapped in `.pp-name-count-val`. Plain
- * ASCII spaces would either collapse (the count text is the only
- * anonymous child of the inline-flex container, and flex strips
- * leading whitespace) or render at the LED font's narrower
- * space-glyph width and break right-alignment. */
+ * header. JS pads with leading zeros (`String(n).padStart(4, '0')`)
+ * so a one-video folder reads "0001" rather than "1" — keeps the
+ * pill width stable across the whole library. */
 .pp-name-count {
   display: inline-flex;
   align-items: center;
