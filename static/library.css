@@ -944,14 +944,21 @@ body .app .fav-stage {
    * Visible at rest, fades out on hover so the user can read the full
    * image once they engage with the tile. `pointer-events: none` keeps
    * the heart/lock buttons underneath fully clickable; `z-index: 30`
-   * sits above the other corner overlays. */
-  .fav-new-badge {
+   * sits above the other corner overlays.
+   *
+   * Scoped to `.fav-cell-visual .fav-new-badge` so the rule beats the
+   * looser `.fav-perf-ph img` / `.fav-studio-ph img` selectors that
+   * stretch every IMG to 100% (without this it inherits width:100% +
+   * height:100% + object-fit:cover and fills the whole tile).
+   */
+  .fav-cell-visual .fav-new-badge {
     position: absolute;
     top: 0;
     left: 0;
     z-index: 30;
     width: 33%;
     height: auto;
+    object-fit: contain;
     pointer-events: none;
     opacity: 1;
     transition: opacity 0.18s ease;
