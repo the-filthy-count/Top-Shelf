@@ -2033,6 +2033,18 @@
         </h1>
         <div id="searchFileLabel" style="display:none;font-size:11px;color:var(--dim);letter-spacing:0.04em;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto" onclick="clearSelectedFile()" title="Deselect"></div>
       </div>
+      <!-- Source toggles live in the header so the form area stays
+           focused on the user's typed input. Previously below the Plot
+           field; moved here so the chips read as a popup-wide control
+           rather than form furniture. -->
+      <div class="qs-source-toggle qs-source-toggle--header" style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        <span style="font-family:var(--secs);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--dim);margin-right:4px">Sources</span>
+        <button type="button" class="qs-source-pill is-on" data-source="StashDB" onclick="toggleQSearchSource(this)" title="StashDB"><img src="/static/logos/stashdb.webp" alt="StashDB"></button>
+        <button type="button" class="qs-source-pill is-on" data-source="TPDB" onclick="toggleQSearchSource(this)" title="ThePornDB"><img src="/static/logos/tpdb.webp" alt="TPDB"></button>
+        <button type="button" class="qs-source-pill is-on" data-source="FansDB" onclick="toggleQSearchSource(this)" title="FansDB"><img src="/static/logos/fansdb.webp" alt="FansDB"></button>
+        <button type="button" class="qs-source-pill is-on" data-source="JAVStash" onclick="toggleQSearchSource(this)" title="JAVStash"><img src="/static/logos/javstash.webp" alt="JAVStash"></button>
+        <button type="button" class="qs-source-pill is-on" data-source="IAFD" onclick="toggleQSearchSource(this)" title="IAFD"><img src="/static/logos/iafd.webp" alt="IAFD"></button>
+      </div>
       <button onclick="clearSearch()" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:var(--dim);font-size:14px;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0" title="Close (Esc)">&times;</button>
     </div>
     <div id="qSearchBody" style="flex:1 1 0;min-height:0;display:flex;flex-direction:column;overflow:hidden">
@@ -2068,20 +2080,21 @@
               <input class="field-input" id="srchDate" type="text" placeholder="YYYY-MM-DD" onkeydown="if(event.key==='Enter')runQueueSearch()">
             </div>
           </div>
-          <div class="field-row" style="margin-top:10px">
-            <label class="field-label">Plot / Description</label>
-            <textarea class="field-input" id="mPlot" rows="4" placeholder="Optional description..." style="resize:none;width:100%;box-sizing:border-box"></textarea>
-          </div>
-          <div class="qs-source-toggle" style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap">
-            <span style="font-family:var(--secs);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--dim);margin-right:4px">Sources</span>
-            <button type="button" class="qs-source-pill is-on" data-source="StashDB" onclick="toggleQSearchSource(this)" title="StashDB"><img src="/static/logos/stashdb.webp" alt="StashDB"></button>
-            <button type="button" class="qs-source-pill is-on" data-source="TPDB" onclick="toggleQSearchSource(this)" title="ThePornDB"><img src="/static/logos/tpdb.webp" alt="TPDB"></button>
-            <button type="button" class="qs-source-pill is-on" data-source="FansDB" onclick="toggleQSearchSource(this)" title="FansDB"><img src="/static/logos/fansdb.webp" alt="FansDB"></button>
-            <button type="button" class="qs-source-pill is-on" data-source="JAVStash" onclick="toggleQSearchSource(this)" title="JAVStash"><img src="/static/logos/javstash.webp" alt="JAVStash"></button>
-            <button type="button" class="qs-source-pill is-on" data-source="IAFD" onclick="toggleQSearchSource(this)" title="IAFD"><img src="/static/logos/iafd.webp" alt="IAFD"></button>
-            <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-              <button class="btn-primary" onclick="runQueueSearch()" title="Search" style="flex-shrink:0"><i class="fa-solid fa-magnifying-glass"></i><span class="btn-label" style="margin-left:6px">Search</span></button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+            <div class="field-row">
+              <label class="field-label">Plot / Description</label>
+              <textarea class="field-input" id="mPlot" rows="4" placeholder="Optional description..." style="resize:none;width:100%;box-sizing:border-box"></textarea>
             </div>
+            <div class="field-row manual-perf-wrap">
+              <label class="field-label">Tags</label>
+              <div class="field-input qs-pill-input" id="srchTagPills" style="display:flex;flex-wrap:wrap;gap:6px;min-height:34px;align-items:center;padding:4px 8px;cursor:text;align-content:flex-start" onclick="document.getElementById('srchTag').focus()">
+                <span class="qs-pill-chips" id="srchTagChips" style="display:contents"></span>
+                <input id="srchTag" type="text" placeholder="Add tag, comma to lock…" autocomplete="off" spellcheck="false" style="border:none;background:transparent;outline:none;color:var(--text);font-family:inherit;font-size:inherit;flex:1;min-width:120px;padding:0">
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px">
+            <button class="btn-primary" onclick="runQueueSearch()" title="Search" style="flex-shrink:0"><i class="fa-solid fa-magnifying-glass"></i><span class="btn-label" style="margin-left:6px">Search</span></button>
           </div>
         </div>
         <!-- (Scene-pick "Filing from" panel removed — title/studio/date

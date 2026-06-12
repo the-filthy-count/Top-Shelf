@@ -3505,6 +3505,59 @@ def javstash_search_performer(name: str, api_key: str) -> list[dict]:
         return []
 
 
+def _stashbox_resolve_tag_ids(endpoint: str, api_key: str, names: list[str]) -> list[str]:
+    """Resolve free-text tag names to stash-box tag IDs.
+
+    Used by the manual-scene submit flow: the user types comma-separated
+    tags in the queue's filing form, and each name is matched against
+    the upstream's tag catalogue via ``queryTags``. Exact name match
+    wins; otherwise the first hit (best-effort) is taken. Names that
+    don't resolve are silently dropped — submission proceeds with
+    whatever resolved IDs we got, so a typo or fringe tag never blocks
+    the upload.
+    """
+    if not names or not api_key or not endpoint:
+        return []
+    gql = """
+    query TagLookup($n: String!) {
+      queryTags(input: {name: $n, page: 1, per_page: 10}) {
+        tags { id name aliases }
+      }
+    }
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in names:
+        n = (raw or "").strip()
+        if not n:
+            continue
+        try:
+            body = _stashbox_post(endpoint, api_key, gql, {"n": n})
+            tags = ((body.get("queryTags") or {}).get("tags")) or []
+        except Exception:
+            continue
+        if not tags:
+            continue
+        nl = n.lower()
+        hit = next(
+            (t for t in tags if str(t.get("name") or "").strip().lower() == nl),
+            None,
+        )
+        if hit is None:
+            hit = next(
+                (t for t in tags
+                 if any(str(a or "").strip().lower() == nl for a in (t.get("aliases") or []))),
+                None,
+            )
+        if hit is None:
+            hit = tags[0]
+        tid = str(hit.get("id") or "").strip()
+        if tid and tid not in seen:
+            seen.add(tid)
+            out.append(tid)
+    return out
+
+
 def fansdb_upload_image(image_url: str, api_key: str) -> str | None:
     """Upload an image to FansDB (stash-box). Silently skipped if not authorised."""
     if not image_url:
@@ -3538,7 +3591,8 @@ def javstash_upload_image(image_url: str, api_key: str) -> str | None:
 def fansdb_submit_scene(title: str, date: str, studio_id: str,
                          performer_ids: list, phash: str,
                          details: str, image_url: str, api_key: str,
-                         duration: int = 0) -> dict:
+                         duration: int = 0,
+                         tag_ids: list[str] | None = None) -> dict:
     """Submit a new scene to FansDB. FansDB uses the same stash-box
     schema as StashDB so we can reuse SCENE_CREATE verbatim."""
     fingerprints = []
@@ -3561,6 +3615,8 @@ def fansdb_submit_scene(title: str, date: str, studio_id: str,
         inp["performers"] = [{"performer_id": pid} for pid in performer_ids]
     if image_ids:
         inp["image_ids"] = image_ids
+    if tag_ids:
+        inp["tag_ids"] = [str(t) for t in tag_ids if t]
     try:
         data = _stashbox_post(FANSDB_ENDPOINT, api_key, STASHDB_SCENE_CREATE, {"input": inp})
         errors = data.get("errors") or []
@@ -3578,7 +3634,8 @@ def fansdb_submit_scene(title: str, date: str, studio_id: str,
 def javstash_submit_scene(title: str, date: str, studio_id: str,
                            performer_ids: list, phash: str,
                            details: str, image_url: str, api_key: str,
-                           duration: int = 0) -> dict:
+                           duration: int = 0,
+                           tag_ids: list[str] | None = None) -> dict:
     """Submit a new scene to JAVStash. JAVStash is a stash-box deployment
     so the SCENE_CREATE mutation matches StashDB/FansDB verbatim."""
     fingerprints = []
@@ -3601,6 +3658,8 @@ def javstash_submit_scene(title: str, date: str, studio_id: str,
         inp["performers"] = [{"performer_id": pid} for pid in performer_ids]
     if image_ids:
         inp["image_ids"] = image_ids
+    if tag_ids:
+        inp["tag_ids"] = [str(t) for t in tag_ids if t]
     try:
         data = _stashbox_post(JAVSTASH_ENDPOINT, api_key, STASHDB_SCENE_CREATE, {"input": inp})
         errors = data.get("errors") or []
@@ -3618,7 +3677,8 @@ def javstash_submit_scene(title: str, date: str, studio_id: str,
 def stashdb_submit_scene(title: str, date: str, studio_id: str,
                           performer_ids: list, phash: str,
                           details: str, image_url: str, api_key: str,
-                          duration: int = 0) -> dict:
+                          duration: int = 0,
+                          tag_ids: list[str] | None = None) -> dict:
     """Submit a new scene to StashDB."""
     fingerprints = []
     if phash:
@@ -3644,6 +3704,8 @@ def stashdb_submit_scene(title: str, date: str, studio_id: str,
         inp["performers"] = [{"performer_id": pid} for pid in performer_ids]
     if image_ids:
         inp["image_ids"] = image_ids
+    if tag_ids:
+        inp["tag_ids"] = [str(t) for t in tag_ids if t]
 
     try:
         data = _stashbox_post(STASHDB_ENDPOINT, api_key, STASHDB_SCENE_CREATE, {"input": inp})
@@ -5687,7 +5749,15 @@ def best_studio_image_url(images: list) -> str | None:
     return str(max(dimmed, key=sort_key)["url"]).strip()
 
 
-def build_nfo(title, show_title, studio, performers, date) -> str:
+def build_nfo(
+    title,
+    show_title,
+    studio,
+    performers,
+    date,
+    details: str = "",
+    tags: list[str] | None = None,
+) -> str:
     try:
         dt = datetime.strptime(date, "%Y-%m-%d")
         year, mmdd = str(dt.year), dt.strftime("%m%d")
@@ -5699,8 +5769,27 @@ def build_nfo(title, show_title, studio, performers, date) -> str:
                      ("year", year), ("studio", studio),
                      ("dateadded", f"{date} 00:00:00"), ("mpaa", "Adult")]:
         ET.SubElement(root, tag).text = val
+    # Plot — Kodi episodedetails reads `<plot>`. Skip when empty so the
+    # NFO doesn't end up with an empty placeholder element.
+    plot_text = (details or "").strip()
+    if plot_text:
+        ET.SubElement(root, "plot").text = plot_text
     ET.SubElement(root, "tag").text = "Porn"
     ET.SubElement(root, "tag").text = "XXX"
+    # User-supplied tags appear after the hardcoded "Porn" / "XXX" so
+    # Kodi's tag list reads the curated values right next to the genre
+    # anchors. De-dup against the hardcoded values and against each
+    # other (case-insensitive).
+    seen_tags: set[str] = {"porn", "xxx"}
+    for tag_name in tags or []:
+        tn = (tag_name or "").strip()
+        if not tn:
+            continue
+        key = tn.lower()
+        if key in seen_tags:
+            continue
+        seen_tags.add(key)
+        ET.SubElement(root, "tag").text = tn
     for name in performers:
         actor = ET.SubElement(root, "actor")
         ET.SubElement(actor, "name").text = name.strip()
@@ -5709,6 +5798,45 @@ def build_nfo(title, show_title, studio, performers, date) -> str:
     buf = io.BytesIO()
     tree.write(buf, encoding="utf-8", xml_declaration=True)
     return buf.getvalue().decode("utf-8")
+
+
+def _scene_extract_plot_and_tags(scene: dict) -> tuple[str, list[str]]:
+    """Pull plot + tag list off a stash-box-shaped scene dict.
+
+    Manual entry uses ``_plot`` / ``_tags``; DB picks use ``details`` /
+    ``tags`` (the latter is usually a list of ``{name}`` dicts). Returns
+    a ``(plot_text, tag_name_list)`` tuple — values are normalised so
+    callers (NFO writer, DB submit) can drop in without re-checking.
+    """
+    if not isinstance(scene, dict):
+        return "", []
+    details = (
+        scene.get("_plot")
+        or scene.get("details")
+        or scene.get("description")
+        or ""
+    )
+    details = str(details).strip()
+    raw_tags = scene.get("_tags")
+    if not raw_tags:
+        raw_tags = scene.get("tags") or []
+    out: list[str] = []
+    seen: set[str] = set()
+    for t in raw_tags or []:
+        if isinstance(t, str):
+            n = t.strip()
+        elif isinstance(t, dict):
+            n = str(t.get("name") or "").strip()
+        else:
+            n = ""
+        if not n:
+            continue
+        key = n.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(n)
+    return details, out
 
 # ---------------------------------------------------------------------------
 # Filing logic (shared between pipeline and manual filing)
@@ -5772,6 +5900,7 @@ def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: s
     performers = scene.get("performers") or []
     images     = scene.get("images") or []
     perf_names = [p["performer"]["name"] for p in performers]
+    plot_text, tag_names = _scene_extract_plot_and_tags(scene)
 
     emit(f"  Match: [{source}] {studio} - {date} - {title}")
     emit(f"  Performers: {', '.join(perf_names) or 'Unknown'}")
@@ -5849,6 +5978,8 @@ def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: s
             "thumb_data_url": scene.get("_thumb_data_url", "") or "",
             "route": route,
             "title": title,
+            "details": plot_text,
+            "tags": tag_names,
         }
 
     cross_on = _library_index_queue_matching_enabled(settings)
@@ -5959,6 +6090,8 @@ def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: s
         "thumb_data_url": scene.get("_thumb_data_url", "") or "",
         "route": route,
         "title": title,
+        "details": plot_text,
+        "tags": tag_names,
     }
 
 
@@ -5985,8 +6118,13 @@ def write_library_scene_nfo_and_thumb(video: Path, scene: dict, source: str) -> 
     date = plan["date"]
     images = plan["images"]
     thumb_data_url = plan.get("thumb_data_url") or ""
+    plot_text = plan.get("details") or ""
+    tag_names = plan.get("tags") or []
 
-    nfo = build_nfo(nfo_title, show_title, studio or "Unknown", perf_names, date)
+    nfo = build_nfo(
+        nfo_title, show_title, studio or "Unknown", perf_names, date,
+        details=plot_text, tags=tag_names,
+    )
     nfo_path = parent / f"{stem}.nfo"
     nfo_path.write_text(nfo, encoding="utf-8")
     _ensure_library_filed_permissions(nfo_path)
@@ -6112,12 +6250,17 @@ def _file_scene_from_match_impl(video: Path, scene: dict, source: str = "") -> d
     date = plan["date"]
     images = plan["images"]
     thumb_data_url = plan.get("thumb_data_url") or ""
+    plot_text = plan.get("details") or ""
+    tag_names = plan.get("tags") or []
     title = plan["title"]
     ext = video.suffix
 
     dest_season.mkdir(parents=True, exist_ok=True)
 
-    nfo = build_nfo(nfo_title, show_title, studio or "Unknown", perf_names, date)
+    nfo = build_nfo(
+        nfo_title, show_title, studio or "Unknown", perf_names, date,
+        details=plot_text, tags=tag_names,
+    )
     (dest_season / f"{base_name}.nfo").write_text(nfo, encoding="utf-8")
     emit("  NFO: saved")
 
@@ -16646,16 +16789,24 @@ def _submit_manual_scene_to_stashdb(scene: dict, filename: str) -> None:
             image_url = imgs[0].get("url") or ""
         elif isinstance(scene.get("image"), str):
             image_url = scene["image"]
+        # Tags can come from the source DB (list of {name} dicts) or the
+        # manual entry form (`_tags`, list of bare strings). Resolve to
+        # StashDB tag IDs; tags that don't match are dropped silently
+        # rather than blocking the submission.
+        _, scene_tag_names = _scene_extract_plot_and_tags(scene)
+        tag_ids = _stashbox_resolve_tag_ids(STASHDB_ENDPOINT, api_key, scene_tag_names)
+        details_text = (scene.get("_plot") or scene.get("details") or "").strip()
         result = stashdb_submit_scene(
             title=title,
             date=date,
             studio_id=studio_id,
             performer_ids=performer_ids,
             phash=phash,
-            details=(scene.get("details") or ""),
+            details=details_text,
             image_url=image_url,
             api_key=api_key,
             duration=duration,
+            tag_ids=tag_ids,
         )
         if isinstance(result, dict) and result.get("error"):
             emit(f"  Submit-StashDB error: {result['error']}")
@@ -28526,6 +28677,7 @@ async def file_manual_metadata(payload: dict, background_tasks: BackgroundTasks)
     plot           = payload.get("plot", "").strip()
     image_url      = payload.get("image_url", "").strip()
     thumb_data_url = payload.get("thumb_data_url", "").strip()
+    tags_raw       = payload.get("tags") or ""
 
     if not all([filename, title, studio, date]):
         return JSONResponse({"error": "filename, title, studio and date are required"}, status_code=400)
@@ -28539,6 +28691,10 @@ async def file_manual_metadata(payload: dict, background_tasks: BackgroundTasks)
 
     # Build a scene dict in stash-box shape so file_scene_from_match can handle it
     perf_list = [p.strip() for p in performers.split(",") if p.strip()]
+    if isinstance(tags_raw, list):
+        tag_list = [str(t).strip() for t in tags_raw if str(t).strip()]
+    else:
+        tag_list = [t.strip() for t in str(tags_raw).split(",") if t.strip()]
     scene = {
         "title":           title,
         "release_date":    date,
@@ -28546,6 +28702,7 @@ async def file_manual_metadata(payload: dict, background_tasks: BackgroundTasks)
         "performers":      [{"performer": {"name": n, "gender": ""}} for n in perf_list],
         "images":          [{"url": image_url, "width": 0, "height": 0}] if image_url else [],
         "_plot":           plot,
+        "_tags":           tag_list,
         "_thumb_data_url": thumb_data_url,
     }
 
@@ -31687,6 +31844,10 @@ async def javstash_submit_manual(payload: dict):
         except Exception:
             pass
 
+    tag_names = payload.get("tags") or []
+    if isinstance(tag_names, str):
+        tag_names = [t.strip() for t in tag_names.split(",") if t.strip()]
+    tag_ids = _stashbox_resolve_tag_ids(JAVSTASH_ENDPOINT, api_key, list(tag_names))
     result = javstash_submit_scene(
         title         = payload.get("title", ""),
         date          = payload.get("date", ""),
@@ -31697,6 +31858,7 @@ async def javstash_submit_manual(payload: dict):
         image_url     = payload.get("image_url", ""),
         api_key       = api_key,
         duration      = duration,
+        tag_ids       = tag_ids,
     )
     return result
 
@@ -31728,6 +31890,10 @@ async def fansdb_submit_manual(payload: dict):
         except Exception:
             pass
 
+    tag_names = payload.get("tags") or []
+    if isinstance(tag_names, str):
+        tag_names = [t.strip() for t in tag_names.split(",") if t.strip()]
+    tag_ids = _stashbox_resolve_tag_ids(FANSDB_ENDPOINT, api_key, list(tag_names))
     result = fansdb_submit_scene(
         title         = payload.get("title", ""),
         date          = payload.get("date", ""),
@@ -31738,6 +31904,7 @@ async def fansdb_submit_manual(payload: dict):
         image_url     = payload.get("image_url", ""),
         api_key       = api_key,
         duration      = duration,
+        tag_ids       = tag_ids,
     )
     return result
 
@@ -31774,6 +31941,10 @@ async def stashdb_submit_manual(payload: dict):
         except Exception:
             pass
 
+    tag_names = payload.get("tags") or []
+    if isinstance(tag_names, str):
+        tag_names = [t.strip() for t in tag_names.split(",") if t.strip()]
+    tag_ids = _stashbox_resolve_tag_ids(STASHDB_ENDPOINT, api_key, list(tag_names))
     result = stashdb_submit_scene(
         title         = payload.get("title", ""),
         date          = payload.get("date", ""),
@@ -31784,6 +31955,7 @@ async def stashdb_submit_manual(payload: dict):
         image_url     = payload.get("image_url", ""),
         api_key       = api_key,
         duration      = duration,
+        tag_ids       = tag_ids,
     )
     return result
 

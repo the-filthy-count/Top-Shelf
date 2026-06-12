@@ -2656,6 +2656,25 @@
       const plotSrc = (scene.details || scene.description || scene.synopsis || scene.plot || '').toString().trim();
       if (plotSrc) plotEl.value = plotSrc;
     }
+    //: Hydrate the Tags pill input from whichever shape the upstream
+    //: DB used. Stash-box returns ``tags: [{name}]``; TPDB returns
+    //: ``tags: [{name}]`` or ``tag_objects``. Bare-string variants are
+    //: also accepted. The user can still edit/remove pills after.
+    if (typeof _tagPillsSet === 'function') {
+      const rawTags = scene.tags || scene.tag_objects || [];
+      const names = [];
+      if (Array.isArray(rawTags)) {
+        for (const t of rawTags) {
+          if (typeof t === 'string') {
+            const v = t.trim(); if (v) names.push(v);
+          } else if (t && typeof t === 'object') {
+            const n = String(t.name || '').trim();
+            if (n) names.push(n);
+          }
+        }
+      }
+      _tagPillsSet(names);
+    }
     //: Thumbnail — populate from whichever URL the scene carried. The
     //: search row's `.image` is already a normalised string; the _raw
     //: payload may also have `images[0].url`, `poster`, or `thumb`
@@ -3215,8 +3234,9 @@
     // moments after the user closed the modal.
     _qOpenSearchSeq++;
     _qStoredMatchScene = null;
-    ['srchTerm','srchTitle','srchPerformer','srchStudio','srchDate','mPlot','mImageUrl'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    ['srchTerm','srchTitle','srchPerformer','srchStudio','srchDate','mPlot','mImageUrl','srchTag'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     if (typeof _perfPillsClear === 'function') _perfPillsClear();
+    if (typeof _tagPillsClear === 'function') _tagPillsClear();
     const sr = document.getElementById('qSearchResults');
     if (sr) sr.innerHTML = '<div class="empty">Enter search terms above and press Search</div>';
     _qSelectedFile = null;
@@ -3514,6 +3534,123 @@
   }
   window._perfPillsValue = _perfPillsValue;
   window._perfPillsNames = _perfPillsNames;
+
+  // Tag pills — simpler twin of the performer pill input. No library
+  // lookup (tags aren't catalogued client-side; the backend resolves
+  // each pill against the upstream stash-box tag list at submit time).
+  // Comma-separated input, Enter or comma locks the in-progress text
+  // into a pill, click X to remove.
+  let _tagPills = [];
+
+  function _tagPillsClear() {
+    _tagPills = [];
+    _tagPillsRender();
+  }
+
+  function _tagPillsSet(names) {
+    _tagPills = (names || [])
+      .map(n => String(n || '').trim())
+      .filter(Boolean);
+    _tagPillsRender();
+  }
+
+  function _tagPillsAdd(name) {
+    const nm = String(name || '').trim();
+    if (!nm) return;
+    const dup = _tagPills.some(t => t.toLowerCase() === nm.toLowerCase());
+    if (dup) return;
+    _tagPills.push(nm);
+    _tagPillsRender();
+  }
+
+  function _tagPillsRemoveAt(i) {
+    if (i < 0 || i >= _tagPills.length) return;
+    _tagPills.splice(i, 1);
+    _tagPillsRender();
+  }
+
+  function _tagPillsValue() {
+    return _tagPills.join(', ');
+  }
+  function _tagPillsNames() {
+    return _tagPills.slice();
+  }
+  window._tagPillsValue = _tagPillsValue;
+  window._tagPillsNames = _tagPillsNames;
+
+  function _tagPillsRender() {
+    const host = document.getElementById('srchTagChips');
+    const input = document.getElementById('srchTag');
+    if (!host) return;
+    host.innerHTML = _tagPills.map((nm, i) => {
+      const bg = 'rgba(var(--brand-accent-rgb),0.14)';
+      const border = 'rgba(var(--brand-accent-rgb),0.45)';
+      const color = 'var(--accent)';
+      return `<span class="qs-pill" data-idx="${i}" title="Tag" style="display:inline-flex;align-items:center;gap:6px;padding:3px 4px 3px 10px;border-radius:14px;background:${bg};border:1px solid ${border};color:${color};font-family:var(--mono);font-size:11px;letter-spacing:0.02em;line-height:1.4;white-space:nowrap">
+        <span>${esc(nm)}</span>
+        <button type="button" class="qs-tag-pill-x" data-idx="${i}" title="Remove" aria-label="Remove ${esc(nm)}" style="background:rgba(0,0,0,0.30);border:none;color:inherit;width:16px;height:16px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:9px;padding:0;flex-shrink:0"><i class="fa-solid fa-xmark"></i></button>
+      </span>`;
+    }).join('');
+    host.querySelectorAll('.qs-tag-pill-x').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        _tagPillsRemoveAt(parseInt(btn.dataset.idx, 10));
+        if (input) input.focus();
+      });
+    });
+    if (input) {
+      input.placeholder = _tagPills.length ? '' : 'Add tag, comma to lock…';
+    }
+  }
+
+  // Wire the Tags input — comma or Enter commits the in-progress
+  // token to a pill; Backspace at empty input drops the last pill so
+  // the user doesn't have to mouse over to the X.
+  function _tagPillsBindInput() {
+    const input = document.getElementById('srchTag');
+    if (!input || input._tagBound) return;
+    input._tagBound = true;
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ',') {
+        const v = (input.value || '').trim().replace(/,$/, '');
+        if (v) {
+          e.preventDefault();
+          _tagPillsAdd(v);
+          input.value = '';
+        } else if (e.key === ',') {
+          e.preventDefault();
+        }
+        return;
+      }
+      if (e.key === 'Backspace' && !input.value && _tagPills.length) {
+        e.preventDefault();
+        _tagPillsRemoveAt(_tagPills.length - 1);
+      }
+    });
+    input.addEventListener('input', () => {
+      // Bulk-paste of "a, b, c" auto-splits on the comma.
+      const v = input.value || '';
+      if (v.includes(',')) {
+        const parts = v.split(',');
+        const last = parts.pop();
+        parts.forEach(p => _tagPillsAdd(p));
+        input.value = last.trimStart();
+      }
+    });
+    input.addEventListener('blur', () => {
+      const v = (input.value || '').trim();
+      if (v) {
+        _tagPillsAdd(v);
+        input.value = '';
+      }
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _tagPillsBindInput);
+  } else {
+    _tagPillsBindInput();
+  }
 
   function _perfPillsRender() {
     const host = document.getElementById('srchPerformerChips');
@@ -3826,6 +3963,7 @@
         date: document.getElementById('srchDate').value.trim(),
         performers: (typeof _perfPillsValue === 'function' ? _perfPillsValue() : document.getElementById('srchPerformer').value.trim()),
         plot: document.getElementById('mPlot').value.trim(),
+        tags: (typeof _tagPillsNames === 'function' ? _tagPillsNames() : []),
         image_url: imageUrl,
       };
       if (mThumbMode === 'generated' && mThumbDataUrl) payload.thumb_data_url = mThumbDataUrl;
@@ -3914,9 +4052,19 @@
     });
     const titleEl = document.getElementById('srchTitle');
     const finalTitle = (titleEl ? titleEl.value : '').trim() || _qConfirmBaseTitle;
+    // Overlay the user's edits in the Plot textarea + Tags pills onto
+    // the source-DB scene so the NFO carries whatever the form shows.
+    // ``_plot`` / ``_tags`` are the form-provided overrides;
+    // ``_scene_extract_plot_and_tags`` prefers them over the upstream
+    // values.
+    const plotEl = document.getElementById('mPlot');
+    const finalPlot = (plotEl ? plotEl.value : '').trim();
+    const formTags = (typeof _tagPillsNames === 'function') ? _tagPillsNames() : [];
     const scene = Object.assign({}, _qConfirmScene, {
       performers: chosen,
       title: finalTitle,
+      _plot: finalPlot,
+      _tags: formTags,
     });
     //: The duplicated "Submit to StashDB after filing" checkbox in the
     //: removed Filing-from panel is gone — the right-column STASH
@@ -3969,6 +4117,7 @@
           title: payload.title, date: payload.date, plot: payload.plot,
           studio_id: resolved.studio || null,
           performer_ids: (resolved.performers || []).filter(Boolean),
+          tags: Array.isArray(payload.tags) ? payload.tags : [],
           image_url: imageUrl,
         }) });
         const sd = await sr.json();
