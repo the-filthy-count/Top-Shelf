@@ -937,6 +937,29 @@ body .app .fav-stage {
   .fav-cell:hover .fav-perf-age {
     opacity: 1;
   }
+
+  /* "NEW" corner badge — top-left, visible at rest, fades out on
+   * hover so the cover art reads cleanly once the user moves to
+   * interact with the tile. Painted via /static/img/new.webp.
+   * `z-index: 30` puts it above the heart/lock overlays so it never
+   * gets clipped by them; `pointer-events: none` keeps the buttons
+   * underneath fully clickable. */
+  .fav-new-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 30;
+    width: 64px;
+    height: auto;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 0.18s ease;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+    display: block;
+  }
+  .fav-cell:hover .fav-new-badge {
+    opacity: 0;
+  }
   .fav-perf-ph .fav-perf-flag img {
     width: 100%; height: 100%; display: block;
     object-fit: contain;

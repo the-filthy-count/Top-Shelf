@@ -1025,6 +1025,26 @@
       cardIcons = `<div class="fav-card-icons">${stashBtn}</div>`;
     }
 
+    // "NEW" corner badge — stars/studios added in the last two weeks.
+    // Sits top-left at rest; the hover rules in library.css fade it out
+    // so the user can read the cover art unobstructed once they've moved
+    // their cursor to interact with the tile.
+    const newBadge = (() => {
+      if (kind !== 'performer' && kind !== 'studio') return '';
+      const ts = String(row.added_at || '').trim();
+      if (!ts) return '';
+      // SQLite stores added_at as "YYYY-MM-DD HH:MM:SS" (CURRENT_TIMESTAMP
+      // default; UTC). Date.parse rejects that form on Safari without a
+      // T separator — normalise before parsing.
+      const iso = ts.includes('T') ? ts : ts.replace(' ', 'T') + (ts.includes('Z') ? '' : 'Z');
+      const t = Date.parse(iso);
+      if (!Number.isFinite(t)) return '';
+      const ageMs = Date.now() - t;
+      const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000;
+      if (ageMs < 0 || ageMs > TWO_WEEKS) return '';
+      return `<img class="fav-new-badge" src="/static/img/new.webp" alt="New" loading="lazy" aria-hidden="true">`;
+    })();
+
     const flagOverlay = (kind === 'performer' && row.country && window.countryFlagHtml)
       ? `<span class="fav-perf-flag" aria-hidden="false">${window.countryFlagHtml(row.country)}</span>`
       : '';
@@ -1061,12 +1081,12 @@
           <div class="jav-duo-slot jav-duo-slot--back"><img class="duo-img" src="${esc(backUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.opacity=0"></div>
           <div class="jav-duo-slot jav-duo-slot--front"><img class="duo-img" src="${posterSrc}" alt="" loading="lazy" referrerpolicy="no-referrer"${errAttr}></div>
           <div class="duo-tint" aria-hidden="true"></div>
-        </div>${pathMissingWarn}${posterUnlockBtn}${posterSolidHeartBtn}${cardIcons}${flagOverlay}${ageOverlay}${genderOverlay}`;
+        </div>${newBadge}${pathMissingWarn}${posterUnlockBtn}${posterSolidHeartBtn}${cardIcons}${flagOverlay}${ageOverlay}${genderOverlay}`;
       }
       const movieSplitOnload = (kind === 'movie' || kind === 'jav')
         ? ' onload="typeof tsApplyMovieCoverSplit===\'function\'&&tsApplyMovieCoverSplit(this,\'solo\')"'
         : '';
-      return `<div class="duo-inner"><img class="duo-img" src="${posterSrc}" alt="" loading="lazy" referrerpolicy="no-referrer"${errAttr}${movieSplitOnload}><div class="duo-tint" aria-hidden="true"></div></div>${pathMissingWarn}${posterUnlockBtn}${posterSolidHeartBtn}${cardIcons}${flagOverlay}${ageOverlay}${genderOverlay}`;
+      return `<div class="duo-inner"><img class="duo-img" src="${posterSrc}" alt="" loading="lazy" referrerpolicy="no-referrer"${errAttr}${movieSplitOnload}><div class="duo-tint" aria-hidden="true"></div></div>${newBadge}${pathMissingWarn}${posterUnlockBtn}${posterSolidHeartBtn}${cardIcons}${flagOverlay}${ageOverlay}${genderOverlay}`;
     })();
     // CRT/TV-frame overlay (`tv.png`) — only applied to studio + vice
     // tiles where the static-noise + green-vignette backdrop already
