@@ -938,18 +938,19 @@ body .app .fav-stage {
     opacity: 1;
   }
 
-  /* "NEW" corner badge — top-left, visible at rest, fades out on
-   * hover so the cover art reads cleanly once the user moves to
-   * interact with the tile. Painted via /static/img/new.webp.
-   * `z-index: 30` puts it above the heart/lock overlays so it never
-   * gets clipped by them; `pointer-events: none` keeps the buttons
-   * underneath fully clickable. */
+  /* "NEW" corner badge — anchored hard to the top-left corner of the
+   * tile visual (no inset) and sized at ~1/3 of the tile width so the
+   * banner reads at a glance without overpowering the cover art.
+   * Visible at rest, fades out on hover so the user can read the full
+   * image once they engage with the tile. `pointer-events: none` keeps
+   * the heart/lock buttons underneath fully clickable; `z-index: 30`
+   * sits above the other corner overlays. */
   .fav-new-badge {
     position: absolute;
-    top: 6px;
-    left: 6px;
+    top: 0;
+    left: 0;
     z-index: 30;
-    width: 64px;
+    width: 33%;
     height: auto;
     pointer-events: none;
     opacity: 1;
