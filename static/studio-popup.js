@@ -414,6 +414,17 @@
       parentLogo.style.display = '';
       parentLogo.src = '';
     }
+    // Wipe the linked-logo row and the cell's fanart background so
+    // they don't bleed through from the previous studio while the
+    // new one is loading. Both get repainted below once the row
+    // payload arrives.
+    const linkedHost = document.getElementById('studioPopupLinkedLogos');
+    if (linkedHost) {
+      linkedHost.innerHTML = '';
+      linkedHost.hidden = true;
+    }
+    const infoCell = m.querySelector('.studio-popup-info-cell');
+    if (infoCell) infoCell.style.removeProperty('--ts-cell-fanart');
 
     if (!_activeRowId) {
       // External-studio mode: when the caller passes a source-DB id

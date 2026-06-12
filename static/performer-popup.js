@@ -237,6 +237,66 @@
       if (e.target === div) closePerformerPopup();
     });
     div.querySelector('.performer-popup-close').addEventListener('click', closePerformerPopup);
+
+    // Delegated handler for the inline action buttons (favourite, lock,
+    // alias edit, add-to-library, etc.). Attaching here once — instead
+    // of in openPerformerPopup() per-render — means the buttons stay
+    // wired across every renderHeader/renderBio repaint, and the same
+    // listener never accumulates duplicate copies on repeated opens
+    // (which would have toggled the lock state twice and looked like
+    // "nothing happened").
+    div.addEventListener('click', async (ev) => {
+      const btn = ev.target.closest(
+        '.pp-action-btn[data-action], .pp-name-action[data-action], .pp-cta-btn[data-action], .pp-alias-edit[data-action], .pp-bio-search-btn[data-action], .pp-alias-chip[data-folder-name]'
+      );
+      if (!btn || !div.contains(btn)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (btn.classList.contains('pp-alias-chip') && btn.dataset.folderName) {
+        ppSelectFolderName(btn.dataset.folderName, div);
+        return;
+      }
+      const action = btn.dataset.action;
+      if (action === 'add-to-library') {
+        openAddToLibraryModal(_activeData);
+        return;
+      }
+      const rowId = parseInt(btn.dataset.rowId, 10);
+      if (!rowId) return;
+      try {
+        if (action === 'favourite') {
+          const on = !btn.classList.contains('is-on');
+          await fetch('/api/favourites/star', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ id: rowId, is_favourite: on }),
+          });
+          btn.classList.toggle('is-on', on);
+          btn.title = on ? 'Unfavourite' : 'Favourite';
+          fetch(`/api/performer/popup?row_id=${rowId}&refresh=1`, { credentials: 'same-origin' }).catch(() => {});
+        } else if (action === 'lock') {
+          const on = !btn.classList.contains('is-locked');
+          await fetch('/api/favourites/lock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ id: rowId, matches_locked: on }),
+          });
+          btn.classList.toggle('is-locked', on);
+          btn.title = on ? 'Unlock matches' : 'Lock matches';
+          const ic = btn.querySelector('i');
+          if (ic) ic.className = `fa-solid fa-${on ? 'lock' : 'lock-open'}`;
+          fetch(`/api/performer/popup?row_id=${rowId}&refresh=1`, { credentials: 'same-origin' }).catch(() => {});
+        } else if (action === 'upload') {
+          uploadCustomImage(rowId);
+        } else if (action === 'alias') {
+          editAliases(rowId);
+        }
+      } catch (e) {
+        if (window.toast) window.toast(e.message || 'Failed');
+      }
+    });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && div.classList.contains('open')) closePerformerPopup();
     });
@@ -602,6 +662,7 @@
     // The skeleton scaffolds match each cell's real layout so the
     // transition to populated content is a swap rather than a relayout.
     if (!opts._refresh) {
+      resetPopupVisuals(m);
       paintSkeletons(m);
       paintStageBanner(m);
     }
@@ -694,59 +755,9 @@
     // identity (source / id / name) without re-fetching.
     _activeData = data;
 
-    // Inline action wiring (lock/favourite/upload/alias/add-to-library)
-    // — re-bound on every render. .pp-name-action and .pp-cta-btn are
-    // both eligible.
-    m.querySelectorAll('.pp-action-btn[data-action], .pp-name-action[data-action], .pp-cta-btn[data-action], .pp-alias-edit[data-action], .pp-bio-search-btn[data-action], .pp-alias-chip[data-folder-name]').forEach((btn) => {
-      btn.addEventListener('click', async (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        if (btn.classList.contains('pp-alias-chip') && btn.dataset.folderName) {
-          ppSelectFolderName(btn.dataset.folderName, m);
-          return;
-        }
-        const action = btn.dataset.action;
-        if (action === 'add-to-library') {
-          openAddToLibraryModal(_activeData);
-          return;
-        }
-        const rowId = parseInt(btn.dataset.rowId, 10);
-        if (!rowId) return;
-        try {
-          if (action === 'favourite') {
-            const on = !btn.classList.contains('is-on');
-            await fetch('/api/favourites/star', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'same-origin',
-              body: JSON.stringify({ id: rowId, is_favourite: on }),
-            });
-            btn.classList.toggle('is-on', on);
-            btn.title = on ? 'Unfavourite' : 'Favourite';
-            fetch(`/api/performer/popup?row_id=${rowId}&refresh=1`, { credentials: 'same-origin' }).catch(() => {});
-          } else if (action === 'lock') {
-            const on = !btn.classList.contains('is-locked');
-            await fetch('/api/favourites/lock', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'same-origin',
-              body: JSON.stringify({ id: rowId, matches_locked: on }),
-            });
-            btn.classList.toggle('is-locked', on);
-            btn.title = on ? 'Unlock matches' : 'Lock matches';
-            const ic = btn.querySelector('i');
-            if (ic) ic.className = `fa-solid fa-${on ? 'lock' : 'lock-open'}`;
-            fetch(`/api/performer/popup?row_id=${rowId}&refresh=1`, { credentials: 'same-origin' }).catch(() => {});
-          } else if (action === 'upload') {
-            uploadCustomImage(rowId);
-          } else if (action === 'alias') {
-            editAliases(rowId);
-          }
-        } catch (e) {
-          window.toast(e.message || 'Failed');
-        }
-      });
-    });
+    // Inline action wiring lives on the modal itself (see ensureModal),
+    // so renderHeader can rewrite the name row without us having to
+    // re-attach handlers — and re-opening the popup never double-binds.
 
     // Group-badge click → open the members modal so the user can drill
     // into individual members and edit their DB links separately. Re-
@@ -937,6 +948,33 @@
     { delay: 2200, text: 'Fetching gallery',    ico: 'fa-images' },
     { delay: 3000, text: 'Polishing',           ico: 'fa-wand-sparkles' },
   ];
+
+  /* Wipe the visuals that survive across popup opens — bg-hero,
+   * right-rail posters, name text, source-DB pill row. `paintSkeletons`
+   * already clears bio/films/carousel/gallery; without this extra step
+   * the user opens performer A → closes → opens performer B and sees
+   * A's headshot poster, hero background, and source pills bleed
+   * through until B's data arrives. */
+  function resetPopupVisuals(m) {
+    if (!m) return;
+    const bg = m.querySelector('#performerPopupBg');
+    if (bg) {
+      bg.style.backgroundImage = '';
+      bg.style.opacity = '0';
+    }
+    m.querySelectorAll('.pp-cell-posters .pp-poster-slot').forEach((slot) => {
+      slot.classList.add('is-empty');
+      slot.style.removeProperty('--tile-bg');
+      slot.innerHTML = '<span class="pp-poster-slot-empty">—</span>';
+      slot.onclick = null;
+    });
+    const nameEl = m.querySelector('.pp-name');
+    if (nameEl) {
+      nameEl.innerHTML = '<span class="pp-name-text" style="opacity:0.45">Loading…</span>';
+    }
+    const pills = m.querySelector('.pp-profiles-grid--header');
+    if (pills) pills.innerHTML = '';
+  }
 
   function paintSkeletons(m) {
     m.querySelector('.pp-cell-bio').innerHTML = `
