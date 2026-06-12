@@ -315,9 +315,21 @@ class _WarmCache:
             return self._snapshot
 
     def invalidate(self) -> None:
-        """Schedule a rebuild. Multiple invalidations coalesce into a
-        single rebuild — set is idempotent until the worker clears it."""
+        """Schedule a rebuild AND drop the current snapshot.
+
+        The worker still picks up the dirty event for the background
+        path, but readers that race the worker — e.g. a frontend that
+        creates a row and immediately re-fetches the list — used to get
+        the prior snapshot back because ``get()`` short-circuits on a
+        non-None ``_snapshot``. Clearing the snapshot here forces the
+        next ``get()`` through the locked rebuild branch, so the very
+        next read after any mutation is guaranteed fresh. Concurrent
+        rebuilds (worker + get) serialise on ``_build_lock``; whichever
+        finishes first wins and the second call sees the new snapshot
+        and returns without re-running the builder.
+        """
         self._dirty.set()
+        self._snapshot = None
 
     def age_seconds(self) -> float:
         ts = self._snapshot_built_at
