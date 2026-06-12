@@ -487,10 +487,14 @@
     }
 
     try {
-      // /api/favourites/entity-panel returns: row, tpdb_scenes, scenes_source.
-      // The row carries name, image_url (logo), match counts, etc.
+      // Two-stage load: entity-panel?skip_scenes=1 returns the row
+      // (logo, name, pills, video count) immediately from local DB;
+      // entity-scenes hits TPDB/StashDB/FansDB in parallel for the
+      // recent-scenes grid. The grid pre-renders NO SIGNAL placeholders
+      // up-front so the studio reads "structured, scenes loading"
+      // rather than holding the whole popup hostage on the slow fetch.
       const startedRow = _activeRowId;
-      const r = await fetch('/api/favourites/entity-panel?row_id=' + encodeURIComponent(_activeRowId), {
+      const r = await fetch('/api/favourites/entity-panel?skip_scenes=1&row_id=' + encodeURIComponent(_activeRowId), {
         credentials: 'same-origin',
       });
       const d = await r.json().catch(() => ({}));
@@ -501,7 +505,29 @@
           `<div class="studio-popup-empty" style="color:var(--red)">${ESC(d.error || ('HTTP ' + r.status))}</div>`;
         return;
       }
-      renderRow(d);
+      // Paint the row immediately with empty scenes — renderScenesGrid
+      // emits NO SIGNAL placeholder tiles so the grid has structure
+      // while the slow fetch runs.
+      renderRow(Object.assign({}, d, { tpdb_scenes: [], scenes_source: null, _scenes_loading: true }));
+      // Fire the slow scenes fetch in parallel with studio-detail
+      // (description / parent / links). They independently swap their
+      // own sections in when ready.
+      fetch('/api/favourites/entity-scenes?row_id=' + encodeURIComponent(_activeRowId), {
+        credentials: 'same-origin',
+      })
+        .then((rs) => rs.json().catch(() => ({})))
+        .then((ds) => {
+          if (_activeRowId !== startedRow) return;
+          const scenes = (ds && ds.tpdb_scenes) || [];
+          // Repaint just the scenes-dependent regions, not the whole row.
+          renderLatestScene(scenes[0], _activeName);
+          renderScenesGrid(scenes);
+        })
+        .catch(() => {
+          if (_activeRowId !== startedRow) return;
+          renderLatestScene(null, _activeName);
+          renderScenesGrid([]);
+        });
       // Description is a separate endpoint (TPDB / StashDB scrape).
       // Fire it after the panel paints so the recent scenes don't wait.
       // The same payload now also carries `parent` (network from the
@@ -601,8 +627,12 @@
     applyCellFanart(m.querySelector('.studio-popup-info-cell'), row && row.id);
     renderParentLogoFromApi(null);  // placeholder until /studio-detail returns
     renderLinkedLogos(row);
-    renderLatestScene(scenes[0], name);
-    renderScenesGrid(scenes);
+    // While entity-scenes is still in flight the caller flags
+    // `_scenes_loading` so the latest-scene + scenes-grid sections
+    // render placeholder slots instead of "no scenes found".
+    const scenesLoading = !!(d && d._scenes_loading);
+    renderLatestScene(scenes[0], name, { loading: scenesLoading });
+    renderScenesGrid(scenes, { loading: scenesLoading });
     renderProwlarrPanel(name);
   }
 
@@ -1062,10 +1092,29 @@
     return (s && (s.image || s.poster || s.thumb || s.background || s.screenshot)) || '';
   }
 
-  function renderLatestScene(scene, _studioName) {
+  function renderLatestScene(scene, _studioName, opts) {
     const el = document.getElementById('studioPopupLatest');
     if (!el) return;
+    const loading = !!(opts && opts.loading);
     if (!scene) {
+      if (loading) {
+        // Mirror the latest-scene layout so the panel doesn't reflow
+        // when real data arrives — title row + NO SIGNAL art slot.
+        el.innerHTML = `
+          <div class="studio-popup-latest-info">
+            <div class="studio-popup-latest-kicker">Latest scene</div>
+            <div class="studio-popup-latest-title" style="opacity:0.45">— — —</div>
+            <div class="studio-popup-latest-meta" style="opacity:0.35">Loading…</div>
+          </div>
+          <div class="studio-popup-latest-art is-empty">
+            <div class="scene-static-noise" aria-hidden="true"></div>
+            <div class="scene-static-bands" aria-hidden="true"></div>
+            <div class="scene-static-label">NO SIGNAL</div>
+            <div class="studio-popup-latest-glow" aria-hidden="true"></div>
+            <div class="studio-popup-latest-vignette" aria-hidden="true"></div>
+          </div>`;
+        return;
+      }
       el.innerHTML = '<div class="studio-popup-empty">No recent scene art found.</div>';
       return;
     }
@@ -1106,13 +1155,38 @@
       </div>`;
   }
 
-  function renderScenesGrid(scenes) {
+  function renderScenesGrid(scenes, opts) {
     const label = document.getElementById('studioPopupScenesLabel');
     const el = document.getElementById('studioPopupScenes');
     if (!el || !label) return;
-    if (!scenes.length) {
+    // Two empty-state modes:
+    //   loading=true  → paint 9 NO SIGNAL placeholder tiles so the
+    //                   section has structure while entity-scenes
+    //                   resolves. Label stays visible to anchor the
+    //                   grid in place.
+    //   loading=false → real "no results" message (entity-scenes
+    //                   returned an empty array).
+    const loading = !!(opts && opts.loading);
+    if (!scenes.length && !loading) {
       label.style.display = 'none';
       el.innerHTML = '<div class="studio-popup-empty">No recent scenes found.</div>';
+      return;
+    }
+    if (!scenes.length && loading) {
+      label.style.display = '';
+      const slots = Array.from({ length: 9 }, () => `
+        <div class="scene-card scene-card--static" aria-hidden="true">
+          <div class="img-load">
+            <div class="scene-static-noise" aria-hidden="true"></div>
+            <div class="scene-static-bands" aria-hidden="true"></div>
+            <div class="scene-static-label">NO SIGNAL</div>
+          </div>
+          <div class="scene-meta" style="padding:6px 4px">
+            <div class="scene-title" style="font-size:11px;color:rgba(255,255,255,0.35);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">— — —</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.25)">CH-00 · STATIC</div>
+          </div>
+        </div>`).join('');
+      el.innerHTML = `<div class="pp-scenes-grid studio-popup-pp-scenes">${slots}</div>`;
       return;
     }
     label.style.display = '';

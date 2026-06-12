@@ -25779,8 +25779,14 @@ async def api_favourites_folder_fanart(row_id: int):
 
 
 @app.get("/api/favourites/entity-panel")
-async def api_favourites_entity_panel(row_id: int):
-    """Poster, TPDB scenes, and metadata for the favourites detail panel."""
+async def api_favourites_entity_panel(row_id: int, skip_scenes: int = 0):
+    """Poster, TPDB scenes, and metadata for the favourites detail panel.
+
+    ``skip_scenes=1`` returns the row payload immediately without hitting
+    the external scene-list APIs — the studio popup uses this to paint
+    its logo/name/pills the moment the DB row is read, then fires
+    ``/api/favourites/entity-scenes`` in parallel for the slow grid.
+    """
     row = db.favourite_get(row_id)
     if not row:
         return JSONResponse({"error": "Not found"}, status_code=404)
@@ -25796,7 +25802,9 @@ async def api_favourites_entity_panel(row_id: int):
         r["video_count"] = 0
     scenes: list[dict] = []
     src: str | None = None
-    if r.get("kind") in ("movie", "jav"):
+    if skip_scenes:
+        pass  # client fires entity-scenes separately
+    elif r.get("kind") in ("movie", "jav"):
         scenes = []
     else:
         # Studio panel renders these as a 12-tile grid (matches the
@@ -25805,6 +25813,22 @@ async def api_favourites_entity_panel(row_id: int):
         # it off the event loop so concurrent popup opens don't queue.
         scenes, src = await run_in_threadpool(favourites_recent_scenes, dict(row), 12)
     return {"row": r, "tpdb_scenes": scenes, "scenes_source": src}
+
+
+@app.get("/api/favourites/entity-scenes")
+async def api_favourites_entity_scenes(row_id: int):
+    """Recent scenes only for a favourites row — the slow half of
+    ``entity-panel``. Returned in the same ``tpdb_scenes`` /
+    ``scenes_source`` shape the popup already understands so the client
+    can call this independently and reuse the existing render path."""
+    row = db.favourite_get(row_id)
+    if not row:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    kind = row.get("kind")
+    if kind in ("movie", "jav"):
+        return {"tpdb_scenes": [], "scenes_source": None}
+    scenes, src = await run_in_threadpool(favourites_recent_scenes, dict(row), 12)
+    return {"tpdb_scenes": scenes, "scenes_source": src}
 
 
 @app.get("/api/studios/external-panel")

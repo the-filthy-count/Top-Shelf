@@ -1712,7 +1712,27 @@
       set.forEach((extId) => fetchPlan.push({ source: SOURCE_LABEL[src], srcKey: src, id: extId }));
     });
     const hasAnyId = fetchPlan.length > 0;
-    el.innerHTML = `<div class="pp-loading"><span class="loader" role="status" aria-label="Loading"></span></div>`;
+    // Paint the carousel grid immediately with NO SIGNAL placeholder
+    // tiles so the section reads as "structured + loading" instead of
+    // an empty cell with a centred spinner. Real tiles swap in once
+    // /api/scenes/recent returns. MIN_TILES matches the post-fetch
+    // padding floor so the slot count doesn't jump on swap.
+    const MIN_TILES = 9;
+    {
+      const placeholders = Array.from({ length: MIN_TILES }, () => `
+        <div class="scene-card scene-card--static discover-info-scene-card discover-info-scene-card--performer" aria-hidden="true">
+          <div class="img-load">
+            <div class="scene-static-noise" aria-hidden="true"></div>
+            <div class="scene-static-bands" aria-hidden="true"></div>
+            <div class="scene-static-label">NO SIGNAL</div>
+          </div>
+          <div class="scene-meta" style="padding:6px 4px">
+            <div class="scene-title" style="font-size:11px;color:rgba(255,255,255,0.35);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">— — —</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.25)">CH-00 · STATIC</div>
+          </div>
+        </div>`).join('');
+      el.innerHTML = `<div class="pp-scenes-grid">${placeholders}</div>`;
+    }
     let merged = [];
     if (hasAnyId) {
       try {
@@ -1758,10 +1778,8 @@
     scenes.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
     // Cap at the most recent 12.
     scenes = scenes.slice(0, 12);
-    // Pad to a minimum of 9 so the grid never looks half-empty. Empty
-    // slots render as "NO SIGNAL" static-noise tiles, mirroring the
-    // /discover layout.
-    const MIN_TILES = 9;
+    // Pad to a minimum of MIN_TILES (declared above for the placeholder
+    // grid) so the slot count doesn't jump when real tiles swap in.
     const realCount = scenes.length;
     const padded = scenes.slice();
     while (padded.length < MIN_TILES) padded.push({ __static: true });
