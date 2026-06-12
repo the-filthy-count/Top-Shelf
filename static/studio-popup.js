@@ -1099,17 +1099,15 @@
     if (!scene) {
       if (loading) {
         // Mirror the latest-scene layout so the panel doesn't reflow
-        // when real data arrives — title row + NO SIGNAL art slot.
+        // when real data arrives — title row + spinner-only art slot.
         el.innerHTML = `
           <div class="studio-popup-latest-info">
             <div class="studio-popup-latest-kicker">Latest scene</div>
-            <div class="studio-popup-latest-title" style="opacity:0.45">— — —</div>
-            <div class="studio-popup-latest-meta" style="opacity:0.35">Loading…</div>
+            <div class="studio-popup-latest-title" style="opacity:0.45">Loading…</div>
+            <div class="studio-popup-latest-meta" style="opacity:0.35">&nbsp;</div>
           </div>
-          <div class="studio-popup-latest-art is-empty">
-            <div class="scene-static-noise" aria-hidden="true"></div>
-            <div class="scene-static-bands" aria-hidden="true"></div>
-            <div class="scene-static-label">NO SIGNAL</div>
+          <div class="studio-popup-latest-art is-empty studio-popup-latest-art--loading">
+            <span class="loader" role="status" aria-label="Loading scene"></span>
             <div class="studio-popup-latest-glow" aria-hidden="true"></div>
             <div class="studio-popup-latest-vignette" aria-hidden="true"></div>
           </div>`;
@@ -1175,15 +1173,13 @@
     if (!scenes.length && loading) {
       label.style.display = '';
       const slots = Array.from({ length: 9 }, () => `
-        <div class="scene-card scene-card--static" aria-hidden="true">
+        <div class="scene-card scene-card--loading" aria-hidden="true">
           <div class="img-load">
-            <div class="scene-static-noise" aria-hidden="true"></div>
-            <div class="scene-static-bands" aria-hidden="true"></div>
-            <div class="scene-static-label">NO SIGNAL</div>
+            <span class="loader" role="status" aria-label="Loading scene"></span>
           </div>
           <div class="scene-meta" style="padding:6px 4px">
-            <div class="scene-title" style="font-size:11px;color:rgba(255,255,255,0.35);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">— — —</div>
-            <div style="font-size:10px;color:rgba(255,255,255,0.25)">CH-00 · STATIC</div>
+            <div class="scene-title" style="font-size:11px;color:rgba(255,255,255,0.35);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Loading…</div>
+            <div style="font-size:10px;color:rgba(255,255,255,0.25)">&nbsp;</div>
           </div>
         </div>`).join('');
       el.innerHTML = `<div class="pp-scenes-grid studio-popup-pp-scenes">${slots}</div>`;

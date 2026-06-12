@@ -8390,6 +8390,43 @@ button.pp-name-group:hover .pp-name-group-count {
   overflow: hidden;
   background: #060310;
 }
+
+/* Loading-state scene tile — shown in the popup carousels while the
+ * scene fetch is in flight (replaced by either a real tile or a
+ * NO SIGNAL pad once data arrives). Reuses the global `.loader`
+ * spinner; the wrapper centres it inside the 16:9 thumb slot. */
+.scene-card--loading {
+  cursor: default;
+  pointer-events: none;
+  background: linear-gradient(165deg, rgba(8, 4, 16, 0.85) 0%, rgba(4, 2, 8, 0.92) 100%);
+  border-color: rgba(var(--brand-purple-rgb), 0.18);
+}
+.scene-card--loading .img-load {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+  background: #060310;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.scene-card--loading .img-load .loader {
+  position: static;
+}
+
+/* Latest-scene art slot in its loading state: centre the spinner
+ * within the 16:9 art panel without bringing in the static-noise
+ * overlay. */
+.studio-popup-latest-art--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #060310;
+}
+.studio-popup-latest-art--loading .loader {
+  position: static;
+}
 .scene-static-noise {
   position: absolute;
   inset: 0;
