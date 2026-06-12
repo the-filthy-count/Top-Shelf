@@ -563,7 +563,7 @@
       const hasCount = typeof row.video_count === 'number' && row.id;
       if (hasCount) {
         const vc = Number(row.video_count || 0);
-        if (vcValEl) vcValEl.textContent = String(vc).padStart(4, ' ');
+        if (vcValEl) vcValEl.textContent = String(vc).padStart(4, ' ');
         const tip = `${vc} video${vc === 1 ? '' : 's'} in this folder`;
         vcEl.setAttribute('title', tip);
         vcEl.setAttribute('aria-label', tip);
