@@ -5812,6 +5812,71 @@ def build_nfo(
     return buf.getvalue().decode("utf-8")
 
 
+def _group_member_names_for_row(row_id: int) -> list[str]:
+    """Return the unique member names recorded on a group performer row.
+
+    Reads ``group_ids_json`` through ``db._group_ids_load`` (which
+    rescues legacy mangled-dict entries) and collects the ``name``
+    field from each rich entry across every source bucket. Bare-string
+    entries — which only carry an id, no name — are skipped because
+    they'd give us a stash-box UUID where the NFO needs a human name.
+    """
+    try:
+        gids = db._group_ids_load(int(row_id)) or {}
+    except Exception:
+        return []
+    names: list[str] = []
+    seen: set[str] = set()
+    for src in ("stashdb", "fansdb", "tpdb", "javstash"):
+        for entry in gids.get(src) or []:
+            n = ""
+            if isinstance(entry, dict):
+                n = str(entry.get("name") or "").strip()
+            if not n:
+                continue
+            key = n.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            names.append(n)
+    return names
+
+
+def _expand_group_performers_for_nfo(perf_names: list[str]) -> list[str]:
+    """Resolve any performer name that maps to a library *group* row
+    into its constituent members for the NFO ``<actor>`` block.
+
+    Routing logic still uses the original ``perf_names`` so a video
+    matched to "Fox Twins" lands in the Fox Twins folder; only the
+    actor list written to disk is expanded. Names that don't match a
+    group row pass through unchanged. Falls back to the original name
+    if a group row has no member names yet (avoids writing an empty
+    cast list)."""
+    if not perf_names:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in perf_names:
+        name = (raw or "").strip()
+        if not name:
+            continue
+        members: list[str] = []
+        try:
+            row = db.favourite_lookup_performer_by_name(name)
+        except Exception:
+            row = None
+        if row and int(row.get("is_group") or 0):
+            members = _group_member_names_for_row(int(row["id"]))
+        chosen = members if members else [name]
+        for n in chosen:
+            key = n.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(n)
+    return out
+
+
 def _scene_extract_plot_and_tags(scene: dict) -> tuple[str, list[str]]:
     """Pull plot + tag list off a stash-box-shaped scene dict.
 
@@ -6132,9 +6197,14 @@ def write_library_scene_nfo_and_thumb(video: Path, scene: dict, source: str) -> 
     thumb_data_url = plan.get("thumb_data_url") or ""
     plot_text = plan.get("details") or ""
     tag_names = plan.get("tags") or []
+    # NFO actors get the expanded form: any group name on perf_names
+    # (e.g. "Fox Twins") becomes the group's individual member names so
+    # the Kodi `<actor>` block lists the real humans. Routing already
+    # happened in `_scene_filing_plan` using the original group name.
+    actor_names = _expand_group_performers_for_nfo(perf_names)
 
     nfo = build_nfo(
-        nfo_title, show_title, studio or "Unknown", perf_names, date,
+        nfo_title, show_title, studio or "Unknown", actor_names, date,
         details=plot_text, tags=tag_names,
     )
     nfo_path = parent / f"{stem}.nfo"
@@ -6269,8 +6339,14 @@ def _file_scene_from_match_impl(video: Path, scene: dict, source: str = "") -> d
 
     dest_season.mkdir(parents=True, exist_ok=True)
 
+    # NFO actors get the expanded form: any group name on perf_names
+    # (e.g. "Fox Twins") becomes the group's individual member names so
+    # the Kodi `<actor>` block lists the real humans. Routing already
+    # happened in `_scene_filing_plan` using the original group name.
+    actor_names = _expand_group_performers_for_nfo(perf_names)
+
     nfo = build_nfo(
-        nfo_title, show_title, studio or "Unknown", perf_names, date,
+        nfo_title, show_title, studio or "Unknown", actor_names, date,
         details=plot_text, tags=tag_names,
     )
     (dest_season / f"{base_name}.nfo").write_text(nfo, encoding="utf-8")
@@ -16198,6 +16274,16 @@ async def search_scenes(payload: dict):
     sources_filter: set[str] | None = None
     if isinstance(sources_in, list) and sources_in:
         sources_filter = {str(s).strip().upper() for s in sources_in if str(s).strip()}
+
+    # Library groups (e.g. "Fox Twins") aren't real performers on any
+    # upstream DB — searching by the group name returns zero hits.
+    # Swap any group name in the comma-separated performer list for its
+    # constituent member names so the search actually finds scenes.
+    if performer:
+        names_in = [n.strip() for n in performer.split(",") if n.strip()]
+        names_out = _expand_group_performers_for_nfo(names_in)
+        if names_out:
+            performer = ", ".join(names_out)
 
     if not any([term, title, performer, studio, date_from, date_to]):
         return JSONResponse({"error": "Provide at least one search field"}, status_code=400)
