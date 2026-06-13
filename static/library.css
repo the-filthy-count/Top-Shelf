@@ -1062,7 +1062,7 @@ body .app .fav-stage {
     filter: drop-shadow(0 1px 2px rgba(0,0,0,0.9));
     /* Empty (not-yet-favourited) heart stays hidden at rest as the
      * "click to favourite" affordance — it surfaces on tile hover. */
-    opacity: 0; transition: opacity 0.2s ease;
+    opacity: 0; transition: opacity 0.2s ease, filter 0.2s ease;
   }
   .fav-cell:hover .fav-card-heart { opacity: 1; }
   /* Hover used to combine `filter: brightness + drop-shadow` with
@@ -1071,12 +1071,22 @@ body .app .fav-stage {
    * costing ~3-6 ms per hover-move event on busy grids. Bare scale
    * keeps the tactile feedback at zero compositor cost. */
   .fav-card-heart:hover { transform: scale(1.06); }
-  /* Favourited heart — reversed from the empty state. Visible at
-   * rest so the user can spot which tiles are favourited at a glance,
-   * fades out on tile hover so the cover art reads clean while they
-   * engage with the tile. */
-  .fav-card-heart.heart-on { color: var(--accent); opacity: 1; }
-  .fav-cell:hover .fav-card-heart.heart-on { opacity: 0; }
+  /* Favourited heart — bright accent on hover, dimmed at rest. The
+   * previous behaviour had the heart at full brightness all the time;
+   * dimming at rest reads as "I'm marked, but you're not engaging with
+   * me right now" and the hover lift to full accent matches the rest
+   * of the tile coming alive on hover (cover art swaps from duotone
+   * back to natural). The `filter: brightness(.55)` stacks with the
+   * existing drop-shadow so the legibility-against-the-poster halo
+   * still applies. */
+  .fav-card-heart.heart-on {
+    color: var(--accent);
+    opacity: 1;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.9)) brightness(0.55);
+  }
+  .fav-cell:hover .fav-card-heart.heart-on {
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.9)) brightness(1);
+  }
 
   /* Poster: lock toggle (left, on hover). Solid heart only when favourited (right). */
   .fav-card-lock {
