@@ -1060,20 +1060,23 @@ body .app .fav-stage {
     display: flex; align-items: center; justify-content: center;
     font-size: 19px; padding: 0; box-shadow: none;
     filter: drop-shadow(0 1px 2px rgba(0,0,0,0.9));
-    /* Reversed from the original hover-to-reveal pattern: the
-     * favourite indicator shows at rest so the user can scan the grid
-     * for hearts at a glance, and fades out on tile hover so the cover
-     * art reads clean while they engage with the tile. */
-    opacity: 1; transition: opacity 0.2s ease;
+    /* Empty (not-yet-favourited) heart stays hidden at rest as the
+     * "click to favourite" affordance — it surfaces on tile hover. */
+    opacity: 0; transition: opacity 0.2s ease;
   }
-  .fav-cell:hover .fav-card-heart { opacity: 0; }
+  .fav-cell:hover .fav-card-heart { opacity: 1; }
   /* Hover used to combine `filter: brightness + drop-shadow` with
    * `transform: scale(1.04)`. The filter change forces a new layer
    * promotion per hover and stacks atop the resting drop-shadow,
    * costing ~3-6 ms per hover-move event on busy grids. Bare scale
    * keeps the tactile feedback at zero compositor cost. */
   .fav-card-heart:hover { transform: scale(1.06); }
-  .fav-card-heart.heart-on { color: var(--accent); }
+  /* Favourited heart — reversed from the empty state. Visible at
+   * rest so the user can spot which tiles are favourited at a glance,
+   * fades out on tile hover so the cover art reads clean while they
+   * engage with the tile. */
+  .fav-card-heart.heart-on { color: var(--accent); opacity: 1; }
+  .fav-cell:hover .fav-card-heart.heart-on { opacity: 0; }
 
   /* Poster: lock toggle (left, on hover). Solid heart only when favourited (right). */
   .fav-card-lock {
