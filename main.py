@@ -2333,7 +2333,20 @@ def query_stashbox(phash_hex, endpoint, api_key, query, fingerprint_var):
                          json={"query": query, "variables": variables},
                          headers={"Content-Type": "application/json", "ApiKey": api_key},
                          timeout=30)
-    resp.raise_for_status()
+    # GraphQL endpoints frequently return 4xx with a body that explains
+    # exactly which field/argument got rejected (e.g. "Cannot query
+    # field 'X' on type 'Y'"). raise_for_status() throws an HTTPError
+    # that hides the body, so unwrap it first and surface the
+    # `errors[].message` so the caller's emit() picks up the real cause.
+    if resp.status_code >= 400:
+        try:
+            err_body = resp.json()
+            err_msgs = err_body.get("errors") if isinstance(err_body, dict) else None
+            if err_msgs:
+                raise RuntimeError(f"HTTP {resp.status_code}: {err_msgs}")
+        except ValueError:
+            pass
+        raise RuntimeError(f"HTTP {resp.status_code}: {(resp.text or '')[:500]}")
     data = resp.json()
     if "errors" in data:
         raise RuntimeError(f"Stash-box error: {data['errors']}")
