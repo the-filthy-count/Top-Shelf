@@ -10156,12 +10156,17 @@ def fetch_studio_detail(source: str, sid: str) -> dict | None:
     if not key:
         emit(f"fetch_studio_detail no {key_name} configured")
         return None
+    # stash-box `Studio` has no description field — that's `Scene.details`.
+    # Pull every field the popup actually uses and leave description blank
+    # for stash-box sources (the popup falls back to "No description
+    # available" in that case, and the logo + scenes + URL chips still
+    # render). The pre-422 codebase queried `details` here and the silent
+    # exception handler made every stash-box studio look empty.
     gql = """
     query($id: ID!) {
       findStudio(id: $id) {
         id
         name
-        details
         images { url }
         parent { id name }
         urls { url site { name } }
@@ -10197,7 +10202,7 @@ def fetch_studio_detail(source: str, sid: str) -> dict | None:
         "id": s.get("id"),
         "name": s.get("name"),
         "title": s.get("name"),
-        "description": s.get("details") or "",
+        "description": "",
         "images": s.get("images") or [],
         "parent": s.get("parent") or None,
         "urls": s.get("urls") or [],
