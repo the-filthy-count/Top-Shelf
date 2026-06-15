@@ -27,7 +27,14 @@ import sqlite3
 import asyncio
 from app.core.pipeline import ProcessingPipeline, VIDEO_EXTENSIONS, _scene_dict_from_grab_row
 from app.utils.fs import safe_move
-from app.utils.text import UPPERCASE_KEYWORDS, apply_caps, render_pattern, _sanitize_fs_component
+from app.utils.text import (
+    UPPERCASE_KEYWORDS,
+    apply_caps,
+    render_pattern,
+    _sanitize_fs_component,
+    shorten_filename,
+    FS_FILENAME_MAX_BYTES,
+)
 from app.utils.images import best_image_url
 from app.utils.fs import LIBRARY_FILED_MODE_DEFAULT, _ensure_library_filed_permissions
 from app.core.phash import (
@@ -6049,7 +6056,7 @@ def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: s
         emit(f"  Manual vice → {vice_name}")
         fields      = {**base_fields, "performer": _sanitize_fs_component(perf_names[0] if perf_names else "Unknown")}
         pattern     = settings.get("pattern_series", db.DEFAULTS["pattern_series"])
-        base_name   = render_pattern(pattern, fields)
+        base_name   = shorten_filename(render_pattern(pattern, fields), "-thumb.jpg")
         show_title  = apply_caps(vice_name)
         nfo_title   = f"{', '.join(perf_names)} - {title}" if perf_names else title
         dest_season = vice_path / season_token
@@ -6091,7 +6098,7 @@ def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: s
     if studio_dir:
         fields     = {**base_fields, "performer": _sanitize_fs_component(perf_names[0] if perf_names else "Unknown")}
         pattern    = settings.get("pattern_series", db.DEFAULTS["pattern_series"])
-        base_name  = render_pattern(pattern, fields)
+        base_name  = shorten_filename(render_pattern(pattern, fields), "-thumb.jpg")
         show_title = apply_caps(studio)
         nfo_title  = f"{', '.join(perf_names)} - {title}" if perf_names else title
         dest_season = studio_dir / season_token
@@ -6140,7 +6147,7 @@ def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: s
                 emit(f"  Vice match → {vice_name}")
                 fields      = {**base_fields, "performer": _sanitize_fs_component(perf_names[0] if perf_names else "Unknown")}
                 pattern     = settings.get("pattern_series", db.DEFAULTS["pattern_series"])
-                base_name   = render_pattern(pattern, fields)
+                base_name   = shorten_filename(render_pattern(pattern, fields), "-thumb.jpg")
                 show_title  = apply_caps(vice_name)
                 nfo_title   = f"{', '.join(perf_names)} - {title}" if perf_names else title
                 dest_season = vice_path / season_token
@@ -6160,7 +6167,7 @@ def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: s
             performer_path, performer_name = result
             fields     = {**base_fields, "performer": _sanitize_fs_component(performer_name)}
             pattern    = settings.get("pattern_performer", db.DEFAULTS["pattern_performer"])
-            base_name  = render_pattern(pattern, fields)
+            base_name  = shorten_filename(render_pattern(pattern, fields), "-thumb.jpg")
             show_title = performer_name
             nfo_title  = f"{performer_name} - {title}"
             dest_season = performer_path / season_token
@@ -6812,7 +6819,14 @@ def _movie_filing_stem(movie: dict) -> str:
         year_str = yraw
     else:
         year_str = "0000"
-    return f"{safe_title} ({year_str})"
+    # Cap so the assembled stem + "-poster.jpg" / video extension still
+    # fits inside the kernel's 255-byte per-component limit. JAV titles
+    # in Japanese hit this constantly (3 bytes per kanji).
+    year_suffix = f" ({year_str})"
+    return shorten_filename(
+        safe_title + year_suffix,
+        "-poster.jpg",
+    )
 
 
 def file_movie(
@@ -11093,6 +11107,11 @@ def create_tvshow_folder(
     *,
     logo_url: str | None = None,
 ) -> Path:
+    # Cap the folder name so mkdir doesn't ENAMETOOLONG on long JAV
+    # titles (ext4 limit is 255 bytes per component; one kanji is 3
+    # bytes in UTF-8). The .nfo / poster / logo files inside the folder
+    # have fixed short names so they don't need their own cap.
+    name = shorten_filename(name, "")
     folder = dest_dir / name
     folder.mkdir(parents=True, exist_ok=True)
     nfo_path = folder / "tvshow.nfo"

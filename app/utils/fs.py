@@ -5,6 +5,8 @@ import logging
 import stat
 from pathlib import Path
 
+from app.utils.text import FS_FILENAME_MAX_BYTES, shorten_filename
+
 logger = logging.getLogger(__name__)
 
 # Filed videos: clients often finish as 0700; shutil.move keeps that mode. Sidecars (.nfo, thumbs) are
@@ -30,6 +32,20 @@ def _ensure_library_filed_permissions(path: Path) -> None:
         pass
 
 
+def _shorten_path_basename(p: Path) -> Path:
+    """Return a copy of *p* with its final filename (or directory) name
+    truncated to the kernel's per-component limit. UTF-8 safe."""
+    name = p.name
+    if len(name.encode("utf-8")) <= FS_FILENAME_MAX_BYTES:
+        return p
+    if "." in name and not name.startswith("."):
+        stem, _, ext = name.rpartition(".")
+        if len(ext) <= 8:  # Don't treat "2024.12.31.title" as having an ext.
+            new = shorten_filename(stem, "." + ext)
+            return p.with_name(new)
+    return p.with_name(shorten_filename(name, ""))
+
+
 def safe_move(src: Path, dst: Path, emit_cb=None) -> None:
     """Move *src* to *dst*; never leave both after a successful import."""
     src = Path(src)
@@ -40,6 +56,26 @@ def safe_move(src: Path, dst: Path, emit_cb=None) -> None:
             emit_cb(msg)
         else:
             logger.info(msg)
+
+    # Cap each path component (in case the parent folder name is also
+    # over the limit, e.g. movie folder "<long-jav-title> (2026)"). The
+    # final basename is the most common offender; truncate that last so
+    # the warning shows the right file.
+    parts = list(dst.parts)
+    capped = False
+    for i, part in enumerate(parts):
+        if len(part.encode("utf-8")) > FS_FILENAME_MAX_BYTES:
+            new_part = _shorten_path_basename(Path(part)).name
+            if new_part != part:
+                parts[i] = new_part
+                capped = True
+    if capped:
+        new_dst = Path(*parts)
+        _emit(
+            f"  safe_move: filename exceeded 255 bytes — truncating "
+            f"{dst.name!r} -> {new_dst.name!r}"
+        )
+        dst = new_dst
 
     if not src.exists():
         raise FileNotFoundError(f"Source not found: {src}")
