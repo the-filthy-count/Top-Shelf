@@ -26103,6 +26103,7 @@ async def api_studios_external_panel(
     src = _normalize_metadata_db_source((source or "").strip()) if (source or "").strip() else ""
     sid = (id or "").strip()
     nm = (name or "").strip()
+    emit(f"external_panel: source={src!r} (raw {source!r}) id={sid!r} name={nm!r}")
     if not src or (not sid and not nm):
         return JSONResponse({"error": "source and id (or name) required"}, status_code=400)
 
@@ -26113,8 +26114,12 @@ async def api_studios_external_panel(
     if sid:
         try:
             detail = await run_in_threadpool(fetch_studio_detail, src, sid)
-        except Exception:
+        except Exception as e:
+            emit(f"external_panel: fetch_studio_detail raised: {e}")
             detail = None
+    else:
+        emit("external_panel: no sid in request — skipping fetch_studio_detail")
+    emit(f"external_panel: detail keys={list((detail or {}).keys())!r}")
 
     detail = detail or {}
     display_name = (detail.get("name") or detail.get("title") or nm or "").strip() or "Studio"
