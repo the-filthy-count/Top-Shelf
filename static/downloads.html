@@ -1,0 +1,1923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Downloads</title>
+
+<link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
+<link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
+<!-- webawesome bundle previously loaded here. The page uses zero
+     <wa-*> elements, and the bundled localize.js / chunk module
+     ships a self-referencing import cycle that throws on load. -->
+<script src="/static/theme-init.js?v=20260614c"></script>
+<link rel="stylesheet" href="/static/app-shell.css?v=26">
+<link rel="stylesheet" href="/static/downloads.css?v=1">
+<script src="/static/ts-utils.js?v=20260614a"></script>
+<script src="/static/lib-entity-actions.js?v=20260612c"></script>
+<script src="/static/popup-loader.js?v=20260615b"></script>
+<style>
+  /* Font tokens (--mono / --acid / --secs) live in /static/app-shell.css */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { height: 100%; }
+  body {
+    background: transparent;
+    color: var(--text); font-family: var(--mono); font-size: 13px; line-height: 1.6;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  body::before { content: ''; position: fixed; inset: 0; background: rgba(var(--bg-rgb),0.72); z-index: 0; }
+  .app {
+    position: relative; z-index: 1;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 24px 24px;
+  }
+
+  header {
+    flex-shrink: 0;
+    padding: 14px 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.88) 0%, rgba(var(--panel-lo-rgb),0.78) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.22);
+    margin-bottom: 20px;
+  }
+  header:not(.ts-app-header) {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  header.ts-app-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 2fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 12px 16px;
+  }
+  header.ts-app-header .ts-header-left { justify-self: start; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
+  header.ts-app-header .nav-links { justify-self: end; }
+  .logo img { height: 36px; object-fit: contain; }
+  .nav-links { display: flex; gap: 10px; align-items: center; }
+
+  .panel.downloads-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.55) 0%, rgba(var(--panel-lo-rgb),0.45) 100%);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.35); border-radius: 10px; overflow: hidden;
+    backdrop-filter: blur(18px) saturate(1.08); -webkit-backdrop-filter: blur(18px) saturate(1.08);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 8px 32px rgba(0,0,0,0.26);
+  }
+  .panel-header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .panel-title { font-family: var(--acid); font-size: 26px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .field-input {
+    background: var(--raised); border: 1px solid var(--border); border-radius: 4px; color: var(--text);
+    padding: 8px 12px; font-family: var(--mono); font-size: 12px; min-width: 180px;
+  }
+  .field-input:focus { outline: none; border-color: var(--accent); }
+
+  .meta { font-size: 11px; color: var(--dim); }
+  .note { font-size: 11px; color: var(--amber); margin: 8px 18px 0; line-height: 1.5; flex-shrink: 0; }
+  .err { font-size: 11px; color: var(--red); margin: 6px 18px 0; flex-shrink: 0; }
+
+  .downloads-panel .table-wrap {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 0 18px 18px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    text-align: left; padding: 10px 12px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--dim); border-bottom: 1px solid var(--border); background: rgba(var(--panel-lo-rgb),0.95); white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.06);
+  }
+  td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .td-name { color: var(--text); max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dl-type {
+    font-family: var(--font-impact-label), var(--mono);
+    font-size: calc(17px + 2pt);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--blue);
+  }
+  .dl-queue {
+    font-family: var(--font-impact-label), var(--mono);
+    font-size: calc(15px + 2pt);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .dl-queue.pill-active { color: var(--green); }
+  .dl-queue.pill-hist { color: var(--dim); }
+  /* Full-width progress bar rows */
+  /* ── Downloads tile grid ──
+   * Each download is a frosted-glass tile with: studio logo + filename
+   * header, conic-gradient progress ring as the hero, stat chips,
+   * headshots, and a thin progress bar pinned to the tile's bottom
+   * edge. Class names .dl-bar / .dl-bar-headshots / .dl-bar-name /
+   * .dl-bar-meta are kept so the existing JS render template + the
+   * _hydrateDownloadHeadshots() routine continue to find their hooks. */
+  .dl-bar-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 14px;
+    padding: 14px 16px;
+  }
+  .dl-bar {
+    position: relative;
+    isolation: isolate;
+    border-radius: 14px;
+    overflow: hidden;
+    padding: 14px 16px 22px;
+    min-height: 280px;
+    display: grid;
+    /* 4-row layout:
+     *   row 1: head      (studio logo + remove button, full-width)
+     *   row 2: title     (filename, full-width, wraps over 2 lines)
+     *   row 3: content   (poster + headshots on left, ring on right)
+     *   row 4: chips     (2-col grid, category spans both columns) */
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas:
+      "head"
+      "title"
+      "content"
+      "chips";
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 10px;
+    /* Dark liquid-glass surface: layered translucent darks (no hard
+     * scanline), a subtle pearlescent top-left wash, heavy backdrop
+     * blur with extra saturation for the refraction feel, and a
+     * soft inner highlight along the top edge instead of a visible
+     * border. */
+    background:
+      radial-gradient(ellipse 120% 80% at 0% 0%,
+        rgba(255, 255, 255, 0.06) 0%,
+        rgba(255, 255, 255, 0) 50%),
+      linear-gradient(160deg,
+        rgba(var(--panel-hi-rgb), 0.55) 0%,
+        rgba(var(--panel-lo-rgb), 0.42) 60%,
+        rgba(0, 0, 0, 0.50) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(28px) saturate(1.6);
+    -webkit-backdrop-filter: blur(28px) saturate(1.6);
+    box-shadow:
+      0 12px 36px rgba(0, 0, 0, 0.55),
+      0 1px 0 rgba(255, 255, 255, 0.08) inset,
+      0 -1px 0 rgba(0, 0, 0, 0.35) inset;
+    transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
+  }
+  .dl-bar:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow:
+      0 18px 48px rgba(0, 0, 0, 0.65),
+      0 1px 0 rgba(255, 255, 255, 0.12) inset,
+      0 -1px 0 rgba(0, 0, 0, 0.4) inset,
+      0 0 24px rgba(var(--brand-purple-rgb), 0.18);
+    transform: translateY(-1px);
+  }
+  /* Decorative silhouette pinned to the bottom-right corner —
+   * half the tile's height, touching the bottom edge, 25% opacity
+   * so it reads as faint atmosphere rather than chrome. Sits above
+   * the sheen pseudo (z-index 0) but below tile content. */
+  /* Watermark silhouette — inside `.prowlarr-search-panel`, centred on
+   * the 2/3 horizontal mark, bottom-aligned. Content stacks above it. */
+  .dl-bg-decor {
+    position: absolute;
+    left: 66.67%;
+    top: 22%;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: min(42vw, 520px);
+    pointer-events: none;
+    z-index: 0;
+    display: none;
+  }
+  .dl-bg-decor img {
+    width: auto;
+    height: 100%;
+    max-height: none;
+    margin: 0 auto;
+    object-fit: contain;
+    object-position: bottom center;
+    opacity: 0.1;
+    display: block;
+  }
+
+  .dl-bar .dl-tile-silhouette {
+    /* Explicit pixel dimensions — earlier `aspect-ratio + height: %`
+     * sizing relied on the parent having a definite height, but
+     * `.dl-bar` only declares `min-height`, so the percentage
+     * resolved to 0 and the element rendered with zero size. Hard
+     * px values guarantee a paintable box. */
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 130px;
+    height: 230px;
+    background: url('/static/img/silhouette8.webp') right bottom / contain no-repeat;
+    opacity: 0.50;
+    pointer-events: none;
+    z-index: 1;
+  }
+  /* Liquid sheen highlight — a soft, irregular bright glaze along
+   * the upper-left arc that suggests light catching wet glass. No
+   * scanlines or hard texture; only the curve. */
+  .dl-bar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 70% 28% at 30% -8%,
+        rgba(255, 255, 255, 0.10) 0%,
+        rgba(255, 255, 255, 0) 70%);
+    z-index: 0;
+    border-radius: inherit;
+  }
+  /* Bottom outline progress bar — a 2px line pinned to the tile's
+   * bottom edge that fills left-to-right with --pct. The classic UI
+   * cue (a la torrent clients of yore) anchors the tile and gives a
+   * second read of progress that doesn't depend on the ring. */
+  .dl-bar::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px;
+    background: linear-gradient(90deg,
+      var(--accent) 0%,
+      var(--accent) calc(var(--pct, 0) * 1%),
+      rgba(255, 255, 255, 0.06) calc(var(--pct, 0) * 1%),
+      rgba(255, 255, 255, 0.06) 100%);
+    box-shadow: 0 0 8px rgba(var(--brand-accent-rgb), 0.45);
+    z-index: 5;
+    pointer-events: none;
+    transition: background 0.4s ease;
+  }
+  /* Active downloads (still in progress) get a hot-pink border + pulse
+   * so they stand out from the history tiles at a glance. Pink is the
+   * app's "live activity" colour (matches the wanted-eye, IN-LIBRARY
+   * pill, and Suggested chip). The render path also hoists every
+   * `.pill-active:not(.complete)` row to the top of `#rows` so they
+   * land in the top-left of the grid. */
+  .dl-bar.pill-active:not(.complete) {
+    border-color: rgba(var(--brand-accent-rgb), 0.65);
+    animation: dl-tile-pulse 3.2s ease-in-out infinite;
+  }
+  @keyframes dl-tile-pulse {
+    0%,100% { box-shadow:
+      var(--ts-bevel, 0 1px 0 rgba(255,255,255,0.05), 0 6px 18px rgba(0,0,0,0.4)),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 0 0 0 rgba(var(--brand-accent-rgb), 0); }
+    50%    { box-shadow:
+      var(--ts-bevel-hover, 0 1px 0 rgba(255,255,255,0.08), 0 8px 22px rgba(0,0,0,0.5)),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 22px 1px rgba(var(--brand-accent-rgb), 0.45); }
+  }
+  /* Complete tiles: switch the accent pulse off, mute the ring, lock
+   * the border to brand-purple. */
+  .dl-bar.complete {
+    border-color: rgba(var(--brand-purple-rgb), 0.55);
+    background: linear-gradient(160deg,
+      rgba(var(--brand-purple-rgb), 0.18) 0%,
+      rgba(var(--panel-lo-rgb), 0.7) 100%);
+  }
+  .dl-bar.complete .dl-tile-ring {
+    background: conic-gradient(rgba(var(--brand-purple-rgb), 0.85) 100%, transparent 0);
+  }
+  /* Header row: studio logo on the left, remove button on the right.
+   * The filename has been promoted to its own row below so the title
+   * can take the full tile width and wrap freely. */
+  .dl-tile-head {
+    grid-area: head;
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+  }
+  .dl-tile-head .dl-bar-studio-logo {
+    flex-shrink: 0;
+    height: 38px;
+    max-width: 110px;
+    width: auto;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
+  }
+  /* Title row: full-width filename. Filename wraps over up to two
+   * lines so long release names don't truncate behind ellipsis. The
+   * source-scene poster (when present) is now anchored to the
+   * tile's bottom-right corner instead of sharing this row. */
+  .dl-tile-title {
+    grid-area: title;
+    position: relative;
+    z-index: 2;
+    min-width: 0;
+  }
+  .dl-tile-title-text {
+    min-width: 0;
+  }
+  /* Source-scene poster — beveled like a physical photo print, sits
+   * in the content row's media column.
+   *   • Default (movie): 88×132 portrait (2:3) — same height as the
+   *     conic ring so the row reads as two side-by-side panels.
+   *     Headshots live as a vertical stack between the poster and
+   *     the ring.
+   *   • `--scene`: 100% width × 16:9 — wide thumbnail stretches
+   *     across the whole media column with headshots flowing
+   *     horizontally underneath. */
+  /* The wrapper carries the burn-in (inset shadows don't render on
+   * <img> directly — the image content paints over them). The img
+   * inside fills 100% with the actual photo. The wrapper's
+   * `::after` paints the inset top shadow + bottom highlight ON
+   * TOP of the image so the recess effect actually shows. */
+  .dl-tile-source-poster {
+    position: relative;
+    flex-shrink: 0;
+    width: 88px;
+    height: 132px;
+    border-radius: 7px;
+    overflow: hidden;
+    background: rgba(var(--panel-lo-rgb), 0.9);
+    /* Outer hard frame — sits in the surface plane like a stamped
+     * recess perimeter. */
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.5),
+      inset 0 0 0 1px rgba(var(--brand-purple-rgb), 0.32);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .dl-tile-source-poster img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* Light desat + contrast harmonises with the dark glass without
+     * blurring or hiding detail. */
+    filter: saturate(0.92) contrast(1.05) brightness(0.96);
+    transition: filter 0.2s ease;
+  }
+  /* Inset gloss/shadow overlay — paints on top of the image to
+   * give the burn-in effect that inset box-shadow can't. Top dark
+   * gradient sinks the image, faint bottom highlight catches the
+   * lip, brand-purple inner rim ties to the chip accents. */
+  .dl-tile-source-poster::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(180deg,
+      rgba(0, 0, 0, 0.45) 0%,
+      rgba(0, 0, 0, 0.20) 22%,
+      rgba(0, 0, 0, 0) 55%,
+      rgba(0, 0, 0, 0) 88%,
+      rgba(255, 255, 255, 0.07) 100%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    transition: opacity 0.2s ease;
+  }
+  /* Hover lifts the photo OUT of the recess — burn-in fades, full
+   * saturation returns, outer halo blooms. */
+  .dl-tile-source-poster:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.5),
+      inset 0 0 0 1px rgba(var(--brand-purple-rgb), 0.7),
+      0 10px 24px rgba(0, 0, 0, 0.65),
+      0 0 18px rgba(var(--brand-purple-rgb), 0.4);
+  }
+  .dl-tile-source-poster:hover img {
+    filter: saturate(1) contrast(1) brightness(1);
+  }
+  .dl-tile-source-poster:hover::after {
+    opacity: 0.35;
+  }
+  .dl-tile-source-poster--scene {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+  }
+  /* Source-DB link chip — same slab shape as the other stat chips,
+   * just clickable. Slot in alongside size / category / status /
+   * queue / duplicate so it reads as another fact about the
+   * download rather than a separate floating control. */
+  .dl-tile-chip-source {
+    cursor: pointer;
+    text-decoration: none;
+    transition: border-left-color 0.15s, background 0.15s;
+    color: var(--text);
+  }
+  .dl-tile-chip-source:hover {
+    border-left-color: rgba(var(--brand-purple-rgb), 0.95);
+    background: linear-gradient(95deg,
+      rgba(var(--brand-purple-rgb), 0.28) 0%,
+      rgba(var(--panel-hi-rgb), 0.55) 100%);
+  }
+  .dl-tile-chip-source img {
+    height: 13px;
+    width: auto;
+    object-fit: contain;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .dl-tile-title .dl-bar-name {
+    font-family: var(--secs, "Impact Label Reversed", sans-serif);
+    font-size: 15px;
+    letter-spacing: 0.02em;
+    color: var(--text);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+    line-height: 1.25;
+    /* 2-line clamp — modern browsers honour the standard property,
+     * the -webkit- prefix is a fallback for older WebKit/Blink. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+  }
+  .dl-tile-title .dl-bar-meta {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    color: var(--text);
+    opacity: 0.6;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+    margin-top: 3px;
+  }
+  /* Content row — splits into a left "media" column (poster +
+   * headshots) and a right "hero" column (the conic progress ring).
+   * Sub-grid sized 1fr | auto so the media area absorbs slack while
+   * the ring stays at its intrinsic 132×132. Slightly more column
+   * gap so the headshot stack and the ring don't crowd each other. */
+  .dl-tile-content {
+    grid-area: content;
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 16px;
+    align-items: center;
+    min-width: 0;
+    margin-bottom: 6px;
+  }
+  /* Media column — the image + headshots. Default layout (no
+   * poster, or movie poster) is row: image left, headshots right.
+   * The `--scene` modifier flips it to column so the wide scene
+   * thumbnail sits on top with the headshots underneath. */
+  .dl-tile-media {
+    display: flex;
+    flex-direction: row;
+    gap: 14px;
+    align-items: center;
+    min-width: 0;
+  }
+  .dl-tile-media--scene {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .dl-tile-hero {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  /* The ring itself: dark→light progression along the filled arc using
+   * the active theme's --duotone-lighten (shadow / dark) →
+   * --duotone-midtone (mid) → --duotone-multiply (highlight / light)
+   * tokens, then a hard cut to a faint track for the unfilled portion.
+   * Using degrees (calc(--pct * 3.6deg)) so the gradient stops align
+   * with the arc boundary cleanly. */
+  .dl-tile-ring {
+    position: relative;
+    width: 132px;
+    height: 132px;
+    border-radius: 50%;
+    background:
+      conic-gradient(
+        var(--duotone-lighten) 0deg,
+        var(--duotone-midtone, color-mix(in srgb, var(--duotone-lighten), var(--duotone-multiply))) calc(var(--pct, 0) * 1.8deg),
+        var(--duotone-multiply) calc(var(--pct, 0) * 3.6deg),
+        rgba(0, 0, 0, 0.55) calc(var(--pct, 0) * 3.6deg));
+    transition: background 0.4s ease;
+    /* Burned-in feel: the ring is recessed into the tile glass.
+     * No outer drop-shadow halo. A soft outer dark ring suggests
+     * the lip of a depression in the surface. */
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.55),
+      0 1px 1px rgba(0, 0, 0, 0.45);
+  }
+  /* Inner disc — sunk well below the rim. Dark gradient floor with
+   * a sharp top inset shadow + bottom highlight catch so the disc
+   * reads as the bottom of a circular depression rather than a
+   * raised cap. */
+  .dl-tile-ring::before {
+    content: '';
+    position: absolute;
+    inset: 9px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 50% 80%,
+        rgba(var(--panel-lo-rgb), 0.98) 0%,
+        rgba(0, 0, 0, 0.95) 100%);
+    box-shadow:
+      inset 0 6px 10px rgba(0, 0, 0, 0.75),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+      inset 0 1px 0 rgba(0, 0, 0, 0.65);
+  }
+  /* Tick marks removed — the dark liquid-glass aesthetic favours
+   * smooth surfaces over instrument-cluster detailing. The conic
+   * gradient itself carries enough information. */
+  .dl-tile-pct {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    z-index: 1;
+    line-height: 1;
+  }
+  /* LED Board Reversed font for the percent — same face the .sky-counter
+   * tiles use across /health and /downloads. Skipping the .sky-counter
+   * class itself because that one auto-pads to 6 chars and triggers
+   * fitSkyCounter; we want a tight, fixed-size readout in the ring. */
+  .dl-tile-pct-num {
+    font-family: "LedCounter", "VCRMono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 38px;
+    color: var(--accent);
+    text-shadow: 0 0 10px rgba(var(--brand-accent-rgb), 0.5);
+    letter-spacing: -0.02em;
+    /* Preserve leading spaces from the padStart() in the render
+     * template. Without this, the browser collapses the runs of
+     * whitespace and the readout drifts left as digits change. */
+    white-space: pre;
+  }
+  .dl-tile-pct-sym {
+    font-family: "LedCounter", "VCRMono", ui-monospace, monospace;
+    font-size: 22px;
+    color: var(--accent);
+    opacity: 0.78;
+    margin-left: 1px;
+  }
+  /* Source-type logo (NZB / Torrent) — small badge anchored just
+   * outside the ring's bottom-right edge so it never covers any
+   * part of the conic progress arc. The negative offsets push it
+   * past the ring's bounding box on the down-right diagonal. */
+  .dl-tile-type-badge {
+    position: absolute;
+    right: -8px;
+    bottom: -8px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: rgba(var(--bg-rgb), 0.92);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  }
+  .dl-tile-type-badge img.dl-type-logo {
+    max-height: 22px;
+    max-width: 28px;
+    height: auto;
+    width: auto;
+    display: block;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+  }
+  /* Info chip stack — bottom row of the tile, two columns wide.
+   * The download category gets a full-width slot at the top of the
+   * grid (it's usually the longest text and reads as a header for
+   * the rest of the meta). All other chips fill the 2-col grid in
+   * render order. No divider line — the liquid-glass surface keeps
+   * sections apart with spacing alone. */
+  .dl-tile-chips {
+    grid-area: chips;
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    /* Fixed 3-row height regardless of chip count so the content row
+     * above (image / dial / headshot) sits at the same Y in every
+     * tile. METADL state has 3 chips → 2 rows; DOWNLOADING etc has
+     * 4 chips → 3 rows. Without a fixed floor the chip block shrinks
+     * for METADL tiles and the headshot drifts down to fill the gap.
+     * Three slots @ ~32px (chip height + row-gap) + cat row + padding
+     * = 108px reserves the worst-case slot. align-content: start
+     * keeps the chips top-aligned within that reserved space so the
+     * empty row sits at the bottom rather than spreading. */
+    min-height: 108px;
+    align-content: start;
+    column-gap: 8px;
+    row-gap: 6px;
+    min-width: 0;
+    padding-top: 6px;
+  }
+  .dl-tile-chips .dl-tile-chip-cat {
+    grid-column: 1 / -1;
+    /* Category chip — reads as part of the tile surface (matching the
+     * panel's translucency) rather than a darker sticker layered on
+     * top. A 1px bottom border separates it cleanly from the 2-col
+     * stat chips below, mirroring the divider rhythm of every other
+     * stacked element in the tile. */
+    background: linear-gradient(160deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      rgba(255, 255, 255, 0.02) 50%,
+      rgba(var(--brand-accent-rgb), 0.08) 100%);
+    border-left-width: 4px;
+    border-bottom: 1px solid rgba(var(--brand-accent-rgb), 0.18);
+    border-radius: 8px 8px 0 0;
+    margin-bottom: 2px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.20);
+  }
+  .dl-tile-chip {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 11px 7px 9px;
+    border-radius: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text);
+    /* Burned-in glass pill — recessed into the tile surface.
+     * Inverted bevel (dark inner highlight on top, light catch on
+     * the bottom edge), darker translucent gradient, and a soft
+     * outer top shadow that suggests the pill is sunk below the
+     * surrounding surface. The left accent stripe still carries the
+     * meaning colour. */
+    background: linear-gradient(160deg,
+      rgba(0, 0, 0, 0.35) 0%,
+      rgba(0, 0, 0, 0.22) 50%,
+      rgba(var(--brand-purple-rgb), 0.10) 100%);
+    border: none;
+    border-left: 3px solid rgba(var(--brand-purple-rgb), 0.55);
+    box-shadow:
+      inset 0 2px 4px rgba(0, 0, 0, 0.55),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+      inset 0 1px 0 rgba(0, 0, 0, 0.45);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.1;
+    min-width: 0;
+    /* Slight text shadow so the label reads as if etched into the
+     * recess rather than printed on top. */
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+  }
+  .dl-tile-chip .dl-tile-chip-ico {
+    font-size: 11px;
+    opacity: 0.85;
+    flex-shrink: 0;
+  }
+  .dl-tile-chip-status {
+    color: var(--accent);
+    border-left-color: var(--accent);
+  }
+  .dl-bar.complete .dl-tile-chip-status {
+    color: rgba(var(--brand-purple-rgb), 1);
+    border-left-color: rgba(var(--brand-purple-rgb), 0.85);
+  }
+  .dl-tile-chip-queue.pill-active {
+    color: var(--green);
+    border-left-color: var(--green);
+  }
+  .dl-tile-chip-queue.pill-hist {
+    color: var(--dim);
+    border-left-color: rgba(255, 255, 255, 0.30);
+  }
+  .dl-tile-chip-filed {
+    color: rgba(var(--brand-purple-rgb), 1);
+    border-left-color: rgba(var(--brand-purple-rgb), 0.85);
+  }
+  /* Remove button: anchored to the tile's top-right, isolated from
+   * the .dl-row-remove default button-block styling so it sits as a
+   * compact icon. */
+  .dl-tile-remove {
+    align-self: start;
+    justify-self: end;
+    width: 28px !important;
+    height: 28px !important;
+    padding: 0 !important;
+    border-radius: 6px !important;
+  }
+  /* Headshots: their own row spanning the full tile width at the
+   * bottom, left-aligned. DOM order is primary → secondary →
+   * tertiary (after we stopped reversing in JS), and `flex-direction`
+   * is the default row, so visual order matches DOM order — primary
+   * leftmost, subsequent matches stacked to its right with each one
+   * overlapping the previous via `margin-left: -16px`.
+   *
+   * Z-index 3 so the cluster paints OVER the source-scene poster in
+   * the bottom-right (z:1). When 3 headshots fan to the right, the
+   * rightmost one bleeds onto the poster's left edge, which the
+   * user explicitly wants — gives the row a layered, tactile feel.
+   *
+   * Per-headshot z-index keeps the primary on top of its siblings
+   * regardless of how many we render. */
+  /* Headshots — flex container that adapts to its surroundings.
+   * Inside the movie media column it stacks vertically between the
+   * portrait poster and the ring. Inside the scene media column
+   * (or with no poster) it flows horizontally.
+   *
+   * Sizing is driven by two custom properties scoped to the
+   * container:
+   *   --hs        — per-headshot diameter (default 64px)
+   *   --hs-ovl   — overlap in pixels (default ~15% of --hs)
+   *
+   * Per-count `:has(...:nth-child(N):last-child)` rules below
+   * shrink --hs / --hs-ovl when the natural sizes wouldn't fit
+   * the container's track. The result: small counts fan out with
+   * breathing room, large counts shrink AND overlap up to a 15%
+   * cap rather than spilling out. Posters/stills are unaffected
+   * — they keep their fixed sizes via `flex-shrink: 0`. */
+  .dl-bar-headshots {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: 0;
+    width: 100%;
+    min-width: 0;
+    /* Defaults — overridden per count below. */
+    --hs: 64px;
+    --hs-ovl: 10px;
+  }
+  /* Vertical variant — fixed 132px track matches the movie poster. */
+  .dl-bar-headshots--vertical {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    height: 132px;
+    overflow: visible;
+  }
+
+  /* Per-count adaptive sizing. Hydrator caps headshots at 3.
+   * Horizontal track is the media column's available width
+   * (typically 140–200px once the poster + ring claim their share).
+   * Vertical track is hard-locked to 132px.                                                    */
+  /* 2 horizontal: 64 + 54 = 118; fits comfortably with 15% overlap. */
+  .dl-bar-headshots:not(.dl-bar-headshots--vertical):has(> .dl-bar-headshot:nth-child(2):last-child) {
+    --hs: 64px;
+    --hs-ovl: 10px;
+  }
+  /* 3 horizontal: 3*56 − 2*8 = 152; fits in a ~160px slot.        */
+  .dl-bar-headshots:not(.dl-bar-headshots--vertical):has(> .dl-bar-headshot:nth-child(3):last-child) {
+    --hs: 56px;
+    --hs-ovl: 8px;
+  }
+  /* 4 horizontal (3 faces + overflow chip): 4*48 − 3*7 = 171.   */
+  .dl-bar-headshots:not(.dl-bar-headshots--vertical):has(> .dl-bar-headshot:nth-child(4):last-child) {
+    --hs: 48px;
+    --hs-ovl: 7px;
+  }
+  /* 4 vertical: 4*37 − 3*5 = 133. Tight but legible.            */
+  .dl-bar-headshots--vertical:has(> .dl-bar-headshot:nth-child(4):last-child) {
+    --hs: 37px;
+    --hs-ovl: 5px;
+  }
+  /* No-poster fill — when the media column has no scene/movie image
+   * eating its width, headshots scale up to use the freed space.
+   * Same 15% overlap cap. */
+  .dl-tile-media:not(:has(> .dl-tile-source-poster)) .dl-bar-headshots:not(.dl-bar-headshots--vertical) {
+    --hs: 80px;
+    --hs-ovl: 12px;
+  }
+  .dl-tile-media:not(:has(> .dl-tile-source-poster)) .dl-bar-headshots:not(.dl-bar-headshots--vertical):has(> .dl-bar-headshot:nth-child(3):last-child) {
+    --hs: 72px;
+    --hs-ovl: 10px;
+  }
+  .dl-tile-media:not(:has(> .dl-tile-source-poster)) .dl-bar-headshots:not(.dl-bar-headshots--vertical):has(> .dl-bar-headshot:nth-child(4):last-child) {
+    --hs: 60px;
+    --hs-ovl: 9px;
+  }
+  /* `+N` overflow chip — styled like a headshot but with text
+   * instead of an image. Inherits `--hs` so it sizes coherently
+   * alongside the avatars next to it. Also burned-in: dark recessed
+   * gradient with the same inner rim + sunk shadow language. */
+  .dl-bar-headshot-more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: calc(var(--hs) * 0.32);
+    color: var(--text);
+    background: radial-gradient(circle at 50% 80%,
+      rgba(var(--brand-purple-rgb), 0.45) 0%,
+      rgba(0, 0, 0, 0.85) 100%);
+    text-decoration: none;
+    user-select: none;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.65);
+  }
+  /* 2 vertical: 64 + 64 = 128 in 132 → 4px slack, no overlap.     */
+  .dl-bar-headshots--vertical:has(> .dl-bar-headshot:nth-child(2):last-child) {
+    --hs: 64px;
+    --hs-ovl: 0px;
+  }
+  /* 3 vertical: 3*49 − 2*7 = 133 in 132 → exact fit at 15%.       */
+  .dl-bar-headshots--vertical:has(> .dl-bar-headshot:nth-child(3):last-child) {
+    --hs: 49px;
+    --hs-ovl: 7px;
+  }
+
+  /* Headshot wrapper — same burn-in pattern as the poster. The
+   * actual face image is a child <img>; the wrapper carries the
+   * outer rim shadow + inner gloss so the recess effect renders
+   * (inset box-shadow doesn't paint through <img> directly). */
+  .dl-bar-headshot {
+    position: relative;
+    flex-shrink: 0;
+    width: var(--hs);
+    height: var(--hs);
+    border-radius: 50%;
+    overflow: hidden;
+    background: rgba(var(--panel-lo-rgb), 0.9);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.5),
+      inset 0 0 0 2px rgba(var(--brand-purple-rgb), 0.55);
+    transition: box-shadow 0.2s ease;
+  }
+  .dl-bar-headshot img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 20%;
+    filter: saturate(0.92) contrast(1.05) brightness(0.97);
+    transition: filter 0.2s ease;
+  }
+  /* Inset gloss overlay — top dark wash sinks the face into a
+   * circular well, faint bottom highlight is the lip catch. */
+  .dl-bar-headshot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background: radial-gradient(circle at 50% 18%,
+      rgba(0, 0, 0, 0.45) 0%,
+      rgba(0, 0, 0, 0.15) 45%,
+      rgba(0, 0, 0, 0) 70%),
+      linear-gradient(180deg,
+        rgba(0, 0, 0, 0) 75%,
+        rgba(255, 255, 255, 0.08) 100%);
+    transition: opacity 0.2s ease;
+  }
+  .dl-bar-headshot:hover {
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.5),
+      inset 0 0 0 2px rgba(var(--brand-purple-rgb), 0.85),
+      0 0 12px rgba(var(--brand-purple-rgb), 0.35);
+  }
+  .dl-bar-headshot:hover img {
+    filter: saturate(1) contrast(1) brightness(1);
+  }
+  .dl-bar-headshot:hover::after {
+    opacity: 0.4;
+  }
+  /* The +N overflow chip is also `.dl-bar-headshot` (no inner img)
+   * — kill the gloss overlay there since its background gradient
+   * already conveys the recess. */
+  .dl-bar-headshot.dl-bar-headshot-more::after {
+    display: none;
+  }
+  /* Overlap applied to every non-first sibling — direction depends
+   * on the container variant. */
+  .dl-bar-headshot + .dl-bar-headshot {
+    margin-left: calc(-1 * var(--hs-ovl));
+  }
+  .dl-bar-headshots--vertical .dl-bar-headshot + .dl-bar-headshot {
+    margin-left: 0;
+    margin-top: calc(-1 * var(--hs-ovl));
+  }
+  /* Default (horizontal): primary on top so the most relevant face
+   * is unobscured at the leading edge of the row. */
+  .dl-bar-headshots .dl-bar-headshot:nth-child(1) { z-index: 3; }
+  .dl-bar-headshots .dl-bar-headshot:nth-child(2) { z-index: 2; }
+  .dl-bar-headshots .dl-bar-headshot:nth-child(3) { z-index: 1; }
+  /* Vertical override — bottom-most face paints on top. Placed AFTER
+   * the default rules so the same-specificity selector wins via
+   * source order. */
+  .dl-bar-headshots--vertical .dl-bar-headshot:nth-child(1) { z-index: 1; }
+  .dl-bar-headshots--vertical .dl-bar-headshot:nth-child(2) { z-index: 2; }
+  .dl-bar-headshots--vertical .dl-bar-headshot:nth-child(3) { z-index: 3; }
+  /* Mobile: tighter padding, smaller ring + headshots, single column
+   * from the grid's auto-fill rule. */
+  @media (max-width: 640px) {
+    .dl-bar-list {
+      grid-template-columns: 1fr !important;
+      gap: 10px !important;
+      padding: 10px !important;
+    }
+    .dl-bar {
+      padding: 12px 12px 18px !important;
+      /* Phone-tight layout — smaller ring + smaller poster + the
+       * bigger heads row (110) need ~280 to stay un-cramped. */
+      min-height: 280px !important;
+    }
+    .dl-tile-ring { width: 110px; height: 110px; }
+    .dl-tile-pct-num { font-size: 30px; }
+    .dl-tile-pct-sym { font-size: 18px; }
+    .dl-bar-headshot { width: 48px; height: 48px; border-width: 1.5px; }
+    /* Mobile vertical column matches the smaller mobile poster. */
+    .dl-bar-headshots--vertical { height: 110px; }
+    /* Mobile poster scales down to match the smaller mobile ring
+     * (110×110) so the row still reads as two equal panels. Scene
+     * variant remains responsive. */
+    .dl-tile-source-poster {
+      width: 73px;
+      height: 110px;
+    }
+    .dl-tile-source-poster--scene {
+      width: 100%;
+      height: auto;
+    }
+  }
+
+  .dl-row-remove {
+    flex-shrink: 0;
+    width: 32px;
+    height: 28px;
+    min-width: 32px;
+    min-height: 28px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    border-radius: 6px;
+    background: rgba(239, 68, 68, 0.16);
+    color: #ef4444;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    line-height: 1;
+    transition: filter 0.15s, box-shadow 0.15s, transform 0.05s, background 0.15s;
+    box-sizing: border-box;
+    box-shadow: var(--ts-bevel);
+  }
+  .dl-row-remove:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.28);
+    filter: brightness(1.08);
+    box-shadow: var(--ts-bevel-hover);
+  }
+  .dl-row-remove:active:not(:disabled) {
+    box-shadow: var(--ts-bevel-active);
+    transform: translateY(1px);
+  }
+  .dl-row-remove:disabled { cursor: not-allowed; box-shadow: none; opacity: 0.5; }
+  /* Size-only override for the Process / Refresh icon buttons in the
+   * downloads-panel header. The visual treatment (brand-purple
+   * gradient face, accent-pink border, accent-pink icon, accent-fill
+   * hover) is inherited from the global `.btn-secondary` recipe in
+   * app-shell.css — we used to repaint them with a solid purple
+   * background here, which left them looking pre-refresh next to the
+   * rest of the now-accent-themed buttons on the page. */
+  .downloads-page-head .toolbar .btn-secondary {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0;
+  }
+  .downloads-page-head .toolbar #catFilter {
+    min-width: 180px;
+  }
+  .dl-bar-list > .dl-empty-state,
+  .dl-bar-list > .empty:only-child {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: 100%;
+    max-width: 40rem;
+  }
+  .dl-empty-state {
+    padding: 32px 18px;
+    text-align: center;
+    line-height: 1.55;
+  }
+  .dl-empty-state a {
+    color: rgba(var(--brand-accent-rgb), 0.95);
+    text-decoration: underline;
+  }
+  .queue-section .queue-stats-bar .stat-card.dl-stat-link {
+    cursor: pointer;
+  }
+  .queue-section .stat-card.dl-stat-link:hover {
+    border-color: rgba(var(--brand-purple-rgb), 0.45);
+    background: linear-gradient(160deg, rgba(var(--brand-purple-rgb), 0.12) 0%, rgba(var(--brand-purple-rgb), 0.06) 100%);
+  }
+  .pct { font-variant-numeric: tabular-nums; }
+  .empty { text-align: center; color: var(--dim); padding: 32px 18px; font-size: 12px; }
+  .progress-cell { min-width: 120px; }
+  .progress-track {
+    height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 4px; max-width: 140px;
+  }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), rgba(var(--brand-purple-rgb),0.6)); border-radius: 3px; transition: width 0.2s ease; }
+  .progress-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .progress-num { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--dim); min-width: 3.2em; }
+
+  .prowlarr-search-panel {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.88) 0%, rgba(var(--panel-lo-rgb),0.78) 100%);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    overflow: hidden;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.25);
+  }
+  .prowlarr-search-panel .panel-header { border-bottom: 1px solid rgba(255,255,255,0.06); }
+
+  /* Downloads inline panel (shown when toggle = downloads) */
+  .downloads-panel-inline {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 1;
+  }
+  /* Image popup */
+  #dlImgPopup {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 300;
+    align-items: center;
+    justify-content: center;
+    cursor: zoom-out;
+    backdrop-filter: blur(8px);
+  }
+  #dlImgPopup.open { display: flex; }
+  #dlImgPopup img {
+    max-width: min(480px, 90vw);
+    max-height: 80vh;
+    border-radius: 10px;
+    object-fit: contain;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+    cursor: default;
+  }
+
+  /* ── Queue tab ── */
+  .queue-section {
+    --glass-panel-bg: linear-gradient(160deg, rgba(var(--panel-hi-rgb), 0.48) 0%, rgba(var(--panel-lo-rgb), 0.36) 100%);
+    --glass-stat-bg: linear-gradient(145deg, rgba(var(--panel-hi-rgb), 0.44) 0%, rgba(var(--panel-lo-rgb), 0.36) 100%);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-blur: 20px;
+    --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    --glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.28);
+    --counter-value-size: clamp(42px, 5vw, 62px);
+    --counter-label-size: 14px;
+  }
+  .queue-stats-bar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; padding: 14px 18px 0; }
+  /* /downloads counter-tile row sits ABOVE the downloads list — no
+   * extra bottom padding here because the list panel below has its
+   * own padding. */
+  .dl-stats-wrap { padding: 0; }
+  .dl-stats-bar { padding: 14px 18px 14px; }
+  .dl-stats-ico {
+    height: 12px;
+    width: auto;
+    vertical-align: middle;
+    margin-right: 4px;
+    opacity: 0.9;
+  }
+  .queue-section .stat-card.stat-queue .stat-value { color: var(--skyfont-color, var(--text)); }
+  .queue-section .stat-card { background: var(--glass-stat-bg); border: 1px solid var(--glass-border); border-radius: 10px; padding: 14px 12px; backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90px; box-shadow: var(--glass-inset), var(--glass-shadow); text-decoration: none; container-type: inline-size; transition: border-color 120ms ease, background 120ms ease; }
+  .queue-section .stat-card[onclick]:hover { border-color: rgba(var(--brand-purple-rgb),0.45); background: linear-gradient(160deg, rgba(var(--brand-purple-rgb),0.12) 0%, rgba(var(--brand-purple-rgb),0.06) 100%); }
+  /* LED counters use `.sky-counter` + `padSkyCounter()` (same as /queue). */
+  .queue-section .stat-value:not(.sky-counter) { font-family: var(--secs); font-size: var(--counter-value-size); font-weight: 400; line-height: 1; display: block; letter-spacing: 0.02em; text-align: center; color: var(--accent); }
+  .queue-section .stat-label { font-family: var(--secs); font-size: var(--counter-label-size); text-transform: uppercase; letter-spacing: -0.02em; color: var(--text); display: block; margin-top: 6px; text-align: center; }
+  /* Counter cards are informational only — no hover affordance. */
+  .queue-section .queue-stats-bar .stat-card { cursor: default; }
+
+  @media (max-width: 900px) { .queue-stats-bar { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 600px) { .queue-stats-bar { grid-template-columns: repeat(2, 1fr); } }
+
+  /* Page head: stack title, then full-width filter + action row (≤900px). */
+  @media (max-width: 900px) {
+    .downloads-page-head .ts-page-head__row {
+      grid-template-columns: 1fr !important;
+      grid-template-areas:
+        "title"
+        "tools" !important;
+      row-gap: 10px !important;
+    }
+    .downloads-page-head .ts-page-head__left {
+      grid-area: title;
+      justify-self: start !important;
+    }
+    .downloads-page-head .ts-page-head__center {
+      display: none !important;
+    }
+    .downloads-page-head .downloads-toolbar {
+      grid-area: tools;
+      grid-column: 1 / -1;
+      justify-self: stretch !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .downloads-page-head .downloads-toolbar #catFilter {
+      flex: 1 1 100%;
+      min-width: 0 !important;
+      width: 100%;
+    }
+    .downloads-page-head .downloads-toolbar .btn-secondary {
+      flex: 1 1 calc(50% - 4px);
+      min-height: 44px;
+    }
+  }
+
+  /* ── /downloads mobile optimisation (≤640px) ── */
+  @media (max-width: 640px) {
+    /* Stats bar: tiles → 2 cols so each stays readable. */
+    .queue-stats-bar { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
+    .queue-section .stat-card { padding: 10px 12px !important; }
+    .queue-section .stat-value:not(.sky-counter) { font-size: 22px !important; }
+    .queue-section .stat-label { font-size: 10px !important; letter-spacing: 0.04em; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="ts-app-header">
+    <div class="ts-header-left">
+      <a href="/queue" class="logo" title="Go to Queue"><img src="/static/img/logo.webp" alt="Top-Shelf" onerror="this.outerHTML='<span style=font-family:var(--acid);font-size:28px;color:var(--text)>TOP-SHELF</span>'"></a>
+      <span class="version" id="appVersion"></span>
+    </div>
+    <div id="tsActivityBanner" class="ts-header-activity" aria-live="polite"></div>
+    <div class="nav-links">
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary" title="Downloads"><i class="ts-nav-icon ts-nav-icon--downloads"></i></button></a>
+      <a href="/scenes" style="text-decoration:none"><button class="btn-secondary" title="Browse — feed grid"><i class="ts-nav-icon ts-nav-icon--scenes"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library"><i class="ts-nav-icon ts-nav-icon--library"></i></button></a><a href="/news" style="text-decoration:none"><button class="btn-secondary" title="News"><i class="ts-nav-icon ts-nav-icon--news"></i></button></a>
+      <a href="/health" style="text-decoration:none"><button class="btn-secondary" title="Health"><i class="ts-nav-icon ts-nav-icon--health"></i></button></a>
+      <a href="/settings" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="ts-nav-icon ts-nav-icon--settings"></i></button></a>
+      <button class="btn-secondary" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>location.href='/login')" title="Logout"><i class="ts-nav-icon ts-nav-icon--logout"></i></button>
+    </div>
+  </header>
+
+  <div class="panel prowlarr-search-panel">
+    <div class="dl-bg-decor" aria-hidden="true" data-dl-decor>
+      <img src="/static/img/silhouette8.webp" alt="" loading="lazy">
+    </div>
+    <div class="ts-page-head downloads-page-head">
+      <div class="ts-page-head__row">
+        <div class="ts-page-head__left">
+          <div class="panel-title ts-page-title">
+            <i class="ts-page-title__icon ts-nav-icon ts-nav-icon--downloads" aria-hidden="true"></i>
+            <span class="ts-page-title__text">Downloads</span>
+          </div>
+        </div>
+        <div class="ts-page-head__center" aria-hidden="true"></div>
+        <div class="ts-page-head__right downloads-toolbar toolbar">
+        <label class="meta" for="catFilter">Show</label>
+        <select id="catFilter" class="field-input" onchange="loadDownloads()" title="Category filter">
+          <option value="">Top-Shelf</option>
+          <option value="*">All categories</option>
+        </select>
+        <button class="btn-secondary" onclick="processAllDownloads()" title="Process now"><i class="fa-solid fa-play"></i></button>
+        <button class="btn-secondary" onclick="loadDownloads()" title="Refresh"><i class="fa-solid fa-arrows-rotate"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="dlSearchModeDownloads" class="downloads-panel-inline" style="display:flex">
+      <!-- Counter tiles — reuse the .queue-section .queue-stats-bar +
+           .stat-card chrome from /queue + /index so all three pages
+           share the same glass-tile look. Populated by `_paintDlStats`
+           after each loadDownloads(). -->
+      <div class="queue-section dl-stats-wrap">
+        <div class="queue-stats-bar dl-stats-bar">
+          <div class="stat-card" id="dlStatCardTotal" title="Total downloads">
+            <span class="stat-value sky-counter" id="dlStatTotal">     0</span>
+            <span class="stat-label">Total</span>
+          </div>
+          <div class="stat-card" id="dlStatCardActive" title="Currently downloading">
+            <span class="stat-value sky-counter" id="dlStatActive">     0</span>
+            <span class="stat-label">In Progress</span>
+          </div>
+          <div class="stat-card" id="dlStatCardMoviesNzb" title="Movies — NZB">
+            <span class="stat-value sky-counter" id="dlStatMoviesNzb">     0</span>
+            <span class="stat-label"><img class="dl-stats-ico" src="/static/logos/nzb.webp" alt="NZB"> Movies</span>
+          </div>
+          <div class="stat-card" id="dlStatCardMoviesTorrent" title="Movies — Torrent">
+            <span class="stat-value sky-counter" id="dlStatMoviesTorrent">     0</span>
+            <span class="stat-label"><img class="dl-stats-ico" src="/static/logos/torrent.webp" alt="Torrent"> Movies</span>
+          </div>
+          <div class="stat-card" id="dlStatCardScenesNzb" title="Scenes — NZB">
+            <span class="stat-value sky-counter" id="dlStatScenesNzb">     0</span>
+            <span class="stat-label"><img class="dl-stats-ico" src="/static/logos/nzb.webp" alt="NZB"> Scenes</span>
+          </div>
+          <div class="stat-card" id="dlStatCardScenesTorrent" title="Scenes — Torrent">
+            <span class="stat-value sky-counter" id="dlStatScenesTorrent">     0</span>
+            <span class="stat-label"><img class="dl-stats-ico" src="/static/logos/torrent.webp" alt="Torrent"> Scenes</span>
+          </div>
+          <div class="stat-card" id="dlStatCardBandwidth" title="Current download speed">
+            <span class="stat-value sky-counter" id="dlStatBandwidth">     0</span>
+            <span class="stat-label"><i class="fa-solid fa-angles-down" style="margin-right:4px"></i><span id="dlStatBandwidthUnit">KB/s</span></span>
+          </div>
+        </div>
+      </div>
+      <div id="notes"></div>
+      <div id="errors"></div>
+      <div id="rows" class="dl-bar-list">
+        <div class="empty" style="padding:32px 18px;text-align:center">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="dlImgPopup" onclick="closeDlImgPopup()">
+  <img id="dlImgPopupImg" src="" alt="" onclick="event.stopPropagation()" loading="lazy">
+</div>
+
+<script>
+  const TS_DL_PAGE = 'downloads';
+  const DOWNLOADS_AUTO_REFRESH_MS = 20000;
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeDlImgPopup(); }
+  });
+
+    function openDlImgPopup(src, name) {
+    const img = document.getElementById('dlImgPopupImg');
+    const pop = document.getElementById('dlImgPopup');
+    if (!img || !pop) return;
+    img.src = src;
+    img.alt = name || '';
+    pop.classList.add('open');
+  }
+
+  function closeDlImgPopup() {
+    const pop = document.getElementById('dlImgPopup');
+    if (pop) pop.classList.remove('open');
+  }
+
+  let _downloadsFetchGen = 0;
+  let _downloadsRefreshTimer = null;
+
+  function getDlSearchMode() {
+    return 'downloads';
+  }
+
+  function applyDlSearchModeUi() {
+    const elD = document.getElementById('dlSearchModeDownloads');
+    const decor = document.querySelector('[data-dl-decor]');
+    if (elD) elD.style.display = 'flex';
+    if (decor) decor.style.display = 'block';
+  }
+
+  // Update the 7 counter tiles above the downloads list. Reads from
+  // the same /api/downloads payload that drives the list; no extra
+  // round-trip. Categories are matched against the server-reported
+  // `default_category` (scenes) and `movie_category` (movies) so
+  // user-renamed Prowlarr categories keep mapping cleanly. The
+  // bandwidth field comes pre-summed from the server (one cheap
+  // probe per client, see `_dl_collect_bandwidth`).
+  function _paintDlStats(items, payload) {
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const next = (typeof padSkyCounter === 'function') ? padSkyCounter(val) : String(val);
+      if (el.textContent !== next) el.textContent = next;
+    };
+    const sceneCat = (payload && (payload.default_category || '')).toLowerCase().trim();
+    const movieCat = (payload && (payload.movie_category || '')).toLowerCase().trim();
+    let total = 0, active = 0;
+    let movNzb = 0, movTor = 0, scnNzb = 0, scnTor = 0;
+    for (const it of (items || [])) {
+      total++;
+      if (it.queue === 'active') {
+        const n = Number(it.progress_pct);
+        if (Number.isNaN(n) || n < 99.5) active++;
+      }
+      const src = (it.source || '').toLowerCase();
+      const cat = (it.category || '').toLowerCase().trim();
+      // Movie when category matches movie_category (when set) — fall
+      // back to a name-contains check so a category called "Movies-HD"
+      // still counts. Scenes get the inverse: category matches the
+      // default scenes category OR doesn't look movie-ish.
+      const isMovie = !!(movieCat && (cat === movieCat || cat.includes('movie'))) || cat.includes('movie');
+      const isScene = !isMovie && (!sceneCat || cat === sceneCat || cat.includes(sceneCat) || cat === '');
+      if (src === 'nzb') {
+        if (isMovie) movNzb++;
+        else if (isScene) scnNzb++;
+      } else if (src === 'torrent') {
+        if (isMovie) movTor++;
+        else if (isScene) scnTor++;
+      }
+    }
+    set('dlStatTotal', total);
+    set('dlStatActive', active);
+    set('dlStatMoviesNzb', movNzb);
+    set('dlStatMoviesTorrent', movTor);
+    set('dlStatScenesNzb', scnNzb);
+    set('dlStatScenesTorrent', scnTor);
+    // Bandwidth: server gives bytes/sec; show KB/s under 1 MB/s,
+    // MB/s otherwise. One-decimal precision keeps the LCD-style tile
+    // value short enough not to wrap.
+    const bps = Number((payload && payload.bandwidth_down_bps) || 0);
+    const kbps = bps / 1024;
+    let bwVal, bwUnit;
+    if (kbps >= 1024) {
+      bwVal = (kbps / 1024).toFixed(1);
+      bwUnit = 'MB/s';
+    } else {
+      bwVal = Math.round(kbps);
+      bwUnit = 'KB/s';
+    }
+    set('dlStatBandwidth', bwVal);
+    set('dlStatBandwidthUnit', bwUnit);
+    _wireDlStatCrosslinks(items);
+  }
+
+  function _wireDlStatCrosslinks(items) {
+    let active = 0;
+    for (const it of items || []) {
+      if (it.queue === 'active') {
+        const n = Number(it.progress_pct);
+        if (Number.isNaN(n) || n < 99.5) active++;
+      }
+    }
+    const total = (items || []).length;
+    const totalCard = document.getElementById('dlStatCardTotal');
+    const activeCard = document.getElementById('dlStatCardActive');
+    const goQueue = () => { window.location.href = '/queue'; };
+    if (totalCard) {
+      if (total === 0) {
+        totalCard.classList.add('dl-stat-link');
+        totalCard.title = 'No downloads — open Queue to process source files';
+        totalCard.onclick = goQueue;
+      } else {
+        totalCard.classList.remove('dl-stat-link');
+        totalCard.onclick = null;
+        totalCard.title = 'Total downloads';
+      }
+    }
+    if (activeCard) {
+      if (active > 0) {
+        activeCard.classList.add('dl-stat-link');
+        activeCard.title = 'Downloads in progress — open Queue for the filing pipeline';
+        activeCard.onclick = goQueue;
+      } else {
+        activeCard.classList.remove('dl-stat-link');
+        activeCard.onclick = null;
+        activeCard.title = 'Currently downloading';
+      }
+    }
+  }
+
+  function _dlEmptyHtml() {
+    return '<div class="empty dl-empty-state">Nothing in your download clients right now. '
+      + '<a href="/queue">Open Queue</a> to match and file videos from your source folder.</div>';
+  }
+
+  async function loadDownloads() {
+    const fid = ++_downloadsFetchGen;
+    const cat = document.getElementById('catFilter').value;
+    const params = new URLSearchParams();
+    if (cat === '*') params.set('category', '*');
+    else if (cat !== '') params.set('category', cat);
+    const tbody = document.getElementById('rows');
+    const notesEl = document.getElementById('notes');
+    const errEl = document.getElementById('errors');
+    notesEl.innerHTML = '';
+    errEl.innerHTML = '';
+    try {
+      // Library token cache feeds `.qs-match` highlighting on the
+      // download-client tile names. Fire it in parallel with the
+      // /api/downloads request — first load primes the cache, later
+      // refreshes catch new library entries.
+      const libPromise = _refreshLibraryStudios();
+      const r = await fetch('/api/downloads?' + params.toString(), { credentials: 'same-origin' });
+      const d = await r.json();
+      if (libPromise) await libPromise;
+      if (fid !== _downloadsFetchGen) return;
+      const notes = d.notes || [];
+      if (notes.length) {
+        notesEl.insertAdjacentHTML('beforeend',
+          notes.map(n => `<div class="note">${esc(n)}</div>`).join(''));
+      }
+      const errs = d.errors || [];
+      if (errs.length) {
+        errEl.insertAdjacentHTML('beforeend',
+          errs.map(e => `<div class="err">${esc(e)}</div>`).join(''));
+      }
+      const items = d.items || [];
+      _paintDlStats(items, d);
+      if (!items.length) {
+        if (fid !== _downloadsFetchGen) return;
+        tbody.innerHTML = _dlEmptyHtml();
+        return;
+      }
+      // Hoist actively-downloading tiles (active queue, not yet
+      // complete) to the top so they cluster in the grid's top-left.
+      // Stable sort within each bucket — keeps the existing
+      // newest-first / queue order intact otherwise. The pink
+      // border + pulse keyframe (defined above on
+      // `.dl-bar.pill-active:not(.complete)`) handles the visual cue.
+      const _isLive = (it) => {
+        if (it.queue !== 'active') return false;
+        const n = Number(it.progress_pct);
+        if (Number.isNaN(n)) return true;  // unknown pct → still live
+        return n < 99.5;
+      };
+      const liveItems = items.filter(_isLive);
+      const restItems = items.filter(it => !_isLive(it));
+      const ordered = liveItems.concat(restItems);
+      if (fid !== _downloadsFetchGen) return;
+      tbody.innerHTML = ordered.map(it => {
+        const isTor = it.source === 'torrent';
+        const typ = isTor ? 'Torrent' : 'NZB';
+        const typLogo = `<img class="dl-type-logo" src="/static/logos/${isTor ? 'torrent' : 'nzb'}.webp" alt="${typ}" title="${typ}">`;
+        const q = it.queue === 'active' ? 'Active' : 'History';
+        const qClass = it.queue === 'active' ? 'pill-active' : 'pill-hist';
+        let pctNum = null;
+        if (it.progress_pct != null && it.progress_pct !== '') {
+          const n = Number(it.progress_pct);
+          if (!Number.isNaN(n)) pctNum = Math.min(100, Math.max(0, n));
+        }
+        const pctFill = pctNum != null ? pctNum : 0;
+        // Always render the readout as 4 chars: 3 right-aligned for
+        // the number ("  5", " 87", "100") plus the trailing "%".
+        // LedCounter is monospaced so padding with leading spaces
+        // gives a fixed-width strip that doesn't shift left/right
+        // as the percentage climbs.
+        const pctNumRaw = pctNum != null ? String(Math.round(pctNum)) : '—';
+        const pctNumDisplay = pctNumRaw.padStart(3, ' ');
+        const pctSym = '<span class="dl-tile-pct-sym">%</span>';
+        const completeClass = pctNum != null && pctNum >= 99.5 ? ' complete' : '';
+        const f = it.filing || {};
+        let filedChip = '';
+        if (f.filed) {
+          const k = f.kind === 'movie' ? 'Movie' : 'Scene';
+          let dt = '';
+          if (f.processed_at) {
+            try {
+              const dobj = new Date(f.processed_at);
+              if (!Number.isNaN(dobj.getTime())) {
+                dt = dobj.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+              }
+            } catch (_) {}
+          }
+          const srcLabel = f.match_source === 'exact'
+            ? 'exact filename match'
+            : f.match_source === 'normalized_prefix'
+            ? 'fuzzy filename match'
+            : f.match_source || 'unknown';
+          const tipLines = [
+            `Match: ${srcLabel}`,
+            f.matched_filename ? `From: ${f.matched_filename}` : '',
+            f.destination || '',
+            f.processed_at || '',
+          ].filter(Boolean);
+          // The download client is offering us a file that we've already
+          // filed locally — flag the tile as a duplicate. Full match
+          // detail (exact vs. fuzzy filename match, the matched file
+          // path on disk, the destination, when we filed it) sits in
+          // the hover tooltip.
+          const fullTip = [
+            `Match: ${srcLabel}`,
+            `Kind: ${k}`,
+            dt ? `Filed: ${dt}` : '',
+            f.matched_filename ? `From: ${f.matched_filename}` : '',
+            f.destination ? `To: ${f.destination}` : '',
+          ].filter(Boolean).join('\n');
+          filedChip = `<span class="dl-tile-chip dl-tile-chip-filed" title="${esc(fullTip)}"><i class="fa-solid fa-clone dl-tile-chip-ico"></i>Duplicate</span>`;
+        }
+        const rmBtn = it.id
+          ? `<button class="dl-row-remove dl-tile-remove" title="Remove from client" onclick="removeDownload('${esc(it.id)}', this)"><i class="fa-solid fa-xmark"></i></button>`
+          : '';
+        // Stat chips: size, status (Downloading / Stalled / etc.), queue
+        // (Active / History), category — each rendered conditionally so
+        // empty fields don't leave dangling pills.
+        let sizeLabel = '';
+        if (it.size_mb != null) {
+          const mb = Number(it.size_mb);
+          if (!Number.isNaN(mb)) {
+            sizeLabel = mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
+          }
+        }
+        const sizeChip = sizeLabel
+          ? `<span class="dl-tile-chip dl-tile-chip-size"><i class="fa-solid fa-database dl-tile-chip-ico"></i>${sizeLabel}</span>`
+          : '';
+        const statusChip = it.status
+          ? `<span class="dl-tile-chip dl-tile-chip-status">${esc(it.status)}</span>`
+          : '';
+        const queueChip = `<span class="dl-tile-chip dl-tile-chip-queue ${qClass}">${q}</span>`;
+        const catChip = it.category
+          ? `<span class="dl-tile-chip dl-tile-chip-cat"><i class="fa-solid fa-tag dl-tile-chip-ico"></i>${esc(it.category)}</span>`
+          : '';
+        const studioLogo = f.studio
+          ? `<img class="dl-bar-studio-logo" src="/api/studio-logo?q=${encodeURIComponent(f.studio)}" alt="${esc(f.studio)}" title="${esc(f.studio)}" onerror="this.style.display='none'" loading="lazy">`
+          : `<span class="dl-bar-studio-logo" aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:rgba(var(--panel-hi-rgb),0.5);border:1px solid rgba(var(--brand-purple-rgb),0.25);color:var(--dim);font-size:14px"><i class="fa-solid fa-server"></i></span>`;
+        // Source-scene metadata: rendered when this download was
+        // grabbed from /scenes (server attached `source_scene` via
+        // the scene_grab_log lookup). `isScene` picks portrait vs
+        // landscape — TPDB movie posters are 2:3, scene thumbs are
+        // 16:9 — and drives the media-column layout below.
+        const src = it.source_scene || null;
+        const isScene = src && (src.kind || 'scene').toLowerCase() === 'scene';
+        // Prefer the filed performer list (canonical, fresh from the
+        // processing pipeline). Fall back to the source-scene's
+        // performers (captured at grab time) so un-filed / in-flight
+        // downloads still get headshots — without this fallback,
+        // every active queue tile rendered with an empty headshot
+        // slot until phash matching completed. Normalise object
+        // entries (TPDB movies sometimes return performers as
+        // `{name, ...}` objects rather than plain strings).
+        let perfNames = Array.isArray(f.performers) ? f.performers : [];
+        if (!perfNames.length && src && Array.isArray(src.performers)) {
+          perfNames = src.performers
+            .map(p => typeof p === 'string' ? p : (p && (p.name || p.full_name) ? (p.name || p.full_name) : ''))
+            .filter(Boolean);
+        }
+        // Movie tiles stack headshots vertically between the portrait
+        // poster and the ring; scene tiles (or any tile without a
+        // poster) flow them horizontally.
+        const headshotsClass = (src && src.poster_url && !isScene)
+          ? 'dl-bar-headshots dl-bar-headshots--vertical'
+          : 'dl-bar-headshots';
+        const headshotSlot = `<span class="${headshotsClass}" data-perf-names="${esc(perfNames.join('|'))}"></span>`;
+        const mediaClass = (src && src.poster_url && isScene)
+          ? 'dl-tile-media dl-tile-media--scene'
+          : 'dl-tile-media';
+        const posterClass = isScene ? 'dl-tile-source-poster dl-tile-source-poster--scene' : 'dl-tile-source-poster';
+        const posterMovieOnload = !isScene
+          ? ' class="movie-poster" onload="typeof tsApplyMovieCoverSplit===\'function\'&&tsApplyMovieCoverSplit(this,\'solo\')"'
+          : '';
+        const posterImg = (src && src.poster_url)
+          ? `<span class="${posterClass}" title="${esc((src.title || '') + (src.studio ? ' — ' + src.studio : ''))}"><img${posterMovieOnload} src="${esc(src.poster_url)}" alt="${esc(src.title || '')}" onerror="this.parentElement.style.display='none'" loading="lazy"></span>`
+          : '';
+        // Source-DB link chip — slots into the chip stack alongside
+        // the other info tiles. Each DB has its own scene/movie URL
+        // pattern; we currently grab from TPDB / StashDB / FansDB.
+        let sourceChip = '';
+        if (src && src.id && src.db) {
+          const db = (src.db || '').toLowerCase();
+          const sceneOrMovie = isScene ? 'scenes' : 'movies';
+          let linkHref = '';
+          let logoSrc = '';
+          let logoAlt = '';
+          if (db === 'tpdb' || db === 'theporndb') {
+            linkHref = `https://theporndb.net/${sceneOrMovie}/${encodeURIComponent(src.id)}`;
+            logoSrc = '/static/logos/tpdb.webp';
+            logoAlt = 'TPDB';
+          } else if (db === 'stashdb') {
+            linkHref = `https://stashdb.org/scenes/${encodeURIComponent(src.id)}`;
+            logoSrc = '/static/logos/stashdb.webp';
+            logoAlt = 'StashDB';
+          } else if (db === 'fansdb') {
+            linkHref = `https://fansdb.cc/scenes/${encodeURIComponent(src.id)}`;
+            logoSrc = '/static/logos/fansdb.webp';
+            logoAlt = 'FansDB';
+          }
+          if (linkHref) {
+            sourceChip = `<a class="dl-tile-chip dl-tile-chip-source" href="${esc(linkHref)}" target="_blank" rel="noopener" title="Open on ${logoAlt}" onclick="event.stopPropagation()"><img src="${esc(logoSrc)}" alt="${esc(logoAlt)}" loading="lazy"></a>`;
+          }
+        }
+        return `<div class="dl-bar ${qClass}${completeClass}" data-pct="${pctFill}" style="--pct:${pctFill}">
+          <div class="dl-tile-head">
+            ${studioLogo}
+            ${rmBtn}
+          </div>
+          <div class="dl-tile-title">
+            <div class="dl-tile-title-text">
+              <div class="dl-bar-name" title="${esc(it.display_name || it.name)}">${(typeof _libraryHighlight === 'function') ? _libraryHighlight(spaceifyReleaseName(it.display_name || it.name)) : esc(spaceifyReleaseName(it.display_name || it.name))}</div>
+            </div>
+          </div>
+          <div class="dl-tile-content">
+            <div class="${mediaClass}">
+              ${posterImg}
+              ${headshotSlot}
+            </div>
+            <div class="dl-tile-hero">
+              <div class="dl-tile-ring">
+                <div class="dl-tile-pct">
+                  <span class="dl-tile-pct-num">${pctNumDisplay}</span>${pctSym}
+                </div>
+                <div class="dl-tile-type-badge">${typLogo}</div>
+              </div>
+            </div>
+          </div>
+          <div class="dl-tile-chips">${catChip}${sizeChip}${statusChip}${queueChip}${filedChip}${sourceChip}</div>
+        </div>`;
+      }).join('');
+      // Batch-fetch headshots for all matched performers in one request,
+      // then paint each bar's placeholder with the resolved thumbnails.
+      _hydrateDownloadHeadshots();
+    } catch (e) {
+      if (fid !== _downloadsFetchGen) return;
+      tbody.innerHTML = `<div class="empty" style="padding:32px 18px;text-align:center">Error: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function spaceifyReleaseName(name) {
+    // Release names from download clients come in two shapes:
+    //   1. dotted:  "DogHouseDigital.26.04.15.Emma.Rosie.XXX.1080p.MP4-WRB"
+    //   2. camel/run: "DogHouseDigital260415EmmaRosieSheLovesToSquirtXXX1080pMP4-WRB"
+    // We transform both to: "Dog House Digital 26 04 15 Emma Rosie ... XXX 1080p MP4-WRB"
+    // Keep "1080p"/"720p"/"4k" atomic (digit→lowercase stays together).
+    return (name || '')
+      // dots → spaces
+      .replace(/\./g, ' ')
+      // lowercase → Uppercase: "DogHouse" → "Dog House"
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      // Uppercase run → Uppercase+lowercase: "XXXMp4" → "XXX Mp4"
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+      // letter → digit: "Digital260" → "Digital 260", "XXX1080" → "XXX 1080"
+      .replace(/([a-zA-Z])(\d)/g, '$1 $2')
+      // digit → Uppercase letter only: "260415Emma" → "260415 Emma"
+      // (lowercase after digit stays glued so "1080p" doesn't become "1080 p")
+      .replace(/(\d)([A-Z])/g, '$1 $2')
+      // Re-glue codec/container tags the splits above chopped in half:
+      // MP4 / MP3 → they got split as "MP 4" / "MP 3"; H264/H265 → "H 264"/"H 265"
+      .replace(/\b(MP) (\d)\b/g, '$1$2')
+      .replace(/\b(H) (\d{3})\b/g, '$1$2')
+      .replace(/\b(AAC|DDP|EAC|DTS) (\d)\b/g, '$1$2')
+      // collapse stray whitespace
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function _escH(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  async function _hydrateDownloadHeadshots() {
+    // Collect every unique performer name across the rendered bars.
+    const slots = Array.from(document.querySelectorAll('#rows .dl-bar-headshots'));
+    if (!slots.length) return;
+    const allNames = new Set();
+    slots.forEach(slot => {
+      (slot.dataset.perfNames || '').split('|').forEach(n => {
+        const t = (n || '').trim();
+        if (t) allNames.add(t);
+      });
+    });
+    if (!allNames.size) return;
+    let lookup;
+    try {
+      const r = await fetch('/api/performers/headshots-by-name?names=' + encodeURIComponent([...allNames].join(',')));
+      const d = await r.json();
+      lookup = {};
+      (d.performers || []).forEach(p => {
+        if (p && p.name) lookup[p.name.toLowerCase()] = p.headshot_url || null;
+      });
+    } catch (_) {
+      return;
+    }
+    slots.forEach(slot => {
+      const names = (slot.dataset.perfNames || '').split('|').map(n => n.trim()).filter(Boolean);
+      // Avatar-group pattern: show up to 3 matched faces inline. If
+      // more remain, replace what would have been the 4th+ slot with
+      // a `+N` overflow chip (styled like a headshot, same --hs size).
+      // Anything past 3 inline shrinks the avatars below readable
+      // sizes in the 132px vertical track, so the chip is the
+      // cleanest way to communicate "there are more performers"
+      // without sacrificing legibility.
+      const matched = [];
+      for (const n of names) {
+        const url = lookup[n.toLowerCase()];
+        if (url) matched.push({ name: n, url });
+      }
+      const SHOW = 3;
+      const visible = matched.slice(0, SHOW);
+      const overflow = matched.length - visible.length;
+      // Tooltip listing the names hidden behind the overflow chip.
+      const overflowNames = matched.slice(SHOW).map(m => m.name).join(', ');
+      const imgs = visible.map(m =>
+        `<span class="dl-bar-headshot" title="${m.name.replace(/"/g, '&quot;')}"><img src="${m.url}" alt="${m.name.replace(/"/g, '&quot;')}" onerror="this.parentElement.style.display='none'" loading="lazy"></span>`
+      );
+      if (overflow > 0) {
+        imgs.push(`<span class="dl-bar-headshot dl-bar-headshot-more" title="${overflowNames.replace(/"/g, '&quot;')}">+${overflow}</span>`);
+      }
+      // Natural DOM order: primary → secondary → tertiary → +N chip.
+      // CSS z-index ladder keeps the primary on top horizontally /
+      // bottom on top vertically.
+      slot.innerHTML = imgs.join('');
+    });
+  }
+
+  async function processAllDownloads() {
+    const r = await fetch('/api/download/process-all', { method: 'POST' });
+    const d = await r.json();
+    if (d.error) { window.toast(`Error: ${d.error}`); return; }
+    const cleaned = Number(d.cleaned || 0);
+    if (!d.started) {
+      window.toast(d.message || 'No entries found in download folder');
+      return;
+    }
+    const plural = d.count === 1 ? 'y' : 'ies';
+    const tail = cleaned ? ` (${cleaned} junk file${cleaned === 1 ? '' : 's'} cleaned up)` : '';
+    window.toast(`Processing ${d.count} video entr${plural}${tail} — check the log`);
+  }
+
+  async function removeDownload(id, btn) {
+    if (!id) return;
+    // Optimistic remove: drop the tile from the DOM immediately so
+    // the user sees the click land. The downloads grid auto-polls
+    // (`startDownloadsAutoRefresh`), so a full `loadDownloads()` here
+    // was redundant — the next tick reconciles anyway. If the server
+    // rejects we toast + force-poll to restore.
+    const tile = btn ? btn.closest('.dl-bar') : null;
+    if (tile) { tile.style.opacity = '0.4'; tile.style.pointerEvents = 'none'; }
+    if (btn) btn.disabled = true;
+    try {
+      const r = await fetch('/api/downloads/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || 'unknown');
+      if (tile) tile.remove();
+    } catch (e) {
+      window.toast('Remove failed: ' + (e.message || 'unknown'));
+      if (tile) { tile.style.opacity = ''; tile.style.pointerEvents = ''; }
+      if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+      loadDownloads();
+    }
+  }
+
+  // SSE-backed live updates with a polling fallback. The /api/downloads/stream
+  // endpoint pushes a fresh snapshot only when state changes (plus a
+  // 25-s heartbeat). On modern browsers this drops the wasted poll
+  // traffic to near zero while keeping per-tick progress smooth.
+  // If EventSource isn't available, or the stream drops repeatedly
+  // (proxy, dev reload), we fall back to the original interval-poll.
+  let _downloadsSse = null;
+  let _downloadsSseRetries = 0;
+  // Coalesce SSE-triggered refreshes — the active-download tick can
+  // fire events as fast as every ~3 s, but a full tile re-render
+  // costs more than that, so cap the refresh rate at one per 8 s
+  // (matches the old polling rhythm). When events come in faster,
+  // schedule a single trailing refresh so the last update still
+  // lands.
+  const _DOWNLOADS_MIN_REFRESH_MS = 8000;
+  let _downloadsLastLoad = 0;
+  let _downloadsCoalesceTimer = null;
+  function _scheduleDownloadsRefresh() {
+    if (document.visibilityState !== 'visible') return;
+    // Only refresh when the Downloads panel is actually visible — on
+    // any other tab (Favourites / Performers / Studios / Wanted /
+    // Queue / Search) the downloads grid is hidden, so re-fetching
+    // /api/downloads + rebuilding the tile list is pure wasted work
+    // that competes for the network + main thread with the visible
+    // panel. SSE keeps running for instant snap-back when you return.
+    if (typeof getDlSearchMode === 'function' && getDlSearchMode() !== 'downloads') return;
+    const now = Date.now();
+    const since = now - _downloadsLastLoad;
+    if (since >= _DOWNLOADS_MIN_REFRESH_MS) {
+      _downloadsLastLoad = now;
+      if (_downloadsCoalesceTimer) { clearTimeout(_downloadsCoalesceTimer); _downloadsCoalesceTimer = null; }
+      loadDownloads();
+      return;
+    }
+    if (_downloadsCoalesceTimer) return;
+    _downloadsCoalesceTimer = setTimeout(() => {
+      _downloadsCoalesceTimer = null;
+      _downloadsLastLoad = Date.now();
+      loadDownloads();
+    }, _DOWNLOADS_MIN_REFRESH_MS - since);
+  }
+  function _stopDownloadsSse() {
+    if (_downloadsSse) { try { _downloadsSse.close(); } catch (_) {} _downloadsSse = null; }
+  }
+  function _startDownloadsSse() {
+    if (typeof EventSource === 'undefined') return false;
+    _stopDownloadsSse();
+    const cat = document.getElementById('catFilter')?.value || '';
+    const qs = cat ? ('?category=' + encodeURIComponent(cat)) : '';
+    try {
+      _downloadsSse = new EventSource('/api/downloads/stream' + qs);
+    } catch (_) { return false; }
+    _downloadsSse.addEventListener('state', () => {
+      _downloadsSseRetries = 0;
+      // SSE pushes whenever the payload hash changes. During active
+      // downloads that's every progress tick (every ~3 s), and each
+      // tick used to trigger a full loadDownloads() + tile rebuild —
+      // 7× the work of the old 20 s poll. _scheduleDownloadsRefresh
+      // coalesces bursts to at most one refresh per
+      // DOWNLOADS_MIN_REFRESH_MS, so SSE still delivers instant
+      // updates on real state changes but the render rate never
+      // exceeds the old polling rhythm.
+      _scheduleDownloadsRefresh();
+    });
+    _downloadsSse.onerror = () => {
+      // EventSource auto-retries; only fall back if we've been
+      // bouncing repeatedly (proxy doesn't support SSE).
+      _downloadsSseRetries++;
+      if (_downloadsSseRetries >= 4) {
+        _stopDownloadsSse();
+        _startDownloadsPolling();
+      }
+    };
+    return true;
+  }
+  function _startDownloadsPolling() {
+    if (_downloadsRefreshTimer) clearInterval(_downloadsRefreshTimer);
+    _downloadsRefreshTimer = setInterval(() => {
+      if (document.visibilityState === 'visible') loadDownloads();
+    }, DOWNLOADS_AUTO_REFRESH_MS);
+  }
+  function startDownloadsAutoRefresh() {
+    if (_downloadsRefreshTimer) clearInterval(_downloadsRefreshTimer);
+    const ok = _startDownloadsSse();
+    if (!ok) _startDownloadsPolling();
+  }
+
+  // Hoisted alias — boot + feed loaders run synchronously before later `const`
+  // bindings; `typeof` on a TDZ `const` throws ReferenceError.
+  function _refreshLibraryStudios() {
+    return (typeof _refreshLibraryTokens === 'function')
+      ? _refreshLibraryTokens()
+      : Promise.resolve();
+  }
+
+  (() => {
+    // Synchronous category-dropdown setup off the URL `?category=` param.
+    // Used to live behind an `await fetch('/api/auth/status')` — that
+    // round-trip blocked every /downloads visit for nothing (auth was
+    // already validated when the HTML was served; the response wasn't
+    // even read), so it's gone. Just run the dropdown init inline.
+    try {
+      const sel = document.getElementById('catFilter');
+      const def = new URLSearchParams(location.search).get('category');
+      if (def !== null && sel) {
+        if (def === '*' || def === '') {
+          sel.value = def === '*' ? '*' : '';
+        } else {
+          let opt = Array.from(sel.options).find(o => o.value === def);
+          if (!opt) {
+            opt = document.createElement('option');
+            opt.value = def;
+            opt.textContent = `Category: ${def}`;
+            sel.appendChild(opt);
+          }
+          sel.value = def;
+        }
+      }
+    } catch (_) {}
+    applyDlSearchModeUi();
+    loadDownloads();
+    startDownloadsAutoRefresh();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        loadDownloads();
+      }
+    });
+  })();
+</script>
+<script defer src="/static/activity-banner.js?v=20260531"></script>
+<script defer src="/static/app-shell.js?v=20260529"></script>
+<script>
+fetch('/api/status').then(r => r.json()).then(d => {
+  const el = document.getElementById('appVersion');
+  if (el && d.version) el.textContent = 'v' + d.version;
+});
+</script>
+</body>
+</html>
