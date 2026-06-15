@@ -41,15 +41,29 @@ async def query_stashbox(client: httpx.AsyncClient, phash_hex, endpoint, api_key
         variables = {"fingerprints": [{"hash": phash_hex, "algorithm": "PHASH"}]}
     else:
         variables = {"fingerprints": [[{"hash": phash_hex, "algorithm": "PHASH"}]]}
-        
+
     resp = await client.post(
         endpoint,
         json={"query": query, "variables": variables},
         headers={"Content-Type": "application/json", "ApiKey": api_key}
     )
-    resp.raise_for_status()
+    # GraphQL endpoints return 4xx with a JSON body that pinpoints the
+    # broken field (e.g. "Cannot query field 'X' on type 'Y'"). httpx's
+    # raise_for_status() loses that body in HTTPStatusError, so the
+    # pipeline log just says "422 Unprocessable Entity" with no hint of
+    # which field broke. Unwrap errors[] before falling back so the
+    # query_with_fallback emit prints the actual cause.
+    if resp.status_code >= 400:
+        try:
+            err_body = resp.json()
+            err_msgs = err_body.get("errors") if isinstance(err_body, dict) else None
+            if err_msgs:
+                raise RuntimeError(f"HTTP {resp.status_code}: {err_msgs}")
+        except ValueError:
+            pass
+        raise RuntimeError(f"HTTP {resp.status_code}: {(resp.text or '')[:500]}")
     data = resp.json()
-    
+
     if "errors" in data:
         raise RuntimeError(f"Stash-box error: {data['errors']}")
         
