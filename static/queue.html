@@ -781,15 +781,20 @@
   }
   .queue-dup-row {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    flex-direction: column;
+    gap: 8px;
     padding: 10px 14px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
     font-size: 12px;
   }
   .queue-dup-row:last-child { border-bottom: none; }
   .queue-dup-row.is-keeper { background: rgba(var(--brand-accent-rgb), 0.08); }
+  .queue-dup-row-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
   .queue-dup-row-name {
     min-width: 0;
     flex: 1;
@@ -799,6 +804,77 @@
     color: var(--text);
   }
   .queue-dup-row-meta { font-size: 10px; color: var(--dim); margin-top: 3px; }
+  .queue-dup-row-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  /* Buttons inside the modal live outside .queue-section, so re-skin the
+   * generic .btn-icon here. Match the modal's purple/pink accent system
+   * instead of the browser's default white box. */
+  #queueDupOverlay .queue-dup-row-actions .btn-icon {
+    background: linear-gradient(160deg,
+      rgba(var(--brand-purple-rgb), 0.18) 0%,
+      rgba(var(--brand-purple-rgb), 0.06) 100%);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.32);
+    border-radius: 8px;
+    color: rgba(var(--brand-accent-rgb), 1);
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+  }
+  #queueDupOverlay .queue-dup-row-actions .btn-icon:hover {
+    border-color: rgba(var(--brand-accent-rgb), 0.65);
+    background: linear-gradient(160deg,
+      rgba(var(--brand-accent-rgb), 0.22) 0%,
+      rgba(var(--brand-accent-rgb), 0.08) 100%);
+    color: #fff;
+  }
+  #queueDupOverlay .queue-dup-row-actions .btn-icon.qi-delete-btn {
+    border-color: rgba(244, 114, 182, 0.32);
+    color: #f472b6;
+  }
+  #queueDupOverlay .queue-dup-row-actions .btn-icon.qi-delete-btn:hover {
+    border-color: rgba(244, 114, 182, 0.75);
+    background: linear-gradient(160deg, rgba(244, 114, 182, 0.22) 0%, rgba(244, 114, 182, 0.08) 100%);
+    color: #fff;
+  }
+  /* Inline filmstrip — 5 thumbs across so you can verify the dup
+   * groups visually without opening each filmstrip popup. */
+  .queue-dup-row-strip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    width: 100%;
+  }
+  .queue-dup-row-strip .qd-thumb {
+    aspect-ratio: 16 / 9;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.18);
+    border-radius: 3px;
+    overflow: hidden;
+    cursor: zoom-in;
+    position: relative;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .queue-dup-row-strip .qd-thumb:hover {
+    transform: translateY(-1px);
+    border-color: rgba(var(--brand-purple-rgb), 0.65);
+  }
+  .queue-dup-row-strip .qd-thumb img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  .queue-dup-row-strip .qd-thumb-empty {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(var(--brand-purple-rgb), 0.45);
+    font-size: 13px;
+  }
   .queue-dup-badge {
     font-size: 10px;
     padding: 2px 8px;
@@ -809,6 +885,13 @@
   .queue-dup-badge--rec { color: #86efac; border: 1px solid rgba(134, 239, 172, 0.35); background: rgba(134, 239, 172, 0.10); }
   .queue-dup-badge--review { color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.35); background: rgba(251, 191, 36, 0.10); }
   .queue-dup-badge--ignored { color: var(--dim); border: 1px solid rgba(255, 255, 255, 0.12); }
+  /* Header buttons (Keep best / ignore) — give the ignore button a
+   * subtle outline state so the icon-only button doesn't look hollow. */
+  #queueDupOverlay .queue-dup-group-head .btn-secondary {
+    font-size: 11px;
+    padding: 6px 10px;
+    min-height: 32px;
+  }
   /* Queue counter cards are informational only now — no hover affordance. */
   .queue-section .queue-stats-bar .stat-card { cursor: default; }
 
@@ -2421,7 +2504,7 @@
   </div>
 </div>
 
-<script defer src="/static/queue.js?v=1"></script>
+<script defer src="/static/queue.js?v=20260616a"></script>
 
 <!-- Queue duplicates modal — same phash grouping / keeper rules as Library Health. -->
 <div id="queueDupOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);z-index:9998;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeQueueDuplicatesModal()">

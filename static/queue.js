@@ -4652,21 +4652,27 @@
         const isKeep = !needRev && keepFn && fn === keepFn;
         const res = (f.media_width && f.media_height) ? `${f.media_width}×${f.media_height}` : '—';
         const fnAttr = fn.replace(/'/g, "\\'");
+        const fnB64 = encodeURIComponent(fn);
         return `<div class="queue-dup-row${isKeep ? ' is-keeper' : ''}">
-          <div style="min-width:0;flex:1">
-            <div class="queue-dup-row-name">${esc(fn)}${isKeep ? ' <span style="color:#86efac;font-size:10px">(keeper)</span>' : ''}</div>
-            <div class="queue-dup-row-meta">${_fmtQueueDupSize(f.size_bytes)} · ${esc(res)}</div>
+          <div class="queue-dup-row-top">
+            <div style="min-width:0;flex:1">
+              <div class="queue-dup-row-name">${esc(fn)}${isKeep ? ' <span style="color:#86efac;font-size:10px">(keeper)</span>' : ''}</div>
+              <div class="queue-dup-row-meta">${_fmtQueueDupSize(f.size_bytes)} · ${esc(res)}</div>
+            </div>
+            <span class="queue-dup-row-actions">
+              <button type="button" class="btn-icon" onclick="openQueueFilmstrip('${fnAttr}')" title="Open large filmstrip"><i class="fa-solid fa-expand"></i></button>
+              ${!isKeep ? `<button type="button" class="btn-icon qi-delete-btn" onclick="queueDupDeleteOne('${fnAttr}', ${gi})" title="Delete from queue"><i class="fa-solid fa-trash"></i></button>` : ''}
+            </span>
           </div>
-          <span style="display:flex;gap:6px;flex-shrink:0">
-            <button type="button" class="btn-icon" onclick="openQueueFilmstrip('${fnAttr}')" title="Filmstrip"><i class="fa-solid fa-photo-film"></i></button>
-            ${!isKeep ? `<button type="button" class="btn-icon qi-delete-btn" onclick="queueDupDeleteOne('${fnAttr}', ${gi})" title="Delete from queue"><i class="fa-solid fa-trash"></i></button>` : ''}
-          </span>
+          <div class="queue-dup-row-strip" data-qd-strip="${fnB64}">
+            ${Array.from({ length: 5 }, () => '<div class="qd-thumb"><div class="qd-thumb-empty"><span class="loader loader--btn loader--muted" role="status" aria-label="Generating"></span></div></div>').join('')}
+          </div>
         </div>`;
       }).join('');
       const keepBtn = (!isIg && !needRev && keepFn)
-        ? `<button type="button" class="btn-secondary" onclick="queueDupKeepRecommended(${gi})" title="Keep recommended, delete others" style="font-size:11px;padding:6px 10px"><i class="fa-solid fa-brain"></i> Keep best</button>`
+        ? `<button type="button" class="btn-secondary" onclick="queueDupKeepRecommended(${gi})" title="Keep recommended, delete others"><i class="fa-solid fa-brain"></i> Keep best</button>`
         : '';
-      const ignBtn = `<button type="button" class="btn-secondary" onclick="queueDupToggleIgnore('${phEnc}', ${isIg ? 'false' : 'true'})" title="${isIg ? 'Include again' : 'Ignore group'}" style="font-size:11px;padding:6px 10px"><i class="fa-solid fa-dice-two"></i></button>`;
+      const ignBtn = `<button type="button" class="btn-secondary" onclick="queueDupToggleIgnore('${phEnc}', ${isIg ? 'false' : 'true'})" title="${isIg ? 'Include again' : 'Ignore group'}"><i class="fa-solid fa-dice-two"></i></button>`;
       return `<div class="${gClass}">
         <div class="queue-dup-group-head">
           <div style="font-size:11px;color:var(--dim);word-break:break-all">Phash: <span style="color:var(--text);font-family:var(--mono)">${esc((g.phash || '').slice(0, 16))}…</span> ${badge}</div>
@@ -4675,6 +4681,63 @@
         ${rows}
       </div>`;
     }).join('');
+    body.querySelectorAll('[data-qd-strip]').forEach(el => {
+      const fn = decodeURIComponent(el.getAttribute('data-qd-strip') || '');
+      if (fn) _loadQueueDupStrip(el, fn);
+    });
+  }
+
+  // Lazy-load each row's 5-frame filmstrip. Frames are cached server-side
+  // once generated, so reopening the duplicates modal is instant. Polls
+  // up to ~30s while ffmpeg generates frames; gives up cleanly if backoff
+  // hits or no frames ever land.
+  const _qdStripTokens = new WeakMap();
+  async function _loadQueueDupStrip(container, filename) {
+    const myToken = (_qdStripTokens.get(container) || 0) + 1;
+    _qdStripTokens.set(container, myToken);
+    const renderState = (d) => {
+      if (_qdStripTokens.get(container) !== myToken) return;
+      const thumbs = Array.isArray(d.thumbs) ? d.thumbs : [];
+      const byIdx = new Map(thumbs.map(t => [t.i, t]));
+      const slots = [];
+      for (let i = 0; i < 5; i++) {
+        const t = byIdx.get(i);
+        if (t) {
+          const fnAttr = filename.replace(/'/g, "\\'");
+          slots.push(`<div class="qd-thumb" onclick="openQueueFilmstrip('${fnAttr}')" title="Frame ${t.i + 1} — click for full filmstrip"><img src="${esc(t.url)}" alt="Frame ${t.i + 1}" loading="lazy"></div>`);
+        } else if (d.backoff) {
+          slots.push('<div class="qd-thumb"><div class="qd-thumb-empty" title="FFmpeg gave up — open the large filmstrip to retry"><i class="fa-solid fa-triangle-exclamation"></i></div></div>');
+        } else if (d.generating) {
+          slots.push('<div class="qd-thumb"><div class="qd-thumb-empty"><span class="loader loader--btn loader--muted" role="status" aria-label="Generating"></span></div></div>');
+        } else {
+          slots.push('<div class="qd-thumb"><div class="qd-thumb-empty"><i class="ts-icon-scenes" aria-hidden="true"></i></div></div>');
+        }
+      }
+      container.innerHTML = slots.join('');
+    };
+    const startMs = Date.now();
+    const POLL_INTERVAL_MS = 2000;
+    const POLL_TIMEOUT_MS = 30 * 1000;
+    try {
+      while (true) {
+        const r = await fetch('/api/queue/thumbs?filename=' + encodeURIComponent(filename), { credentials: 'same-origin' });
+        if (_qdStripTokens.get(container) !== myToken) return;
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          renderState({ thumbs: [], backoff: true });
+          return;
+        }
+        renderState(d);
+        if (d.ready || d.backoff || !d.generating) return;
+        if (Date.now() - startMs > POLL_TIMEOUT_MS) {
+          renderState({ ...d, backoff: true, generating: false });
+          return;
+        }
+        await new Promise(res => setTimeout(res, POLL_INTERVAL_MS));
+      }
+    } catch (_) {
+      renderState({ thumbs: [], backoff: true });
+    }
   }
 
   async function refreshQueueDuplicatesModal() {
