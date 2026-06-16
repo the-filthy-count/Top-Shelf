@@ -9,9 +9,13 @@ TPDB_ENDPOINT    = "https://theporndb.net/graphql"
 FANSDB_ENDPOINT  = "https://fansdb.cc/graphql"
 JAVSTASH_ENDPOINT = "https://javstash.org/graphql"
 
+# stash-box (StashDB / FansDB / JAVStash) dropped findScenesByFullFingerprints
+# in favour of findScenesBySceneFingerprints — same field TPDB has used all
+# along. Keep the flat [FingerprintQueryInput!]! input the new stash-box
+# schema accepts; query_stashbox handles flat vs nested results downstream.
 STASHDB_QUERY = """
-query FindScenesByFullFingerprints($fingerprints: [FingerprintQueryInput!]!) {
-  findScenesByFullFingerprints(fingerprints: $fingerprints) {
+query FindScenesBySceneFingerprints($fingerprints: [FingerprintQueryInput!]!) {
+  findScenesBySceneFingerprints(fingerprints: $fingerprints) {
     id title release_date
     studio { id name }
     performers { performer { id name gender } }
@@ -72,8 +76,16 @@ async def query_stashbox(client: httpx.AsyncClient, phash_hex, endpoint, api_key
     if "findScenesByFullFingerprints" in result:
         scenes = result["findScenesByFullFingerprints"] or []
     elif "findScenesBySceneFingerprints" in result:
-        nested = result["findScenesBySceneFingerprints"] or []
-        scenes = [s for group in nested for s in (group or [])]
+        raw = result["findScenesBySceneFingerprints"] or []
+        # TPDB returns [[Scene]] (one inner list per fingerprint); the
+        # renamed stash-box field on StashDB / FansDB returns [Scene]
+        # flat. Sniff the first element type rather than trusting the
+        # variant flag, since the field name is shared but signatures
+        # differ across sources.
+        if raw and isinstance(raw[0], list):
+            scenes = [s for group in raw for s in (group or [])]
+        else:
+            scenes = list(raw)
         
     if scenes:
         src = ""

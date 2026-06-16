@@ -1430,9 +1430,14 @@ def _migrate_sidecar_phashes():
 # GraphQL queries
 # ---------------------------------------------------------------------------
 
+#: stash-box (StashDB / FansDB / JAVStash) dropped findScenesByFullFingerprints
+#: in favour of findScenesBySceneFingerprints — same field name TPDB has used
+#: all along. Use the unified field with the flat single-list input the
+#: new stash-box schema accepts; query_stashbox handles flat-result vs
+#: TPDB's nested-result downstream.
 STASHDB_QUERY = """
-query FindScenesByFullFingerprints($fingerprints: [FingerprintQueryInput!]!) {
-  findScenesByFullFingerprints(fingerprints: $fingerprints) {
+query FindScenesBySceneFingerprints($fingerprints: [FingerprintQueryInput!]!) {
+  findScenesBySceneFingerprints(fingerprints: $fingerprints) {
     id title release_date
     studio { id name }
     performers { performer { id name gender } }
@@ -2362,8 +2367,15 @@ def query_stashbox(phash_hex, endpoint, api_key, query, fingerprint_var):
     if "findScenesByFullFingerprints" in result:
         scenes = result["findScenesByFullFingerprints"] or []
     elif "findScenesBySceneFingerprints" in result:
-        nested = result["findScenesBySceneFingerprints"] or []
-        scenes = [s for group in nested for s in (group or [])]
+        raw = result["findScenesBySceneFingerprints"] or []
+        # Result shape varies by source: TPDB returns [[Scene]] (one
+        # inner list per input fingerprint); the renamed stash-box field
+        # on StashDB / FansDB returns [Scene] (flat). Detect by sniffing
+        # the first element type rather than trusting the variant flag.
+        if raw and isinstance(raw[0], list):
+            scenes = [s for group in raw for s in (group or [])]
+        else:
+            scenes = list(raw)
     # Opportunistically persist any fingerprints the stash-box gave us
     # so the /api/library/scenes-in lookup has them on hand. Source is
     # inferred from the endpoint URL (stashdb / fansdb / tpdb).
