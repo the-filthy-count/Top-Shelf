@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Library</title>
+
+<link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
+<link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
+<!-- webawesome was loaded here previously but the page uses zero
+     <wa-*> elements and the bundled localize.js / chunk module cycle
+     throws an `Uncaught SyntaxError: Detected cycle while resolving
+     name 'registerTranslation'` on every load. Same fix /discover
+     already applied. -->
+<script src="/static/theme-init.js?v=20260614c"></script>
+<link rel="stylesheet" href="/static/app-shell.css?v=27">
+<link rel="stylesheet" href="/static/library.css?v=20260617b">
+<script src="/static/ts-utils.js?v=20260617a"></script>
+<script src="/static/lib-entity-actions.js?v=20260612c"></script>
+<script src="/static/popup-loader.js?v=20260615b"></script>
+<script defer src="/static/movie-popup.js?v=20260531"></script>
+
+</head>
+<body>
+<div class="app">
+  <header class="ts-app-header">
+    <div class="ts-header-left">
+      <a href="/queue" class="logo" title="Go to Queue"><img src="/static/img/logo.webp" alt="Top-Shelf" onerror="this.outerHTML='<span style=font-family:var(--acid);font-size:28px;color:var(--text)>TOP-SHELF</span>'"></a>
+      <span class="version" id="appVersion"></span>
+    </div>
+    <div id="tsActivityBanner" class="ts-header-activity" aria-live="polite"></div>
+    <div class="nav-links">
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary" title="Downloads"><i class="ts-nav-icon ts-nav-icon--downloads"></i></button></a>
+      <a href="/scenes" style="text-decoration:none"><button class="btn-secondary" title="Browse — feed grid"><i class="ts-nav-icon ts-nav-icon--scenes"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library"><i class="ts-nav-icon ts-nav-icon--library"></i></button></a><a href="/news" style="text-decoration:none"><button class="btn-secondary" title="News"><i class="ts-nav-icon ts-nav-icon--news"></i></button></a>
+      <a href="/health" style="text-decoration:none"><button class="btn-secondary" title="Health"><i class="ts-nav-icon ts-nav-icon--health"></i></button></a>
+      <a href="/settings" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="ts-nav-icon ts-nav-icon--settings"></i></button></a>
+      <button class="btn-secondary" onclick="fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'}).then(()=>location.href='/login')" title="Logout"><i class="ts-nav-icon ts-nav-icon--logout"></i></button>
+    </div>
+  </header>
+
+  <div class="fav-sticky ts-page-head">
+    <div class="fav-sticky-top">
+      <div class="fav-sticky-title-row">
+        <div class="fav-sticky-title-left">
+          <h1 class="fav-page-title ts-page-title" id="favPageTitle">
+            <i class="ts-page-title__icon ts-nav-icon ts-nav-icon--library" aria-hidden="true"></i>
+            <span class="ts-page-title__text">Stars Library</span>
+            <span class="fav-count" id="favCount">—</span>
+          </h1>
+        </div>
+        <div class="fav-sticky-title-center">
+          <div class="ts-seg ts-seg--5 fav-seg" role="tablist">
+            <button type="button" id="segSearch" onclick="setView('search')" title="Search"><i class="fa-solid fa-magnifying-glass" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Search</span></button>
+            <button type="button" id="segMovie" onclick="setView('movie')" title="Movies"><i class="ts-icon-movies" style="margin-right:5px;font-size:12px" aria-hidden="true"></i><span class="btn-label">Movies</span></button>
+            <button type="button" id="segPerf" class="active" onclick="setView('performer')" title="Stars"><i class="fa-solid fa-user" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Stars</span></button>
+            <button type="button" id="segStudio" onclick="setView('studio')" title="Studios"><i class="ts-icon-studios" style="margin-right:5px;font-size:12px" aria-hidden="true"></i><span class="btn-label">Studios</span></button>
+            <button type="button" id="segVice" onclick="setView('vice')" title="Vices"><i class="fa-solid fa-fire" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Vices</span></button>
+          </div>
+        </div>
+        <div class="fav-sticky-title-spacer" aria-hidden="true"></div>
+      </div>
+    </div>
+    <button type="button" class="fav-mobile-filter-btn" id="favMobileFilterOpen" onclick="openFavFilterSheet()" aria-haspopup="dialog" aria-controls="favFilterSheet">
+      <i class="fa-solid fa-sliders" aria-hidden="true"></i> Filters
+    </button>
+    <div class="fav-filter-sheet" id="favFilterSheet" hidden aria-hidden="true">
+      <div class="fav-filter-sheet-scrim" onclick="closeFavFilterSheet()" aria-hidden="true"></div>
+      <div class="fav-filter-sheet-panel" role="dialog" aria-modal="true" aria-label="Library filters">
+        <div class="fav-filter-sheet-head">
+          <span>Filters</span>
+          <button type="button" onclick="closeFavFilterSheet()" aria-label="Close filters"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="fav-filter-sheet-body" id="favFilterSheetBody"></div>
+      </div>
+    </div>
+    <div class="fav-sticky-toolbar-host" id="favToolbarHost">
+    <div class="fav-sticky-toolbar" id="favToolbar">
+      <div class="fav-filter-toolbar-cell">
+        <div class="fav-filter-row">
+          <div class="fav-filter-wrap">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="search" id="favFilter" placeholder="Filter by name…" autocomplete="off" oninput="tsDebouncedInput('favFilter', _renderResetPage, 100)">
+          </div>
+          <div class="fav-filter-dir-wrap" title="Library directory">
+            <span class="fav-filter-dir-icon" aria-hidden="true"><i class="fa-solid fa-folder"></i></span>
+            <select id="favFilterRoot" class="fav-sel fav-sel--dir" onchange="_renderResetPage()">
+              <option value="all">All directories</option>
+            </select>
+          </div>
+          <div class="fav-filter-icon-btns">
+            <input type="hidden" id="favFilterStar" value="all">
+            <input type="hidden" id="favFilterLock" value="all">
+            <input type="hidden" id="favFilterPath" value="all">
+            <input type="hidden" id="favFilterUnlinked" value="all">
+            <button type="button" id="favFilterStarBtn" class="fav-filter-ibtn fav-filter-ibtn--heart" data-filter-state="all" title="Filter: starred" aria-pressed="false" onclick="toggleFavFilterStar()"><span class="fav-lips" aria-hidden="true"></span></button>
+            <button type="button" id="favFilterLockBtn" class="fav-filter-ibtn fav-filter-ibtn--lock" data-filter-state="all" title="Filter: unlocked" aria-pressed="false" onclick="toggleFavFilterLock()"><i class="fa-solid fa-lock-open" aria-hidden="true"></i></button>
+            <button type="button" id="favFilterPathBtn" class="fav-filter-ibtn fav-filter-ibtn--path" data-filter-state="all" title="Filter: missing" aria-pressed="false" onclick="toggleFavFilterPath()"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></button>
+            <button type="button" id="favFilterUnlinkedBtn" class="fav-filter-ibtn fav-filter-ibtn--unlinked" data-filter-state="all" title="Filter: unlinked" aria-pressed="false" onclick="toggleFavFilterUnlinked()"><i class="fa-solid fa-link-slash fav-unlinked-fa"></i></button>
+            <button type="button" id="favFilterClearBtn" class="fav-filter-ibtn fav-filter-ibtn--clear" title="Clear filters" aria-label="Clear all filters" onclick="clearAllFavFilters()"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+            <div class="fav-alpha-bar" id="favAlphaBar">
+              <button type="button" class="fav-alpha-btn fav-alpha-btn--all is-active" data-letter="" onclick="setAlphaFilter('')" title="All">All</button>
+              <button type="button" class="fav-alpha-btn" data-letter="A" onclick="setAlphaFilter('A')">A</button>
+              <button type="button" class="fav-alpha-btn" data-letter="B" onclick="setAlphaFilter('B')">B</button>
+              <button type="button" class="fav-alpha-btn" data-letter="C" onclick="setAlphaFilter('C')">C</button>
+              <button type="button" class="fav-alpha-btn" data-letter="D" onclick="setAlphaFilter('D')">D</button>
+              <button type="button" class="fav-alpha-btn" data-letter="E" onclick="setAlphaFilter('E')">E</button>
+              <button type="button" class="fav-alpha-btn" data-letter="F" onclick="setAlphaFilter('F')">F</button>
+              <button type="button" class="fav-alpha-btn" data-letter="G" onclick="setAlphaFilter('G')">G</button>
+              <button type="button" class="fav-alpha-btn" data-letter="H" onclick="setAlphaFilter('H')">H</button>
+              <button type="button" class="fav-alpha-btn" data-letter="I" onclick="setAlphaFilter('I')">I</button>
+              <button type="button" class="fav-alpha-btn" data-letter="J" onclick="setAlphaFilter('J')">J</button>
+              <button type="button" class="fav-alpha-btn" data-letter="K" onclick="setAlphaFilter('K')">K</button>
+              <button type="button" class="fav-alpha-btn" data-letter="L" onclick="setAlphaFilter('L')">L</button>
+              <button type="button" class="fav-alpha-btn" data-letter="M" onclick="setAlphaFilter('M')">M</button>
+              <button type="button" class="fav-alpha-btn" data-letter="N" onclick="setAlphaFilter('N')">N</button>
+              <button type="button" class="fav-alpha-btn" data-letter="O" onclick="setAlphaFilter('O')">O</button>
+              <button type="button" class="fav-alpha-btn" data-letter="P" onclick="setAlphaFilter('P')">P</button>
+              <button type="button" class="fav-alpha-btn" data-letter="Q" onclick="setAlphaFilter('Q')">Q</button>
+              <button type="button" class="fav-alpha-btn" data-letter="R" onclick="setAlphaFilter('R')">R</button>
+              <button type="button" class="fav-alpha-btn" data-letter="S" onclick="setAlphaFilter('S')">S</button>
+              <button type="button" class="fav-alpha-btn" data-letter="T" onclick="setAlphaFilter('T')">T</button>
+              <button type="button" class="fav-alpha-btn" data-letter="U" onclick="setAlphaFilter('U')">U</button>
+              <button type="button" class="fav-alpha-btn" data-letter="V" onclick="setAlphaFilter('V')">V</button>
+              <button type="button" class="fav-alpha-btn" data-letter="W" onclick="setAlphaFilter('W')">W</button>
+              <button type="button" class="fav-alpha-btn" data-letter="X" onclick="setAlphaFilter('X')">X</button>
+              <button type="button" class="fav-alpha-btn" data-letter="Y" onclick="setAlphaFilter('Y')">Y</button>
+              <button type="button" class="fav-alpha-btn" data-letter="Z" onclick="setAlphaFilter('Z')">Z</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="fav-sticky-actions">
+        <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="btnSearchMissing" onclick="searchMissing()" title="Fill missing links"><i class="fa-solid fa-magnifying-glass"></i></button>
+        <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="btnLibraryScan" onclick="scanLibrary()" title="Scan folders"><i class="fa-solid fa-folder-tree"></i></button>
+        <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="btnRefreshImages" onclick="refreshImagesAll()" title="Refresh images"><i class="fa-solid fa-image"></i></button>
+        <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="btnRefreshAll" onclick="refreshAll()" title="Re-match all"><i class="fa-solid fa-arrows-rotate"></i></button>
+        <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="btnLockAll" onclick="lockAllMatches()" title="Lock all"><i class="fa-solid fa-lock"></i></button>
+        <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="btnUnlockAll" onclick="unlockAllMatches()" title="Unlock all"><i class="fa-solid fa-lock-open"></i></button>
+        <button type="button" class="fav-icon-btn fav-icon-btn--primary" data-duotone-toggle onclick="toggleDuotoneMode()" title="Swap duotone"><i class="fa-solid fa-palette"></i></button>
+      </div>
+      <span class="toast fav-toolbar-toast" id="toolMsg"></span>
+    </div>
+    </div>
+  </div>
+
+  <div class="fav-stage">
+    <div class="fav-scroll">
+      <div class="fav-grid fav-grid--perf" id="favGrid"></div>
+      <div class="fav-pager" id="favPager" style="display:none">
+        <button type="button" class="fav-pager-btn" id="favPagerFirst" title="First page" aria-label="First page">«</button>
+        <button type="button" class="fav-pager-btn" id="favPagerPrev" title="Previous page" aria-label="Previous page">‹</button>
+        <span class="fav-pager-state" id="favPagerState">Page 1 / 1</span>
+        <button type="button" class="fav-pager-btn" id="favPagerNext" title="Next page" aria-label="Next page">›</button>
+        <button type="button" class="fav-pager-btn" id="favPagerLast" title="Last page" aria-label="Last page">»</button>
+        <span class="fav-pager-meta" id="favPagerMeta"></span>
+      </div>
+      <!-- Search-tab host. Mounted by setView('search') — input + type
+           pills at the top, fav-cell-style result tiles below. Reuses
+           the fav-grid container chrome so results look like the rest
+           of /library. -->
+      <div id="favSearchHost" hidden>
+        <div class="fav-search-toolbar">
+          <div class="fav-search-toolbar__input">
+            <i class="fa-solid fa-magnifying-glass fav-search-icon" aria-hidden="true"></i>
+            <input id="favSearchQ" type="text" autocomplete="off" spellcheck="false"
+                   placeholder="Search performers, studios or movies…"
+                   onkeydown="if(event.key==='Enter')runFavSearch()">
+            <button type="button" id="favSearchClearBtn" class="fav-search-clear" title="Clear" hidden><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+          </div>
+          <div class="ts-seg ts-seg--3 fav-search-types" role="tablist" aria-label="Search type">
+            <button type="button" id="favSearchTypeStars" class="active" data-type="performer" onclick="setFavSearchType('performer')" title="Stars"><i class="fa-solid fa-user" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Stars</span></button>
+            <button type="button" id="favSearchTypeStudios" data-type="studio" onclick="setFavSearchType('studio')" title="Studios"><i class="ts-icon-studios" style="margin-right:5px;font-size:12px" aria-hidden="true"></i><span class="btn-label">Studios</span></button>
+            <button type="button" id="favSearchTypeMovies" data-type="movie" onclick="setFavSearchType('movie')" title="Movies"><i class="ts-icon-movies" style="margin-right:5px;font-size:12px" aria-hidden="true"></i><span class="btn-label">Movies</span></button>
+          </div>
+          <div class="fav-search-toolbar__spacer" aria-hidden="true"></div>
+        </div>
+        <div id="favSearchStatus" class="fav-search-status" hidden></div>
+        <div class="fav-grid fav-grid--perf" id="favSearchResults"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay entity-panel-overlay" id="entityPanelModal">
+  <div class="modal-box entity-panel-box">
+    <div class="entity-panel-head">
+      <div class="entity-panel-head-title-row">
+        <div id="entityPanelActionsMount"></div>
+        <div style="min-width:0;flex:1">
+          <h3 id="entityPanelTitle">—</h3>
+          <div class="entity-panel-meta" id="entityPanelMeta"></div>
+        </div>
+      </div>
+      <div class="entity-panel-tools">
+        <button type="button" class="fav-icon-btn" id="entityPanelRefresh" title="Refresh"><i class="fa-solid fa-arrows-rotate"></i></button>
+        <button type="button" class="fav-icon-btn" onclick="closeEntityPanel()" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+    <div class="entity-panel-body" id="entityPanelBody">
+      <div class="entity-panel-loading">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="imagePickModal">
+  <div class="modal-box fav-imgpick-modal-box">
+    <h3 id="imagePickTitle">Pick image</h3>
+    <div class="modal-body">
+      <p class="fav-imgpick-hint" id="imagePickHint">
+        Images from your linked TPDB, StashDB, FansDB, and JAVStash profiles (every poster or logo returned by each API). Link a profile under the card or in the detail panel if this list is empty.
+      </p>
+      <label class="fav-imgpick-save">
+        <input type="checkbox" id="imagePickSaveLocal">
+        <span id="imagePickSaveLabel">Save to this folder on disk</span>
+      </label>
+      <div id="imagePickResults"></div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="fav-icon-btn" onclick="closeImagePickModal()" title="Close" style="width:auto;padding:0 14px;font-size:12px">Close</button>
+      <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="imagePickApplyBtn" onclick="applyPickedImage()" disabled title="Apply" style="width:auto;padding:0 14px;font-size:12px">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Poster-role picker (performer only): three-column layout —
+     stacked role tiles (headshot / primary / secondary) on the left, each
+     with their own apply button; scrollable candidate grid in the middle;
+     a large preview pane on the right that mirrors whichever candidate
+     is currently selected. Apply buttons replace the role on disk and the
+     thumbnail in the matching left-column tile refreshes live. -->
+<div class="modal-overlay" id="posterRoleModal">
+  <div class="modal-box fav-roles-modal-box" style="position:relative">
+    <button type="button" class="fav-roles-modal-close" onclick="closePosterRolePicker()" title="Close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    <div class="fav-roles-modal-header">
+      <div class="fav-roles-header-row">
+        <h3><span id="posterRoleTitle">Manage posters</span> <button type="button" class="fav-roles-hint-btn" title="Upload or paste a URL to add an image to the candidate grid, then apply to headshot (crop), primary, or secondary." aria-label="Help"><i class="fa-solid fa-circle-info"></i></button></h3>
+        <div class="fav-roles-header-center">
+          <button type="button" class="fav-icon-btn" onclick="posterRoleUploadImport()" title="Upload image"><i class="fa-solid fa-upload"></i></button>
+          <button type="button" class="fav-icon-btn" id="posterRoleUrlToggleBtn" onclick="posterRoleToggleUrlInput()" title="From URL"><i class="fa-solid fa-link"></i></button>
+        </div>
+        <div aria-hidden="true"></div>
+      </div>
+      <div class="fav-roles-header-url-row" id="posterRoleHeaderUrlRow">
+        <input type="url" id="posterRoleImportUrl" placeholder="https://…" autocomplete="off" onkeydown="if(event.key==='Enter')posterRoleLoadImportUrl();if(event.key==='Escape')posterRoleToggleUrlInput(false)">
+        <button type="button" class="fav-icon-btn fav-icon-btn--primary" onclick="posterRoleLoadImportUrl()">Load</button>
+      </div>
+      <input type="file" id="posterRoleImportFile" accept="image/*" style="display:none" onchange="posterRoleHandleImportFile(this.files)">
+    </div>
+    <div class="modal-body">
+      <div class="fav-roles-layout">
+        <!-- Left column: stacked role tiles (headshot, primary, secondary)
+             with each tile's apply button directly underneath. Tile labels
+             render as overlay pills inside the image (no external heading). -->
+        <div class="fav-roles-left-col">
+          <div class="fav-roles-current-tile fav-roles-headshot-tile" id="posterRoleCurHeadshot" data-role="headshot">
+            <div class="fav-roles-current-img-wrap is-empty" data-role="headshot">
+              <img alt="Current headshot" id="posterRoleCurHeadshotImg" onerror="this.style.display='none';this.parentElement.classList.add('is-empty')">
+              <div class="fav-roles-current-empty">Not set</div>
+              <div class="fav-roles-current-label-overlay">Headshot</div>
+            </div>
+          </div>
+          <div class="fav-roles-apply-row">
+            <button type="button" class="fav-icon-btn fav-roles-apply-btn" id="posterRoleSetHeadshotBtn" onclick="applyPosterRole('headshot')" disabled title="Crop &amp; set headshot"><i class="fa-solid fa-angles-up"></i></button>
+          </div>
+
+          <div class="fav-roles-current-tile" id="posterRoleCurPrimary" data-role="primary">
+            <div class="fav-roles-current-img-wrap is-empty" data-role="primary">
+              <img alt="Current primary poster" id="posterRoleCurPrimaryImg" onerror="this.style.display='none';this.parentElement.classList.add('is-empty')">
+              <div class="fav-roles-current-empty">Not set</div>
+              <div class="fav-roles-current-label-overlay">Primary</div>
+            </div>
+          </div>
+          <div class="fav-roles-apply-row">
+            <button type="button" class="fav-icon-btn fav-roles-apply-btn" id="posterRoleSetPrimaryBtn" onclick="applyPosterRole('primary')" disabled title="Set as primary"><i class="fa-solid fa-angles-up"></i></button>
+          </div>
+
+          <div class="fav-roles-current-tile" id="posterRoleCurSecondary" data-role="secondary">
+            <div class="fav-roles-current-img-wrap is-empty" data-role="secondary">
+              <img alt="Current secondary poster" id="posterRoleCurSecondaryImg" onerror="this.style.display='none';this.parentElement.classList.add('is-empty')">
+              <div class="fav-roles-current-empty">Not set</div>
+              <div class="fav-roles-current-label-overlay">Secondary</div>
+            </div>
+          </div>
+          <div class="fav-roles-apply-row">
+            <button type="button" class="fav-icon-btn fav-roles-apply-btn" id="posterRoleSetSecondaryBtn" onclick="applyPosterRole('secondary')" disabled title="Set as secondary"><i class="fa-solid fa-angles-up"></i></button>
+          </div>
+        </div>
+        <!-- Middle: candidate grid. -->
+        <div id="posterRoleCandidates" class="fav-imgpick-candidates-scroll"></div>
+        <!-- Right column: large preview pane that mirrors whichever candidate
+             is currently selected, scaled to fit while preserving aspect
+             ratio (2:3 portraits, 3:4 headshots, square thumbs). -->
+        <div class="fav-roles-preview-col">
+          <div class="fav-roles-preview-pane is-empty" id="posterRolePreviewPane">
+            <img alt="Selected image preview" id="posterRolePreviewImg" style="display:none">
+            <div class="fav-roles-preview-empty">Select a candidate, click an existing tile, or drop a local image here</div>
+          </div>
+          <div class="fav-roles-preview-caption" id="posterRolePreviewCaption"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="searchModal">
+  <div class="modal-box fav-search-modal-box">
+    <h3 id="searchModalTitle">Search databases</h3>
+    <div class="modal-body">
+      <div class="search-row">
+        <input type="text" id="searchInput" placeholder="Search TPDB, StashDB, FansDB…" autocomplete="off">
+        <button type="button" class="fav-icon-btn fav-icon-btn--primary" style="width:44px" onclick="runManualSearch()" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
+      </div>
+      <div class="search-row" id="searchYearRow" style="display:none">
+        <input type="text" id="searchYearInput" placeholder="Year (optional)" inputmode="numeric" autocomplete="off" maxlength="4" style="max-width:120px">
+      </div>
+      <div class="search-filters" id="searchFilters"></div>
+      <div id="searchResults"></div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="fav-icon-btn" onclick="closeSearch()" title="Close" style="width:auto;padding:0 14px;font-size:12px">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="extLinkModal" onclick="if(event.target===this)closeExtLinkModal()">
+  <div class="modal-box" style="max-width:520px" onclick="event.stopPropagation()">
+    <h3 id="extLinkTitle">Link profile</h3>
+    <div class="modal-body" style="padding:14px 0 8px;display:flex;flex-direction:column;gap:12px">
+      <!-- Search row -->
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="extLinkSearchQ" placeholder="Search by name…" autocomplete="off"
+          style="flex:1;padding:7px 10px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none"
+          onkeydown="if(event.key==='Enter')doExtLinkSearch()">
+        <button type="button" class="fav-icon-btn" id="extLinkSearchBtn" style="width:auto;padding:0 14px;font-size:12px" onclick="doExtLinkSearch()">Search</button>
+      </div>
+      <!-- Search results -->
+      <div id="extLinkResults" style="display:none;max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+      <!-- Divider -->
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.07)"></div>
+        <span style="font-size:9px;color:var(--dim);font-family:var(--secs);text-transform:uppercase;letter-spacing:0.08em">Or paste URL</span>
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.07)"></div>
+      </div>
+      <input type="text" id="extLinkInput" placeholder="https://…" autocomplete="off" spellcheck="false"
+        style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none">
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="fav-icon-btn" onclick="closeExtLinkModal()" style="width:auto;padding:0 14px;font-size:12px">Cancel</button>
+      <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="extLinkSaveBtn" style="width:auto;padding:0 14px;font-size:12px" onclick="saveExtLink()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Headshot crop modal: opened by the Manage-posters modal when the user
+     assigns a candidate / uploaded / URL-loaded image as the headshot. -->
+<div class="modal-overlay" id="cropModal" onclick="if(event.target===this)closeCropModal()">
+  <div class="modal-box crop-modal-box" onclick="event.stopPropagation()">
+    <h3 style="display:flex;align-items:center;gap:8px;margin:0 0 4px 0"><i class="fa-solid fa-crop-simple"></i> Crop headshot</h3>
+    <div class="modal-body" style="padding:10px 0 6px">
+      <div class="crop-viewport" id="cropViewport">
+        <img id="cropImg" alt="" referrerpolicy="no-referrer">
+      </div>
+      <div class="crop-scale-row">
+        <i class="fa-solid fa-magnifying-glass-minus"></i>
+        <input type="range" id="cropScale" min="1" max="4" step="0.01" value="1">
+        <i class="fa-solid fa-magnifying-glass-plus"></i>
+        <span class="crop-scale-val" id="cropScaleVal">1.00×</span>
+      </div>
+      <div class="crop-hint">Drag the image to reposition. Scroll or use the slider to zoom.</div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="fav-icon-btn" onclick="closeCropModal()" style="width:auto;padding:0 14px;font-size:12px">Cancel</button>
+      <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="cropConfirmBtn" onclick="confirmCrop()" style="width:auto;padding:0 14px;font-size:12px"><i class="fa-solid fa-check"></i> Apply</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="imgUploadModal" onclick="if(event.target===this)closeImgUploadModal()">
+  <div class="modal-box" style="max-width:460px" onclick="event.stopPropagation()">
+    <h3>Set Headshot Image</h3>
+    <div class="modal-body" style="padding:14px 0 8px;display:flex;flex-direction:column;gap:12px">
+      <!-- URL option -->
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="url" id="imgUploadUrl" placeholder="Paste image URL…" autocomplete="off"
+          style="flex:1;padding:8px 10px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none"
+          onkeydown="if(event.key==='Enter')saveImgFromUrl()">
+        <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="imgUrlSaveBtn" style="width:auto;padding:0 14px;font-size:12px" onclick="saveImgFromUrl()">Save URL</button>
+      </div>
+      <!-- Divider -->
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.07)"></div>
+        <span style="font-size:9px;color:var(--dim);font-family:var(--secs);text-transform:uppercase;letter-spacing:0.08em">Or upload file</span>
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.07)"></div>
+      </div>
+      <!-- File option -->
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="file" id="imgUploadFile" accept="image/*">
+        <button type="button" class="fav-icon-btn fav-icon-btn--primary" id="imgFileSaveBtn" style="width:auto;padding:0 14px;font-size:12px" onclick="uploadImgFile()">Upload</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="fav-icon-btn" onclick="closeImgUploadModal()" style="width:auto;padding:0 14px;font-size:12px">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/poster-role-picker.js?v=20260617a"></script>
+<script defer src="/static/favourites.js?v=20260617b"></script>
+<script defer src="/static/activity-banner.js?v=20260531"></script>
+<script defer src="/static/app-shell.js?v=20260529"></script>
+<script>
+fetch('/api/status').then(r => r.json()).then(d => {
+  const el = document.getElementById('appVersion');
+  if (el && d.version) el.textContent = 'v' + d.version;
+});
+</script>
+</body>
+</html>

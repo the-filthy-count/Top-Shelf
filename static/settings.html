@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Settings</title>
+<link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
+<link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
+<script src="/static/theme-init.js?v=20260614c"></script>
+<link rel="stylesheet" href="/static/app-shell.css?v=27">
+<link rel="stylesheet" href="/static/settings-page.css">
+<link rel="stylesheet" href="/static/ts-help.css">
+<script src="/static/ts-utils.js?v=20260614a"></script>
+<style>
+  :root {
+    /* Standard glass-panel chrome — matches /scenes, /library, /queue, /downloads, /log */
+    --glass-panel-bg: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.48) 0%, rgba(var(--panel-lo-rgb),0.36) 100%);
+    --glass-border: rgba(255,255,255,0.12); --glass-blur: 20px;
+    --glass-inset: inset 0 1px 0 rgba(255,255,255,0.12);
+    --glass-shadow: 0 10px 40px rgba(0,0,0,0.28);
+    --glass-header-bg: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.52) 0%, rgba(var(--panel-lo-rgb),0.4) 100%);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: transparent;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(var(--bg-rgb), 0.72);
+    z-index: 0;
+  }
+  /* Glass header — same recipe as /scenes, /downloads, /library */
+  header {
+    padding: 14px 16px;
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    background: var(--glass-header-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-inset), var(--glass-shadow);
+    margin-bottom: 20px;
+  }
+  header.ts-app-header {
+    display: grid;
+    /* Side columns size to content (`auto`) so the nav cluster on the
+     * right can stretch as wide as it needs without wrapping. The
+     * earlier `minmax(0, 1fr)` capped the right column at ~25% of the
+     * header, which forced the LCD pill + Queue / Downloads / Index +
+     * 7 nav buttons onto a second row. */
+    grid-template-columns: auto minmax(200px, 1fr) auto;
+    align-items: center;
+    gap: 12px 16px;
+  }
+  header.ts-app-header .ts-header-left { justify-self: start; display: flex; align-items: center; gap: 16px; min-width: 0; }
+  header.ts-app-header .nav-links { justify-self: end; display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; }
+  .logo img { height: 36px; object-fit: contain; }
+</style>
+</head>
+<body>
+<div class="app settings-page-app">
+
+<header class="ts-app-header">
+    <div class="ts-header-left">
+      <a href="/queue" class="logo" style="text-decoration:none" title="Go to Queue"><img src="/static/img/logo.webp" alt="Top-Shelf" style="height:36px;object-fit:contain"></a>
+      <span class="version" id="appVersion"></span>
+    </div>
+    <div id="tsActivityBanner" class="ts-header-activity" aria-live="polite" aria-atomic="true"></div>
+    <div class="nav-links">
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary" title="Downloads"><i class="ts-nav-icon ts-nav-icon--downloads"></i></button></a>
+      <a href="/scenes" style="text-decoration:none"><button class="btn-secondary" title="Browse — feed grid"><i class="ts-nav-icon ts-nav-icon--scenes"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library"><i class="ts-nav-icon ts-nav-icon--library"></i></button></a>
+      <a href="/news" style="text-decoration:none"><button class="btn-secondary" title="News"><i class="ts-nav-icon ts-nav-icon--news"></i></button></a>
+      <a href="/health" style="text-decoration:none"><button class="btn-secondary" title="Health"><i class="ts-nav-icon ts-nav-icon--health"></i></button></a>
+      <a href="/settings" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="ts-nav-icon ts-nav-icon--settings"></i></button></a>
+      <button class="btn-secondary" onclick="settingsLogout()" title="Logout"><i class="ts-nav-icon ts-nav-icon--logout"></i></button>
+    </div>
+  </header>
+<div id="settingsRoot">
+  <div class="settings-shell panel">
+    <div class="settings-shell-header ts-page-head settings-page-head">
+      <div class="ts-page-head__row settings-page-head__row">
+        <div class="ts-page-head__left">
+          <span class="panel-title ts-page-title">
+            <i class="ts-page-title__icon ts-nav-icon ts-nav-icon--settings" aria-hidden="true"></i>
+            <span class="ts-page-title__text">Settings</span>
+          </span>
+        </div>
+        <div class="ts-page-head__center" aria-hidden="true"></div>
+        <div class="ts-page-head__right settings-shell-header-actions">
+        <button class="btn-secondary" onclick="settingsLeavePage()" title="Cancel">Cancel</button>
+        <button class="btn-primary" onclick="saveSettings()" title="Save Settings">Save</button>
+        </div>
+      </div>
+    </div>
+    <div class="settings-shell-body">
+
+      <div class="settings-modal-layout">
+
+        <!-- Left nav sidebar -->
+        <nav class="settings-nav-sidebar">
+          <button type="button" class="settings-nav-item active" data-settings-category="security">
+            <i class="fa-solid fa-lock settings-nav-icon"></i>
+            <span class="settings-nav-label">Security</span>
+            <span class="settings-nav-error-dot"></span>
+          </button>
+          <button type="button" class="settings-nav-item" data-settings-category="directories">
+            <i class="fa-solid fa-folder-tree settings-nav-icon"></i>
+            <span class="settings-nav-label">Directories</span>
+            <span class="settings-nav-error-dot"></span>
+          </button>
+          <button type="button" class="settings-nav-item" data-settings-category="filters">
+            <i class="fa-solid fa-filter settings-nav-icon"></i>
+            <span class="settings-nav-label">Content Filters</span>
+            <span class="settings-nav-error-dot"></span>
+          </button>
+          <button type="button" class="settings-nav-item" data-settings-category="pipeline">
+            <i class="fa-solid fa-gears settings-nav-icon"></i>
+            <span class="settings-nav-label">Pipeline</span>
+            <span class="settings-nav-error-dot"></span>
+          </button>
+          <button type="button" class="settings-nav-item" data-settings-category="databases">
+            <i class="fa-solid fa-database settings-nav-icon"></i>
+            <span class="settings-nav-label">Databases</span>
+            <span class="settings-nav-error-dot"></span>
+          </button>
+          <button type="button" class="settings-nav-item" data-settings-category="downloads">
+            <i class="fa-solid fa-download settings-nav-icon"></i>
+            <span class="settings-nav-label">Downloads</span>
+            <span class="settings-nav-error-dot"></span>
+          </button>
+          <button type="button" class="settings-nav-item" data-settings-category="rss">
+            <i class="fa-solid fa-square-rss settings-nav-icon"></i>
+            <span class="settings-nav-label">RSS Feeds</span>
+            <span class="settings-nav-error-dot"></span>
+          </button>
+          <button type="button" class="settings-nav-item" data-settings-category="mediaservers">
+            <i class="fa-solid fa-server settings-nav-icon"></i>
+            <span class="settings-nav-label">Media Servers</span>
+            <span class="settings-nav-error-dot"></span>
+          </button>
+
+          <button type="button" class="settings-nav-item" data-settings-category="health">
+            <i class="fa-solid fa-heart-pulse settings-nav-icon"></i>
+            <span class="settings-nav-label">Library Health</span>
+            <span class="settings-nav-error-dot"></span>
+          </button>
+          <button type="button" class="settings-nav-item" data-settings-category="appearance">
+            <i class="fa-solid fa-palette settings-nav-icon"></i>
+            <span class="settings-nav-label">Appearance</span>
+            <span class="settings-nav-error-dot"></span>
+          </button>
+        </nav>
+
+        <!-- Right panel -->
+        <div class="settings-panel-outer">
+          <div class="settings-panel-scroll" id="settingsPanelScroll">
+
+            <!-- Security -->
+            <div class="settings-category-panel" data-settings-category="security">
+      <!-- Password -->
+      <div class="settings-section">
+        <div class="settings-section-title">Password Protection</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-row">
+            <label class="field-label">New password</label>
+            <input class="field-input" id="cfgNewPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current">
+          </div>
+          <div class="field-row">
+            <label class="field-label ts-title-help-wrap">Session idle timeout (minutes)
+              <button type="button" class="ts-info-btn" aria-label="About session idle timeout" data-ts-help-template="help-q-session-timeout"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+            </label>
+            <input class="field-input" id="cfgSessionMinutes" type="number" min="1" max="525600" placeholder="1440">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn-secondary" onclick="setPassword()" style="font-size:14px;padding:6px 12px">Set Password</button>
+          <button class="btn-secondary" onclick="removePassword()" style="font-size:14px;padding:6px 12px;color:var(--red);border-color:var(--red)">Remove Password</button>
+        </div>
+        <div id="pwMsg" style="font-size:14px;margin-top:8px;display:none"></div>
+      </div>
+
+            </div>
+
+            <!-- Directories -->
+            <div class="settings-category-panel" data-settings-category="directories" style="display:none">
+      <!-- Directories -->
+      <div class="settings-section">
+        <div class="settings-section-title">Download Directories</div>
+        <div class="field-row">
+          <label class="field-label">Scenes — input folder (files to process)</label>
+          <input class="field-input" id="cfgSourceDir" type="text" placeholder="/path/to/folder">
+        </div>
+        <div class="field-row">
+          <label class="field-label">Movies — input folder for movie files</label>
+          <input class="field-input" id="cfgMoviesSourceDir" type="text" placeholder="/path/to/movies/folder">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Series Library Directory</div>
+        <div class="field-row">
+          <label class="field-label">Root folder containing studio subdirectories</label>
+          <input class="field-input" id="cfgSeriesDir" type="text" placeholder="/path/to/Series">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Movies Library Directory</div>
+        <div class="field-row">
+          <label class="field-label">Root folder for movies (one subfolder per film)</label>
+          <input class="field-input" id="cfgFeaturesDir" type="text" placeholder="/path/to/Movies">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title"><i class="fa-solid fa-fire" style="margin-right:6px;color:var(--accent)"></i>Vices Library Directory</div>
+        <div class="field-row">
+          <label class="field-label">Root folder for vices (treated like studios — no routing wired yet)</label>
+          <input class="field-input" id="cfgVicesDir" type="text" placeholder="/path/to/Vices">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">JAV features</div>
+        <div class="field-row">
+          <label class="field-label">Root folder for JAV features (optional)</label>
+          <input class="field-input" id="cfgJavDir" type="text" placeholder="/path/to/JAV">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">File Ownership</div>
+        <div class="field-row">
+          <label class="field-label">Owner (uid or username)</label>
+          <input class="field-input" id="cfgLibraryOwnerUser" type="text" placeholder="e.g. 1000 or media">
+        </div>
+        <div class="field-row">
+          <label class="field-label">Group (gid or group name)</label>
+          <input class="field-input" id="cfgLibraryOwnerGroup" type="text" placeholder="e.g. 1000 or media">
+        </div>
+        <div class="field-row" style="opacity:0.7;font-size:12px">
+          <label class="field-label">&nbsp;</label>
+          <div>Applied via chown to library folders and files the app creates. Leave blank to inherit. Requires the app process to have permission to change ownership (typically root).</div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title ts-title-help-wrap">Star Library Directories
+          <button type="button" class="ts-info-btn" aria-label="About star library directories" data-ts-help-template="help-q-performer-dirs"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+        </div>
+        <div class="dir-list" id="dirList"></div>
+        <div style="margin-top:12px">
+          <div class="settings-section-title" style="margin-bottom:10px;font-size:14px">Add Directory</div>
+          <div class="add-dir-row">
+            <div class="field-row">
+              <label class="field-label">Label</label>
+              <input class="field-input" id="newDirLabel" type="text" placeholder="Stars">
+            </div>
+            <div class="field-row">
+              <label class="field-label">Path</label>
+              <input class="field-input" id="newDirPath" type="text" placeholder="/path/to/folder">
+            </div>
+            <div class="field-row">
+              <label class="field-label">&nbsp;</label>
+              <button type="button" class="btn-secondary dir-add-btn" onclick="addDir()">Add</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+            </div>
+
+            <!-- Pipeline -->
+                        <div class="settings-category-panel" data-settings-category="filters" style="display:none">
+      <!-- Content Filters -->
+      <div class="settings-section">
+        <div class="settings-section-title ts-title-help-wrap">Scenes
+          <button type="button" class="ts-info-btn" aria-label="About content category filters" data-ts-help-template="help-q-content-filters"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <label class="toggle-row" style="cursor:pointer">
+            <span class="field-label" style="flex:1"><i class="fa-solid fa-venus-mars" style="width:20px;text-align:center;color:var(--accent)"></i> Straight</span>
+            <label class="toggle"><input type="checkbox" id="cfgCatStraight" checked><span class="toggle-slider"></span></label>
+          </label>
+          <label class="toggle-row" style="cursor:pointer">
+            <span class="field-label" style="flex:1"><i class="fa-solid fa-venus-double" style="width:20px;text-align:center;color:var(--accent)"></i> Lesbian</span>
+            <label class="toggle"><input type="checkbox" id="cfgCatLesbian" checked><span class="toggle-slider"></span></label>
+          </label>
+          <label class="toggle-row" style="cursor:pointer">
+            <span class="field-label" style="flex:1"><i class="fa-solid fa-mars-double" style="width:20px;text-align:center;color:var(--accent)"></i> Gay</span>
+            <label class="toggle"><input type="checkbox" id="cfgCatGay" checked><span class="toggle-slider"></span></label>
+          </label>
+          <label class="toggle-row" style="cursor:pointer">
+            <span class="field-label" style="flex:1"><i class="fa-solid fa-venus" style="width:20px;text-align:center;color:var(--accent)"></i> Women</span>
+            <label class="toggle"><input type="checkbox" id="cfgCatSoloFemale" checked><span class="toggle-slider"></span></label>
+          </label>
+          <label class="toggle-row" style="cursor:pointer">
+            <span class="field-label" style="flex:1"><i class="fa-solid fa-transgender" style="width:20px;text-align:center;color:var(--accent)"></i> LGBTQ+</span>
+            <label class="toggle"><input type="checkbox" id="cfgCatTrans" checked><span class="toggle-slider"></span></label>
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title"><i class="fa-solid fa-fire" style="margin-right:6px;color:var(--accent)"></i>Vices</div>
+        <div style="margin-top:4px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+            <label class="field-label" style="margin:0">Blacklisted vices</label>
+            <button type="button" class="ts-info-btn" aria-label="About vice blacklist" data-ts-help-template="help-q-tag-blacklist"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+          </div>
+          <div style="position:relative">
+            <input class="field-input" id="cfgBlacklistTagSearch" type="text" placeholder="Search TPDB, StashDB, FansDB &amp; JAVStash tags…" style="width:100%" autocomplete="off">
+            <div id="cfgBlacklistTagResults" style="display:none;position:absolute;top:100%;left:0;right:0;background:rgba(var(--panel-lo-rgb),0.98);border:1px solid rgba(var(--brand-purple-rgb),0.35);border-radius:8px;margin-top:4px;max-height:340px;overflow-y:auto;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,0.5)"></div>
+          </div>
+          <div id="cfgBlacklistTagChips" class="ts-tag-source-grid" style="margin-top:12px"></div>
+        </div>
+        <div style="margin-top:18px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+            <label class="field-label ts-title-help-wrap" style="margin:0">Vice folders
+              <button type="button" class="ts-info-btn" aria-label="About vice folders" data-ts-help-template="help-q-vice-folders"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+            </label>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+            <input class="field-input" id="cfgNewViceName" type="text" placeholder="New vice name (e.g. Foot Fetish)…" style="flex:1" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();addVice();}">
+            <button type="button" class="btn-secondary" onclick="addVice()" title="New vice"><i class="fa-solid fa-plus"></i> <span class="btn-label">Add Vice</span></button>
+          </div>
+          <div id="cfgVicesList" style="display:flex;flex-direction:column;gap:10px"></div>
+        </div>
+      </div>
+
+
+            </div>
+
+            <div class="settings-category-panel" data-settings-category="pipeline" style="display:none">
+      <!-- Naming patterns -->
+      <div class="settings-section">
+        <div class="settings-section-title ts-title-help-wrap">Naming Patterns
+          <button type="button" class="ts-info-btn" aria-label="About naming pattern tokens" data-ts-help-template="help-q-naming-tokens"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+        </div>
+        <div class="token-guide">
+          <span class="token">{title} <span>scene title</span></span>
+          <span class="token">{studio} <span>studio name</span></span>
+          <span class="token">{performer} <span>first matched star</span></span>
+          <span class="token">{performers} <span>all stars</span></span>
+          <span class="token">{year} <span>YYYY</span></span>
+          <span class="token">{month} <span>MM</span></span>
+          <span class="token">{day} <span>DD</span></span>
+          <span class="token">{date} <span>YYYY-MM-DD</span></span>
+          <span class="token">{source} <span>database source</span></span>
+        </div>
+
+        <div class="field-row" style="margin-top:16px">
+          <div class="field-label" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span>Series pattern <span style="color:var(--muted)">(studio match)</span></span>
+            <button type="button" class="ts-info-btn" aria-label="About series pattern output" data-ts-help-template="help-q-pattern-series"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+          </div>
+          <input class="field-input" id="cfgPatternSeries" type="text">
+        </div>
+
+        <div class="field-row">
+          <div class="field-label" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span>Star pattern <span style="color:var(--muted)">(star match)</span></span>
+            <button type="button" class="ts-info-btn" aria-label="About star pattern output" data-ts-help-template="help-q-pattern-performer"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+          </div>
+          <input class="field-input" id="cfgPatternPerformer" type="text">
+        </div>
+      </div>
+
+      <!-- Automatic Retry -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title">Automatic Retry</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgRetryEnabled" onchange="toggleSection('retryBody', this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="collapsible-body" id="retryBody" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="field-row">
+              <label class="field-label">Run at hour (0–23)</label>
+              <input class="field-input" id="cfgRetryHour" type="number" min="0" max="23" placeholder="1">
+            </div>
+            <div class="field-row">
+              <label class="field-label">Frequency (hours)</label>
+              <select class="select-input" id="cfgRetryFreq" style="width:100%">
+                <option value="1">Every hour</option>
+                <option value="2">Every 2 hours</option>
+                <option value="4">Every 4 hours</option>
+                <option value="6">Every 6 hours</option>
+                <option value="12">Every 12 hours</option>
+                <option value="24">Every 24 hours</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-hint" id="retryNextRun" style="margin-top:8px"></div>
+        </div>
+      </div>
+
+      <!-- Folder Watch -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title">Folder Watch</div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgWatchEnabled" onchange="toggleSection('watchBody', this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="collapsible-body" id="watchBody" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="field-row">
+              <label class="field-label">Hold time (seconds)</label>
+              <input class="field-input" id="cfgWatchHold" type="number" min="10" max="600" placeholder="60">
+            </div>
+            <div class="field-row">
+              <label class="field-label">Status</label>
+              <div id="watcherStatus" style="font-size:14px;color:var(--dim);padding:9px 0">Checking...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filename Parsing -->
+      <div class="settings-section">
+        <div class="collapsible-header" onclick="toggleCollapsible('filenameBody', 'filenameArrow')">
+          <div class="collapsible-header-main">
+            <div class="settings-section-title">Filename Parsing</div>
+            <button type="button" class="ts-info-btn" aria-label="About filename parsing patterns" data-ts-help-template="help-q-filename-patterns" onclick="event.stopPropagation();"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+          </div>
+          <span class="collapsible-arrow" id="filenameArrow">▶</span>
+        </div>
+        <div class="collapsible-body" id="filenameBody">
+          <div class="field-row" style="margin-top:12px">
+            <label class="field-label">Pattern order <span style="color:var(--muted)">(pipe-separated, tried in order)</span></label>
+            <input class="field-input" id="cfgFilenamePatterns" type="text" placeholder="pipe|dot_date|dot_date_short|bracket_site|dash_date">
+          </div>
+          <div class="field-row" style="margin-top:10px">
+            <label class="field-label">Min file size (MB) — smaller files are skipped</label>
+            <input class="field-input" id="cfgMinFileSize" type="number" min="0" placeholder="10" style="width:120px">
+          </div>
+          <div class="field-row" style="margin-top:10px">
+            <label class="field-label">Activity log retention (days)</label>
+            <input class="field-input" id="cfgLogRetentionDays" type="number" min="1" max="365" placeholder="14" style="width:120px">
+            <span style="font-size:14px;color:var(--dim);margin-left:8px">Older lines removed daily. Full log: <a href="/log" style="color:var(--accent)">Log</a> page.</span>
+          </div>
+          <div class="field-row" style="margin-top:10px">
+            <label class="field-label">Strip words <span style="color:var(--muted)">(comma-separated — removed from filenames before parsing)</span></label>
+            <input class="field-input" id="cfgStripWords" type="text" placeholder="fuckingsession.com,lulustream.com">
+          </div>
+        </div>
+      </div>
+
+      <!-- Site Abbreviations -->
+      <div class="settings-section">
+        <div class="collapsible-header" onclick="toggleCollapsible('abbrevBody', 'abbrevArrow')">
+          <div class="collapsible-header-main">
+            <div class="settings-section-title">Site Abbreviations</div>
+            <button type="button" class="ts-info-btn" aria-label="About site abbreviations" data-ts-help-template="help-q-site-abbrevs-section" onclick="event.stopPropagation();"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+          </div>
+          <span class="collapsible-arrow" id="abbrevArrow">▶</span>
+        </div>
+        <div class="collapsible-body" id="abbrevBody">
+          <div class="field-row" style="margin-top:12px">
+            <div class="field-label" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span>Abbreviations — JSON map of short name → full name</span>
+              <button type="button" class="ts-info-btn" aria-label="About abbreviations map" data-ts-help-template="help-q-site-abbrevs"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+            </div>
+            <textarea class="field-input" id="cfgSiteAbbrevs" rows="5" style="font-size:14px;resize:none" placeholder='{"brcc": "Backroom Casting Couch", "nvg": "Net Video Girls"}'></textarea>
+          </div>
+          <div class="field-row" style="margin-top:10px">
+            <div class="field-label" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span>Rename map — JSON map of wrong name → correct name</span>
+              <button type="button" class="ts-info-btn" aria-label="About site rename map" data-ts-help-template="help-q-site-rename"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+            </div>
+            <textarea class="field-input" id="cfgSiteRenameMap" rows="4" style="font-size:14px;resize:none" placeholder='{"Tonights Girlfriend": "Tonights Girlfriend"}'></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alias Lookup -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title ts-title-help-wrap">Star Alias Lookup
+            <button type="button" class="ts-info-btn" aria-label="About star alias lookup" data-ts-help-template="help-q-alias-lookup"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgAliasLookup">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Library index → queue filing -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title ts-title-help-wrap">Queue: use library ID index
+            <button type="button" class="ts-info-btn" aria-label="About library ID index matching" data-ts-help-template="help-q-library-index"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgLibraryIndexQueue" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="field-row" style="margin-top:12px">
+          <label class="field-label">Library index: skip subfolders named <span style="color:var(--dim)">(comma-separated basenames)</span></label>
+          <input class="field-input" id="cfgLibraryWalkPrune" type="text" placeholder="Custom, Hentai, Scripts">
+          <p style="font-size:14px;color:var(--dim);margin:6px 0 0;line-height:1.45">Health → <strong>Index library</strong> will not descend into these names (same idea as <code>find -prune</code>). Recycle bins and common NAS junk are always skipped.</p>
+        </div>
+      </div>
+
+
+
+            </div>
+
+            <!-- Databases -->
+            <div class="settings-category-panel" data-settings-category="databases" style="display:none">
+      <!-- Auto-submission back to source databases -->
+      <div class="settings-section">
+        <div class="settings-section-title ts-title-help-wrap">Database submission
+          <button type="button" class="ts-info-btn" aria-label="About automatic database submission" data-ts-help-template="help-q-submit-phash"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+              <img src="/static/logos/stashdb.webp" alt="StashDB" style="height:16px;max-width:90px" onerror="this.style.display='none'">
+              <span style="font-family:var(--secs);font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:var(--dim)">StashDB</span>
+            </div>
+            <div class="toggle-row" style="margin-bottom:6px">
+              <span style="font-size:12px;color:var(--text)">Submit phash</span>
+              <label class="toggle"><input type="checkbox" id="cfgSubmitPhashStashdb"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="toggle-row">
+              <span style="font-size:12px;color:var(--text)">Create scene if missing</span>
+              <label class="toggle"><input type="checkbox" id="cfgSubmitSceneStashdb"><span class="toggle-slider"></span></label>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+              <img src="/static/logos/fansdb.webp" alt="FansDB" style="height:16px;max-width:90px" onerror="this.style.display='none'">
+              <span style="font-family:var(--secs);font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:var(--dim)">FansDB</span>
+            </div>
+            <div class="toggle-row" style="margin-bottom:6px">
+              <span style="font-size:12px;color:var(--text)">Submit phash</span>
+              <label class="toggle"><input type="checkbox" id="cfgSubmitPhashFansdb"><span class="toggle-slider"></span></label>
+            </div>
+            <div class="toggle-row">
+              <span style="font-size:12px;color:var(--text)">Create scene if missing</span>
+              <label class="toggle"><input type="checkbox" id="cfgSubmitSceneFansdb"><span class="toggle-slider"></span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title ts-title-help-wrap">Manual filing — StashDB submit default
+            <button type="button" class="ts-info-btn" aria-label="About default manual StashDB submission" data-ts-help-template="help-q-manual-submit-default"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgManualSubmitDefault">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- API Keys -->
+      <div class="settings-section">
+        <div class="settings-section-title">API Keys</div>
+        <div class="field-row">
+          <label class="field-label">TMDB</label>
+          <input class="field-input" id="cfgKeyTmdb" type="password" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <label class="field-label">StashDB</label>
+          <input class="field-input" id="cfgKeyStashdb" type="password" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <label class="field-label">ThePornDB</label>
+          <input class="field-input" id="cfgKeyTpdb" type="password" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <label class="field-label">FansDB</label>
+          <input class="field-input" id="cfgKeyFansdb" type="password" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <label class="field-label" style="display:flex;align-items:center;gap:8px"><img src="/static/logos/javstash.webp" alt="" style="height:16px;width:auto;opacity:0.92">JAVStash</label>
+          <input class="field-input" id="cfgKeyJavstash" type="password" autocomplete="off" placeholder="API key from javstash.org">
+        </div>
+      </div>
+
+      <!-- IAFD (HTML scraper, no API key) -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title ts-title-help-wrap">IAFD scene search
+            <button type="button" class="ts-info-btn" aria-label="About IAFD scene search" data-ts-help-template="help-q-iafd-search"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgIafdSearchEnabled">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- TPDB Favourites Sync -->
+      <div class="settings-section">
+        <div class="settings-section-title ts-title-help-wrap">TPDB Favourites Sync
+          <button type="button" class="ts-info-btn" aria-label="About TPDB favourites sync" data-ts-help-template="help-q-tpdb-sync"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label"><input type="checkbox" id="cfgTpdbSyncEnabled" style="margin-right:6px"> Enable scheduled sync</label>
+          </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label"><input type="checkbox" id="cfgTpdbSyncToFavs" style="margin-right:6px"> Sync library stars + studios → TPDB favourites</label>
+          </div>
+          <div class="field-row">
+            <label class="field-label">Sync Hour</label>
+            <input class="field-input" id="cfgTpdbSyncHour" type="number" min="0" max="23" placeholder="2">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Frequency (hours)</label>
+            <input class="field-input" id="cfgTpdbSyncFreq" type="number" min="1" max="168" placeholder="24">
+          </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label">Star directory <span style="color:var(--dim)">(create folders here)</span></label>
+            <input class="field-input" id="cfgTpdbSyncPerformerDir" type="text" placeholder="/library/Stars">
+          </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label">Studio directory <span style="color:var(--dim)">(optional)</span></label>
+            <input class="field-input" id="cfgTpdbSyncStudioDir" type="text" placeholder="/library/Series">
+          </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <button class="btn-secondary" onclick="runTpdbSync()" style="font-size:14px;padding:6px 14px" title="Run sync now"><i class="fa-solid fa-arrows-rotate"></i> <span class="btn-label">Run sync now</span></button>
+            <span id="tpdbSyncStatus" style="font-size:14px;color:var(--dim);margin-left:8px"></span>
+          </div>
+        </div>
+      </div>
+
+<template id="help-q-manual-stashdb"><div class="ts-help-prose"><p>Studio and star names will be looked up on StashDB. Close matches will ask for confirmation before submitting.</p></div></template>
+<template id="help-q-studio-logos-resync"><div class="ts-help-prose"><p>One-shot studio-logo maintenance — runs automatically every 6 hours, use this to trigger it on demand:</p><ol><li><strong>Import</strong> any images you've dropped into <code>metadata/studio_logos/</code> or <code>metadata/studio_images/</code>. Accepts PNG, JPG, WebP, GIF, SVG, BMP, TIFF — non-PNGs are converted to PNG on import and files in <code>studio_images/</code> are moved into the canonical <code>studio_logos/</code> folder. Manual drops always win over existing entries.</li><li><strong>Discover</strong> new studios by walking every NFO under your library roots for <code>&lt;studio&gt;</code> tags. New names are queued with <code>logo_path=NULL</code> so the fetcher can pick them up.</li><li><strong>Fetch</strong> missing logos from StashDB for every queued row. Requires a StashDB API key under Settings → Databases; without one the fetch step is skipped and the result line shows <code>skipped (no_stashdb_key)</code>.</li></ol></div></template>
+<template id="help-q-performer-dirs"><div class="ts-help-prose"><p>Matched in rank order. Files route to the first directory that contains a matching star folder.</p><p>Each entry must be a <strong>root folder</strong> whose <em>immediate subfolders</em> are star names (not your Series studio tree — that path is <strong>Series Library Directory</strong> above).</p></div></template>
+<template id="help-q-naming-tokens"><div class="ts-help-prose"><p>Use these placeholders in series and star patterns (the chips above list the same tokens):</p><p><code>{title}</code> scene title · <code>{studio}</code> studio · <code>{performer}</code> first matched star · <code>{performers}</code> all stars · <code>{year}</code> <code>{month}</code> <code>{day}</code> · <code>{date}</code> (YYYY-MM-DD) · <code>{source}</code> database source.</p></div></template>
+<template id="help-q-pattern-series"><div class="ts-help-prose"><p>Season folder is added automatically. Example output: <em>Season 2024 / ATK Girlfriends - S2024E0228 - Paradise Cove 2.mkv</em></p></div></template>
+<template id="help-q-pattern-performer"><div class="ts-help-prose"><p>Season folder is added automatically. Example output: <em>Season 2024 / Juniper Ren - S2024E0228 - ATK Girlfriends - Paradise Cove 2.mkv</em></p></div></template>
+<template id="help-q-filename-patterns"><div class="ts-help-prose"><p>Pattern names are pipe-separated and tried in order.</p><p><code>pipe</code> — site|date|performers|title<br><code>dot_date</code> — site.YYYY.MM.DD.title<br><code>dot_date_short</code> — site.YY.MM.DD.title<br><code>bracket_site</code> — [Site] Title<br><code>dash_date</code> — site - YYYY-MM-DD - title</p></div></template>
+<template id="help-q-site-abbrevs-section"><div class="ts-help-prose"><p>Two JSON maps: <strong>abbreviations</strong> expand short site names in filenames; <strong>rename map</strong> fixes known bad names from databases. Use the icons next to each field for details.</p></div></template>
+<template id="help-q-site-abbrevs"><div class="ts-help-prose"><p>Expands short site names found in filenames during parsing.</p></div></template>
+<template id="help-q-site-rename"><div class="ts-help-prose"><p>Corrects known bad site names returned by databases (e.g. &quot;BANG! Casting&quot; → &quot;Bang! Casting&quot;).</p></div></template>
+<template id="help-q-alias-lookup"><div class="ts-help-prose"><p>When a star&apos;s name doesn&apos;t match any folder, search StashDB, ThePornDB, and FansDB for their aliases and try matching those instead. Adds a small delay per unmatched star (one API call per source).</p></div></template>
+<template id="help-q-library-index"><div class="ts-help-prose"><p>When enabled, the filing queue uses folder ↔ database ID links from your Favourites index to match stars and studios before falling back to name matching. More accurate but requires a populated Favourites index.</p></div></template>
+<template id="help-q-content-filters"><div class="ts-help-prose"><p>Select which content categories to include in results across all pages. Scenes whose star genders don't match any enabled category are hidden.</p></div></template>
+<template id="help-q-tag-blacklist"><div class="ts-help-prose"><p>Scenes and movies matching any of these will be hidden from feeds. Search StashDB for tags to blacklist.</p><p>Exclude scenes and movies that carry any of these StashDB tags (exact name match, case-insensitive). Scenes with no tags are not excluded. Applied to the scenes feed, recent scenes, and movies search.</p></div></template>
+<template id="help-q-media-scans"><div class="ts-help-prose"><p>Trigger library scans after filing on your media servers. Scans are debounced — multiple files filing in quick succession fire only one scan.</p></div></template>
+<template id="help-q-submit-phash"><div class="ts-help-prose"><p>After a scene is filed, push the phash back to each database so future matches find it. If the scene doesn't exist on a database yet, optionally create it from the filed metadata.</p><p>Automatically submits perceptual hashes to StashDB after a successful match, helping improve the database for everyone.</p></div></template>
+<template id="help-q-manual-submit-default"><div class="ts-help-prose"><p>Sets the default state of the StashDB submission toggle on the manual filing form.</p></div></template>
+<template id="help-q-download-clients"><div class="ts-help-prose"><p>Configure your NZB and torrent clients directly — Top-Shelf will send downloads to them from the Discover page and scene search results.</p></div></template>
+<template id="help-q-download-watch"><div class="ts-help-prose"><p>Watches folders for completed NZB or torrent downloads. Strips junk files, renames gibberish filenames from the parent folder name, then moves videos to your Scene Source or Movies Library folder. Uses the same hold time as the folder watcher.</p></div></template>
+<template id="help-q-prowlarr"><div class="ts-help-prose"><p>Prowlarr searches across your configured indexers. Download clients are configured separately above. The category tag is used to route grabs to the correct client queue.</p></div></template>
+<template id="help-q-rss-feeds"><div class="ts-help-prose"><p>Add one or more feed URLs (Torznab, Newznab, RSS, or Atom). On the <strong>Discover</strong> page, switch the Search toggle to RSS to view a merged list ordered by publication date.</p><p>Releases are filtered to those whose titles contain a star or studio folder name from your Favourites index. Use the <strong>RSS Keyword Blacklist</strong> below to additionally exclude releases by keyword (e.g. <code>480p</code>, <code>VERTICAL</code>).</p></div></template>
+<template id="help-q-tpdb-sync"><div class="ts-help-prose"><p>Bidirectional sync between your library and ThePornDB favourites. Library → TPDB adds star and studio folders to your TPDB favourites list. TPDB → Library creates TVShow folders locally for stars you've favourited on TPDB but don't yet have a folder for.</p></div></template>
+<template id="help-q-iafd-search"><div class="ts-help-prose"><p>Also query <strong>IAFD</strong> (Internet Adult Film Database) during manual scene search. IAFD returns title/studio/year for movies and older scenes the other databases often don't cover. IAFD has no API key — results come from scraping its public results page, which can be slower and occasionally rate-limited.</p><p>IAFD scenes are filed with a year-only release date (<code>YYYY-01-01</code>) since IAFD doesn't expose full dates. Rows without a year show as reference-only (the "Use this" button is disabled).</p></div></template>
+<template id="help-q-session-timeout"><div class="ts-help-prose"><p>Log out after this many minutes of <strong>user inactivity</strong>. Only real input on the page (clicks, key presses, taps) slides the window forward — background polling from open tabs (queue, downloads, activity) <strong>does not</strong> count. Leave a tab open and walk away, it locks after the configured period.</p></div></template>
+<template id="help-q-vice-folders"><div class="ts-help-prose"><p>Each vice has its own folder under your Vices Library Directory and groups one or more StashDB tags. Matched scenes carrying any of a vice's tags can auto-file into that vice's folder. Create a vice below, then assign tags to it.</p></div></template>
+            </div>
+
+            <!-- Downloads -->
+            <div class="settings-category-panel" data-settings-category="downloads" style="display:none">
+      <!-- Download Clients -->
+      <div class="settings-section">
+        <div class="settings-section-title ts-title-help-wrap">Download Clients
+          <button type="button" class="ts-info-btn" aria-label="About download clients" data-ts-help-template="help-q-download-clients"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="settings-subhead settings-subhead--first">NZB Client</div>
+          <div class="field-row">
+            <label class="field-label">Client</label>
+            <select class="field-input" id="cfgDlNzbClient" onchange="toggleNzbFields()">
+              <option value="">None</option>
+              <option value="nzbget">NZBGet</option>
+              <option value="sabnzbd">SABnzbd</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label class="field-label">Host</label>
+            <input class="field-input" id="cfgDlNzbHost" type="text" placeholder="192.168.1.x">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Port</label>
+            <input class="field-input" id="cfgDlNzbPort" type="text" placeholder="6789">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Username</label>
+            <input class="field-input" id="cfgDlNzbUser" type="text" placeholder="nzbget">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Password</label>
+            <input class="field-input" id="cfgDlNzbPass" type="password" autocomplete="off">
+          </div>
+          <div class="field-row" id="nzbApiKeyRow">
+            <label class="field-label">API Key <span style="color:var(--dim)">(SABnzbd only)</span></label>
+            <input class="field-input" id="cfgDlNzbApiKey" type="password" autocomplete="off">
+          </div>
+          <div class="field-row" id="nzbPriorityRow">
+            <label class="field-label">Priority <span style="color:var(--dim)">(client-native)</span></label>
+            <select class="field-input" id="cfgDlNzbPriority"></select>
+          </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <div style="display:flex;align-items:center;gap:12px">
+              <button type="button" id="dlNzbTestBtn" class="btn-secondary" onclick="testDlNzbClient()" style="font-size:14px;padding:6px 12px">Test connection</button>
+              <span id="dlNzbTestStatus" class="dl-test-status" aria-live="polite"></span>
+            </div>
+          </div>
+
+          <div class="settings-subhead settings-subhead--sep">Torrent Client</div>
+          <div class="field-row">
+            <label class="field-label">Client</label>
+            <select class="field-input" id="cfgDlTorrentClient" onchange="_rebuildTorrentPriorityOptions()">
+              <option value="">None</option>
+              <option value="qbittorrent">qBittorrent</option>
+              <option value="transmission">Transmission</option>
+              <option value="deluge">Deluge</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label class="field-label">Host</label>
+            <input class="field-input" id="cfgDlTorrentHost" type="text" placeholder="192.168.1.x">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Port</label>
+            <input class="field-input" id="cfgDlTorrentPort" type="text" placeholder="8080">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Username</label>
+            <input class="field-input" id="cfgDlTorrentUser" type="text" placeholder="admin">
+          </div>
+          <div class="field-row">
+            <label class="field-label">Password</label>
+            <input class="field-input" id="cfgDlTorrentPass" type="password" autocomplete="off">
+          </div>
+          <div class="field-row" id="torrentPriorityRow">
+            <label class="field-label">Priority <span style="color:var(--dim)">(client-native)</span></label>
+            <select class="field-input" id="cfgDlTorrentPriority"></select>
+          </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <div style="display:flex;align-items:center;gap:12px">
+              <button type="button" id="dlTorrentTestBtn" class="btn-secondary" onclick="testDlTorrentClient()" style="font-size:14px;padding:6px 12px">Test connection</button>
+              <span id="dlTorrentTestStatus" class="dl-test-status" aria-live="polite"></span>
+            </div>
+          </div>
+
+          <div class="settings-subhead settings-subhead--sep">
+            Download Folder Watch
+            <button type="button" class="ts-info-btn" aria-label="About download folder watch" data-ts-help-template="help-q-download-watch"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+          </div>
+          <div class="toggle-row" style="grid-column:1/-1">
+            <span style="font-size:calc(12px + 2pt);color:var(--dim);letter-spacing:0.04em;text-transform:uppercase;flex:1;min-width:0;line-height:1.35">Enable download folder watch</span>
+            <label class="toggle">
+              <input type="checkbox" id="cfgDownloadWatchEnabled" onchange="toggleSection('downloadWatchBody', this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="collapsible-body" id="downloadWatchBody" style="display:none;grid-column:1/-1">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+              <div class="field-row" style="grid-column:1/-1">
+                <label class="field-label">Scene watch directory</label>
+                <input class="field-input" id="cfgDownloadWatchDir" type="text" placeholder="/path/to/scene downloads complete">
+              </div>
+              <div class="field-row" style="grid-column:1/-1">
+                <label class="field-label">Movie watch directory</label>
+                <input class="field-input" id="cfgMovieDownloadWatchDir" type="text" placeholder="/path/to/movie downloads complete">
+              </div>
+              <div class="field-row">
+                <label class="field-label">Hold time (seconds)</label>
+                <input class="field-input" id="cfgDownloadWatchHold" type="number" min="30" max="3600" placeholder="300">
+              </div>
+              <div class="field-row" style="grid-column:1/-1">
+                <label class="field-label"><input type="checkbox" id="cfgDownloadImportRemove" style="margin-right:8px">After the <strong>download watch</strong> folder processes a completed release, remove the matching job from the client (torrents: delete data on disk too)</label>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Prowlarr -->
+      <div class="settings-section">
+        <div class="settings-section-title ts-title-help-wrap">Prowlarr
+          <button type="button" class="ts-info-btn" aria-label="About Prowlarr integration" data-ts-help-template="help-q-prowlarr"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-row">
+            <label class="field-label">Prowlarr URL</label>
+            <input class="field-input" id="cfgProwlarrUrl" type="text" placeholder="http://192.168.1.x:9696">
+          </div>
+          <div class="field-row">
+            <label class="field-label">API Key</label>
+            <input class="field-input" id="cfgProwlarrKey" type="password" autocomplete="off">
+          </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label">Status</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div id="prowlarrStatus" style="font-size:14px;color:var(--dim);padding:9px 0">Not checked</div>
+              <button class="btn-secondary" onclick="refreshIndexers()" style="font-size:14px;padding:4px 8px">Refresh indexers</button>
+              <span id="indexerCount" style="font-size:14px;color:var(--dim)"></span>
+            </div>
+          </div>
+          <div class="settings-subhead settings-subhead--sep">Download Category</div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label">Category <span style="color:var(--dim)">(scenes, queue, default)</span></label>
+            <input class="field-input" id="cfgProwlarrCategory" type="text" placeholder="Top-Shelf">
+          </div>
+          <div class="field-row" style="grid-column:1/-1">
+            <label class="field-label">Movies category <span style="color:var(--dim)">(Prowlarr grabs from Movies page; blank = same as above)</span></label>
+            <input class="field-input" id="cfgProwlarrCategoryMovies" type="text" placeholder="">
+          </div>
+        </div>
+      </div>
+
+
+
+            </div>
+
+            <!-- Media Servers -->
+                        <div class="settings-category-panel" data-settings-category="rss" style="display:none">
+      <!-- RSS feeds (merged on Downloads page, ordered by date across all URLs) -->
+      <div class="settings-section" id="settingsSectionRssFeeds">
+        <div class="settings-section-title ts-title-help-wrap">Download RSS feeds
+          <button type="button" class="ts-info-btn" aria-label="About RSS feeds" data-ts-help-template="help-q-rss-feeds"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+        </div>
+        <p style="font-size:14px;color:var(--dim);line-height:1.5;margin:0 0 12px">Add one or more feed URLs (Torznab, Newznab, RSS, or Atom). On the <a href="/downloads" style="color:var(--accent)">Downloads</a> page, switch the Search panel to RSS to view a merged list ordered by publication date. Only releases whose titles mention a star or studio folder from your Favourites index are shown.</p>
+        <div id="rssFeedsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
+        <button type="button" class="btn-secondary" onclick="addRssFeedRow()" title="Add feed URL"><i class="fa-solid fa-plus"></i> <span class="btn-label">Add feed URL</span></button>
+      </div>
+
+      <!-- News-only RSS feeds (rendered on /news as article tiles, distinct
+           from download_rss_feeds above which feeds the Downloads Wanted
+           and Search panels). Article shape (title + summary + thumb), no
+           library matching, no download client wiring. -->
+      <div class="settings-section" id="settingsSectionNewsFeeds">
+        <div class="settings-section-title">News feeds</div>
+        <p style="font-size:14px;color:var(--dim);line-height:1.5;margin:0 0 12px">Article-shaped RSS / Atom feeds rendered on the <a href="/news" style="color:var(--accent)">News</a> page. Separate from the download feeds above — never filtered by your Favourites index, never sent to a download client. The 11 default sources are seeded on first launch; use <strong>Restore defaults</strong> to bring them back after pruning.</p>
+        <div id="newsRssFeedsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn-secondary" onclick="addNewsRssFeedRow()" title="Add news feed URL"><i class="fa-solid fa-plus"></i> <span class="btn-label">Add feed URL</span></button>
+          <button type="button" class="btn-secondary" onclick="restoreNewsRssDefaults()" title="Restore defaults"><i class="fa-solid fa-rotate-left"></i> <span class="btn-label">Restore defaults</span></button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">RSS Keyword Blacklist</div>
+        <div class="field-row">
+          <label class="field-label">Exclude releases containing these keywords <span style="color:var(--dim)">(comma-separated, case-insensitive)</span></label>
+          <input class="field-input" id="cfgRssKeywordBlacklist" type="text" placeholder="480p, VERTICAL, sample">
+        </div>
+      </div>
+
+            </div>
+
+            <div class="settings-category-panel" data-settings-category="mediaservers" style="display:none">
+      <!-- Media Server Integration -->
+      <div class="settings-section">
+        <div class="toggle-row">
+          <div class="settings-section-title ts-title-help-wrap">Media Server Scans
+            <button type="button" class="ts-info-btn" aria-label="About media server scans after filing" data-ts-help-template="help-q-media-scans"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="cfgMediaScanEnabled">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div style="margin-top:10px">
+          <label class="field-label">Debounce delay (minutes)</label>
+          <input class="field-input" id="cfgScanDebounce" type="number" min="1" max="60" placeholder="5" style="width:100px;margin-top:4px">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Media Servers</div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <!-- Stash -->
+          <div class="settings-service-card">
+            <div class="toggle-row" style="margin-bottom:10px">
+              <span class="settings-service-name">Stash</span>
+              <label class="toggle"><input type="checkbox" id="cfgStashEnabled"><span class="toggle-slider"></span></label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field-row"><label class="field-label">URL</label><input class="field-input" id="cfgStashUrl" type="text" placeholder="http://192.168.1.x:9999"></div>
+              <div class="field-row"><label class="field-label">API Key</label><input class="field-input" id="cfgStashKey" type="password" autocomplete="off"></div>
+            </div>
+          </div>
+          <!-- Jellyfin -->
+          <div class="settings-service-card">
+            <div class="toggle-row" style="margin-bottom:10px">
+              <span class="settings-service-name">Jellyfin</span>
+              <label class="toggle"><input type="checkbox" id="cfgJellyfinEnabled"><span class="toggle-slider"></span></label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field-row"><label class="field-label">URL</label><input class="field-input" id="cfgJellyfinUrl" type="text" placeholder="http://192.168.1.x:8096"></div>
+              <div class="field-row"><label class="field-label">API Key</label><input class="field-input" id="cfgJellyfinKey" type="password" autocomplete="off"></div>
+            </div>
+          </div>
+          <!-- Plex -->
+          <div class="settings-service-card">
+            <div class="toggle-row" style="margin-bottom:10px">
+              <span class="settings-service-name">Plex</span>
+              <label class="toggle"><input type="checkbox" id="cfgPlexEnabled"><span class="toggle-slider"></span></label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field-row"><label class="field-label">URL</label><input class="field-input" id="cfgPlexUrl" type="text" placeholder="http://192.168.1.x:32400"></div>
+              <div class="field-row"><label class="field-label">Token</label><input class="field-input" id="cfgPlexToken" type="password" autocomplete="off"></div>
+            </div>
+          </div>
+          <!-- Emby -->
+          <div class="settings-service-card">
+            <div class="toggle-row" style="margin-bottom:10px">
+              <span class="settings-service-name">Emby</span>
+              <label class="toggle"><input type="checkbox" id="cfgEmbyEnabled"><span class="toggle-slider"></span></label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field-row"><label class="field-label">URL</label><input class="field-input" id="cfgEmbyUrl" type="text" placeholder="http://192.168.1.x:8096"></div>
+              <div class="field-row"><label class="field-label">API Key</label><input class="field-input" id="cfgEmbyKey" type="password" autocomplete="off"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+            </div>
+
+            <div class="settings-category-panel" data-settings-category="health" style="display:none">
+              <div class="settings-section">
+                <div class="settings-section-title">Library Health</div>
+                <div class="field-row">
+                  <label class="field-label">
+                    <input type="checkbox" id="cfgHealthPhash3Recurring" style="margin-right:6px;accent-color:var(--accent)" onchange="syncHealthPhash3IntervalDisabled()">
+                    Enable recurring phash_3 rescan
+                  </label>
+                  <div style="font-size:14px;color:var(--dim);line-height:1.5">After a video is re-encoded by FileFlows or similar tools its perceptual hash changes. This job captures an updated hash for duplicate detection. phash_1 and phash_2 are permanent once written — only phash_3 is updated by this job.</div>
+                </div>
+                <div class="field-row">
+                  <label class="field-label">Rescan interval (days)</label>
+                  <input class="field-input" id="cfgHealthPhash3IntervalDays" type="number" min="1" max="365" placeholder="30" style="width:120px">
+                </div>
+              </div>
+              <div class="settings-section">
+                <div class="settings-section-title">Studio Logos</div>
+                <div class="field-row">
+                  <label class="field-label">
+                    Resync studio logos
+                    <button type="button" class="ts-info-btn" aria-label="About the studio-logo resync pipeline" data-ts-help-template="help-q-studio-logos-resync"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></button>
+                  </label>
+                  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                    <button type="button" class="btn-secondary" id="btnStudioLogosResync" onclick="runStudioLogosResync()" title="Fetch &amp; import"><i class="fa-solid fa-rotate" style="margin-right:6px"></i><span class="btn-label">Fetch &amp; import</span></button>
+                    <button type="button" class="btn-secondary" id="btnStudioLogosUnresolvable" onclick="loadStudioLogosUnresolvable()" title="Review"><i class="fa-solid fa-circle-exclamation" style="margin-right:6px"></i><span class="btn-label">Review unresolved</span></button>
+                    <span id="studioLogosResyncMsg" style="font-size:13px;color:var(--dim)"></span>
+                  </div>
+                  <div id="studioLogosSkippedBox" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(239,68,68,0.25);border-radius:8px;background:rgba(239,68,68,0.06);font-size:12px">
+                    <div style="font-weight:600;color:var(--text);margin-bottom:6px">Files the sync skipped</div>
+                    <div style="color:var(--dim);margin-bottom:6px">Rename or remove these in <code>metadata/studio_logos/</code> then re-run.</div>
+                    <ul id="studioLogosSkippedList" style="margin:0;padding-left:18px;color:var(--dim);font-family:monospace;font-size:12px;line-height:1.6"></ul>
+                  </div>
+                  <div id="studioLogosUnresolvedBox" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid rgba(251,146,60,0.25);border-radius:8px;background:rgba(251,146,60,0.06);font-size:12px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
+                      <div style="font-weight:600;color:var(--text)"><span id="studioLogosUnresolvedCount">0</span> studios StashDB couldn't resolve</div>
+                      <div style="display:flex;gap:6px">
+                        <button type="button" class="btn-secondary" style="padding:4px 10px;font-size:12px" onclick="retryAllStudioLogos()" title="Retry all"><i class="fa-solid fa-rotate-right" style="margin-right:4px"></i><span class="btn-label">Retry all</span></button>
+                        <button type="button" class="btn-secondary" style="padding:4px 10px;font-size:12px" onclick="closeStudioLogosUnresolved()"><i class="fa-solid fa-xmark"></i></button>
+                      </div>
+                    </div>
+                    <div style="color:var(--dim);margin-bottom:8px">Drop a PNG into <code>metadata/studio_logos/</code> named after the slug to satisfy these rows, paste a matching alias, or delete junk entries outright.</div>
+                    <div id="studioLogosUnresolvedList" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Appearance -->
+            <div class="settings-category-panel" data-settings-category="appearance" style="display:none">
+              <div class="settings-section">
+                <div class="settings-section-title">Theme</div>
+                <div class="field-row">
+                  <label class="field-label">UI palette</label>
+                  <select class="field-input" id="cfgUiTheme" style="width:260px" onchange="onUiThemeChange(this.value)">
+                    <option value="auto">Auto (match system)</option>
+                    <optgroup label="Dark">
+                      <option value="dark">Dark</option>
+                      <option value="nord-dark">Nord Dark</option>
+                      <option value="solarized">Solarized</option>
+                      <option value="dracula">Dracula</option>
+                      <option value="tokyo-night">Tokyo Night</option>
+                      <option value="gruvbox">Gruvbox</option>
+                      <option value="rose-pine">Rosé Pine</option>
+                      <option value="everforest-dark">Everforest Dark</option>
+                      <option value="kanagawa">Kanagawa</option>
+                      <option value="monokai-pro">Monokai Pro</option>
+                      <option value="catppuccin-frappe">Catppuccin Frappé</option>
+                      <option value="catppuccin-macchiato">Catppuccin Macchiato</option>
+                      <option value="catppuccin-mocha">Catppuccin Mocha</option>
+                    </optgroup>
+                    <optgroup label="Light">
+                      <option value="light">Light</option>
+                      <option value="nord-light">Nord Light</option>
+                      <option value="rose-pine-dawn">Rosé Pine Dawn</option>
+                      <option value="everforest-light">Everforest Light</option>
+                      <option value="catppuccin-latte">Catppuccin Latte</option>
+                    </optgroup>
+                    <optgroup label="Special">
+                      <option value="high-contrast">High Contrast (a11y)</option>
+                      <option value="sunset">Sunset</option>
+                      <option value="gram">Gram</option>
+                      <option value="game-station">Game Station</option>
+                      <option value="halogen">Halogen</option>
+                      <option value="glass">Glass (default)</option>
+                      <option value="vhs">VHS / Synthwave</option>
+                    </optgroup>
+                    <option value="custom">Custom…</option>
+                  </select>
+                  <div style="font-size:14px;color:var(--dim);line-height:1.5;margin-top:8px">Themes only swap the colour palette and duotone tones — the structural VHS shapes (parallelogram tiles, slanted edges, vertical name labels, glitch overlays) are universal. Changes apply instantly and persist across reloads.</div>
+                </div>
+
+                <!-- Accent override — single colour swap on top of the
+                     active theme. Cheaper than building a full Custom
+                     theme for the "I just want pink instead of teal"
+                     case. Empty value clears the override so the
+                     theme's own --accent reasserts. -->
+                <div class="field-row" style="margin-top:14px">
+                  <label class="field-label">Accent override</label>
+                  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                    <input type="color" id="cfgUiAccentOverride" oninput="_updateHex(this);onAccentOverrideChange(this.value)" style="width:80px;height:36px;padding:0;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer">
+                    <code class="hex-value" style="font-family:var(--mono);font-size:13px;color:var(--dim);user-select:all">—</code>
+                    <button type="button" class="btn-secondary" id="btnAccentOverrideDefault" onclick="restoreDefaultAccent()" style="font-size:13px;padding:6px 12px">Restore default</button>
+                    <button type="button" class="btn-secondary" id="btnAccentOverrideClear" onclick="clearAccentOverridePicker()" style="font-size:13px;padding:6px 12px">Clear</button>
+                  </div>
+                  <div style="font-size:14px;color:var(--dim);line-height:1.5;margin-top:6px">Optional. Replaces the active theme's secondary brand colour (highlight pills, active states, danger). <strong>Restore default</strong> sets the Top-Shelf brand orange (#F55600). <strong>Clear</strong> drops the override so the active theme's own accent reasserts.</div>
+                </div>
+              </div>
+
+              <!-- Custom theme builder — visible only when "Custom" is selected. -->
+              <div class="settings-section" id="customThemeSection" style="display:none">
+                <div class="settings-section-title">Custom Palette</div>
+                <div class="field-row" style="margin-bottom:12px">
+                  <label class="field-label">Base</label>
+                  <div style="display:flex;gap:14px;align-items:center;font-size:14px">
+                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="customBase" value="dark" onchange="onCustomFieldChange()" style="accent-color:var(--accent)"> Dark</label>
+                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="customBase" value="light" onchange="onCustomFieldChange()" style="accent-color:var(--accent)"> Light</label>
+                  </div>
+                  <div style="font-size:14px;color:var(--dim);line-height:1.5;margin-top:6px">Base decides text / border / status colours. Pickers below retint the brand and panel hues on top.</div>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 20px;align-items:start">
+                  <div class="field-row" style="margin:0">
+                    <label class="field-label">Brand (primary)</label>
+                    <div style="display:flex;gap:10px;align-items:center">
+                      <input type="color" id="cfgCustomBrandPurple" oninput="_updateHex(this);onCustomFieldChange()" style="width:80px;height:36px;padding:0;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer">
+                      <code class="hex-value" style="font-family:var(--mono);font-size:13px;color:var(--dim);user-select:all">—</code>
+                    </div>
+                    <div style="font-size:13px;color:var(--dim);margin-top:4px">Accents, borders, pill fills</div>
+                  </div>
+                  <div class="field-row" style="margin:0">
+                    <label class="field-label">Brand (secondary)</label>
+                    <div style="display:flex;gap:10px;align-items:center">
+                      <input type="color" id="cfgCustomBrandAccent" oninput="_updateHex(this);onCustomFieldChange()" style="width:80px;height:36px;padding:0;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer">
+                      <code class="hex-value" style="font-family:var(--mono);font-size:13px;color:var(--dim);user-select:all">—</code>
+                    </div>
+                    <div style="font-size:13px;color:var(--dim);margin-top:4px">Highlights, active states</div>
+                  </div>
+                  <div class="field-row" style="margin:0">
+                    <label class="field-label">Body backdrop</label>
+                    <div style="display:flex;gap:10px;align-items:center">
+                      <input type="color" id="cfgCustomBgPanel" oninput="_updateHex(this);onCustomFieldChange()" style="width:80px;height:36px;padding:0;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer">
+                      <code class="hex-value" style="font-family:var(--mono);font-size:13px;color:var(--dim);user-select:all">—</code>
+                    </div>
+                    <div style="font-size:13px;color:var(--dim);margin-top:4px">Page background overlay tint</div>
+                  </div>
+                  <div class="field-row" style="margin:0">
+                    <label class="field-label">Panel (light)</label>
+                    <div style="display:flex;gap:10px;align-items:center">
+                      <input type="color" id="cfgCustomPanelHi" oninput="_updateHex(this);onCustomFieldChange()" style="width:80px;height:36px;padding:0;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer">
+                      <code class="hex-value" style="font-family:var(--mono);font-size:13px;color:var(--dim);user-select:all">—</code>
+                    </div>
+                    <div style="font-size:13px;color:var(--dim);margin-top:4px">Gradient top / card surface</div>
+                  </div>
+                  <div class="field-row" style="margin:0">
+                    <label class="field-label">Panel (dark)</label>
+                    <div style="display:flex;gap:10px;align-items:center">
+                      <input type="color" id="cfgCustomPanelLo" oninput="_updateHex(this);onCustomFieldChange()" style="width:80px;height:36px;padding:0;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer">
+                      <code class="hex-value" style="font-family:var(--mono);font-size:13px;color:var(--dim);user-select:all">—</code>
+                    </div>
+                    <div style="font-size:13px;color:var(--dim);margin-top:4px">Gradient bottom / recessed surface</div>
+                  </div>
+                  <div class="field-row" style="margin:0">
+                    <label class="field-label">Contrast check</label>
+                    <div id="customContrastBadge" class="custom-contrast-badge" title="Live-updated as you edit.">—</div>
+                    <div style="font-size:13px;color:var(--dim);margin-top:4px">Hover for contrast ratio details</div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div><!-- end settings-panel-scroll -->
+        </div><!-- end settings-panel-outer -->
+
+      </div><!-- end settings-modal-layout -->
+
+    </div><!-- end settings-shell-body -->
+  </div><!-- end settings-shell -->
+</div><!-- end #settingsRoot -->
+</div><!-- end .app.settings-page-app -->
+<div id="settingsSavedToast" class="settings-saved-toast" role="status" aria-live="polite"></div>
+<script src="/static/ts-help.js?v=20260529"></script>
+<script src="/static/settings-page.js?v=20260614e"></script>
+<script defer src="/static/activity-banner.js?v=20260531"></script>
+<script defer src="/static/app-shell.js?v=20260529"></script>
+<script>
+fetch('/api/status').then(r => r.json()).then(d => {
+  const el = document.getElementById('appVersion');
+  if (el && d.version) el.textContent = 'v' + d.version;
+});
+</script>
+</body>
+</html>

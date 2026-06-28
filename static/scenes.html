@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Scenes</title>
+
+<link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
+<link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
+<!-- webawesome bundle previously loaded here. The page uses zero
+     <wa-*> elements, and the bundled localize.js / chunk module
+     ships a self-referencing import cycle that throws on load. -->
+<script src="/static/theme-init.js?v=20260614c"></script>
+<link rel="stylesheet" href="/static/app-shell.css?v=27">
+<link rel="stylesheet" href="/static/scenes.css?v=2">
+<script src="/static/ts-utils.js?v=20260614a"></script>
+<script src="/static/lib-entity-actions.js?v=20260612c"></script>
+<script src="/static/popup-loader.js?v=20260615b"></script>
+
+</head>
+<body>
+<div class="app">
+  <header class="ts-app-header">
+    <div class="ts-header-left">
+      <a href="/queue" class="logo" style="text-decoration:none;cursor:pointer" title="Go to Queue"><img src="/static/img/logo.webp" alt="Top-Shelf" style="height:36px; object-fit:contain;"></a>
+      <span class="version" id="appVersion"></span>
+    </div>
+    <div id="tsActivityBanner" class="ts-header-activity" aria-live="polite"></div>
+    <div class="nav-links">
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary" title="Downloads"><i class="ts-nav-icon ts-nav-icon--downloads"></i></button></a>
+      <a href="/scenes" style="text-decoration:none"><button class="btn-secondary" title="Browse — feed grid"><i class="ts-nav-icon ts-nav-icon--scenes"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library"><i class="ts-nav-icon ts-nav-icon--library"></i></button></a><a href="/news" style="text-decoration:none"><button class="btn-secondary" title="News"><i class="ts-nav-icon ts-nav-icon--news"></i></button></a>
+      <a href="/health" style="text-decoration:none"><button class="btn-secondary" title="Health"><i class="ts-nav-icon ts-nav-icon--health"></i></button></a>
+      <a href="/settings" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="ts-nav-icon ts-nav-icon--settings"></i></button></a>
+      <button class="btn-secondary" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>location.href='/login')" title="Logout"><i class="ts-nav-icon ts-nav-icon--logout"></i></button>
+    </div>
+  </header>
+</div>
+
+<!-- Scenes panel - full width below -->
+<div id="scenesSection" style="width:100%;padding:0 var(--shell-page-padding, 24px) 20px;position:relative;z-index:1">
+  <div class="panel prowlarr-search-panel">
+    <div class="ts-page-head scenes-page-head">
+      <div class="ts-page-head__row">
+        <div class="ts-page-head__left">
+          <div class="panel-title ts-page-title" id="scenesTitle">
+            <i class="ts-page-title__icon ts-nav-icon ts-nav-icon--scenes" aria-hidden="true"></i>
+            <span class="ts-page-title__text">Latest Studio Releases</span>
+          </div>
+        </div>
+        <div class="ts-page-head__center scenes-toolbar-feed" title="TPDB feed">
+          <div class="ts-seg ts-seg--6 feed-mode-toggle" id="feedModeToggle">
+            <button type="button" class="feed-mode-btn" data-mode="search" onclick="setScenesFeedMode('search')" title="Search"><i class="fa-solid fa-magnifying-glass" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Search</span></button>
+            <button type="button" class="feed-mode-btn" data-mode="movies" onclick="setScenesFeedMode('movies')" title="Movies"><i class="ts-icon-movies" style="margin-right:5px;font-size:12px" aria-hidden="true"></i><span class="btn-label">Movies</span></button>
+            <button type="button" class="feed-mode-btn" data-mode="jav" onclick="setScenesFeedMode('jav')" title="JAV"><i class="ts-icon-nihon" aria-hidden="true"></i><span class="btn-label" style="font-family:var(--secs,inherit);letter-spacing:0.06em">JAV</span></button>
+            <button type="button" class="feed-mode-btn" data-mode="performers" onclick="setScenesFeedMode('performers')" title="Stars"><i class="fa-solid fa-user" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Stars</span></button>
+            <button type="button" class="feed-mode-btn" data-mode="studios" onclick="setScenesFeedMode('studios')" title="Studios"><i class="ts-icon-studios" style="margin-right:5px;font-size:12px" aria-hidden="true"></i><span class="btn-label">Studios</span></button>
+            <button type="button" class="feed-mode-btn" data-mode="tags" onclick="setScenesFeedMode('tags')" title="Vices"><i class="fa-solid fa-fire" style="margin-right:5px;font-size:12px"></i><span class="btn-label">Vices</span></button>
+          </div>
+        </div>
+        <div class="ts-page-head__right scenes-toolbar-side--end">
+          <div class="scenes-toolbar-sources">
+            <span id="feedSourceLogos" class="feed-source-logos" aria-label="Feed source"></span>
+          </div>
+          <div class="scenes-toolbar-actions">
+          <div id="tagFilterWrap" style="display:none">
+            <button type="button" id="tagFilterBtn" class="scenes-palette-btn" onclick="toggleTagFilterDropdown()" title="Filter by vices"><i class="fa-solid fa-fire"></i><span id="tagFilterBadge" style="display:none;margin-left:6px;padding:1px 7px;border-radius:999px;background:rgba(var(--brand-accent-rgb), 0.18);color:var(--accent);font-size:11px;font-weight:600">0</span></button>
+          </div>
+          <button type="button" id="feedRefreshBtn" class="scenes-palette-btn" onclick="refreshScenesFeed()" title="Refresh feed"><i class="fa-solid fa-arrows-rotate"></i></button>
+          <button type="button" data-duotone-toggle class="scenes-palette-btn" onclick="toggleDuotoneMode()" title="Swap duotone"><i class="fa-solid fa-palette"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="scenesSearchPanel" style="display:none;padding:20px 24px;border-bottom:1px solid rgba(var(--brand-purple-rgb),0.18);background:rgba(var(--brand-purple-rgb),0.04)">
+      <div class="scenes-srch-wrap">
+        <!-- Scene search filters. Title / keywords sits left of the DB
+             toggle on the actions bar; Search / Clear pin right.
+             Movies have their own search panel (#movieSearchInput). -->
+        <div class="scenes-srch-grid">
+          <div><label class="scenes-srch-label" for="scenesSrchPerformer">Star</label><input class="scenes-srch-input" id="scenesSrchPerformer" placeholder="Star name" onkeydown="if(event.key==='Enter')runScenesSearch()"></div>
+          <div><label class="scenes-srch-label" for="scenesSrchStudio">Studio</label><input class="scenes-srch-input" id="scenesSrchStudio" placeholder="Studio / site" onkeydown="if(event.key==='Enter')runScenesSearch()"></div>
+          <div><label class="scenes-srch-label" for="scenesSrchTag">Tag</label><input class="scenes-srch-input" id="scenesSrchTag" placeholder="Tag name" onkeydown="if(event.key==='Enter')runScenesSearch()"></div>
+          <div><label class="scenes-srch-label" for="scenesSrchDateFrom">Date from</label><input class="scenes-srch-input" id="scenesSrchDateFrom" type="date" onkeydown="if(event.key==='Enter')runScenesSearch()"></div>
+          <div><label class="scenes-srch-label" for="scenesSrchDateTo">Date to</label><input class="scenes-srch-input" id="scenesSrchDateTo" type="date" onkeydown="if(event.key==='Enter')runScenesSearch()"></div>
+        </div>
+        <!-- Source multi-toggle + Search / Clear (right). Each toggle face shows
+             the DB logo + name so users don't have to recognise the
+             icon to know what they're toggling; the all/none chevron
+             clears or restores the whole row in one click. -->
+        <div class="scenes-srch-bar">
+          <div class="scenes-srch-bar__primary">
+            <input class="scenes-srch-input scenes-srch-input--title" id="scenesSrchTitle" placeholder="Scene title or keyword…" aria-label="Title / keywords" onkeydown="if(event.key==='Enter')runScenesSearch()">
+            <div class="scenes-srch-sources-block">
+              <div class="scenes-srch-sources-head">
+                <label class="scenes-srch-label" id="scenesSrchSourcesLabel">Search across</label>
+                <button type="button" id="scenesSrchSrcAll" class="scenes-srch-srcs-toggle" onclick="toggleScenesSrchAllSources()" title="Select all or none">All</button>
+              </div>
+              <div class="ts-seg-multi scenes-srch-sources" role="group" aria-labelledby="scenesSrchSourcesLabel">
+                <label class="ts-seg-multi__item" title="ThePornDB">
+                  <input type="checkbox" id="scenesSrchSrcTpdb" checked onchange="_updateScenesSrchSourceState()">
+                  <span class="ts-seg-multi__face"><img src="/static/logos/tpdb.webp" alt="ThePornDB"></span>
+                </label>
+                <label class="ts-seg-multi__item" title="StashDB">
+                  <input type="checkbox" id="scenesSrchSrcStashdb" checked onchange="_updateScenesSrchSourceState()">
+                  <span class="ts-seg-multi__face"><img src="/static/logos/stashdb.webp" alt="StashDB"></span>
+                </label>
+                <label class="ts-seg-multi__item" title="FansDB">
+                  <input type="checkbox" id="scenesSrchSrcFansdb" checked onchange="_updateScenesSrchSourceState()">
+                  <span class="ts-seg-multi__face"><img src="/static/logos/fansdb.webp" alt="FansDB"></span>
+                </label>
+                <label class="ts-seg-multi__item" title="JAVStash">
+                  <input type="checkbox" id="scenesSrchSrcJavstash" checked onchange="_updateScenesSrchSourceState()">
+                  <span class="ts-seg-multi__face"><img src="/static/logos/javstash.webp" alt="JAVStash"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="scenes-srch-bar__actions">
+            <button type="button" id="scenesSrchGo" class="scenes-palette-btn scenes-palette-btn--search" onclick="runScenesSearch()" title="Search (Enter)"><i class="fa-solid fa-magnifying-glass"></i><span class="scenes-srch-go-label">Search</span></button>
+            <button type="button" class="scenes-palette-btn" onclick="clearScenesSearch()" title="Clear fields"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+        </div>
+        <div id="scenesSearchStatus" class="scenes-srch-status"></div>
+      </div>
+    </div>
+    <div id="scenesGrid" class="scene-grid"><div class="empty">Loading…</div></div>
+  </div>
+</div>
+
+<script>
+/* First paint: sync feed tab + title with localStorage before scenes-common.js runs. */
+(function () {
+  var MODES = ['search', 'movies', 'jav', 'performers', 'studios', 'tags'];
+  var TITLES = {
+    movies: 'Latest Movie Releases',
+    jav: 'Latest JAV Releases',
+    performers: 'Latest Star Releases',
+    studios: 'Latest Studio Releases',
+    tags: 'Latest Vice Releases',
+    search: 'Scene Search',
+  };
+  var mode = 'studios';
+  try {
+    mode = localStorage.getItem('topShelfScenesFeedMode') || 'studios';
+    if (!mode || mode === 'library' || mode === 'random' || mode === 'favourites') mode = 'studios';
+    if (mode === 'recent') mode = 'performers';
+    if (MODES.indexOf(mode) < 0) mode = 'studios';
+  } catch (e) { /* ignore */ }
+  document.documentElement.setAttribute('data-scenes-feed-mode', mode);
+  document.documentElement.setAttribute('lang', mode === 'jav' ? 'ja' : 'en');
+  var toggle = document.getElementById('feedModeToggle');
+  if (toggle) {
+    toggle.querySelectorAll('.feed-mode-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+    });
+  }
+  var titleText = document.querySelector('#scenesTitle .ts-page-title__text');
+  if (titleText) titleText.textContent = TITLES[mode] || 'Latest Studio Releases';
+  var grid = document.getElementById('scenesGrid');
+  if (grid) grid.setAttribute('data-feed-mode', mode);
+  var tagWrap = document.getElementById('tagFilterWrap');
+  if (tagWrap) tagWrap.style.display = mode === 'tags' ? 'block' : 'none';
+  var searchPanel = document.getElementById('scenesSearchPanel');
+  if (searchPanel) searchPanel.style.display = mode === 'search' ? 'block' : 'none';
+})();
+</script>
+<script src="/static/scenes-common.js?v=20260614a"></script>
+<div id="sceneOverlay" class="scene-overlay" onclick="if(event.target===this)closeSceneOverlay()">
+  <div class="scene-overlay-card">
+    <div class="scene-overlay-head">
+      <span class="panel-title" id="sceneOverlayTitle">Scene</span>
+      <button type="button" onclick="closeSceneOverlay()" style="background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.35);color:var(--red);width:36px;height:36px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:background 0.15s" onmouseover="this.style.background='rgba(248,113,113,0.22)'" onmouseout="this.style.background='rgba(248,113,113,0.12)'"><i class="fa-solid fa-x"></i></button>
+    </div>
+    <div class="scene-overlay-body">
+      <div id="sceneOverlayStudioLogoRow" class="scene-overlay-studio-logo-row" aria-hidden="true">
+        <img id="sceneOverlayStudioLogo" class="scene-overlay-studio-logo" src="" alt="" loading="lazy">
+      </div>
+      <div class="search-row" style="margin-bottom:10px;align-items:flex-start">
+        <input id="sceneOverlayQuery" class="field-input" type="text" placeholder="Search query..." onkeydown="if(event.key==='Enter')openSceneOverlayProwlarrPopup()">
+        <div style="display:flex;flex-direction:row;gap:6px;flex-shrink:0;align-items:stretch">
+          <button class="btn-primary" onclick="openSceneOverlayProwlarrPopup()" title="Search Prowlarr"><span class="ts-prowlarr-btn-content"><img class="ts-prowlarr-btn-logo" src="/static/logos/prowlarr.webp" alt="Prowlarr"><i class="fa-solid fa-magnifying-glass"></i></span></button>
+          <a id="sceneOverlayTpdbLink" class="btn-secondary scene-overlay-db-link" target="_blank" rel="noopener noreferrer" href="#" style="display:none" title="Open on TPDB"><img src="/static/logos/tpdb.webp" alt="TPDB"></a>
+          <a id="sceneOverlayStashdbLink" class="btn-secondary scene-overlay-db-link" target="_blank" rel="noopener noreferrer" href="#" style="display:none" title="Open on StashDB"><img src="/static/logos/stashdb.webp" alt="StashDB"></a>
+          <a id="sceneOverlayFansdbLink" class="btn-secondary scene-overlay-db-link" target="_blank" rel="noopener noreferrer" href="#" style="display:none" title="Open on FansDB"><img src="/static/logos/fansdb.webp" alt="FansDB"></a>
+          <a id="sceneOverlayJavstashLink" class="btn-secondary scene-overlay-db-link" target="_blank" rel="noopener noreferrer" href="#" style="display:none" title="Open on JAVStash"><img src="/static/logos/javstash.webp" alt="JAVStash"></a>
+        </div>
+      </div>
+      <div id="sceneOverlayMain" style="margin-bottom:12px"></div>
+    </div>
+  </div>
+</div>
+<div id="imgOverlay" class="img-overlay" style="display:none" onclick="closeImageOverlay()">
+  <img id="imgOverlayImg" src="" alt="" loading="lazy">
+</div>
+
+<!-- Movie detail overlay -->
+<div class="movie-detail-overlay" id="movieDetailOverlay" onclick="if(event.target===this)closeMovieDetail()">
+  <div class="movie-detail-card" id="movieDetailCard">
+    <button class="movie-detail-close" onclick="closeMovieDetail()"><i class="fa-solid fa-x"></i></button>
+    <div id="movieDetailContent"></div>
+  </div>
+</div>
+
+<!-- Movie prowlarr overlay -->
+<div class="movie-prowlarr-overlay" id="movieProwlarrOverlay" onclick="if(event.target===this)closeMovieProwlarr()">
+  <div class="movie-prowlarr-card">
+    <button class="movie-prowlarr-close" onclick="closeMovieProwlarr()"><i class="fa-solid fa-x"></i></button>
+    <div class="panel-title" style="font-size:20px;margin-bottom:16px" id="movieProwlarrTitle">Search Results</div>
+    <div id="movieProwlarrResults"><div class="empty">Searching…</div></div>
+  </div>
+</div>
+
+<script defer src="/static/activity-banner.js?v=20260531"></script>
+<div id="tagFilterDropdown" style="display:none;position:fixed;min-width:260px;max-width:320px;max-height:340px;overflow-y:auto;background:linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.96) 0%, rgba(var(--panel-lo-rgb),0.92) 100%);border:1px solid rgba(var(--brand-purple-rgb),0.35);border-radius:10px;padding:8px 6px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,0.5);backdrop-filter:blur(10px)">
+  <div id="tagFilterList"></div>
+</div>
+<script defer src="/static/app-shell.js?v=20260529"></script>
+<script>
+fetch('/api/status').then(r => r.json()).then(d => {
+  const el = document.getElementById('appVersion');
+  if (el && d.version) el.textContent = 'v' + d.version;
+});
+</script>
+</body>
+</html>
