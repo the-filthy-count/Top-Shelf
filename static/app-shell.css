@@ -4888,12 +4888,14 @@ header.ts-app-header #appVersion {
    * brightened the area next to transparent nav buttons. */
   stroke: rgba(0, 0, 0, 0.45);
   stroke-width: 4;
+  stroke-linejoin: round;
 }
 .ts-circle-fill {
   fill: none;
   stroke: var(--accent, #d94a6c);
   stroke-width: 4;
   stroke-linecap: round;
+  stroke-linejoin: round;
   transition: stroke-dasharray 0.4s ease;
 }
 .ts-circle-fill.is-indeterminate {
@@ -4929,17 +4931,17 @@ header.ts-app-header #appVersion {
 /* Defensive: hide any label div left over from stale cached JS. */
 
 /* Downloads circle: performer headshot rendered inside the progress
- * ring instead of the usual percent number. Clipped to a circle so the
- * portrait sits flush inside the track, with a touch of inset shadow
- * to separate it from the ring edge. */
+ * ring instead of the usual percent number. Clipped to the same
+ * pointy-top hexagon as the surrounding ring so the portrait sits
+ * flush inside the stroke. inset shadow gets clipped by clip-path so
+ * we drop it; the outer ring already separates the portrait. */
 .ts-circle-center-img {
   width: 48px;
   height: 48px;
-  border-radius: 50%;
+  border-radius: 0;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
   object-fit: cover;
   display: block;
-  box-shadow: inset 0 0 0 1px rgba(var(--brand-purple-rgb), 0.6),
-              0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 .ts-circle-tick {
@@ -4952,60 +4954,95 @@ header.ts-app-header #appVersion {
   letter-spacing: 0.05em;
   font-size: 18px;
 }
-/* Notifications render as small round icon buttons alongside the
- * progress circles. Kept here (instead of the progress-circles block
+/* Hexagon background SVG layer shared by .ts-banner-dot and
+ * .ts-banner-dot-more. The fill + stroke live on the inner polygon so
+ * hover / kind variants can swap colours without re-laying out. The
+ * progress chips (.ts-circle-ring) use the same pointy-top hex outline
+ * via .ts-circle-track / .ts-circle-fill polygon points. */
+.ts-hex-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  z-index: 0;
+  overflow: visible;
+}
+.ts-hex-fill {
+  fill: rgba(0, 0, 0, 0.55);
+  stroke: rgba(var(--brand-purple-rgb), 0.35);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  transition: fill 0.15s, stroke 0.15s;
+}
+
+/* Notifications render as small hex icon buttons alongside the
+ * progress chips. Kept here (instead of the progress-circles block
  * below) so the JS can share the `.ts-progress-circles` flex row and
- * each notification occupies a compact 34 px button. Click to dismiss;
- * hover for the full message via the `title` attribute. */
+ * each notification occupies a 60 px hex. Click to dismiss; hover for
+ * the full message via the `title` attribute. */
 .ts-banner-dot {
   flex-shrink: 0;
+  position: relative;
   width: 60px;
   height: 60px;
-  border-radius: 50%;
+  border-radius: 0;
+  border: none;
+  background: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
-  /* Match the recessed look of the resting nav buttons — darker than
-   * the prior 0.35 so the counter cells stop reading as a selected
-   * state next to the transparent button slots. */
-  background: rgba(0, 0, 0, 0.55);
   color: var(--text);
   font-size: 22px;
   line-height: 1;
   cursor: pointer;
   padding: 0;
-  transition: transform 0.15s, border-color 0.15s, background 0.15s, color 0.15s;
+  transition: transform 0.15s, color 0.15s;
+}
+.ts-banner-dot > i,
+.ts-banner-dot > span:not(.ts-hex-bg) {
+  position: relative;
+  z-index: 1;
 }
 .ts-banner-dot:hover {
   transform: scale(1.08);
-  border-color: rgba(var(--brand-purple-rgb), 0.85);
-  background: rgba(var(--panel-hi-rgb), 0.6);
+}
+.ts-banner-dot:hover .ts-hex-fill {
+  fill: rgba(var(--panel-hi-rgb), 0.6);
+  stroke: rgba(var(--brand-purple-rgb), 0.85);
 }
 .ts-banner-dot.ts-banner-error {
   color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.55);
+}
+.ts-banner-dot.ts-banner-error .ts-hex-fill {
+  stroke: rgba(239, 68, 68, 0.55);
 }
 .ts-banner-dot.ts-banner-library {
   color: rgba(var(--brand-purple-rgb), 0.95);
 }
 .ts-banner-dot.ts-banner-pipeline {
   color: var(--accent);
-  border-color: rgba(var(--brand-accent-rgb), 0.55);
+}
+.ts-banner-dot.ts-banner-pipeline .ts-hex-fill {
+  stroke: rgba(var(--brand-accent-rgb), 0.55);
 }
 .ts-banner-dot.ts-banner-success {
   color: #86efac;
-  border-color: rgba(34, 197, 94, 0.55);
 }
-/* “+N more” overflow chip — same footprint as .ts-banner-dot (60px). */
+.ts-banner-dot.ts-banner-success .ts-hex-fill {
+  stroke: rgba(34, 197, 94, 0.55);
+}
+/* “+N more” overflow chip — same hex footprint as .ts-banner-dot. */
 .ts-banner-dot-more {
   flex-shrink: 0;
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 60px;
   height: 60px;
-  border-radius: 50%;
+  border-radius: 0;
   font-family: var(--secs, monospace);
   font-size: 18px;
   font-weight: 700;
@@ -5013,40 +5050,32 @@ header.ts-app-header #appVersion {
   line-height: 1;
   color: rgba(var(--brand-purple-rgb), 0.95);
   cursor: help;
-  border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
-  background: rgba(0, 0, 0, 0.35);
+  border: none;
+  background: transparent;
   padding: 0;
-  transition: transform 0.15s, border-color 0.15s, background 0.15s, color 0.15s;
+  transition: transform 0.15s, color 0.15s;
+}
+.ts-banner-dot-more > .ts-banner-dot-more__count {
+  position: relative;
+  z-index: 1;
 }
 button.ts-banner-dot-more {
   cursor: pointer;
 }
-/* Stacked ghost circles only when 3+ hidden items — reads as a pile, not a glitch. */
-.ts-banner-dot-more--stack {
-  position: relative;
-  isolation: isolate;
-  background: linear-gradient(
-    155deg,
-    rgba(var(--brand-purple-rgb), 0.28) 0%,
-    rgba(12, 10, 18, 0.72) 55%,
-    rgba(0, 0, 0, 0.5) 100%
-  );
-  border-color: rgba(var(--brand-purple-rgb), 0.45);
-  box-shadow:
-    0 2px 10px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
+/* Stacked ghost hexes only when 3+ hidden items — reads as a pile of
+ * shapes peeking out behind the active chip. */
 .ts-banner-dot-more--stack::before,
 .ts-banner-dot-more--stack::after {
   content: "";
   position: absolute;
   width: 44px;
   height: 44px;
-  border-radius: 50%;
-  border: 1px solid rgba(var(--brand-purple-rgb), 0.16);
-  background: rgba(var(--brand-purple-rgb), 0.04);
+  border-radius: 0;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: rgba(var(--brand-purple-rgb), 0.16);
   z-index: -1;
   pointer-events: none;
+  transition: background 0.15s;
 }
 .ts-banner-dot-more--stack::before {
   top: -4px;
@@ -5056,25 +5085,24 @@ button.ts-banner-dot-more {
   bottom: -4px;
   right: -4px;
 }
+.ts-banner-dot-more--stack .ts-hex-fill {
+  fill: rgba(12, 10, 18, 0.72);
+  stroke: rgba(var(--brand-purple-rgb), 0.45);
+}
 .ts-banner-dot-more__count {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 .ts-banner-dot-more:hover {
   transform: scale(1.08);
   color: #fff;
-  border-color: rgba(var(--brand-purple-rgb), 0.85);
-  background: rgba(var(--panel-hi-rgb), 0.6);
 }
-.ts-banner-dot-more--stack:hover {
-  box-shadow:
-    0 0 14px rgba(var(--brand-purple-rgb), 0.35),
-    0 4px 12px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+.ts-banner-dot-more:hover .ts-hex-fill {
+  fill: rgba(var(--panel-hi-rgb), 0.6);
+  stroke: rgba(var(--brand-purple-rgb), 0.85);
 }
 .ts-banner-dot-more--stack:hover::before,
 .ts-banner-dot-more--stack:hover::after {
-  border-color: rgba(var(--brand-purple-rgb), 0.28);
-  background: rgba(var(--brand-purple-rgb), 0.08);
+  background: rgba(var(--brand-purple-rgb), 0.28);
 }
 /* Popover anchored under the +N chip — lists the hidden activity items
  * so the user can read each one in full and dismiss the actionable
@@ -5118,26 +5146,29 @@ button.ts-banner-dot-more {
   flex-shrink: 0;
   width: 30px;
   height: 30px;
-  border-radius: 50%;
+  border-radius: 0;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 14px;
   background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
+  /* `border` would be clipped by clip-path; the hex relies on background
+   * + the small headshot inside for its kind colour cue. */
+  border: none;
   color: rgba(var(--brand-purple-rgb), 0.95);
 }
 .ts-banner-more-row.ts-banner-error .ts-banner-more-row__icon {
   color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.18);
 }
 .ts-banner-more-row.ts-banner-pipeline .ts-banner-more-row__icon {
   color: var(--accent);
-  border-color: rgba(var(--brand-accent-rgb), 0.55);
+  background: rgba(var(--brand-accent-rgb), 0.18);
 }
 .ts-banner-more-row.ts-banner-success .ts-banner-more-row__icon {
   color: #86efac;
-  border-color: rgba(34, 197, 94, 0.55);
+  background: rgba(34, 197, 94, 0.18);
 }
 .ts-banner-more-row__text {
   flex: 1;
