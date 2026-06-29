@@ -5,8 +5,10 @@
 (function () {
   var AUTO_DISMISS_MS = 20000;
   var CLIENT_TOAST_DEFAULT_MS = 8000;
-  /** Max dismissible notification boxes; progress rows are uncapped and listed first. */
-  var MAX_VISIBLE_ALERTS = 2;
+  /** Fallback cap if width-based measurement isn't possible (offscreen container).
+   * Width-based overflow now drives the visible/hidden split; this only kicks in
+   * when ``container.clientWidth`` reports 0 (display:none, not yet laid out, …). */
+  var FALLBACK_MAX_VISIBLE = 8;
   var _dismissTimers = {};
   var _clientDismissTimers = {};
   /** Client-side alerts (from window.toast); survive banner poll re-renders. */
@@ -393,10 +395,10 @@
     var fav = (data && data.favourites_index) || {};
     var dl = (data && data.downloads) || {};
 
-    // Lowest priority = rendered last so it wraps to a new row first on
-    // narrow headers. Downloads circle only appears when there are
-    // active items; pipeline / library-index / phash / favourites all
-    // beat it when several tasks run at once.
+    // Lowest priority = rendered last so it gets collapsed first when
+    // the activity row runs out of width. Downloads circle only appears
+    // when there are active items; pipeline / library-index / phash /
+    // favourites all beat it when several tasks run at once.
     var circlesHtml = "";
     circlesHtml += circlePipeline(data || {});
     circlesHtml += circleLibraryIndex(ix);
@@ -405,11 +407,11 @@
     circlesHtml += circleHealthScan();
     circlesHtml += circleDownloads(dl);
 
-    // Notifications now render as small round icon buttons in the same
-    // row as the progress circles. Hover (native tooltip) shows the
-    // full message; click dismisses. Because they're compact they no
-    // longer need to suppress or be suppressed by the progress circles
-    // — both fit inside the fixed 60 px activity band.
+    // Notifications render as round icon buttons alongside the progress
+    // circles, same size for visual consistency. Render every one — the
+    // width-based overflow pass below picks which to fold into a +N
+    // popover, so we no longer summarise prematurely when the header
+    // actually has room.
     pruneClientAlerts();
     var serverNotes = (data && data.notifications) || [];
     var clientNotes = _clientAlerts.map(function (a) {
@@ -422,12 +424,10 @@
       };
     });
     var allNotes = serverNotes.concat(clientNotes);
-    var visibleNotes = allNotes.slice(0, MAX_VISIBLE_ALERTS);
-    var queuedCount = Math.max(0, allNotes.length - visibleNotes.length);
 
     var notesHtml = "";
-    for (var i = 0; i < visibleNotes.length; i++) {
-      var n = visibleNotes[i];
+    for (var i = 0; i < allNotes.length; i++) {
+      var n = allNotes[i];
       var id = n.id;
       var kc = kindClass(n.kind);
       var msgAttr = esc(n.message || "");
@@ -451,7 +451,6 @@
           "</button>";
       }
     }
-    notesHtml += bannerMoreHtml(queuedCount, queuedCount + " more queued", { live: true });
 
     var rowHtml = circlesHtml + notesHtml;
     el.innerHTML = rowHtml
@@ -459,8 +458,8 @@
       : "";
 
     clearAllDismissTimers();
-    for (var j = 0; j < visibleNotes.length; j++) {
-      var vn = visibleNotes[j];
+    for (var j = 0; j < allNotes.length; j++) {
+      var vn = allNotes[j];
       if (!vn._client && vn.id != null) scheduleAutoDismiss(vn.id);
     }
 
@@ -494,9 +493,228 @@
       });
     });
 
+    // Width-based overflow: hide trailing chips when they don't fit, and
+    // surface them via a +N popover. Runs after innerHTML is in the DOM
+    // so we can measure scrollWidth on the actual rendered chips.
+    requestAnimationFrame(function () { applyDynamicOverflow(el); });
+
     if (typeof window.syncCenterLogoVisibility === "function") {
       window.syncCenterLogoVisibility();
     }
+  }
+
+  function _bannerMoreChipHtml(count, title) {
+    var n = Math.max(0, parseInt(count, 10) || 0);
+    if (n < 1) return "";
+    var tip = String(title || n + " more");
+    var stack = n >= 3 ? " ts-banner-dot-more--stack" : "";
+    return (
+      '<button type="button" class="ts-banner-dot-more' + stack + '" data-banner-more="1"' +
+      ' title="' + esc(tip) + '" aria-label="' + esc(tip) + '" aria-expanded="false">' +
+      '<span class="ts-banner-dot-more__count" aria-hidden="true">+' + esc(String(n)) + "</span>" +
+      "</button>"
+    );
+  }
+
+  /** After every render, measure the chip row; if it overflows, swap
+   * trailing chips for a clickable "+N" overflow chip that opens a
+   * popover listing them. Re-runs on container resize. */
+  function applyDynamicOverflow(rootEl) {
+    var row = rootEl.querySelector(".ts-progress-circles");
+    if (!row) {
+      closeBannerMorePopover();
+      return;
+    }
+    var avail = row.clientWidth;
+    // No reliable width yet (display:none ancestor, pre-layout). Cap by
+    // count so we still emit a sensible row.
+    if (avail <= 0) {
+      var chips = row.querySelectorAll(".ts-circle, .ts-banner-dot");
+      if (chips.length > FALLBACK_MAX_VISIBLE) {
+        for (var k = FALLBACK_MAX_VISIBLE; k < chips.length; k++) {
+          chips[k].setAttribute("data-overflow-hidden", "1");
+          chips[k].style.display = "none";
+        }
+        row.insertAdjacentHTML(
+          "beforeend",
+          _bannerMoreChipHtml(chips.length - FALLBACK_MAX_VISIBLE,
+                              (chips.length - FALLBACK_MAX_VISIBLE) + " hidden activity items")
+        );
+        _wireBannerMoreChip(row);
+      }
+      return;
+    }
+
+    // Clear any previous overflow state from this render pass (re-show
+    // hidden chips, drop the prior +N chip).
+    row.querySelectorAll(".ts-banner-dot-more").forEach(function (b) { b.remove(); });
+    row.querySelectorAll("[data-overflow-hidden]").forEach(function (b) {
+      b.removeAttribute("data-overflow-hidden");
+      b.style.display = "";
+    });
+
+    if (row.scrollWidth <= avail) {
+      closeBannerMorePopover();
+      return;
+    }
+    var allChips = Array.from(row.querySelectorAll(".ts-circle, .ts-banner-dot"));
+    var hidden = 0;
+    // Hide trailing chips one at a time and re-measure until we fit. Add
+    // a placeholder +N chip first so its footprint is included in the
+    // fit check (otherwise we'd hide one too few and re-overflow once
+    // the chip is inserted).
+    var placeholder = document.createElement("button");
+    placeholder.type = "button";
+    placeholder.className = "ts-banner-dot-more";
+    placeholder.setAttribute("data-banner-more-placeholder", "1");
+    placeholder.style.visibility = "hidden";
+    placeholder.textContent = "+9";
+    row.appendChild(placeholder);
+    for (var idx = allChips.length - 1; idx >= 0; idx--) {
+      if (row.scrollWidth <= avail) break;
+      allChips[idx].setAttribute("data-overflow-hidden", "1");
+      allChips[idx].style.display = "none";
+      hidden++;
+    }
+    placeholder.remove();
+    if (hidden === 0) {
+      closeBannerMorePopover();
+      return;
+    }
+    row.insertAdjacentHTML(
+      "beforeend",
+      _bannerMoreChipHtml(hidden, hidden + " more — click to view")
+    );
+    _wireBannerMoreChip(row);
+  }
+
+  function _wireBannerMoreChip(row) {
+    var btn = row.querySelector(".ts-banner-dot-more[data-banner-more]");
+    if (!btn) return;
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      toggleBannerMorePopover(btn, row);
+    });
+  }
+
+  var _bannerMorePopover = null;
+  var _bannerMoreOutsideHandler = null;
+
+  function closeBannerMorePopover() {
+    if (_bannerMorePopover) {
+      _bannerMorePopover.remove();
+      _bannerMorePopover = null;
+    }
+    if (_bannerMoreOutsideHandler) {
+      document.removeEventListener("mousedown", _bannerMoreOutsideHandler, true);
+      window.removeEventListener("resize", _bannerMoreOutsideHandler);
+      _bannerMoreOutsideHandler = null;
+    }
+    var openBtn = document.querySelector(".ts-banner-dot-more[aria-expanded='true']");
+    if (openBtn) openBtn.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleBannerMorePopover(btn, row) {
+    if (_bannerMorePopover) {
+      closeBannerMorePopover();
+      return;
+    }
+    var hiddenChips = row.querySelectorAll("[data-overflow-hidden]");
+    if (!hiddenChips.length) return;
+    var pop = document.createElement("div");
+    pop.className = "ts-banner-more-popover";
+    pop.setAttribute("role", "dialog");
+    pop.setAttribute("aria-label", "Hidden activity");
+    var rows = [];
+    hiddenChips.forEach(function (chip) {
+      rows.push(_bannerMoreRowFromChip(chip));
+    });
+    pop.innerHTML = rows.join("");
+    document.body.appendChild(pop);
+
+    // Anchor below the +N chip; flip above if it would clip the viewport.
+    var r = btn.getBoundingClientRect();
+    var top = r.bottom + 8;
+    var maxH = Math.min(window.innerHeight * 0.6, 480);
+    if (top + maxH > window.innerHeight - 8) {
+      top = Math.max(8, r.top - maxH - 8);
+    }
+    var left = Math.max(8, Math.min(window.innerWidth - 8 - 360, r.left - 130));
+    pop.style.top = top + "px";
+    pop.style.left = left + "px";
+    btn.setAttribute("aria-expanded", "true");
+    _bannerMorePopover = pop;
+
+    pop.querySelectorAll("[data-pop-dismiss-id]").forEach(function (xbtn) {
+      xbtn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        var did = xbtn.getAttribute("data-pop-dismiss-id");
+        var nid = parseInt(did, 10);
+        clearDismissTimer(nid);
+        fetch("/api/activity/notifications/dismiss", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: nid }),
+        }).then(function () { closeBannerMorePopover(); tick(); });
+      });
+    });
+    pop.querySelectorAll("[data-pop-client-id]").forEach(function (xbtn) {
+      xbtn.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        var cid = xbtn.getAttribute("data-pop-client-id");
+        dismissClientAlert(cid);
+        closeBannerMorePopover();
+      });
+    });
+
+    _bannerMoreOutsideHandler = function (ev) {
+      if (ev && ev.type === "mousedown") {
+        if (pop.contains(ev.target) || btn.contains(ev.target)) return;
+      }
+      closeBannerMorePopover();
+    };
+    document.addEventListener("mousedown", _bannerMoreOutsideHandler, true);
+    window.addEventListener("resize", _bannerMoreOutsideHandler);
+  }
+
+  function _bannerMoreRowFromChip(chip) {
+    var notifId = chip.getAttribute("data-notification-id") || "";
+    var clientId = chip.getAttribute("data-client-alert-id") || "";
+    var label = chip.getAttribute("aria-label") || chip.getAttribute("title") || "";
+    // The progress circles store their tooltip via `title=` on the
+    // .ts-circle wrapper itself, but the .ts-banner-dot stores its
+    // human-readable copy in aria-label. Strip the "(click to ...)" hint
+    // we appended for the inline tooltip; the popover row already shows
+    // a real dismiss button.
+    label = label.replace(/\s*\(click to (?:act|dismiss)\)\s*$/i, "");
+    // Reuse the chip's own icon HTML so the popover row mirrors the
+    // visual style — covers headshot images, font-awesome glyphs, the
+    // favourites lips, etc. without us re-deriving the kind here.
+    var iconSrc = chip.querySelector(".ts-circle-icon, i, span.fav-lips");
+    var iconHtml = iconSrc ? iconSrc.outerHTML : '<i class="fa-solid fa-circle-info"></i>';
+    // For circles, also peek at the centre element so the popover row
+    // can echo the progress percent / headshot.
+    var centerImg = chip.querySelector(".ts-circle-center-img");
+    if (centerImg) iconHtml = centerImg.outerHTML;
+    var kindMatch = (chip.className.match(/ts-banner-(error|success|library|pipeline)/) || [, ""])[1];
+    var kindCls = kindMatch ? " ts-banner-" + kindMatch : "";
+    var actionHtml = "";
+    if (notifId) {
+      actionHtml = '<button type="button" class="ts-banner-more-row__dismiss" data-pop-dismiss-id="' +
+        esc(notifId) + '" title="Dismiss" aria-label="Dismiss">' +
+        '<i class="fa-solid fa-xmark" aria-hidden="true"></i></button>';
+    } else if (clientId) {
+      actionHtml = '<button type="button" class="ts-banner-more-row__dismiss" data-pop-client-id="' +
+        esc(clientId) + '" title="Dismiss" aria-label="Dismiss">' +
+        '<i class="fa-solid fa-xmark" aria-hidden="true"></i></button>';
+    }
+    return (
+      '<div class="ts-banner-more-row' + kindCls + '">' +
+      '<span class="ts-banner-more-row__icon">' + iconHtml + "</span>" +
+      '<span class="ts-banner-more-row__text">' + esc(label) + "</span>" +
+      actionHtml +
+      "</div>"
+    );
   }
 
   //: Track the highest-seen notification id between ticks so each
@@ -698,6 +916,19 @@
   }
 
   window.addEventListener("pagehide", stopPolling);
+
+  // Re-pack chips on viewport resize so dynamic overflow tracks header
+  // width changes between polls (otherwise the row stays oversized until
+  // the next tick fires). Debounced so resize storms don't thrash.
+  var _overflowResizeTimer = null;
+  window.addEventListener("resize", function () {
+    if (_overflowResizeTimer) clearTimeout(_overflowResizeTimer);
+    _overflowResizeTimer = setTimeout(function () {
+      _overflowResizeTimer = null;
+      var el = document.getElementById("tsActivityBanner");
+      if (el) applyDynamicOverflow(el);
+    }, 120);
+  });
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {

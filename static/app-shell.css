@@ -4959,8 +4959,8 @@ header.ts-app-header #appVersion {
  * hover for the full message via the `title` attribute. */
 .ts-banner-dot {
   flex-shrink: 0;
-  width: 34px;
-  height: 34px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
@@ -4971,7 +4971,7 @@ header.ts-app-header #appVersion {
    * state next to the transparent button slots. */
   background: rgba(0, 0, 0, 0.55);
   color: var(--text);
-  font-size: 14px;
+  font-size: 22px;
   line-height: 1;
   cursor: pointer;
   padding: 0;
@@ -4997,17 +4997,17 @@ header.ts-app-header #appVersion {
   color: #86efac;
   border-color: rgba(34, 197, 94, 0.55);
 }
-/* “+N more” overflow chip — same footprint as .ts-banner-dot (34px). */
+/* “+N more” overflow chip — same footprint as .ts-banner-dot (60px). */
 .ts-banner-dot-more {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   font-family: var(--secs, monospace);
-  font-size: 10px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1;
@@ -5017,6 +5017,9 @@ header.ts-app-header #appVersion {
   background: rgba(0, 0, 0, 0.35);
   padding: 0;
   transition: transform 0.15s, border-color 0.15s, background 0.15s, color 0.15s;
+}
+button.ts-banner-dot-more {
+  cursor: pointer;
 }
 /* Stacked ghost circles only when 3+ hidden items — reads as a pile, not a glitch. */
 .ts-banner-dot-more--stack {
@@ -5037,8 +5040,8 @@ header.ts-app-header #appVersion {
 .ts-banner-dot-more--stack::after {
   content: "";
   position: absolute;
-  width: 26px;
-  height: 26px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 1px solid rgba(var(--brand-purple-rgb), 0.16);
   background: rgba(var(--brand-purple-rgb), 0.04);
@@ -5046,12 +5049,12 @@ header.ts-app-header #appVersion {
   pointer-events: none;
 }
 .ts-banner-dot-more--stack::before {
-  top: -2px;
-  left: -3px;
+  top: -4px;
+  left: -4px;
 }
 .ts-banner-dot-more--stack::after {
-  bottom: -2px;
-  right: -3px;
+  bottom: -4px;
+  right: -4px;
 }
 .ts-banner-dot-more__count {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
@@ -5072,6 +5075,94 @@ header.ts-app-header #appVersion {
 .ts-banner-dot-more--stack:hover::after {
   border-color: rgba(var(--brand-purple-rgb), 0.28);
   background: rgba(var(--brand-purple-rgb), 0.08);
+}
+/* Popover anchored under the +N chip — lists the hidden activity items
+ * so the user can read each one in full and dismiss the actionable
+ * notifications without losing the overflow grouping. */
+.ts-banner-more-popover {
+  position: fixed;
+  z-index: 9000;
+  min-width: 260px;
+  max-width: 360px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--brand-purple-rgb), 0.45);
+  background: linear-gradient(
+    160deg,
+    rgb(var(--panel-hi-rgb)) 0%,
+    rgb(var(--panel-lo-rgb)) 100%
+  );
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.55);
+  font-size: 12px;
+  color: var(--text);
+}
+.ts-banner-more-popover[hidden] {
+  display: none !important;
+}
+.ts-banner-more-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(var(--brand-purple-rgb), 0.18);
+  margin-bottom: 4px;
+}
+.ts-banner-more-row:last-child {
+  margin-bottom: 0;
+}
+.ts-banner-more-row__icon {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
+  color: rgba(var(--brand-purple-rgb), 0.95);
+}
+.ts-banner-more-row.ts-banner-error .ts-banner-more-row__icon {
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.55);
+}
+.ts-banner-more-row.ts-banner-pipeline .ts-banner-more-row__icon {
+  color: var(--accent);
+  border-color: rgba(var(--brand-accent-rgb), 0.55);
+}
+.ts-banner-more-row.ts-banner-success .ts-banner-more-row__icon {
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.55);
+}
+.ts-banner-more-row__text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.ts-banner-more-row__dismiss {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.ts-banner-more-row__dismiss:hover {
+  background: rgba(var(--panel-hi-rgb), 0.6);
+  border-color: rgba(var(--brand-purple-rgb), 0.85);
 }
 /* Header progress: shorter track, equal-width bar column across rows */
 .ts-header-activity .health-progress-row {
