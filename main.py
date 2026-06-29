@@ -32712,8 +32712,15 @@ async def health_library_video_auto_match(payload: dict = Body(...)):
        name when the filename doesn't fit) so Kodi/Jellyfin/Plex still
        see *some* metadata for the file.
     """
-    v = _health_resolve_library_video_path(payload.get("path") or "")
+    raw_path = (payload.get("path") or "").strip()
+    v = _health_resolve_library_video_path(raw_path)
     if isinstance(v, JSONResponse):
+        # A stale scan often lists videos that have since been moved or
+        # re-encoded under a different extension. Treat "not on disk" as
+        # a successful no-op so the bulk Auto-all clears the row from
+        # the list instead of leaving it stuck behind a 404 error.
+        if getattr(v, "status_code", 0) == 404:
+            return {"ok": True, "via": "file_missing", "path": raw_path}
         return v
     try:
         dest_key = str(v.resolve())
