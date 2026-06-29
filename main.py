@@ -32446,7 +32446,14 @@ def _unlink_nfo_sidecar_files(nfo_path: Path) -> None:
 
 
 def _health_delete_nfo_one(path_raw: str, roots: list[dict]) -> str | None:
-    """Delete one .nfo and matching png/jpg/jpeg/webm sidecars. Returns None on success, else error string."""
+    """Delete one .nfo and matching png/jpg/jpeg/webm sidecars. Returns
+    None on success, else an error string.
+
+    A path that no longer exists on disk counts as success — the
+    user's intent (file gone) is already satisfied, and surfacing
+    "Not found" for every stale scan entry blocks the bulk delete
+    from ever clearing the list when the underlying files were
+    cleaned up by a previous run or external tool."""
     path_raw = (path_raw or "").strip()
     if not path_raw or not path_raw.lower().endswith(".nfo"):
         return "nfo path required"
@@ -32454,10 +32461,12 @@ def _health_delete_nfo_one(path_raw: str, roots: list[dict]) -> str | None:
         p = _health_assert_path_under_roots(path_raw, roots)
     except ValueError as e:
         return str(e)
-    if not p.is_file():
-        return "Not found"
     if p.name.lower() == "tvshow.nfo":
         return "refusing tvshow.nfo"
+    if not p.exists():
+        return None
+    if not p.is_file():
+        return "Not a file"
     _unlink_nfo_sidecar_files(p)
     try:
         p.unlink()
