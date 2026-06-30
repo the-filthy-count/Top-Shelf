@@ -62,20 +62,7 @@
     return x.toLocaleString("en-US");
   }
 
-  /** Hex-shaped SVG background used by every non-progress chip
-   * (.ts-banner-dot and .ts-banner-dot-more). The polygon is a
-   * pointy-top hexagon inscribed in the 44×44 viewBox the progress
-   * rings use, so the two chip types share the exact silhouette. */
-  var HEX_POINTS = "22,4 37.59,13 37.59,31 22,40 6.41,31 6.41,13";
-  function hexBgHtml() {
-    return (
-      '<svg class="ts-hex-bg" viewBox="0 0 44 44" aria-hidden="true">' +
-      '<polygon class="ts-hex-fill" points="' + HEX_POINTS + '" pathLength="100"/>' +
-      "</svg>"
-    );
-  }
-
-  /** Compact “+N more” chip — matches banner dot size, stacked-hex motif. */
+  /** Compact “+N more” chip — matches banner dot size, stacked-circle motif. */
   function bannerMoreHtml(count, title, opts) {
     var n = Math.max(0, parseInt(count, 10) || 0);
     if (n < 1) return "";
@@ -87,7 +74,6 @@
       '<span class="ts-banner-dot-more' + stack + '"' + live +
       ' title="' + esc(tip) + '"' +
       ' aria-label="' + esc(tip) + '">' +
-      hexBgHtml() +
       '<span class="ts-banner-dot-more__count" aria-hidden="true">+' + esc(String(n)) + "</span>" +
       "</span>"
     );
@@ -191,6 +177,7 @@
    * Uses pathLength="100" so stroke-dasharray/offset are percent-based,
    * and stroke-dashoffset=25 shifts the arc start to 12 o'clock reliably.
    */
+  var CIRCLE_R = 18;
   function circleHtml(opts) {
     var pct = Math.max(0, Math.min(100, Number(opts.pct) || 0));
     var ind = !!opts.indeterminate;
@@ -198,7 +185,7 @@
     var pctVal = ind ? 28 : pct;
     var dash = pctVal + " " + Math.max(0, 100 - pctVal);
     // Explicit `centerHtml` override wins over the default tick / dots /
-    // percent logic — used by the Downloads chip to render a matched
+    // percent logic — used by the Downloads circle to render a matched
     // performer's headshot instead of a number.
     var centerHtml;
     if (opts.centerHtml) {
@@ -213,11 +200,6 @@
     }
     var fillClass = "ts-circle-fill" + (ind ? " is-indeterminate" : "");
     var iconHtml = opts.iconHtml || "";
-    // The progress polygon starts at the top vertex (first point in
-    // HEX_POINTS), so stroke-dashoffset=0 anchors the fill at 12 o'clock
-    // and grows clockwise — matching the previous circle's behaviour
-    // without the +25 offset hack the circle needed because SVG arcs
-    // start at 3 o'clock.
     return (
       '<div class="ts-circle" data-slot="' +
       esc(opts.slot || "") +
@@ -229,10 +211,16 @@
       (iconHtml ? '<span class="ts-circle-icon">' + iconHtml + "</span>" : "") +
       '<span class="ts-circle-ring">' +
       '<svg class="ts-circle-svg" viewBox="0 0 44 44" aria-hidden="true">' +
-      '<polygon class="ts-circle-track" points="' + HEX_POINTS + '" pathLength="100"/>' +
-      '<polygon class="' + fillClass + '" points="' + HEX_POINTS +
-      '" pathLength="100" stroke-dasharray="' + dash +
-      '" stroke-dashoffset="0"/>' +
+      '<circle class="ts-circle-track" cx="22" cy="22" r="' +
+      CIRCLE_R +
+      '" pathLength="100"/>' +
+      '<circle class="' +
+      fillClass +
+      '" cx="22" cy="22" r="' +
+      CIRCLE_R +
+      '" pathLength="100" stroke-dasharray="' +
+      dash +
+      '" stroke-dashoffset="25"/>' +
       "</svg>" +
       '<span class="ts-circle-center">' +
       centerHtml +
@@ -450,7 +438,6 @@
           ' data-client-alert-id="' + esc(String(id)) + '"' +
           ' title="' + tip + '"' +
           ' aria-label="' + msgAttr + '">' +
-          hexBgHtml() +
           kindIconHtml(n.kind) +
           "</button>";
       } else {
@@ -460,7 +447,6 @@
           ' data-dismiss-id="' + esc(String(id)) + '"' +
           ' title="' + tip + '"' +
           ' aria-label="' + msgAttr + '">' +
-          hexBgHtml() +
           kindIconHtml(n.kind) +
           "</button>";
       }
@@ -525,7 +511,6 @@
     return (
       '<button type="button" class="ts-banner-dot-more' + stack + '" data-banner-more="1"' +
       ' title="' + esc(tip) + '" aria-label="' + esc(tip) + '" aria-expanded="false">' +
-      hexBgHtml() +
       '<span class="ts-banner-dot-more__count" aria-hidden="true">+' + esc(String(n)) + "</span>" +
       "</button>"
     );
