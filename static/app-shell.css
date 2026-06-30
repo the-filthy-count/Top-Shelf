@@ -4978,7 +4978,9 @@ header.ts-app-header #appVersion {
   transition: transform 0.15s, border-color 0.15s, background 0.15s, color 0.15s;
 }
 .ts-banner-dot:hover {
-  transform: scale(1.08);
+  /* Drop the scale lift — the header strip is exactly 60px tall and
+   * a 60×60 chip scaled to 1.08 overflows top and bottom of the panel.
+   * Colour + border-tint already telegraph the hover affordance. */
   border-color: rgba(var(--brand-purple-rgb), 0.85);
   background: rgba(var(--panel-hi-rgb), 0.6);
 }
@@ -5060,7 +5062,9 @@ button.ts-banner-dot-more {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 .ts-banner-dot-more:hover {
-  transform: scale(1.08);
+  /* No scale lift for the same reason .ts-banner-dot drops it —
+   * 60×60 inside a 60px-tall header strip can't grow without
+   * overflowing the activity band. */
   color: #fff;
   border-color: rgba(var(--brand-purple-rgb), 0.85);
   background: rgba(var(--panel-hi-rgb), 0.6);
