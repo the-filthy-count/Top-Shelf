@@ -4952,73 +4952,82 @@ header.ts-app-header #appVersion {
   letter-spacing: 0.05em;
   font-size: 18px;
 }
-/* Notifications render as small round icon buttons alongside the
- * progress circles. Kept here (instead of the progress-circles block
- * below) so the JS can share the `.ts-progress-circles` flex row and
- * each notification occupies a compact 34 px button. Click to dismiss;
- * hover for the full message via the `title` attribute. */
+/* Notifications render as small filled icon buttons alongside the
+ * progress circles. Solid accent fill so the icon reads at-a-glance
+ * without a chunky resting border; per-kind variants override the
+ * fill colour (error → red, success → green, …) but the silhouette
+ * stays a uniform 40 px circle that fits comfortably inside the
+ * 60 px-tall activity band. */
 .ts-banner-dot {
   flex-shrink: 0;
-  width: 60px;
-  height: 60px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
-  /* Match the recessed look of the resting nav buttons — darker than
-   * the prior 0.35 so the counter cells stop reading as a selected
-   * state next to the transparent button slots. */
-  background: rgba(0, 0, 0, 0.55);
-  color: var(--text);
-  font-size: 22px;
+  border: none;
+  background: var(--accent, #e040c0);
+  color: #fff;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
   padding: 0;
-  transition: transform 0.15s, border-color 0.15s, background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 .ts-banner-dot:hover {
-  /* Drop the scale lift — the header strip is exactly 60px tall and
-   * a 60×60 chip scaled to 1.08 overflows top and bottom of the panel.
-   * Colour + border-tint already telegraph the hover affordance. */
-  border-color: rgba(var(--brand-purple-rgb), 0.85);
-  background: rgba(var(--panel-hi-rgb), 0.6);
+  /* Cannot scale-up: the panel is 60px tall and any chip-side grow
+   * pushes a tile past the strip's bottom border. Hover lift is a
+   * subtle outer glow + slight brightness bump instead. */
+  background: rgba(var(--brand-accent-rgb), 1);
+  box-shadow: 0 0 0 2px rgba(var(--brand-accent-rgb), 0.35);
 }
 .ts-banner-dot.ts-banner-error {
-  color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.55);
+  background: #ef4444;
+}
+.ts-banner-dot.ts-banner-error:hover {
+  background: #f87171;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.35);
 }
 .ts-banner-dot.ts-banner-library {
-  color: rgba(var(--brand-purple-rgb), 0.95);
+  background: rgba(var(--brand-purple-rgb), 0.95);
+}
+.ts-banner-dot.ts-banner-library:hover {
+  background: rgb(var(--brand-purple-rgb));
+  box-shadow: 0 0 0 2px rgba(var(--brand-purple-rgb), 0.35);
 }
 .ts-banner-dot.ts-banner-pipeline {
-  color: var(--accent);
-  border-color: rgba(var(--brand-accent-rgb), 0.55);
+  background: var(--accent);
 }
 .ts-banner-dot.ts-banner-success {
-  color: #86efac;
-  border-color: rgba(34, 197, 94, 0.55);
+  background: #22c55e;
 }
-/* “+N more” overflow chip — same footprint as .ts-banner-dot (60px). */
+.ts-banner-dot.ts-banner-success:hover {
+  background: #4ade80;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.35);
+}
+/* “+N more” overflow chip — same 40 px filled silhouette as
+ * .ts-banner-dot but tinted purple (not accent) so the overflow
+ * tile reads differently from the active notifications it groups. */
 .ts-banner-dot-more {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 60px;
-  height: 60px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   font-family: var(--secs, monospace);
-  font-size: 18px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1;
-  color: rgba(var(--brand-purple-rgb), 0.95);
+  color: #fff;
   cursor: help;
-  border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
-  background: rgba(0, 0, 0, 0.35);
+  border: none;
+  background: rgba(var(--brand-purple-rgb), 0.95);
   padding: 0;
-  transition: transform 0.15s, border-color 0.15s, background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 button.ts-banner-dot-more {
   cursor: pointer;
@@ -5042,32 +5051,30 @@ button.ts-banner-dot-more {
 .ts-banner-dot-more--stack::after {
   content: "";
   position: absolute;
-  width: 44px;
-  height: 44px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  border: 1px solid rgba(var(--brand-purple-rgb), 0.16);
-  background: rgba(var(--brand-purple-rgb), 0.04);
+  background: rgba(var(--brand-purple-rgb), 0.45);
   z-index: -1;
   pointer-events: none;
 }
 .ts-banner-dot-more--stack::before {
-  top: -4px;
-  left: -4px;
+  top: -3px;
+  left: -3px;
 }
 .ts-banner-dot-more--stack::after {
-  bottom: -4px;
-  right: -4px;
+  bottom: -3px;
+  right: -3px;
 }
 .ts-banner-dot-more__count {
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 .ts-banner-dot-more:hover {
-  /* No scale lift for the same reason .ts-banner-dot drops it —
-   * 60×60 inside a 60px-tall header strip can't grow without
-   * overflowing the activity band. */
+  /* No scale lift — chip would overflow the 60px activity band.
+   * Outer glow + slight brightness lift gives the hover affordance. */
   color: #fff;
-  border-color: rgba(var(--brand-purple-rgb), 0.85);
-  background: rgba(var(--panel-hi-rgb), 0.6);
+  background: rgb(var(--brand-purple-rgb));
+  box-shadow: 0 0 0 2px rgba(var(--brand-purple-rgb), 0.35);
 }
 .ts-banner-dot-more--stack:hover {
   box-shadow:
@@ -5126,22 +5133,19 @@ button.ts-banner-dot-more {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
-  color: rgba(var(--brand-purple-rgb), 0.95);
+  font-size: 13px;
+  background: var(--accent, #e040c0);
+  border: none;
+  color: #fff;
 }
 .ts-banner-more-row.ts-banner-error .ts-banner-more-row__icon {
-  color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.55);
+  background: #ef4444;
 }
 .ts-banner-more-row.ts-banner-pipeline .ts-banner-more-row__icon {
-  color: var(--accent);
-  border-color: rgba(var(--brand-accent-rgb), 0.55);
+  background: var(--accent);
 }
 .ts-banner-more-row.ts-banner-success .ts-banner-more-row__icon {
-  color: #86efac;
-  border-color: rgba(34, 197, 94, 0.55);
+  background: #22c55e;
 }
 .ts-banner-more-row__text {
   flex: 1;
