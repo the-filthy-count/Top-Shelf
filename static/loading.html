@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Loading</title>
+<link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
+<script src="/static/theme-init.js?v=20260614c"></script>
+<link rel="stylesheet" href="/static/app-shell.css?v=34">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: transparent;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow: hidden;
+  }
+  /* Layered backdrop: dark veil + fine VHS scanlines + slow purple/pink
+   * gradient sweep behind the card to give the page some movement. */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      repeating-linear-gradient(180deg,
+        rgba(255,255,255,0.025) 0 1px,
+        transparent 1px 3px),
+      radial-gradient(900px 600px at 12% 10%, rgba(var(--brand-purple-rgb), 0.18), transparent 55%),
+      radial-gradient(900px 600px at 92% 92%, rgba(var(--brand-accent-rgb), 0.16), transparent 55%),
+      rgba(var(--bg-rgb), 0.86);
+    animation: bg-pan 24s linear infinite;
+  }
+  body::after {
+    content: '';
+    position: fixed; left: 0; right: 0; height: 90px;
+    top: -90px; z-index: 0;
+    background: linear-gradient(180deg,
+      transparent 0%,
+      rgba(255,255,255,0.04) 45%,
+      rgba(var(--brand-accent-rgb), 0.06) 55%,
+      transparent 100%);
+    animation: vhs-roll 9s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes bg-pan {
+    0%, 100% { background-position: 0 0, 0 0, 0 0, 0 0; }
+    50%      { background-position: 0 -3px, 60px 30px, -60px -30px, 0 0; }
+  }
+  @keyframes vhs-roll {
+    0%   { transform: translateY(0); }
+    100% { transform: translateY(calc(100vh + 90px)); }
+  }
+
+  /* CRT TV — wraps tv.png as a beveled frame around the live content.
+   * The PNG has a ~9% top bezel, ~12% bottom bezel, and ~5% side
+   * bezels; .tv-screen is positioned with those insets so the screen
+   * area sits exactly inside the transparent window of the bezel. */
+  .tv {
+    position: relative;
+    z-index: 1;
+    /* Standalone now (no card chrome around it) — let it claim more of
+     * the viewport so the screen is the focal point. */
+    width: min(820px, 86vw);
+    aspect-ratio: 603 / 339;
+    flex-shrink: 0;
+    border-radius: 28px;
+    /* Soft outer glow + drop shadow only — the visible accent ring
+     * lives on the ::after pseudo so it can sit ON TOP of tv.png. */
+    box-shadow:
+      0 24px 60px rgba(0, 0, 0, 0.55),
+      0 0 30px rgba(var(--brand-accent-rgb), 0.18);
+  }
+  /* tv.png sits on TOP of the screen content. Its opaque bezel masks
+   * the edges/corners of the dark backing panel, while the transparent
+   * window in the centre lets .tv-content show through. The 28px
+   * border-radius rounds the PNG's hard outer corners so the bezel
+   * blends into the panel without sharp edges. */
+  .tv::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: url('/static/img/tv.webp') center/100% 100% no-repeat;
+    border-radius: 28px;
+    pointer-events: none;
+    z-index: 10;
+  }
+  /* Accent border — frontmost layer (z=11), painted on top of tv.png.
+   * Inset box-shadow lays a 1px accent line just inside the rounded
+   * rectangle, plus an outer black bezel-edge ring for separation. */
+  .tv::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 28px;
+    pointer-events: none;
+    z-index: 11;
+    box-shadow:
+      inset 0 0 0 1px rgba(var(--brand-accent-rgb), 0.55),
+      0 0 0 4px rgba(0, 0, 0, 0.55);
+  }
+  /* Backing screen — full size of the TV. Placed behind tv.png so the
+   * bezel cleanly covers the corners and the dark panel reads
+   * edge-to-edge through the bezel's transparent centre. The 28px
+   * radius matches the rounded clip applied to tv.png on `.tv::before`
+   * so the dark backing never pokes past the bezel where tv.png has
+   * been clipped transparent. */
+  .tv-screen {
+    position: absolute;
+    inset: 0;
+    border-radius: 28px;
+    overflow: hidden;
+    background: #050608;
+    z-index: 1;
+  }
+  /* Animated TV static — sits between the dark backing and the
+   * scanlines/content, so the noise modulates the screen but the text
+   * (z=4) and scanlines (::before z=1) stay legible. SVG fractal-noise
+   * baked into the background-image; CSS jitters its position on
+   * every frame so the grain is genuinely moving (rather than a
+   * static texture with a wash). */
+  .tv-noise {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    /* Higher opacity + finer-grain turbulence (baseFrequency 0.9, three
+     * octaves) so the snow reads as crisp grain rather than a faint
+     * wash. Saturated near 1.0 lets the bright pixels punch through
+     * the dark backing the way a real CRT static field would. */
+    opacity: 0.95;
+    /* `stitchTiles='stitch'` makes the noise texture seamless across
+     * the 180×180 tile boundary, so the repeated pattern has no visible
+     * grid. We then animate `background-position` (NOT `transform`):
+     * shifting the whole layer with `transform: translate(...)` made
+     * the tiled square visibly move around the screen, which the user
+     * caught as a single noise patch sliding rather than fresh static.
+     * Scrolling background-position by quasi-random offsets each frame
+     * keeps the layer pinned and just resamples a different region of
+     * the seamless texture, so each step reads as a genuine new field
+     * of snow. Same fix we used on the body backdrop pan. */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 180px 180px;
+    background-repeat: repeat;
+    animation: tv-noise-jitter 0.6s steps(10) infinite;
+  }
+  @keyframes tv-noise-jitter {
+    0%   { background-position:    0px    0px; }
+    10%  { background-position:   47px   13px; }
+    20%  { background-position:  113px   89px; }
+    30%  { background-position:   28px  154px; }
+    40%  { background-position:  166px   42px; }
+    50%  { background-position:   71px  178px; }
+    60%  { background-position:  142px   96px; }
+    70%  { background-position:    9px   65px; }
+    80%  { background-position:  131px  121px; }
+    90%  { background-position:   58px   37px; }
+    100% { background-position:    0px    0px; }
+  }
+  /* Screen-internal layers (under content):
+   *  - phosphor scanlines (green tint, 2px stripes)
+   *  - faint vignette darkening the corners */
+  .tv-screen::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+      repeating-linear-gradient(0deg,
+        rgba(74, 222, 128, 0.06) 0 1px,
+        transparent 1px 2px);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .tv-screen::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center,
+      transparent 55%,
+      rgba(0, 0, 0, 0.45) 100%);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .tv-content {
+    position: absolute;
+    /* Inset matches the bezel on tv_clean.png so logo, status text,
+     * progress bar, and step counter all sit inside the live screen
+     * area rather than overlapping the moulded plastic frame. */
+    top: 8%; bottom: 12%; left: 6%; right: 6%;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 0;
+    text-align: center;
+    /* Chromatic aberration — small magenta/green offset on every
+     * descendant text + img, plus a subtle steps() flicker so the
+     * screen content reads as a noisy CRT signal. */
+    filter:
+      drop-shadow( 1.5px 0 0 rgba(244, 114, 182, 0.55))
+      drop-shadow(-1.5px 0 0 rgba(74, 222, 128, 0.55));
+    animation: tv-chroma 3.1s steps(8) infinite;
+  }
+  @keyframes tv-chroma {
+    0%, 100% { transform: translateX(0); }
+    33%      { transform: translateX(0.4px); }
+    66%      { transform: translateX(-0.4px); }
+  }
+  .tv-logo {
+    width: min(320px, 52%);
+    height: auto;
+    object-fit: contain;
+    margin-bottom: 4px;
+  }
+  /* Brand wordmark below the TV — mirrors the `.scene-info / .scene-title`
+   * text strip under each /scenes card. Sits outside the chassis, so we
+   * wrap .tv + .tv-nameplate in a flex-column container (.tv-stack) and
+   * let the nameplate flow naturally underneath the TV. No border, no
+   * background — clean text/logo against the page backdrop. */
+  .tv-stack {
+    position: relative;
+    z-index: 1;
+    /* Pin the stack's width to the TV's width so the nameplate strip
+     * underneath can stretch full-width and the logo centres inside it
+     * — matches the title-strip pattern under each /scenes card where
+     * the text strip is flush against the bottom edge of the image. */
+    width: min(820px, 86vw);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    /* No gap — nameplate strip butts directly against the TV bottom so
+     * the two surfaces read as one continuous card, like /scenes. */
+    gap: 0;
+    /* Outer-card chrome — mirrors the /library studio pattern
+     * (favourites.html:515 `.fav-cell`). One wrapper carries the
+     * border, rounded corners, drop shadow, and outer black bezel
+     * ring; inner TV/tab have no borders of their own. overflow:hidden
+     * clips everything inside to the 28px rounded shape. */
+    border-radius: 28px;
+    overflow: hidden;
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.55);
+    box-shadow:
+      0 24px 60px rgba(0, 0, 0, 0.55),
+      0 0 30px rgba(var(--brand-accent-rgb), 0.18),
+      0 0 0 4px rgba(0, 0, 0, 0.55);
+  }
+  /* .tv inside the stack: width fills the wrapper, no own chrome.
+   * The wrapper's overflow:hidden clips the rounded card shape; the
+   * TV's bezel layers only need their bottom corners squared so the
+   * tab butts in flush (no triangular gaps). The wrapper's outer
+   * accent ring + drop shadow replace .tv's own box-shadow + the
+   * .tv::after accent ring. */
+  .tv-stack .tv,
+  .tv-stack .tv::before,
+  .tv-stack .tv .tv-screen {
+    border-radius: 28px 28px 0 0;
+  }
+  .tv-stack .tv {
+    width: 100%;
+    box-shadow: none;
+  }
+  .tv-stack .tv::after {
+    display: none;
+  }
+  /* Info strip under the TV — styled to read as the same moulded plastic
+   * as the TV bezel above (tv.png is warm grey-brown plastic with subtle
+   * top highlight + recessed underside), so the nameplate looks like an
+   * extension of the chassis rather than a separate black slab.
+   *
+   *  - background gradient: same warm grey-brown the bezel sits in,
+   *    slightly darker at the bottom so the tab feels grounded;
+   *  - top inset highlight: cream plastic edge catching light, matches
+   *    the highlight on the TV's lower bezel lip;
+   *  - bottom inset shadow + inner vignette: gives the slab a recessed
+   *    underbelly, the way a real CRT bottom panel curves under;
+   *  - drop the pink accent separator — the bezel has no pink in it,
+   *    that line read as a sticker rather than part of the chassis. */
+  .tv-nameplate {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 24px 16px;
+    background:
+      linear-gradient(180deg,
+        #232220 0%,
+        #181715 45%,
+        #0a0a09 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 240, 220, 0.10),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.55),
+      inset 0 -10px 18px rgba(0, 0, 0, 0.40),
+      inset 0 8px 22px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+  }
+  .tv-nameplate img {
+    height: 28px;
+    width: auto;
+    max-width: 280px;
+    object-fit: contain;
+    display: block;
+    opacity: 0.92;
+    /* Etched-into-the-plastic feel: light top-edge bevel + dark drop so
+     * the wordmark looks engraved rather than printed on. */
+    filter:
+      drop-shadow(0 1px 0 rgba(255, 240, 220, 0.08))
+      drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
+  }
+  .tv-line {
+    font-family: 'Shatter', monospace;
+    font-size: 16px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #f5efe1;
+    min-height: 22px;
+    transition: opacity 0.25s ease;
+  }
+  .tv-line.is-fresh {
+    animation: tv-typein 0.32s ease-out;
+  }
+  .tv-sub {
+    font-family: var(--mono, monospace);
+    font-size: 11px;
+    color: rgba(74, 222, 128, 0.85);
+    letter-spacing: 0.08em;
+    margin-top: 12px;
+    min-height: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    text-transform: uppercase;
+  }
+  .tv-sub::before { content: '> '; opacity: 0.6; }
+  .tv-sub:empty::before { display: none; }
+  .tv-sub.is-fresh {
+    animation: tv-typein 0.32s ease-out;
+  }
+  @keyframes tv-typein {
+    0%   { opacity: 0; transform: translateY(2px); filter: blur(0.8px); }
+    60%  { opacity: 1; transform: translateY(0); filter: blur(0); }
+    65%  { opacity: 0.55; }
+    100% { opacity: 1; }
+  }
+  /* Subtle screen-roll: every ~7s a faint horizontal band sweeps the
+   * screen, mimicking VHS vertical-hold drift. */
+  .tv-screen .tv-roll {
+    position: absolute;
+    left: 0; right: 0;
+    height: 28px;
+    top: -28px;
+    z-index: 4;
+    background: linear-gradient(180deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.06) 45%,
+      rgba(74, 222, 128, 0.06) 55%,
+      transparent 100%);
+    pointer-events: none;
+    animation: tv-vroll 7.3s linear infinite;
+  }
+  @keyframes tv-vroll {
+    0%   { transform: translateY(0); }
+    100% { transform: translateY(380px); }
+  }
+
+  /* Progress bar — lives in the seam between the TV chassis and the
+   * nameplate tab, so it spans the full stack width and reads as the
+   * cabinet's own status strip. No outer border or pill rounding here;
+   * the bar runs edge-to-edge of the surrounding card chrome (which
+   * the .tv-stack wrapper carries) and only the fill is rounded. */
+  .progress-outer {
+    width: 100%;
+    height: 4px;
+    background: rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+    position: relative;
+    box-shadow:
+      inset 0 1px 0 rgba(0, 0, 0, 0.45),
+      inset 0 -1px 0 rgba(255, 240, 220, 0.06);
+    z-index: 4;
+  }
+  .progress-inner {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg,
+      rgb(var(--brand-purple-rgb)),
+      rgb(var(--brand-accent-rgb)),
+      rgb(var(--brand-purple-rgb)));
+    background-size: 200% 100%;
+    transition: width 0.35s cubic-bezier(0.2, 0.85, 0.2, 1);
+    position: relative;
+    box-shadow: 0 0 10px rgba(var(--brand-accent-rgb), 0.55);
+    animation: bar-shimmer 1.6s linear infinite;
+  }
+  .progress-inner::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    right: 0;
+    width: 12px;
+    background: linear-gradient(90deg, transparent, #fff);
+    opacity: 0.6;
+    filter: blur(4px);
+  }
+  @keyframes bar-shimmer {
+    0%   { background-position:   0% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  .step-counter {
+    font-family: var(--mono, monospace);
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .step-counter::before {
+    content: '';
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px rgba(var(--brand-accent-rgb), 0.7);
+    animation: dot-blink 1s ease-in-out infinite;
+  }
+  @keyframes dot-blink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.3; }
+  }
+</style>
+</head>
+<body>
+<div class="tv-stack">
+  <div class="tv" aria-hidden="false" role="status" aria-live="polite">
+    <div class="tv-screen">
+      <div class="tv-noise" aria-hidden="true"></div>
+      <div class="tv-roll" aria-hidden="true"></div>
+      <div class="tv-content">
+        <div class="tv-line" id="stepLine">Starting up…</div>
+        <div class="tv-sub" id="stepSub"></div>
+        <div class="step-counter" id="stepCounter">—</div>
+      </div>
+    </div>
+  </div>
+  <!-- Progress bar sits in the chassis seam between the TV and the
+       nameplate tab so it reads as a status strip on the cabinet
+       rather than as content on the CRT screen. -->
+  <div class="progress-outer"><div class="progress-inner" id="progressInner"></div></div>
+  <div class="tv-nameplate" aria-hidden="true">
+    <img src="/static/img/logo.webp" alt="Top-Shelf" onerror="this.parentElement.remove()">
+  </div>
+</div>
+<script>
+  const NEXT_URL = '__NEXT__' || '/scenes';
+  const STARTUP_DEADLINE_MS = 120000;
+  const _startupStarted = Date.now();
+  let _statusFailStreak = 0;
+  const stepLine = document.getElementById('stepLine');
+  const stepSub = document.getElementById('stepSub');
+  const stepCounter = document.getElementById('stepCounter');
+  const progressInner = document.getElementById('progressInner');
+
+  // Briefly toggle a class so each new step value re-runs the type-in
+  // animation — matches the "messages appearing one by one" feel
+  // without changing the polling cadence.
+  function setText(el, value) {
+    if (el.textContent === value) return;
+    el.textContent = value;
+    el.classList.remove('is-fresh');
+    // Force reflow so the animation restarts on identical re-adds.
+    void el.offsetWidth;
+    el.classList.add('is-fresh');
+  }
+
+  async function pollStatus() {
+    if (Date.now() - _startupStarted > STARTUP_DEADLINE_MS) {
+      setText(stepLine, 'Startup is taking longer than expected.');
+      setText(stepSub, 'Check the server logs, then refresh this page.');
+      return;
+    }
+    try {
+      const r = await fetch('/api/startup/status', { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const d = await r.json();
+      _statusFailStreak = 0;
+      setText(stepLine, d.current || 'Warming caches…');
+      setText(stepSub, d.current_subtext || '');
+      const total = d.steps_total || 1;
+      const idx = Math.min(d.step_index || 0, total);
+      stepCounter.textContent = total ? `Step ${idx} of ${total}` : '—';
+      const pct = total ? Math.max(4, Math.min(100, Math.round((idx / total) * 100))) : 4;
+      progressInner.style.width = pct + '%';
+      if (d.ready) {
+        progressInner.style.width = '100%';
+        setText(stepLine, 'Ready — redirecting…');
+        setText(stepSub, '');
+        setTimeout(() => { window.location.href = NEXT_URL; }, 350);
+        return;
+      }
+    } catch (err) {
+      _statusFailStreak += 1;
+      if (_statusFailStreak >= 8) {
+        setText(stepLine, 'Cannot reach the server.');
+        setText(stepSub, (err && err.message) ? err.message : 'Check that Top-Shelf is running, then refresh.');
+      }
+    }
+    setTimeout(pollStatus, 800);
+  }
+  pollStatus();
+</script>
+</body>
+</html>

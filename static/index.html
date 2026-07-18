@@ -1,0 +1,2230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — Feeds</title>
+
+<link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
+<link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
+<!-- webawesome bundle previously loaded here. The page uses zero
+     <wa-*> elements, and the bundled localize.js / chunk module
+     ships a self-referencing import cycle that throws on load. -->
+<script src="/static/theme-init.js?v=20260614c"></script>
+<link rel="stylesheet" href="/static/app-shell.css?v=34">
+<link rel="stylesheet" href="/static/index.css?v=1">
+<script src="/static/ts-utils.js?v=20260706a"></script>
+<script src="/static/lib-entity-actions.js?v=20260612c"></script>
+<script src="/static/popup-loader.js?v=20260706a"></script>
+<style>
+  /* Font tokens (--mono / --acid / --secs) live in /static/app-shell.css */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { height: 100%; }
+  body {
+    background: transparent;
+    color: var(--text); font-family: var(--mono); font-size: 13px; line-height: 1.6;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  body::before { content: ''; position: fixed; inset: 0; background: rgba(var(--bg-rgb),0.72); z-index: 0; }
+  .app {
+    position: relative; z-index: 1;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 24px 24px;
+  }
+
+  header {
+    flex-shrink: 0;
+    padding: 14px 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.88) 0%, rgba(var(--panel-lo-rgb),0.78) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.22);
+    margin-bottom: 20px;
+  }
+  header:not(.ts-app-header) {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  header.ts-app-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 2fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 12px 16px;
+  }
+  header.ts-app-header .ts-header-left { justify-self: start; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
+  header.ts-app-header .nav-links { justify-self: end; }
+  .logo img { height: 36px; object-fit: contain; }
+  .nav-links { display: flex; gap: 10px; align-items: center; }
+
+  /* Persistent watermark silhouette — anchored to the viewport
+   * bottom-right and always visible while the Downloads tab is
+   * active. Sits ABOVE `.app` (which carries `position: relative;
+   * z-index: 1` and a backdrop-filter'd translucent panel that
+   * would otherwise erase a low-opacity image painted underneath
+   * it). `pointer-events: none` keeps the dl-bar rows fully
+   * clickable through the watermark. */
+  .dl-bg-decor {
+    position: fixed;
+    right: 24px;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 2;
+    display: none;
+  }
+  .dl-bg-decor img {
+    width: auto;
+    height: calc(100vh - 180px);
+    max-height: 880px;
+    opacity: 0.1;
+    display: block;
+  }
+
+  .pct { font-variant-numeric: tabular-nums; }
+  .empty { text-align: center; color: var(--dim); padding: 32px 18px; font-size: 12px; }
+  .progress-cell { min-width: 120px; }
+  .progress-track {
+    height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 4px; max-width: 140px;
+  }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), rgba(var(--brand-purple-rgb),0.6)); border-radius: 3px; transition: width 0.2s ease; }
+  .progress-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .progress-num { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--dim); min-width: 3.2em; }
+
+  .prowlarr-search-panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.88) 0%, rgba(var(--panel-lo-rgb),0.78) 100%);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    overflow: hidden;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.25);
+  }
+  .prowlarr-search-panel .panel-header { border-bottom: 1px solid rgba(255,255,255,0.06); }
+
+  /* Match the input + select theming used on /discover, /scenes, /queue,
+   * /downloads, and /settings so the search bar reads as part of the
+   * glass chrome instead of falling back to browser-default white. */
+  .field-input { background: var(--raised); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-family: var(--mono); font-size: 12px; width: 100%; outline: none; transition: border-color 0.15s; }
+  .field-input:focus { border-color: var(--accent); }
+  .field-input::placeholder { color: var(--muted); }
+  select.field-input { cursor: pointer; }
+
+  
+  
+
+  /* Prowlarr list results */
+  
+  /* Prowlarr search results — chrome mirrors .ts-row in app-shell.css */
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  .dl-pr-type img.dl-type-logo {
+    max-height: 22px;
+    max-width: 68px;
+    height: auto;
+    width: auto;
+    display: block;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7));
+  }
+  /* Kept as no-ops for any callers still passing the class names. */
+  
+  
+  
+  
+  
+  
+
+  /* RSS poster grid */
+  .rss-poster-grid {
+    display: grid;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: 11px;
+    padding: 14px 18px 20px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    align-content: start;
+  }
+  @media (max-width: 1200px) { .rss-poster-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); } }
+  @media (max-width: 860px)  { .rss-poster-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  /* Mobile (≤640px, matches the rest of the page's portrait
+   * breakpoints): 2 tiles per row across Movies / Performers / Vices
+   * tabs so the posters stay legible on a phone. */
+  @media (max-width: 640px)  { .rss-poster-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  .rss-tile {
+    display: flex;
+    flex-direction: column;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(var(--panel-lo-rgb),0.9);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.55);
+    outline: 1px solid transparent;
+    cursor: default;
+    transition: border-color 0.2s, outline-color 0.2s, box-shadow 0.2s;
+  }
+  .rss-tile:hover {
+    border-color: rgba(var(--brand-purple-rgb),0.65);
+    outline-color: rgba(var(--brand-purple-rgb),0.3);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.55);
+  }
+  /* ── Headshot medallion trio — performer mode ────────────────────────
+   * Three circular medallions stacked at the centre of the tile:
+   *
+   *   • `.rss-tile-headshot-medallion`          — big primary (match[0])
+   *   • `.rss-tile-headshot-medallion--right`   — smaller, offset behind
+   *                                               and slightly above-right
+   *                                               (match[1])
+   *   • `.rss-tile-headshot-medallion--left`    — same, mirrored
+   *                                               (match[2])
+   *
+   * Render count follows match count:
+   *     1 match  → center only
+   *     2 matches → center + right
+   *     3 matches → center + right + left
+   *     4+        → center + right + left, arrows cycle the window
+   *
+   * All three hide on tile hover so the full poster is visible. */
+  .rss-tile-headshot-medallion,
+  .rss-tile-headshot-medallion--right,
+  .rss-tile-headshot-medallion--left {
+    position: absolute;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid rgba(var(--bg-rgb), 0.88);
+    background: var(--raised);
+    opacity: 1;
+    transition: opacity 0.22s ease, transform 0.22s ease;
+    pointer-events: none;
+    /* Defeat any ancestor filter so medallion faces stay vivid against
+     * the muted duotone poster underneath. */
+    filter: none !important;
+  }
+  .rss-tile-headshot-medallion {
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 120px; height: 120px;
+    z-index: 4;                       /* primary on top */
+    box-shadow:
+      0 4px 18px rgba(0,0,0,0.62),
+      0 0 0 1px rgba(var(--brand-purple-rgb), 0.5),
+      0 0 24px rgba(0,0,0,0.38);
+  }
+  /* Side medallions: smaller, peek out from behind the primary at the
+   * top-right and top-left so the three faces form a shallow arc across
+   * the upper third of the tile. z-index 3 keeps them beneath the
+   * primary (z 4), the studio logo (z 5), and the carousel arrows
+   * (z 7). */
+  .rss-tile-headshot-medallion--right,
+  .rss-tile-headshot-medallion--left {
+    width: 84px; height: 84px;
+    z-index: 3;
+    border-width: 2px;
+    box-shadow:
+      0 3px 12px rgba(0,0,0,0.55),
+      0 0 0 1px rgba(var(--brand-purple-rgb), 0.35);
+  }
+  /* Secondary medallions are positioned with fixed pixel offsets so
+   * their outer edge lines up with the outer edge of the carousel
+   * arrows (which have 6px padding). With an 84px medallion and
+   * transform: translate(±50%, -50%), `left/right: 48px` puts the
+   * center one radius + 6px in from the edge, so the far side of the
+   * circle ends up flush at 6px. Upper-third vertically (top: 32%)
+   * so they peek above the primary rather than overlapping horizontally. */
+  .rss-tile-headshot-medallion--right {
+    top: 32%;
+    right: 48px;
+    left: auto;
+    transform: translate(50%, -50%);
+  }
+  .rss-tile-headshot-medallion--left {
+    top: 32%;
+    left: 48px;
+    transform: translate(-50%, -50%);
+  }
+  .rss-tile:hover .rss-tile-headshot-medallion,
+  .rss-tile:hover .rss-tile-headshot-medallion--right,
+  .rss-tile:hover .rss-tile-headshot-medallion--left {
+    opacity: 0;
+    /* Hold the rest-state translate; dropping the scale(0.92) so
+     * medallions fade in place rather than shrinking-and-shifting. */
+    transform: translate(-50%, -50%);
+  }
+  /* Scale the medallions down on narrow grids so they don't dominate
+   * tiny tiles in the 4-col / 2-col responsive breakpoints. The
+   * left/right offsets track the medallion radius + 6px so the edge
+   * stays flush with the carousel arrow edge at every size. */
+  @media (max-width: 1200px) {
+    .rss-tile-headshot-medallion { width: 96px; height: 96px; }
+    .rss-tile-headshot-medallion--right,
+    .rss-tile-headshot-medallion--left { width: 66px; height: 66px; }
+    .rss-tile-headshot-medallion--right { right: 39px; }
+    .rss-tile-headshot-medallion--left  { left:  39px; }
+  }
+  @media (max-width: 860px) {
+    .rss-tile-headshot-medallion { width: 84px; height: 84px; border-width: 2px; }
+    .rss-tile-headshot-medallion--right,
+    .rss-tile-headshot-medallion--left { width: 56px; height: 56px; }
+    .rss-tile-headshot-medallion--right { right: 34px; }
+    .rss-tile-headshot-medallion--left  { left:  34px; }
+  }
+
+  /* ── Studio tile top-left performer row ─────────────────────────────
+   * In studio mode the tile's main image IS the studio logo, so we
+   * can't use the centre for library-performer headshots. Instead we
+   * stack up to 4 circular avatars across the top-centre of the tile —
+   * these come from the RSS result's `matched_rows` filtered to
+   * `kind === 'performer'`, visible at rest (no hover toggle). */
+  .rss-tile-studio-perfs {
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex; flex-direction: row; gap: 6px;
+    z-index: 5;
+    pointer-events: none;
+    max-width: calc(100% - 12px);
+    justify-content: center;
+  }
+  .rss-tile-studio-perf-avatar {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(var(--bg-rgb), 0.88);
+    box-shadow:
+      0 3px 10px rgba(0,0,0,0.6),
+      0 0 0 1px rgba(var(--brand-purple-rgb), 0.45);
+    background: var(--raised);
+    filter: none !important;
+  }
+  /* Scale the studio-mode avatars down on narrow grids so a 4-match
+   * row doesn't overflow the small responsive tile widths. */
+  @media (max-width: 1200px) {
+    .rss-tile-studio-perf-avatar { width: 64px; height: 64px; }
+  }
+  @media (max-width: 860px) {
+    .rss-tile-studio-perf-avatar { width: 52px; height: 52px; border-width: 2px; }
+  }
+  /* Studio logo overlay — performer tiles only. Top-centre of the poster,
+   * sitting above the duotone tints so it's never tinted. Transparent
+   * background with a dark drop-shadow for legibility. The base
+   * `img[src$="/logos/..."]` chip rule from app-shell.css doesn't apply
+   * here (this src is /api/studio-logo?q=…), so the logo renders clean. */
+  .rss-tile-studio-logo {
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    max-height: 38px;
+    max-width: 60%;
+    width: auto;
+    height: auto;
+    pointer-events: none;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.85)) drop-shadow(0 0 6px rgba(0,0,0,0.55));
+    background: transparent;
+    transition: top 0.22s ease, transform 0.22s ease, max-height 0.22s ease;
+  }
+  /* When the tile has no headshot medallion, drop the studio logo into
+   * the centre of the poster so the tile isn't visually empty. */
+  .rss-tile-studio-logo--centered {
+    top: 50%;
+    transform: translate(-50%, -50%);
+    max-height: 70px;
+    max-width: 60%;
+  }
+  .rss-tile:hover .rss-tile-studio-logo--centered {
+    opacity: 0;
+  }
+
+  /* Favourite-match heart badge (mirrors /library .fav-card-heart.heart-on) */
+  .rss-tile-fav-heart {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 5;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: var(--accent);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.95), 0 0 8px rgba(0,0,0,0.8);
+    pointer-events: none;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.85));
+  }
+  /* All tiles (studio + performer/favourite) share the base top-right
+   * anchor — the heart-trio overlap recipe was retired alongside the
+   * three-row layout. z-index beats the medallion (4) and studio logo
+   * (5) so the heart stays the topmost tile overlay. */
+  .rss-tile:not(.rss-tile--studio) .rss-tile-fav-heart {
+    z-index: 6;
+  }
+  /* Inner poster area keeps the aspect ratio */
+  .rss-tile-inner {
+    position: relative;
+    aspect-ratio: 2/3;
+    flex-shrink: 0;
+    overflow: hidden;
+    width: 100%;
+  }
+  .rss-tile--studio .rss-tile-inner {
+    aspect-ratio: 16/9;
+  }
+  .rss-tile-poster {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: filter 0.3s ease, transform 0.3s ease;
+  }
+  /* True duotone on performer tiles: per-image auto-levels from JS (see
+   * autoLevelPosterImage in ts-utils.js) push the muddy source into a punchy
+   * dynamic range, THEN grayscale, so multiply+lighten map onto a proper
+   * luminance gradient rather than a flat mid-grey. At rest we also blur
+   * the poster so the crisp medallion trio stacks visually on top of a
+   * soft colour wash rather than competing with the original image. Hover
+   * drops the blur (and the grayscale) to reveal the clean poster. */
+  .rss-tile:not(.rss-tile--studio) .rss-tile-poster {
+    filter: brightness(var(--auto-b, 1.06))
+            contrast(var(--auto-c, 1.12))
+            hue-rotate(var(--auto-h, 0deg))
+            var(--duotone-filter, none)
+            blur(6px);
+    /* Scale up slightly so the blurred edge doesn't reveal the bare
+     * background colour at the tile border (blur() bleeds outside the
+     * element). */
+    transform: scale(1.04);
+  }
+  .rss-tile:not(.rss-tile--studio):hover .rss-tile-poster {
+    filter: brightness(var(--auto-b-hover, 1.04))
+            contrast(var(--auto-c-hover, 1.1))
+            hue-rotate(var(--auto-h, 0deg))
+            saturate(1.22);
+    /* Keep the rest-state scale(1.04) on hover too — the resting
+     * upscale was added to mask blur bleed at the tile edges, but
+     * shrinking back to scale(1) on hover read as the poster "moving".
+     * Holding the same scale through both states keeps the tile
+     * static; the filter swap (blur → sharpened) handles the visual
+     * lift without any geometry change. Same fix below for the
+     * inverted-duotone variant. */
+    transform: scale(1.04);
+  }
+  /* TV-static layer over the blurred resting poster. Three stacked
+   * background layers do the work:
+   *   1. Horizontal scanline pattern (1px white line every 3px) that
+   *      rolls vertically — the "rolling band" tearing you get on an
+   *      untuned analog channel.
+   *   2. High-frequency `--vhs-noise` (≈22% alpha) jittering at one
+   *      frequency.
+   *   3. Coarser `--vhs-noise2` (≈10% alpha) panning the opposite way
+   *      so the pattern never settles into a recognisable texture.
+   * `screen` blend mode adds the static onto the blurred image so it
+   * pops as bright sparkle on dark areas and leaves highlights alone.
+   * Opacity 0.85 (up from 0.45) gives the look real bite — closer to
+   * a dead channel than a film grain. Studio tiles opt out below. */
+  .rss-tile:not(.rss-tile--studio) .rss-tile-inner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    /* Inline SVG noise fallbacks so the TV static still renders when
+     * the VHS theme variables (--vhs-noise / --vhs-noise2) aren't set
+     * — e.g. when the user is on the default theme. */
+    background-image:
+      repeating-linear-gradient(0deg,
+        rgba(255, 255, 255, 0.10) 0 1px,
+        transparent 1px 3px),
+      var(--vhs-noise,  url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.22 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")),
+      var(--vhs-noise2, url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.45' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.10 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"));
+    background-size:
+      100% 4px,
+      160px 160px,
+      220px 220px;
+    background-repeat: repeat-x, repeat, repeat;
+    mix-blend-mode: screen;
+    opacity: 0.85;
+    transition: opacity 0.3s ease;
+    animation: rss-tile-tv-static 0.55s steps(8) infinite;
+  }
+  /* Fade the static out alongside the blur — the hover state shows
+   * the clean sharpened poster, no interference. */
+  .rss-tile:not(.rss-tile--studio):hover .rss-tile-inner::before {
+    opacity: 0;
+  }
+  /* Studio variant uses ::before for its own duotone fill (see below),
+   * so make sure our noise rule doesn't bleed into it. */
+  /* Studio tiles repurpose `::before` as the radial-vignette layer
+   * (mirrors the /library studio recipe in favourites.html). The
+   * scan-line / noise animation that the non-studio rule paints
+   * stays disabled — `animation: none` so even if cascade churn
+   * re-enables `content`, the layer just paints the gradient
+   * statically. Multiply blend darkens the static at the corners
+   * and tints the centre green; opacity drops to 0.5 on hover so
+   * the static reads more cleanly while the logo brightens. */
+  .rss-tile--studio .rss-tile-inner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    /* Desaturated blue-grey vignette. Brightness of each stop is
+     * preserved from the previous saturated blue pair so the
+     * multiply-blend recipe (logo + static + vignette) keeps the
+     * same visual weight; only the chroma drops by ~50%. */
+    background: radial-gradient(ellipse at center,
+      #bac9dc 0%,
+      #414658 50%,
+      #0a0d0a 100%
+    );
+    mix-blend-mode: multiply;
+    pointer-events: none;
+    z-index: 0;
+    border-radius: inherit;
+    opacity: 1;
+    animation: none;
+    transition: opacity 0.3s ease, background 0.3s ease;
+  }
+  .rss-tile--studio:hover .rss-tile-inner::before,
+  .rss-tile--studio:focus-within .rss-tile-inner::before {
+    background: radial-gradient(ellipse at center,
+      #c9d5e3 0%,
+      #4c5570 50%,
+      #0a0d0a 100%
+    );
+    opacity: 0.5;
+  }
+  /* Three-layer pan:
+   *   layer 1 (scanlines)       only Y scrolls — rolls down the tile.
+   *   layer 2 (fine noise)      jitters in both axes, fast.
+   *   layer 3 (coarse noise)    drifts opposite of layer 2, slower
+   *                             apparent speed (smaller deltas).
+   * The `steps(8)` cadence makes the motion feel quantised — like an
+   * analog tube redrawing rather than smoothly tweening. */
+  @keyframes rss-tile-tv-static {
+    0%   { background-position:  0   0,    0    0,     0    0; }
+    25%  { background-position:  0  -9px, 40px -28px, -22px  12px; }
+    50%  { background-position:  0  -2px, -22px 36px,  12px -28px; }
+    75%  { background-position:  0 -14px, 18px -52px, -34px -6px; }
+    100% { background-position:  0 -22px, 60px  8px,  -6px  44px; }
+  }
+  /* Reuse old keyframe name for backwards-compat with `.wanted-thumb`
+   * which references it explicitly below. */
+  @keyframes rss-tile-noise-pan {
+    0%   { background-position:  0   0,    0    0,     0    0; }
+    25%  { background-position:  0  -9px, 40px -28px, -22px  12px; }
+    50%  { background-position:  0  -2px, -22px 36px,  12px -28px; }
+    75%  { background-position:  0 -14px, 18px -52px, -34px -6px; }
+    100% { background-position:  0 -22px, 60px  8px,  -6px  44px; }
+  }
+  /* Studio logo: contain inside dark bg instead of cover. Uniform
+   * 40px padding so the logo is small inside the duotone backdrop;
+   * object-fit: contain scales the logo to fit the reduced inner
+   * box so it never touches the tile edges. */
+  .rss-tile--studio .rss-tile-poster {
+    object-fit: contain;
+    padding: 40px;
+    box-sizing: border-box;
+    /* `mix-blend-mode: soft-light` mirrors the /library studio
+     * recipe — symmetric soft response on both light and dark
+     * portions of the logo, paired with `brightness(0.5)` to mute
+     * the rest state without alpha-mixing blacks into the dark
+     * vignette. Hover drops the brightness mute so the logo pops
+     * while the gradient `::before` simultaneously fades. */
+    mix-blend-mode: soft-light;
+    opacity: 1;
+    filter: brightness(0.5)
+            drop-shadow(0 2px 4px rgba(0,0,0,0.7))
+            drop-shadow(0 0 3px rgba(0,0,0,0.45));
+    transition: filter 0.3s ease;
+    position: relative;
+    z-index: 1;
+  }
+  .rss-tile--studio:hover .rss-tile-poster,
+  .rss-tile--studio:focus-within .rss-tile-poster {
+    mix-blend-mode: soft-light;
+    opacity: 1;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.7))
+            drop-shadow(0 0 3px rgba(0,0,0,0.45));
+  }
+  html[data-duotone-inverted="1"] .rss-tile--studio .rss-tile-poster {
+    mix-blend-mode: soft-light;
+    opacity: 1;
+    filter: brightness(0.5)
+            drop-shadow(0 2px 4px rgba(0,0,0,0.7))
+            drop-shadow(0 0 3px rgba(0,0,0,0.45));
+  }
+  html[data-duotone-inverted="1"] .rss-tile--studio:hover .rss-tile-poster {
+    mix-blend-mode: soft-light;
+    opacity: 1;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.7))
+            drop-shadow(0 0 3px rgba(0,0,0,0.45));
+  }
+  /* CRT/TV-frame overlay sits above the vignette `::before` (z:0),
+   * the logo IMG (z:1), and the existing `::after` accent layer
+   * (z:2). The studio logo (z:5) and the studio-perf headshot row
+   * (z:5) stay on top of it; the title overlay needs to be lifted
+   * (see rule below) since its default z-index of 1 would put the
+   * cleaned release name behind the scan-line frame. */
+  .rss-tile--studio .rss-tile-tv-overlay {
+    position: absolute;
+    inset: 0;
+    background: url('/static/img/tv.webp') center/100% 100% no-repeat;
+    pointer-events: none;
+    z-index: 3;
+    border-radius: inherit;
+    overflow: hidden;
+  }
+  /* ── Studio tile three-row layout ───────────────────────────────
+   * The CRT/TV frame (`tv.png`) draws a thick bezel around the inner
+   * area, so the three content slots need to be inset from the tile
+   * edges to stay inside the bezel's "screen" region:
+   *   ~10% top / 10% bottom (bezel is taller on the vertical edges)
+   *   ~6% left / 6% right
+   *
+   * Top row     — headshots (`.rss-tile-studio-perfs`)
+   * Middle row  — studio logo (`.rss-tile-studio-logo`)
+   * Bottom row  — title + age/size meta (`.rss-tile-overlay`)
+   *
+   * Each row spans ~26% of the tile height, with 10% bezel padding
+   * top + bottom and 1% gap between rows: 10 + 26 + 1 + 26 + 1 + 26 + 10 = 100. */
+
+  /* Headshots row → top band inside the bezel. */
+  .rss-tile--studio .rss-tile-studio-perfs {
+    top: 10%;
+    bottom: auto;
+    left: 6%;
+    right: 6%;
+    transform: none;
+    height: 26%;
+    width: auto;
+    max-width: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Below the tv-frame (z:3) so the scan-lines paint over the
+     * headshots — mirrors the title overlay below. Still above the
+     * vignette `::before` (z:0) and the poster's implicit layer. */
+    z-index: 2;
+  }
+  /* Headshot avatars on studio tiles share the logo's rest-state
+   * recipe: `mix-blend-mode: soft-light` for a symmetric soft tint
+   * against the static + vignette backdrop, plus `brightness(0.85)`
+   * to mute the rest state without alpha-mixing dark pixels into
+   * the dark backdrop. Hover lifts the brightness back to 1 to
+   * mirror the logo's brighten-on-hover so headshots and logo
+   * crossfade together. The `filter: none !important` on the base
+   * rule needs an explicit override since we ARE setting a filter.
+   *
+   * Sizing: the row is height: 26% of the tile (see `.rss-tile-studio-perfs`
+   * above). Avatars use `height: 100%` of that row + `aspect-ratio: 1`
+   * so they remain circles that scale with the row, never busting
+   * out of the headshot band. The fixed-pixel media-query sizes in
+   * the base rule are overridden with `width/height: auto` driven
+   * by the row height. */
+  .rss-tile--studio .rss-tile-studio-perf-avatar {
+    height: 100%;
+    width: auto;
+    aspect-ratio: 1 / 1;
+    max-height: 80px;
+    mix-blend-mode: soft-light;
+    filter: brightness(0.85) !important;
+    transition: filter 0.3s ease;
+  }
+  .rss-tile--studio:hover .rss-tile-studio-perf-avatar,
+  .rss-tile--studio:focus-within .rss-tile-studio-perf-avatar {
+    mix-blend-mode: soft-light;
+    filter: brightness(1) !important;
+  }
+
+  /* Middle row — the studio's brand mark IS the poster image
+   * (`.rss-tile-poster`) in studios mode, so we constrain THAT
+   * element to the middle band. Default rule pins the poster to
+   * `inset: 0` with 40px internal padding, which made it span the
+   * entire tile and ignore the row layout.
+   *
+   * `inset: auto` first to clear the base `inset: 0`, then explicit
+   * top/left/right + height for the middle row, plus `padding: 0`
+   * so `object-fit: contain` scales the logo into the row bounds
+   * rather than shrinking inside an extra 40px of padding. */
+  .rss-tile--studio .rss-tile-poster {
+    /* CSS spec quirk: for an absolutely-positioned *replaced* element
+     * (IMG), `width: auto` with BOTH `left` and `right` set is
+     * over-constrained — the renderer uses the IMG's intrinsic
+     * width and silently ignores the `right` value. That's why
+     * wide brand marks were leaking off the right edge: the box
+     * was natural-image-pixels wide, then `object-fit: contain`
+     * had nothing to scale into.
+     *
+     * Switching to an explicit `width: 84%` + `left: 8%` defines
+     * the IMG's box as a fixed (left-anchored) rectangle, and
+     * `object-fit: contain` then scales the image content to fit
+     * inside the rectangle while preserving aspect ratio. Drop
+     * `right` entirely since `left + width = 92%` already mirrors
+     * the intended 8% gutter on the right. */
+    inset: auto;
+    top: 37%;
+    left: 8%;
+    right: auto;
+    bottom: auto;
+    width: 84%;
+    height: 26%;
+    padding: 0;
+    object-fit: contain;
+    object-position: center;
+  }
+
+  /* Secondary `.rss-tile-studio-logo` overlay — used on performer /
+   * favourites tiles to brand a release with a small studio mark.
+   * On the studios tab it would double up with the poster above so
+   * the JS template skips it; this rule only catches stray cases. */
+  .rss-tile--studio .rss-tile-studio-logo,
+  .rss-tile--studio .rss-tile-studio-logo--centered {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-height: 22%;
+    max-width: 55%;
+    width: auto;
+    height: auto;
+    z-index: 5;
+  }
+  .rss-tile--studio:hover .rss-tile-studio-logo--centered {
+    opacity: 1;
+  }
+
+  /* Title + meta → bottom band inside the bezel. Note: order matters
+   * — `inset: auto` MUST come before the per-edge overrides because
+   * `inset` is shorthand for top/right/bottom/left and would reset
+   * any of them written before it. The base rule has `inset: 0`, so
+   * we explicitly null that with `inset: auto` first, THEN apply our
+   * top/left/right/bottom anchors to pin the band. `z-index: 4` keeps
+   * the title above the tv-frame layer (z:3) so the cleaned release
+   * name + age/size meta read through the scan-line texture.
+   *
+   * Soft-light + brightness(0.5)→1 mirrors the logo + headshot
+   * treatment: at rest the text muutes into the backdrop, on hover
+   * it lifts to full strength so the whole tile crossfades together. */
+  .rss-tile--studio .rss-tile-overlay {
+    inset: auto;
+    top: auto;
+    bottom: 10%;
+    left: 6%;
+    right: 6%;
+    height: 26%;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    /* Below the tv-frame layer (z:3) so the scan-line texture paints
+     * across the title — title still sits above the vignette `::before`
+     * (z:0) and the poster image's implicit layer. */
+    z-index: 2;
+    padding: 0;
+    gap: 4px;
+  }
+  .rss-tile--studio .rss-tile-overlay .rss-tile-title {
+    -webkit-line-clamp: 2;
+    font-size: 12px;
+    line-height: 1.25;
+    margin: 0;
+  }
+  .rss-tile--studio .rss-tile-overlay .rss-tile-meta {
+    font-size: 10px;
+    line-height: 1.2;
+    margin: 0;
+  }
+  .rss-tile-no-img {
+    position: absolute; inset: 0;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.95) 0%, rgba(var(--bg-rgb),0.98) 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; color: rgba(var(--brand-purple-rgb),0.35);
+  }
+
+  /* ── Three-row layout for favourite + performer tiles ────────────
+   *   Top    — studio logo            (height: 33%)
+   *   Middle — headshot medallions    (height: 33%)
+   *   Bottom — title + meta           (height: 33%)
+   *
+   * The poster IMG still covers the full tile with the duotone+blur
+   * recipe; these rules only re-pin the three overlay groups so each
+   * lives inside its own third and never bleeds into a neighbour. */
+
+  /* Top band — studio logo. The base rule pins it to `top: 6px` with a
+   * fixed `max-height: 38px`; we override both with full-width band
+   * sizing + `object-fit: contain` so the brand mark scales to fill its
+   * third without cropping. The `--centered` variant (set by the JS
+   * when the tile has no center headshot) is also overridden so the
+   * logo always sits in the top third on non-studio tiles. */
+  .rss-tile:not(.rss-tile--studio) .rss-tile-studio-logo,
+  .rss-tile:not(.rss-tile--studio) .rss-tile-studio-logo--centered {
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: auto;
+    transform: none;
+    width: 100%;
+    height: 33.33%;
+    max-height: none;
+    max-width: none;
+    padding: 8px 14px;
+    box-sizing: border-box;
+    object-fit: contain;
+    object-position: center;
+    transition: opacity 0.18s ease;
+  }
+  /* Hover state on favourites + performers tiles: fade the studio brand
+   * out so the hover-reveal content underneath (headshot trio, tv
+   * overlay, title band) isn't competing with a logo at the top edge.
+   * Studios tab keeps its own behaviour via `.rss-tile--studio:hover`
+   * rules above. */
+  .rss-tile:not(.rss-tile--studio):hover .rss-tile-studio-logo,
+  .rss-tile:not(.rss-tile--studio):hover .rss-tile-studio-logo--centered {
+    opacity: 0;
+  }
+
+  /* Middle band — medallion trio. Switching from fixed-pixel sizes
+   * (120 / 84 / 84) to `height` percentages of the tile + `aspect-ratio: 1`
+   * keeps the circles round and constrains them to the middle band at
+   * any tile width. Centred vertically on the tile (top: 50%) puts
+   * them at the centre of the middle third (which spans 33%–66%). */
+  .rss-tile:not(.rss-tile--studio) .rss-tile-headshot-medallion,
+  .rss-tile:not(.rss-tile--studio) .rss-tile-headshot-medallion--right,
+  .rss-tile:not(.rss-tile--studio) .rss-tile-headshot-medallion--left {
+    top: 50%;
+    width: auto;
+    aspect-ratio: 1 / 1;
+  }
+  .rss-tile:not(.rss-tile--studio) .rss-tile-headshot-medallion {
+    height: 26%;
+    left: 50%;
+    right: auto;
+    transform: translate(-50%, -50%);
+  }
+  .rss-tile:not(.rss-tile--studio) .rss-tile-headshot-medallion--right {
+    height: 20%;
+    right: 16%;
+    left: auto;
+    transform: translate(0, -50%);
+  }
+  .rss-tile:not(.rss-tile--studio) .rss-tile-headshot-medallion--left {
+    height: 20%;
+    left: 16%;
+    right: auto;
+    transform: translate(0, -50%);
+  }
+
+  /* Bottom band — title + meta. Pin the overlay to the bottom third so
+   * its `justify-content: flex-end` flushes the title against the tile
+   * floor, never overlapping the medallion trio above. Cap the title at
+   * 3 lines so a long release name still fits within the band height. */
+  .rss-tile:not(.rss-tile--studio) .rss-tile-overlay {
+    top: 66.67%;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 33.33%;
+    padding: 0 8px 10px;
+  }
+  .rss-tile:not(.rss-tile--studio) .rss-tile-overlay .rss-tile-title {
+    -webkit-line-clamp: 3;
+  }
+  /* Legacy blend-mode duotone layers — disabled in favour of the SVG
+   * filter applied directly to .rss-tile-poster. The elements remain
+   * in the DOM for template compatibility but paint nothing. */
+  .rss-tile-duo-tint { display: none; }
+  .rss-tile-inner::after { content: none; }
+
+  /* ── Inverted duotone mode (palette toggle on the RSS toolbar) ──
+   * Default: duotone at rest, clean image on hover.
+   * Inverted: clean (no duotone) at rest, duotone on hover.
+   * Blur behaviour is orthogonal to the toggle — we always blur at rest
+   * and sharpen on hover, because the blur reads as "card in its resting
+   * state" independent of which way the duotone is flipped.
+   * Studio rules intentionally exempt — studios use their own accent/purple
+   * swap and the palette toggle leaves that behaviour alone. */
+  html[data-duotone-inverted="1"] .rss-tile:not(.rss-tile--studio) .rss-tile-poster {
+    filter: brightness(var(--auto-b-hover, 1.04))
+            contrast(var(--auto-c-hover, 1.1))
+            hue-rotate(var(--auto-h, 0deg))
+            saturate(1.22)
+            blur(6px);
+    transform: scale(1.04);
+  }
+  html[data-duotone-inverted="1"] .rss-tile:not(.rss-tile--studio):hover .rss-tile-poster {
+    filter: brightness(var(--auto-b, 1.06))
+            contrast(var(--auto-c, 1.12))
+            hue-rotate(var(--auto-h, 0deg))
+            var(--duotone-filter, none);
+    transform: scale(1.04);
+  }
+  /* Palette toggle button active state (generic) */
+  [data-duotone-toggle].is-active { outline: 1px solid rgba(var(--brand-accent-rgb),0.65); outline-offset: 1px; }
+
+  /* Studios: no duotone (transparent PNGs), use a vertical wash
+   * through the duotone tokens into the body backdrop instead.
+   * Rest: duotone1 → duotone2 → bg   (warm top, cool mid, dark bottom)
+   * Hover: bg → duotone2 → duotone1  (reversed — dark top, warm bottom)
+   * Both gradients re-theme automatically when the user picks a
+   * new theme. */
+  .rss-tile--studio .rss-tile-duo-tint { display: none; }
+  .rss-tile--studio .rss-tile-inner::after { display: none; }
+  .rss-tile--studio .rss-tile-inner {
+    /* Static IS the background — full opacity, no gradient layer
+     * here. Vignette is painted separately via `::before` with
+     * mix-blend-mode: multiply (see rule above). Mirrors the
+     * /library studio recipe so the green-vignette + scan-line
+     * effect behaves identically on both pages. */
+    background-color: #0d120e;
+    background-image: url('/static/img/studio-.webp');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-blend-mode: normal;
+    transition: background-image 0.3s ease;
+  }
+  .rss-tile--studio:hover .rss-tile-inner {
+    /* Swap to the mirrored static for the hover state — the gradient
+     * crossfade is handled by the `::before` rule above. */
+    background-image: url('/static/img/studio+.webp');
+  }
+  /* Drop-shadow tinted with the duotone shadow token. Tight blur so it
+   * reads as a grounded ring, not a fuzzy halo; identical on rest and
+   * hover so the tile's shadow never blinks when the cursor crosses
+   * it. Overrides the generic `.rss-tile:hover { box-shadow }` up
+   * above for studios only. First declaration is the plain-rgba
+   * fallback; the `color-mix` version overrides in supporting
+   * browsers. */
+  .rss-tile--studio,
+  .rss-tile--studio:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--duotone-lighten) 55%, transparent);
+  }
+
+  /* Glassy dark layer sitting on top of poster, bottom-heavy gradient for text */
+  /* Bottom-heavy glass fade: always black so the tile title reads on any poster,
+   * regardless of theme. Scales with alpha only, not hue.
+   * Performer tiles now rely on the duotone + text-shadow for legibility, so
+   * only studio tiles render the glass overlay (see .rss-tile--studio rules). */
+  .rss-tile-glass {
+    position: absolute; inset: 0;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.22) 40%, rgba(0,0,0,0.62) 100%);
+    backdrop-filter: blur(0.5px) saturate(0.85);
+    -webkit-backdrop-filter: blur(0.5px) saturate(0.85);
+  }
+  .rss-tile:not(.rss-tile--studio) .rss-tile-glass { display: none; }
+  .rss-tile:hover .rss-tile-glass {
+    background: linear-gradient(to bottom, rgba(0,0,0,0.12) 0%, rgba(0,0,0,0.3) 40%, rgba(0,0,0,0.72) 100%);
+  }
+  /* Studio glass: no dim at all (matches /library studios). Title
+   * legibility over the duotone relies on text-shadow only. The
+   * :hover override stops the generic .rss-tile:hover gradient fade
+   * from kicking in on studio tiles. */
+  .rss-tile--studio .rss-tile-glass {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .rss-tile--studio:hover .rss-tile-glass {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .rss-tile-overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    text-align: center;
+    padding: 0 6px 10px;
+    z-index: 1;
+    pointer-events: none;
+  }
+  .rss-tile-title {
+    font-family: var(--secs);
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.3;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    word-break: break-word;
+    /* Triple-stacked shadow — 1px sharp edge for crisp contrast on
+       light posters, wider blur for body readability, outer halo so
+       the text stays legible against busy / high-contrast artwork.
+       Doubled strength vs the previous version so bright-coloured
+       posters (pink/yellow) stop swallowing the overlay. */
+    text-shadow:
+      0 0 3px rgba(0,0,0,1),
+      0 1px 4px rgba(0,0,0,1),
+      0 2px 8px rgba(0,0,0,0.95),
+      0 4px 20px rgba(0,0,0,0.85);
+    text-align: center;
+    width: 100%;
+  }
+  .rss-tile-meta {
+    font-size: 10px;
+    color: var(--dim);
+    margin-top: 8px;
+    text-shadow:
+      0 0 2px rgba(0,0,0,1),
+      0 1px 4px rgba(0,0,0,1),
+      0 2px 8px rgba(0,0,0,0.9);
+    text-align: center;
+    width: 100%;
+    letter-spacing: 0.02em;
+  }
+  /* Performer name label below poster, mirrors .fav-cell-title */
+  .rss-tile-name {
+    padding: 9px 8px 8px;
+    font-family: var(--secs);
+    font-size: 14px;
+    color: var(--text);
+    text-align: center;
+    line-height: 1.25;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 2.4em;
+    flex-shrink: 0;
+    background: linear-gradient(165deg, rgba(var(--panel-lo-rgb),0.98) 0%, rgba(var(--panel-lo-rgb),0.97) 100%);
+    border-top: 1px solid rgba(var(--brand-purple-rgb),0.2);
+    /* Subtle lift off the solid panel background — much lighter than
+       the on-poster shadows because there's no busy image behind it. */
+    text-shadow: 0 1px 2px rgba(0,0,0,0.85), 0 2px 6px rgba(0,0,0,0.5);
+  }
+  /* Studio tile: inner area is 16:9 */
+  .rss-tile--studio .rss-tile-inner { aspect-ratio: 16/9; }
+  .rss-tile--studio .rss-tile-no-img {
+    background: radial-gradient(ellipse 90% 80% at 50% 40%, rgba(88,56,120,0.45) 0%, rgba(var(--panel-hi-rgb),0.55) 45%, rgba(var(--panel-lo-rgb),0.96) 100%);
+  }
+  /* Studio grid: 4-column wide tiles */
+  .rss-poster-grid--studio {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  @media (max-width: 1200px) { .rss-poster-grid--studio { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 860px)  { .rss-poster-grid--studio { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .rss-tile-inner .rss-tile-grab {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.85);
+    width: 62px; height: 62px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    background: rgba(18,10,28,0.82);
+    color: var(--accent);
+    border: 2px solid rgba(var(--brand-purple-rgb),0.65);
+    box-shadow: 0 0 18px rgba(var(--brand-purple-rgb),0.35), 0 4px 16px rgba(0,0,0,0.7);
+    opacity: 0;
+    transition: opacity 0.18s, transform 0.18s, box-shadow 0.18s;
+    z-index: 2;
+  }
+  .rss-tile-inner:hover .rss-tile-grab { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .rss-tile-grab:hover { box-shadow: 0 0 28px rgba(var(--brand-purple-rgb),0.65), 0 4px 20px rgba(0,0,0,0.8); transform: translate(-50%, -50%) scale(1.08) !important; color: #fff; border-color: rgba(var(--brand-purple-rgb),0.7); }
+  .rss-tile-grab.nzb { color: var(--accent); }
+  .rss-tile-grab:not(.nzb) { color: var(--accent); }
+  .rss-tile-grab--sent { color: var(--green) !important; border-color: var(--green) !important; box-shadow: 0 0 18px rgba(74,222,128,0.3) !important; }
+  .rss-tile-inner:hover .rss-tile-count-badge { opacity: 1 !important; }
+
+  /* Matched performer thumbnails — bottom-right corner stack */
+  .rss-tile-inner .rss-tile-matches {
+    position: absolute;
+    top: 6px; right: 6px;
+    display: flex; flex-direction: column; gap: 3px;
+    z-index: 2;
+  }
+  .rss-tile-match-thumb {
+    width: 28px; height: 34px;
+    border-radius: 4px;
+    object-fit: cover;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(0,0,0,0.4);
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s;
+    display: block;
+  }
+  .rss-tile-match-thumb:hover { transform: scale(1.12); border-color: var(--accent); }
+  .rss-tile-match-thumb--studio {
+    height: 20px;
+    object-fit: contain;
+    background: rgba(0,0,0,0.6);
+  }
+  /* Performer carousel: pink arrows pinned to bottom edge of image */
+  .rss-tile-carousel {
+    position: absolute;
+    top: 50%; left: 0; right: 0;
+    transform: translateY(-50%);
+    z-index: 3;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 6px;
+    pointer-events: none;
+  }
+  .rss-tile-carousel-btn {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 1px solid rgba(var(--brand-purple-rgb),0.6);
+    background: rgba(0,0,0,0.68);
+    color: var(--accent);
+    font-size: 11px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: all;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    flex-shrink: 0;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.7);
+  }
+  .rss-tile-carousel-btn:hover { background: rgba(0,0,0,0.88); border-color: var(--accent); transform: scale(1.1); }
+
+
+  /* ── Queue tab ── */
+  .queue-section {
+    --glass-panel-bg: linear-gradient(160deg, rgba(var(--panel-hi-rgb), 0.48) 0%, rgba(var(--panel-lo-rgb), 0.36) 100%);
+    --glass-stat-bg: linear-gradient(145deg, rgba(var(--panel-hi-rgb), 0.44) 0%, rgba(var(--panel-lo-rgb), 0.36) 100%);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-blur: 20px;
+    --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    --glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.28);
+    --counter-value-size: clamp(42px, 5vw, 62px);
+    --counter-label-size: 14px;
+  }
+  .queue-section .q-panel { background: var(--glass-panel-bg); border: 1px solid var(--glass-border); border-radius: 10px; overflow: hidden; backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); box-shadow: var(--glass-inset), var(--glass-shadow); display: flex; flex-direction: column; min-height: 0; flex: 1; margin: 12px 18px 14px; }
+  .queue-section .q-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.09); gap: 10px; flex-shrink: 0; }
+
+  /* ── 35mm film-strip — single canonical style ──
+   * Same anatomy as the search-header strip but bigger frames (108px
+   * tall), more generous padding, and double-row sprocket perforations
+   * top + bottom. The strip body is a deep coffee black; the cream
+   * sprocket holes are punched through as rectangles with a thin dark
+   * outline so they read as actual cut-outs rather than painted-on
+   * stripes. The strip casts a soft inset shadow on its inner edge to
+   * suggest celluloid thickness. */
+  .film-strip--suggestions {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 8%, transparent 92%, rgba(0,0,0,0.45) 100%),
+      #120804 !important;
+    padding: 22px 14px !important;
+    border-radius: 3px !important;
+    box-shadow:
+      inset 0 0 0 1px rgba(0, 0, 0, 0.85),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 6px 20px rgba(0, 0, 0, 0.55) !important;
+    position: relative;
+    /* Strip width hugs its frames instead of stretching the full
+     * panel — `width: fit-content` shrinks to content width, then
+     * `margin: 0 auto` centres the resulting block. Stops the strip
+     * from looking 80% empty on either side of the 5 frames.
+     * Block-level + fit-content + auto-margins is the only reliable
+     * combo that respects `margin-auto` centering — `inline-flex`
+     * doesn't honour auto-margins. */
+    display: flex !important;
+    width: fit-content !important;
+    max-width: 100% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+  .film-strip--suggestions::before,
+  .film-strip--suggestions::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 14px;
+    background:
+      /* sprocket holes — cream rectangles punched out of the strip */
+      repeating-linear-gradient(
+        90deg,
+        transparent 0 6px,
+        #e8d8b0 6px 7px,
+        #f5e8c8 7px 17px,
+        #c9b88a 17px 18px,
+        transparent 18px 24px
+      );
+    pointer-events: none;
+    z-index: 1;
+  }
+  .film-strip--suggestions::before {
+    top: 4px;
+    box-shadow:
+      inset 0 1px 0 rgba(0, 0, 0, 0.55),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.55);
+  }
+  .film-strip--suggestions::after {
+    bottom: 4px;
+    box-shadow:
+      inset 0 1px 0 rgba(0, 0, 0, 0.55),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.55);
+  }
+  /* Frame slots: square corners, thin dark gutter so they read as
+   * adjacent emulsion panels rather than floating tiles. Sizing
+   * rules folded in from the (now-deleted) #searchFrameStrip block
+   * so a single class drives both the search and suggestions strips. */
+  .film-strip--suggestions > div {
+    aspect-ratio: 16 / 9;
+    height: 108px;
+    background: #000;
+    border: 1px solid rgba(0, 0, 0, 0.75) !important;
+    border-radius: 0 !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    overflow: hidden;
+    position: relative;
+    z-index: 2;
+    flex: 0 1 auto;
+    cursor: zoom-in;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .film-strip--suggestions > div > img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .queue-section .q-panel-title { font-family: var(--acid); font-size: clamp(22px, 2vw, 30px); font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
+  .queue-section .q-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  /* Scrollbar inherits global accent-themed style from app-shell.css. */
+  .queue-section .q-panel-body { padding: 0; }
+
+  /* ── Wanted panel — split into two columns ─────────────────────────
+   * Scenes on the left, movies on the right. Each column is a
+   * vertical stack of horizontal rows (thumb + text + actions).
+   * Rows are full-width within their column. */
+  .queue-section .wanted-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    padding: 14px 16px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .queue-section .wanted-list-col {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .queue-section .wanted-list-col-header {
+    font-family: var(--secs);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: var(--text);
+    padding: 4px 4px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .queue-section .wanted-list-col-header i {
+    color: rgba(var(--brand-purple-rgb), 0.7);
+  }
+  .queue-section .wanted-list-col-count {
+    color: var(--dim);
+    font-size: 11px;
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  .queue-section .wanted-list-col-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  /* When the column body wears `.ts-row-list`, the rows render as flat
+   * dividers (handled by ts-row chrome in app-shell.css) instead of
+   * spaced cards. Drop the inter-row gap and the global ts-row-list
+   * `0 -18px` bleed (we sit inside a narrow column, not a panel-body). */
+  .queue-section .wanted-list-col-body.ts-row-list {
+    gap: 0;
+    margin: 0;
+    padding: 0;
+  }
+  /* Wanted row — horizontal: thumb (left) + text (middle) + actions (right).
+   * Inherits the unified `.ts-row` chrome from app-shell.css (flat
+   * top-divider, faint hover background, no individual card border /
+   * radius / shadow / gradient). Layout-only overrides here: the row
+   * needs `position: relative` for the absolutely-positioned thumb
+   * decorations, and `overflow: visible` so the VHS movie sticker
+   * isn't clipped by the row container. */
+  .queue-section .ts-row.wanted-row {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    margin: 0;
+    background: transparent;
+    border: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+    user-select: auto;
+    transition: background 0.15s ease;
+  }
+  .queue-section .ts-row.wanted-row:hover {
+    background: rgba(255, 255, 255, 0.055);
+    border-color: rgba(255, 255, 255, 0.06);
+    box-shadow: none;
+  }
+  .queue-section .ts-row.wanted-row:first-child { border-top: 0; }
+  /* Thumb on the left of each row — fixed height + explicit width.
+   * Earlier this relied on `aspect-ratio` to derive width from height,
+   * but in flex rows the browser sizes to natural image content first
+   * and only applies aspect-ratio afterwards — a full-size poster
+   * load would balloon the thumb to viewport scale before the ratio
+   * kicked in. Hard-coding `flex-basis` + explicit pixel width pins
+   * the box. Scenes are 16:9 landscape (96×171); movies are 27:40
+   * portrait (160×108). */
+  .queue-section .wanted-thumb {
+    position: relative;
+    height: 96px;
+    width: 171px;
+    flex: 0 0 171px;
+    aspect-ratio: 16 / 9;
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.45);
+    box-shadow: none;
+    isolation: isolate;
+  }
+  .queue-section .wanted-thumb--movie {
+    height: 160px;
+    width: 108px;
+    flex: 0 0 108px;
+    aspect-ratio: 27 / 40;
+    border-radius: 6px;
+    margin: 0;
+  }
+  /* Scenes: keep the /scenes CRT bezel + phosphor stack from
+   * app-shell.css (`.scene-card .img-load::before/::after`) so
+   * the wanted thumb reads as a TV playing the scene. Only kill
+   * the outer halo box-shadow that would bleed past the rounded
+   * corners. */
+  html[data-theme="vhs"] .queue-section .wanted-thumb--scene .img-load {
+    box-shadow: none !important;
+  }
+  /* Bottom-heavy glass fade so the kind/phash pills + studio logo
+   * keep contrast against bright posters at rest. Sits above the
+   * thumbnail art layers but below the pill chrome. */
+  .queue-section .wanted-thumb::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 3;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.18) 45%, rgba(0,0,0,0.55) 100%);
+    transition: opacity 0.3s ease;
+  }
+  .queue-section .wanted-row:hover .wanted-thumb::after {
+    opacity: 0.35;
+  }
+
+  /* ── Scene wanted thumb (inherits /scenes scene-card treatment) ──
+   * The wrapper carries `.scene-card` and the inner image is wrapped
+   * in `.img-load > img.scene-thumb`, so every VHS effect applied to
+   * `.scene-card .img-load*` in app-shell.css (CRT halo, inner
+   * vignette, chromatic aberration, scanlines, hover reset) lands
+   * here automatically. Only the bits that need to be defined on
+   * /downloads are positioning + layout: */
+  .queue-section .wanted-thumb--scene .img-load {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    isolation: isolate;
+    border-radius: inherit;
+  }
+  .queue-section .wanted-thumb--scene .scene-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: filter 0.3s ease, transform 0.3s ease;
+  }
+
+  /* ── Movie wanted thumb (front sleeve poster only) ──
+   * Single paper-VHS sleeve filling the wanted-thumb cell. Source
+   * posters are usually portrait (27:40) and the thumb is landscape
+   * (380×214); the poster scales to fit horizontally and crops top
+   * + bottom via `object-fit: cover` so the thumb stays a uniform
+   * landscape shape across all wanted rows. The .movie-card class
+   * brings paper-grain halftone from app-shell.css. */
+  .queue-section .wanted-thumb--movie .img-load,
+  .queue-section .wanted-thumb--movie .wt-mov-poster {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    isolation: isolate;
+    border-radius: inherit;
+  }
+  .queue-section .wanted-thumb--movie .wt-mov-poster .img-load {
+    inset: 0;
+  }
+  .queue-section .wanted-thumb--movie .wt-mov-poster .img-load img,
+  .queue-section .wanted-thumb--movie .img-load img,
+  .queue-section .wanted-thumb--movie img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+  }
+  /* Wanted-row movie thumbs are tiny next to the full /scenes poster
+   * tiles, so the decorative VHS sticker that .movie-card normally
+   * pastes on every poster (`.movie-card .img-load::before` in
+   * app-shell.css) ends up cluttering a thumbnail that just needs to
+   * read as "this is the movie." Suppress it on the wanted list. The
+   * bottom-heavy gradient overlay is also disabled for movie thumbs
+   * (kept for scene thumbs where thumbs are landscape and the overlay
+   * reinforces the chrome pill contrast). */
+  .queue-section .wanted-thumb--movie .img-load::before {
+    display: none !important;
+  }
+  .queue-section .wanted-thumb--movie::after {
+    display: none;
+  }
+  /* Keep the pills + studio logo above all the overlay layers
+   * (including the revealed-on-hover scene img at z-index 4). */
+  .queue-section .wanted-thumb .wanted-kind-pill,
+  .queue-section .wanted-thumb .wanted-phash-pill,
+  .queue-section .wanted-thumb .wanted-studio-logo {
+    z-index: 5;
+  }
+  .queue-section .wanted-kind-pill {
+    position: absolute;
+    top: 6px; left: 6px;
+    font-family: var(--secs);
+    font-size: 9px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(14,10,22,0.85);
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.4);
+    font-weight: 600;
+    backdrop-filter: blur(4px);
+  }
+  /* Perceptual-hash indicator — top-right corner of the thumb. Purple
+   * when stored (scene will auto-clear on library match), grey when we
+   * haven't seen a phash for this wanted item yet. */
+  .queue-section .wanted-phash-pill {
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 24px; height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(14,10,22,0.85);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.3);
+    backdrop-filter: blur(4px);
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+  }
+  .queue-section .wanted-phash-pill.is-on {
+    color: rgb(var(--brand-purple-rgb));
+    border-color: rgba(var(--brand-purple-rgb),0.65);
+    box-shadow: 0 0 0 1px rgba(var(--brand-purple-rgb),0.15), 0 0 8px rgba(var(--brand-purple-rgb),0.25);
+  }
+  .queue-section .wanted-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 0;
+  }
+  .queue-section .wanted-title {
+    font-family: var(--secs);
+    font-size: 14px;
+    color: var(--text);
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+  }
+  .queue-section .wanted-meta {
+    font-size: 11px;
+    color: var(--dim);
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .queue-section .wanted-desc {
+    font-size: 12px;
+    color: var(--text);
+    opacity: 0.78;
+    line-height: 1.5;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .queue-section .wanted-actions {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: nowrap;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+  }
+  .queue-section .wanted-actions-group {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .queue-section .wanted-actions-group--links {
+    flex: 1 1 auto;
+    justify-content: flex-start;
+  }
+  .queue-section .wanted-actions-group--ops {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+  }
+  /* Two-row action grid. Each row: [36px action][76px db][76px db][36px op].
+   *   Row 1: Database · TPDB · StashDB · Refresh
+   *   Row 2: Prowlarr · FansDB · JAVStash · Remove */
+  .queue-section .wanted-actions {
+    flex-direction: column !important;
+    gap: 6px !important;
+    --wanted-db-btn-w: 76px;
+  }
+  .queue-section .wanted-actions-row {
+    display: grid;
+    grid-template-columns: 36px var(--wanted-db-btn-w) var(--wanted-db-btn-w) 36px;
+    column-gap: 6px;
+    align-items: center;
+    justify-items: stretch;
+    min-width: 0;
+    justify-content: end;
+  }
+  .queue-section .wanted-actions-row .wanted-action-btn:not(.wanted-action-btn--wide) {
+    width: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  .queue-section .wanted-action-btn--wide {
+    width: var(--wanted-db-btn-w);
+    min-width: var(--wanted-db-btn-w);
+    max-width: var(--wanted-db-btn-w);
+    height: 36px;
+    padding: 0 6px;
+    box-sizing: border-box;
+  }
+  .queue-section .wanted-action-btn--link.wanted-action-btn--wide {
+    min-width: var(--wanted-db-btn-w);
+    padding: 0 6px;
+  }
+  .queue-section .wanted-action-btn--wide img,
+  .queue-section .wanted-action-btn--link.wanted-action-btn--wide img {
+    height: 14px;
+    width: auto;
+    max-width: calc(var(--wanted-db-btn-w) - 14px);
+    margin: 0 auto;
+    display: block;
+    object-fit: contain;
+  }
+  .queue-section .wanted-action-btn:not(.wanted-action-btn--wide) .ts-prowlarr-btn-content {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+  }
+  .queue-section .wanted-action-btn:not(.wanted-action-btn--wide) .ts-prowlarr-btn-logo {
+    width: 12px;
+    height: 12px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+  .queue-section .wanted-action-btn:not(.wanted-action-btn--wide) .ts-prowlarr-btn-content .fa-magnifying-glass,
+  .queue-section .wanted-action-btn:not(.wanted-action-btn--wide) .fa-database {
+    font-size: 13px;
+  }
+  /* Brief flash after a Database check finds nothing. */
+  .queue-section .wanted-action-btn--db.is-nomatch {
+    border-color: rgba(239, 68, 68, 0.55);
+    background: rgba(239, 68, 68, 0.14);
+    color: #ef4444;
+  }
+  .queue-section .wanted-action-btn {
+    min-width: 36px;
+    height: 36px;
+    padding: 0 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(var(--brand-purple-rgb),0.08);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.30);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: border-color 0.15s, background 0.15s, color 0.15s, transform 0.1s;
+  }
+  .queue-section .wanted-action-btn:hover {
+    border-color: rgba(var(--brand-purple-rgb),0.7);
+    background: rgba(var(--brand-purple-rgb),0.18);
+  }
+  .queue-section .wanted-action-btn:active { transform: scale(0.95); }
+  .queue-section .wanted-action-btn--link {
+    color: rgb(var(--brand-purple-rgb));
+    padding: 0;
+  }
+  .queue-section .wanted-action-btn--link:not(.wanted-action-btn--wide) img {
+    height: 14px;
+    width: auto;
+    max-width: 22px;
+    display: block;
+    object-fit: contain;
+    margin: 0 auto;
+  }
+  /* Greyed-out cross-reference tile when StashDB / FansDB didn't match
+   * the TPDB phash (or no phash was available). Kept visible so the
+   * absence reads as a failed match, not a missing feature. */
+  .queue-section .wanted-action-btn.is-disabled {
+    cursor: default;
+    opacity: 0.30;
+    filter: grayscale(1);
+    border-color: rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.02);
+  }
+  .queue-section .wanted-action-btn.is-disabled:hover {
+    border-color: rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.02);
+  }
+  /* Refresh metadata — accent at rest (after base `.wanted-action-btn`
+   * so these modifiers win the cascade). */
+  .queue-section .wanted-action-btn--refresh {
+    border-color: rgba(var(--brand-accent-rgb), 0.55);
+    background: rgba(var(--brand-accent-rgb), 0.14);
+    color: var(--accent);
+  }
+  .queue-section .wanted-action-btn--refresh:hover {
+    border-color: rgba(var(--brand-accent-rgb), 0.95);
+    background: rgba(var(--brand-accent-rgb), 0.28);
+    color: #fff;
+  }
+  /* Remove from Wanted — hardcoded red on every theme (not --red). */
+  .queue-section .wanted-action-btn--danger {
+    border-color: rgba(239, 68, 68, 0.55);
+    background: rgba(239, 68, 68, 0.14);
+    color: #ef4444;
+  }
+  .queue-section .wanted-action-btn--danger:hover {
+    border-color: rgba(239, 68, 68, 0.95);
+    background: rgba(239, 68, 68, 0.28);
+    color: #fff;
+  }
+  .queue-section .wanted-action-btn--danger i {
+    color: #ef4444;
+  }
+  .queue-section .wanted-action-btn--danger:hover i {
+    color: #fff;
+  }
+  .queue-section .wanted-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  /* Wanted tag chips — physical luggage-tag shape matching /scenes. */
+  .queue-section .wanted-tag-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px 3px 16px;
+    background: rgba(var(--brand-accent-rgb), 0.92);
+    color: rgba(20, 14, 30, 0.95);
+    font-size: 11px;
+    font-family: var(--secs);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    line-height: 1.45;
+    clip-path: polygon(8px 0, 100% 0, 100% 100%, 8px 100%, 0 50%);
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+  }
+  .queue-section .wanted-tag-chip::before {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: rgba(20, 14, 30, 0.85);
+    pointer-events: none;
+  }
+  .queue-section .wanted-studio-logo {
+    position: absolute;
+    bottom: 6px; left: 6px;
+    max-height: 28px;
+    max-width: 90px;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.9)) drop-shadow(0 0 6px rgba(0,0,0,0.55));
+    pointer-events: none;
+  }
+  .queue-section .wanted-title-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    min-width: 0;
+  }
+  .queue-section .wanted-kind-ico {
+    font-size: 14px;
+    flex-shrink: 0;
+    filter: drop-shadow(0 0 4px currentColor);
+    opacity: 0.9;
+    margin-top: 3px;
+  }
+  /* Studio sits on its own line below the title — `display: block`
+   * so it never gets crammed into the same row as a long scene title
+   * (the previous inline layout overlapped the truncation ellipsis). */
+  .queue-section .wanted-studio-name {
+    display: block;
+    font-family: var(--secs);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgb(var(--brand-purple-rgb));
+    opacity: 0.85;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+  }
+  /* Performer-name strip (.wanted-performers) is no longer rendered —
+   * the rule kept for backwards-compat in case any cached HTML still
+   * carries the class. */
+  .queue-section .wanted-performers { display: none !important; }
+  .queue-section .wanted-headshots:empty { display: none; }
+  /* ── Headshots — same `--hs` / `--hs-ovl` recipe as `.dl-bar-headshots`
+   *
+   * Two variants share the `:has(:nth-child(N):last-child)` per-count
+   * sizing rules so headshot stacks fan out at small counts and
+   * shrink + overlap (capped at ~15%) at larger counts:
+   *   • `.wanted-headshots--row`     — horizontal, beneath scene thumb
+   *   • `.wanted-headshots--column`  — vertical, beside movie poster
+   *
+   * Defaults sit at 64px / 10px overlap; per-count rules tighten as
+   * the cast grows. The hydrator caps the visible faces at 3 and
+   * appends a `+N` overflow chip for the rest. */
+  .queue-section .wanted-headshots--row,
+  .queue-section .wanted-headshots--column {
+    --hs: 64px;
+    --hs-ovl: 10px;
+  }
+  .queue-section .wanted-headshots--row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 8px 14px 4px;
+    overflow: visible;
+  }
+  .queue-section .wanted-headshots--column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    height: 100%;
+    min-width: 0;
+    overflow: visible;
+  }
+  /* Per-count sizing — horizontal row (scenes) */
+  .queue-section .wanted-headshots--row:has(> .wanted-headshot:nth-child(2):last-child) {
+    --hs: 80px;
+    --hs-ovl: 12px;
+  }
+  .queue-section .wanted-headshots--row:has(> .wanted-headshot:nth-child(3):last-child) {
+    --hs: 72px;
+    --hs-ovl: 10px;
+  }
+  .queue-section .wanted-headshots--row:has(> .wanted-headshot:nth-child(4):last-child) {
+    --hs: 64px;
+    --hs-ovl: 10px;
+  }
+  /* Per-count sizing — vertical column (movies) */
+  .queue-section .wanted-headshots--column:has(> .wanted-headshot:nth-child(2):last-child) {
+    --hs: 80px;
+    --hs-ovl: 0px;
+  }
+  .queue-section .wanted-headshots--column:has(> .wanted-headshot:nth-child(3):last-child) {
+    --hs: 72px;
+    --hs-ovl: 8px;
+  }
+  .queue-section .wanted-headshots--column:has(> .wanted-headshot:nth-child(4):last-child) {
+    --hs: 64px;
+    --hs-ovl: 8px;
+  }
+  /* Headshot wrapper + image — circle, dark recess + purple inner
+   * rim, mirrors `.dl-bar-headshot`. */
+  .queue-section .wanted-headshot {
+    position: relative;
+    flex-shrink: 0;
+    width: var(--hs);
+    height: var(--hs);
+    border-radius: 50%;
+    overflow: hidden;
+    background: rgba(var(--panel-lo-rgb), 0.9);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.5),
+      inset 0 0 0 2px rgba(var(--brand-purple-rgb), 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .queue-section .wanted-headshot img,
+  .queue-section .wanted-headshot-ph {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    object-position: center 20%;
+    background: rgba(var(--brand-purple-rgb), 0.10);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(var(--brand-purple-rgb), 0.55);
+    font-size: calc(var(--hs) * 0.40);
+    border: none;
+  }
+  /* Overflow chip (`+N`) — same diameter as a face, recessed dark
+   * background, monospace count. */
+  .queue-section .wanted-headshot.wanted-headshot--more {
+    background: radial-gradient(circle at 50% 80%,
+      rgba(var(--brand-purple-rgb), 0.45) 0%,
+      rgba(0, 0, 0, 0.85) 100%);
+    color: var(--text);
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: calc(var(--hs) * 0.32);
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.65);
+    user-select: none;
+  }
+  /* Overlap — every non-first sibling overlaps along the cross-axis
+   * (horizontal in row, vertical in column). */
+  .queue-section .wanted-headshots--row .wanted-headshot + .wanted-headshot {
+    margin-left: calc(-1 * var(--hs-ovl));
+  }
+  .queue-section .wanted-headshots--column .wanted-headshot + .wanted-headshot {
+    margin-top: calc(-1 * var(--hs-ovl));
+  }
+  /* Stack order — first face on top in the horizontal row, last face
+   * on top in the vertical column (matches downloads). */
+  .queue-section .wanted-headshots--row .wanted-headshot:nth-child(1) { z-index: 4; }
+  .queue-section .wanted-headshots--row .wanted-headshot:nth-child(2) { z-index: 3; }
+  .queue-section .wanted-headshots--row .wanted-headshot:nth-child(3) { z-index: 2; }
+  .queue-section .wanted-headshots--row .wanted-headshot:nth-child(4) { z-index: 1; }
+  .queue-section .wanted-headshots--column .wanted-headshot:nth-child(1) { z-index: 1; }
+  .queue-section .wanted-headshots--column .wanted-headshot:nth-child(2) { z-index: 2; }
+  .queue-section .wanted-headshots--column .wanted-headshot:nth-child(3) { z-index: 3; }
+  .queue-section .wanted-headshots--column .wanted-headshot:nth-child(4) { z-index: 4; }
+  /* Headshots not rendered in wanted rows — defensive hide. */
+  .queue-section .wanted-headshots,
+  .queue-section .wanted-headshots--row,
+  .queue-section .wanted-headshots--column {
+    display: none !important;
+  }
+  /* `.wanted-headshots--column` base layout (display, flex direction,
+   * variable defaults) lives in the shared block above so the
+   * `--hs` / `--hs-ovl` per-count rules can target both variants. */
+  /* Search-Prowlarr overlay button — pinned to the centre of the
+   * thumb, fades in on row hover. Larger circular target, accent
+   * border so it pops against the VHS bezel underneath. */
+  .queue-section .wanted-thumb-search {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.85);
+    z-index: 10;
+    width: 60px;
+    height: 60px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.55);
+    background: rgba(8, 6, 14, 0.78);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    color: var(--accent);
+    font-size: 22px;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease, background 0.15s, border-color 0.15s;
+  }
+  .queue-section .wanted-row:hover .wanted-thumb-search,
+  .queue-section .wanted-row:focus-within .wanted-thumb-search {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  .queue-section .wanted-thumb-search:hover {
+    background: rgba(var(--brand-accent-rgb), 0.20);
+    border-color: rgba(var(--brand-accent-rgb), 0.85);
+    color: #ffffff;
+  }
+  /* Movie hover overrides moved to the higher-specificity
+   * block above (`.queue-item.wanted-row--movie:hover`) where
+   * `transform: none` and `outline: transparent` are forced —
+   * the original rule here only covered shadow and was being
+   * outranked by `.queue-section .queue-item:hover` for the
+   * outline/border tint. */
+  /* Prowlarr release rows inside the wanted search popup. */
+  .queue-section .wanted-release-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(var(--brand-purple-rgb),0.20);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    background: rgba(var(--brand-purple-rgb),0.04);
+    transition: border-color 0.15s;
+  }
+  #wantedSearchResults .wanted-release-row { }
+  #wantedSearchResults .wanted-release-row:hover { border-color: rgba(var(--brand-purple-rgb),0.45); }
+  #wantedSearchResults .wanted-release-title {
+    font-family: var(--secs);
+    font-size: 13px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 3px;
+  }
+  #wantedSearchResults .wanted-release-meta {
+    display: flex; gap: 10px;
+    font-size: 11px;
+    color: var(--dim);
+    font-variant-numeric: tabular-nums;
+  }
+  #wantedSearchResults .wanted-release-grab {
+    background: rgba(var(--brand-purple-rgb),0.12);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.45);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 12px;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  #wantedSearchResults .wanted-release-grab:hover:not(:disabled) {
+    border-color: rgba(var(--brand-purple-rgb),0.85);
+    background: rgba(var(--brand-purple-rgb),0.22);
+  }
+  #wantedSearchResults .wanted-release-grab:disabled { opacity: 0.7; cursor: default; }
+  .queue-section .header-actions { display: flex; gap: 8px; align-items: center; flex: 1; }
+  .queue-section .queue-filter { background: var(--raised); border: 1px solid rgba(255,255,255,0.08); color: var(--text); padding: 8px 10px; border-radius: 6px; font-family: var(--mono); font-size: 12px; outline: none; min-width: 120px; flex: 1; }
+  .queue-section .queue-filter:focus { border-color: var(--accent); }
+  /* Headshot pile shared between the manual search rows and the
+   * suggestions modal candidate cards. Hot-pink ring picks up the
+   * accent the rest of the modal uses; missing headshots collapse
+   * to a neutral silhouette so the layout stays balanced. */
+  .ts-perf-pile {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: nowrap;
+    margin-top: 4px;
+  }
+  .ts-perf-pile-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    object-position: center 18%;
+    border: 1.5px solid rgba(var(--brand-accent-rgb), 0.55);
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb), 0.85), rgba(var(--panel-lo-rgb), 0.85));
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(var(--brand-purple-rgb), 0.55);
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  .ts-perf-pile-avatar + .ts-perf-pile-avatar { margin-left: -10px; }
+  .ts-perf-pile-avatar--missing {
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb), 0.6), rgba(var(--panel-lo-rgb), 0.7));
+    color: rgba(var(--brand-purple-rgb), 0.5);
+  }
+  .ts-perf-pile-avatar--more {
+    background: rgba(var(--brand-purple-rgb), 0.35);
+    border-color: rgba(var(--brand-accent-rgb), 0.35);
+    color: var(--text);
+    font-family: var(--secs);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    width: auto;
+    min-width: 32px;
+    padding: 0 8px;
+    border-radius: 999px;
+  }
+
+
+  .index-mode-seg {
+    min-width: min(720px, 100%);
+  }
+  @media (max-width: 900px) {
+    .index-mode-head .index-mode-seg,
+    .index-mode-seg {
+      min-width: 0 !important;
+      width: 100% !important;
+      align-self: stretch !important;
+    }
+  }
+
+  /* ── /downloads mobile optimisation (≤640px) ── */
+  @media (max-width: 640px) {
+    /* The 7-button main toggle stretches to the full panel width on
+       mobile and divides evenly across 7 equal columns. The base
+       class already declares repeat(7, minmax(0, 1fr)); we just need
+       to defeat the desktop inline ``min-width:740px`` and let the
+       grid fill its row instead of hugging its content (the desktop
+       rule sets ``align-self: center`` which keeps it intrinsic-sized
+       inside its parent). */
+    .ts-seg--7 {
+      min-width: 0 !important;
+      width: 100% !important;
+      align-self: stretch !important;
+      /* Wanted tab is hidden on mobile — drop the grid to 6 even
+       * columns so the remaining buttons fill the row without leaving
+       * an empty 7th slot. */
+      grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    }
+    .ts-seg--7 > button {
+      padding: 8px 4px !important;
+      font-size: 13px;
+      width: 100%;
+      min-width: 0;
+    }
+    /* Wanted panel: allow horizontal scroll on narrow screens instead
+     * of hiding the tab entirely. */
+    .wanted-split {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .wanted-list-col {
+      min-width: min(100%, 280px);
+      flex: 1 1 280px;
+    }
+    .index-page-head .ts-seg--5 {
+      min-width: 0 !important;
+      width: 100% !important;
+      align-self: stretch !important;
+      grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    }
+    .index-page-head .ts-seg--5 > button {
+      padding: 8px 4px !important;
+      font-size: 12px;
+      min-width: 0;
+    }
+    .index-page-head .ts-seg--5 .btn-label {
+      display: none;
+    }
+    .index-page-head .ts-seg--5 > button i,
+    .index-page-head .ts-seg--5 > button .fav-lips {
+      margin-right: 0 !important;
+    }
+    /* Discover panel header: title + 7-button toggle + palette button
+       cram into a 1fr/auto/1fr grid on desktop. On mobile drop the
+       toggle row to a new line so the buttons get the full panel
+       width and the title/palette stay on top. */
+    .index-page-head .ts-page-head__row {
+      grid-template-columns: 1fr auto !important;
+      grid-template-areas:
+        "title palette"
+        "toggle toggle" !important;
+      row-gap: 10px !important;
+    }
+    .index-page-head #indexPageTitle {
+      grid-area: title;
+      justify-self: start !important;
+    }
+    .index-page-head .ts-page-head__center {
+      grid-area: toggle;
+      justify-self: stretch !important;
+      width: 100% !important;
+      min-width: 0 !important;
+      display: block !important;
+      grid-column: 1 / -1;
+    }
+    .index-page-head .ts-page-head__right {
+      grid-area: palette;
+      justify-self: end !important;
+    }
+    /* Wanted panel header: title + filter stack vertically. */
+    .q-panel-header {
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .q-panel-header .header-actions {
+      flex-wrap: wrap;
+      width: 100%;
+    }
+    .q-panel-header .queue-filter {
+      flex: 1 1 100%;
+      min-width: 0;
+    }
+  }
+</style>
+</head>
+<body>
+<!-- Persistent decorative silhouette — pinned to the viewport's
+     bottom-right. Lives at <body> root (not inside the panel) because
+     `.prowlarr-search-panel` declares `backdrop-filter` + `overflow:hidden`,
+     which would re-anchor and clip a `position:fixed` descendant. -->
+<div class="dl-bg-decor" aria-hidden="true" data-dl-decor>
+  <img src="/static/img/silhouette8.webp" alt="" loading="lazy">
+</div>
+<div class="app">
+
+  <header class="ts-app-header">
+    <div class="ts-header-left">
+      <a href="/queue" class="logo" title="Go to Queue"><img src="/static/img/logo.webp" alt="Top-Shelf" onerror="this.outerHTML='<span style=font-family:var(--acid);font-size:28px;color:var(--text)>TOP-SHELF</span>'"></a>
+      <span class="version" id="appVersion"></span>
+    </div>
+    <div id="tsActivityBanner" class="ts-header-activity" aria-live="polite"></div>
+    <div class="nav-links">
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary" title="Downloads"><i class="ts-nav-icon ts-nav-icon--downloads"></i></button></a>
+      <a href="/scenes" style="text-decoration:none"><button class="btn-secondary" title="Browse — feed grid"><i class="ts-nav-icon ts-nav-icon--scenes"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library"><i class="ts-nav-icon ts-nav-icon--library"></i></button></a><a href="/news" style="text-decoration:none"><button class="btn-secondary" title="News"><i class="ts-nav-icon ts-nav-icon--news"></i></button></a>
+      <a href="/health" style="text-decoration:none"><button class="btn-secondary" title="Health"><i class="ts-nav-icon ts-nav-icon--health"></i></button></a>
+      <a href="/settings" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="ts-nav-icon ts-nav-icon--settings"></i></button></a>
+      <button class="btn-secondary" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>location.href='/login')" title="Logout"><i class="ts-nav-icon ts-nav-icon--logout"></i></button>
+    </div>
+  </header>
+
+  <div class="panel prowlarr-search-panel">
+    <div class="ts-page-head index-page-head">
+      <div class="ts-page-head__row">
+        <div class="ts-page-head__left">
+          <div class="panel-title ts-page-title" id="indexPageTitle">
+            <i class="ts-page-title__icon ts-nav-icon ts-nav-icon--index" aria-hidden="true"></i>
+            <span class="ts-page-title__text" id="indexPageTitleText">Latest Favourite Downloads</span>
+          </div>
+        </div>
+        <div class="ts-page-head__center">
+        <div class="ts-seg ts-seg--5 index-mode-seg" role="group" aria-label="Feed source">
+          <button type="button" id="dlModeProwlarr" onclick="setDlSearchMode('prowlarr')" title="Search"><i class="fa-solid fa-magnifying-glass" style="margin-right:6px"></i><span class="btn-label">Search</span></button>
+          <button type="button" id="dlModeFavourites" class="active" onclick="setDlSearchMode('favourites')" title="Favourites"><span class="fav-lips" style="margin-right:6px"></span><span class="btn-label">Favourites</span></button>
+          <button type="button" id="dlModeRss" onclick="setDlSearchMode('rss')" title="Stars"><i class="fa-solid fa-user" style="margin-right:6px"></i><span class="btn-label">Stars</span></button>
+          <button type="button" id="dlModeStudios" onclick="setDlSearchMode('studios')" title="Studios"><i class="ts-icon-studios" style="margin-right:6px" aria-hidden="true"></i><span class="btn-label">Studios</span></button>
+          <button type="button" id="dlModeWanted" onclick="setDlSearchMode('wanted')" title="Wanted"><i class="fa-solid fa-eye" style="margin-right:6px"></i><span class="btn-label">Wanted</span></button>
+        </div>
+        </div>
+        <div class="ts-page-head__right" id="dlRssHeaderControls" style="visibility:visible">
+        <input type="text" id="dlRssFilter" class="field-input" placeholder="Filter…" style="width:220px;padding:8px 10px" oninput="filterRssResults()">
+        <button type="button" data-duotone-toggle class="btn-primary" onclick="toggleDuotoneMode()" title="Swap duotone" style="width:40px;height:40px;padding:0;border-radius:8px;flex-shrink:0"><i class="fa-solid fa-palette"></i></button>
+        <button type="button" id="dlRssRefreshBtn" class="btn-primary" onclick="loadDlRssFeed('_refresh')" title="Refresh" style="width:40px;height:40px;padding:0;border-radius:8px;flex-shrink:0"><i class="fa-solid fa-arrows-rotate"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="dlSearchModeProwlarr">
+    <div class="dl-prowlarr-toolbar" style="justify-content:center">
+      <select id="dlProwlarrKind" class="field-input" style="min-width:160px;flex:0 0 auto" title="Category tag">
+        <option value="scene">…</option>
+        <option value="movie">…</option>
+      </select>
+      <input type="text" id="dlProwlarrQuery" class="field-input" style="flex:1;min-width:160px;max-width:420px" placeholder="Query…" autocomplete="off" onkeydown="if(event.key==='Enter')runDlProwlarrSearch()">
+      <button type="button" class="btn-primary" onclick="runDlProwlarrSearch()"><i class="fa-solid fa-magnifying-glass"></i></button>
+    </div>
+    </div>
+    <div id="dlSearchModeRss" style="display:none">
+    </div>
+    <div class="dl-prowlarr-body" id="dlProwlarrBodyWrap">
+      <div id="dlProwlarrResults" class="dl-prowlarr-results"><div class="empty" style="padding:16px">Enter a query and search.</div></div>
+    </div>
+    <!-- Wanted section -->
+    <div id="dlSearchModeWanted" class="queue-section wanted-panel" style="display:none;flex:1;min-height:0;flex-direction:column">
+      <div class="q-panel">
+        <div class="q-panel-header">
+          <span class="q-panel-title"><i class="fa-solid fa-eye" style="color:var(--accent);margin-right:8px;font-size:calc(12px + 2pt)"></i>Wanted <span id="wantedCount" style="font-family:var(--secs);font-size:calc(12px + 2pt);letter-spacing:-0.02em;color:var(--dim)"></span></span>
+          <div class="header-actions">
+            <input id="wantedFilter" class="queue-filter" type="text" placeholder="Filter wanted…" oninput="filterWantedPanel()" spellcheck="false">
+            <button class="btn-secondary" onclick="loadWantedPanel({force:true})" title="Refresh Wanted" style="border:1px solid var(--border);color:var(--dim);padding:6px 10px;border-radius:6px;background:none;cursor:pointer;transition:border-color 0.15s,color 0.15s"><i class="fa-solid fa-arrows-rotate"></i></button>
+          </div>
+        </div>
+        <div class="q-panel-body wanted-split">
+          <div class="wanted-list-col wanted-list-col--scenes">
+            <div class="wanted-list-col-header"><i class="ts-icon-scenes" aria-hidden="true"></i> Scenes <span class="wanted-list-col-count" id="wantedCountScenes">(0)</span></div>
+            <div id="wantedListScenes" class="wanted-list-col-body ts-row-list"><div class="empty">Loading…</div></div>
+          </div>
+          <div class="wanted-list-col wanted-list-col--movies">
+            <div class="wanted-list-col-header"><i class="ts-icon-movies" aria-hidden="true"></i> Movies <span class="wanted-list-col-count" id="wantedCountMovies">(0)</span></div>
+            <div id="wantedListMovies" class="wanted-list-col-body ts-row-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+<script defer src="/static/index.js?v=1"></script>
+
+<div id="wantedSearchOverlay" style="display:none;position:fixed;inset:0;background:rgba(8,6,16,0.78);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);z-index:9998;align-items:center;justify-content:center;padding:24px" onclick="if(event.target===this)closeWantedSearch()">
+  <div style="width:min(960px,96vw);max-height:86vh;display:flex;flex-direction:column;background:linear-gradient(165deg, rgba(40,32,60,0.97) 0%, rgba(18,14,28,0.94) 100%);border:1px solid rgba(var(--brand-purple-rgb),0.40);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.06);overflow:hidden">
+    <div id="wantedSearchHeader" style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid rgba(var(--brand-purple-rgb),0.20)"></div>
+    <button type="button" onclick="closeWantedSearch()" style="position:absolute;top:28px;right:28px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:var(--dim);font-size:16px;cursor:pointer;width:32px;height:32px;display:flex;align-items:center;justify-content:center;z-index:10">&times;</button>
+    <div id="wantedSearchStatus" style="padding:10px 20px;font-size:12px;color:var(--dim);border-bottom:1px solid rgba(var(--brand-purple-rgb),0.10);background:rgba(var(--brand-purple-rgb),0.03)"></div>
+    <div id="wantedSearchResults" style="flex:1;min-height:0;overflow-y:auto;padding:12px 16px"></div>
+  </div>
+</div>
+
+<script defer src="/static/activity-banner.js?v=20260701"></script>
+<script defer src="/static/app-shell.js?v=20260529"></script>
+<script>
+fetch('/api/status').then(r => r.json()).then(d => {
+  const el = document.getElementById('appVersion');
+  if (el && d.version) el.textContent = 'v' + d.version;
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf — News Feed</title>
+
+<link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
+<link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
+<script src="/static/theme-init.js?v=20260614c"></script>
+<link rel="stylesheet" href="/static/app-shell.css?v=34">
+<script src="/static/ts-utils.js?v=20260706a"></script>
+<script src="/static/lib-entity-actions.js?v=20260612c"></script>
+<script src="/static/popup-loader.js?v=20260706a"></script>
+<style>
+  /* Universal reset + body baseline — news.html was previously
+   * relying on browser defaults (8px body margin) which pushed every
+   * element 8px in from the viewport. The header full-bleeds via
+   * negative `--shell-page-padding` margins (set by app-shell.css),
+   * but those negative margins resolve from inside `.app`, not from
+   * the viewport — so with body's 8px margin still in play the
+   * header *and* the body-level `#newsSection` ended up at different
+   * insets, which read as the news panel "bumping into" the header.
+   * Mirrors the reset block every other top-bar page declares
+   * (scenes.html, downloads.html, etc). */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { height: 100%; }
+  body {
+    background: transparent;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before { content: ''; position: fixed; inset: 0; background: rgba(var(--bg-rgb),0.72); z-index: 0; }
+
+  header {
+    padding: 14px 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.88) 0%, rgba(var(--panel-lo-rgb),0.78) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.22);
+    margin-bottom: 20px;
+  }
+  /* Header grid layout — three columns (logo / activity banner /
+   * nav-links). Without this, the nav-links cell rendered as a
+   * plain block child of `<header>` instead of a grid item, and the
+   * buttons inside ran inline at the left of the cell. Matching the
+   * scenes.html / downloads.html declarations so the cluster sits
+   * justified to the right edge of the third column with a flex row
+   * of buttons inside. */
+  header.ts-app-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(200px, 2fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 12px 16px;
+  }
+  header.ts-app-header .ts-header-left { justify-self: start; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; min-width: 0; }
+  header.ts-app-header .nav-links { justify-self: end; }
+  .logo img { height: 36px; object-fit: contain; }
+  .nav-links { display: flex; gap: 10px; align-items: center; }
+
+  /* News tile grid — auto-fill so the column count tracks viewport
+   * width. Each tile is its own glass panel with a hero image, title,
+   * source pill, and age stamp. Hover lifts the tile and burns a
+   * brand-purple ring around it. */
+  .news-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 18px;
+    padding: 0 0 28px;
+  }
+  .news-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.62) 0%, rgba(var(--panel-lo-rgb),0.48) 100%);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.18);
+    border-radius: 14px;
+    overflow: hidden;
+    backdrop-filter: blur(18px) saturate(1.08);
+    -webkit-backdrop-filter: blur(18px) saturate(1.08);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.06),
+      0 10px 30px rgba(0,0,0,0.35);
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  .news-tile:hover {
+    transform: translateY(-2px);
+    border-color: rgba(var(--brand-purple-rgb), 0.55);
+    outline: 1px solid rgba(var(--brand-purple-rgb), 0.35);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.10),
+      0 18px 40px rgba(0,0,0,0.50),
+      0 0 0 1px rgba(var(--brand-purple-rgb), 0.30);
+  }
+
+  .news-tile-hero {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: linear-gradient(135deg, rgba(var(--brand-purple-rgb),0.18), rgba(var(--brand-purple-rgb),0.04));
+    overflow: hidden;
+  }
+  .news-tile-hero img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+    transition: transform 0.4s ease, filter 0.3s ease;
+  }
+  .news-tile:hover .news-tile-hero img {
+    transform: scale(1.04);
+    filter: saturate(1.1) brightness(1.04);
+  }
+  .news-tile-hero::after {
+    /* Soft fade into the body so titles read clearly even when the
+     * hero image's bottom edge is busy. */
+    content: '';
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 38%;
+    background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(8,4,16,0.78) 100%);
+    pointer-events: none;
+  }
+  .news-tile-hero-empty {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(var(--brand-purple-rgb), 0.45);
+    font-size: 38px;
+  }
+
+  .news-tile-source-pill {
+    position: absolute;
+    top: 10px; left: 10px;
+    padding: 4px 10px;
+    font-family: var(--secs);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(var(--brand-accent-rgb), 1);
+    background: rgba(20, 8, 30, 0.78);
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.45);
+    border-radius: 999px;
+    backdrop-filter: blur(6px);
+    z-index: 2;
+    max-width: calc(100% - 20px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .news-tile-age-pill {
+    position: absolute;
+    top: 10px; right: 10px;
+    padding: 4px 10px;
+    font-family: var(--secs);
+    font-size: 10px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--text);
+    background: rgba(0, 0, 0, 0.62);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 999px;
+    z-index: 2;
+  }
+
+  .news-tile-body {
+    padding: 14px 16px 16px;
+    display: flex; flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    isolation: isolate;
+  }
+  /* Per-feed colour wash. Drives off the inline `--news-tint-rgb`
+   * custom property the renderer stamps onto tinted tiles (and which
+   * stays absent on untinted tiles, so the rule no-ops automatically).
+   * The wash sits behind text via z-index:-1 so titles / summaries
+   * stay legible at the same contrast as before. */
+  .news-tile-body[style*="--news-tint-rgb"]::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(160deg,
+      rgba(var(--news-tint-rgb), 0.30) 0%,
+      rgba(var(--news-tint-rgb), 0.14) 60%,
+      rgba(var(--news-tint-rgb), 0.06) 100%);
+    pointer-events: none;
+    z-index: -1;
+  }
+  .news-tile-title {
+    font-family: var(--acid);
+    font-size: 14px;
+    line-height: 1.3;
+    letter-spacing: 0.01em;
+    color: var(--text);
+    /* Clamp to 3 lines so tiles stay roughly equal height in the grid. */
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .news-tile-summary {
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--dim);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .news-tile-foot {
+    margin-top: auto;
+    display: flex; align-items: center; justify-content: flex-end;
+    padding-top: 6px;
+    color: rgba(var(--brand-purple-rgb), 0.85);
+    font-family: var(--secs);
+    font-size: 11px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    gap: 6px;
+  }
+  .news-tile-foot i { font-size: 10px; transition: transform 0.18s ease; }
+  .news-tile:hover .news-tile-foot i { transform: translateX(3px); }
+
+  /* Title bar: global `.ts-page-head` in app-shell.css */
+  .news-panel-title { margin: 0; }
+  .news-panel-meta {
+    font-family: var(--secs);
+    font-size: 11px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .news-panel-tools {
+    display: flex; gap: 8px; align-items: center;
+  }
+  .news-status {
+    font-size: 12px; color: var(--dim);
+    margin: 0 0 14px;
+  }
+  .news-status.is-error { color: var(--red); }
+
+  .news-empty {
+    margin: 0;
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--dim);
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.45) 0%, rgba(var(--panel-lo-rgb),0.35) 100%);
+    border: 1px dashed rgba(var(--brand-purple-rgb), 0.35);
+    border-radius: 12px;
+  }
+  .news-empty i {
+    font-size: 42px;
+    color: rgba(var(--brand-purple-rgb), 0.45);
+    margin-bottom: 14px;
+    display: block;
+  }
+  .news-empty a { color: var(--accent); text-decoration: none; }
+  .news-empty a:hover { text-decoration: underline; }
+
+  /* The refresh + gear buttons used to carry a bespoke `.news-tool-btn`
+   * recipe (purple/pink gradient + accent border + accent text); that
+   * look has since been promoted to the global `.btn-secondary` in
+   * app-shell.css so every page picks it up. We keep a per-page size
+   * override (40×40 to match the header buttons) since the global rule
+   * leaves sizing context-specific. */
+  .news-panel-tools .btn-secondary {
+    width: 40px; height: 40px;
+    font-size: 19px;
+    padding: 0;
+  }
+
+  @media (max-width: 720px) {
+    .news-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="ts-app-header">
+    <div class="ts-header-left">
+      <a href="/queue" class="logo" style="text-decoration:none;cursor:pointer" title="Go to Queue"><img src="/static/img/logo.webp" alt="Top-Shelf" style="height:36px; object-fit:contain;"></a>
+      <span class="version" id="appVersion"></span>
+    </div>
+    <div id="tsActivityBanner" class="ts-header-activity" aria-live="polite"></div>
+    <div class="nav-links">
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary" title="Downloads"><i class="ts-nav-icon ts-nav-icon--downloads"></i></button></a>
+      <a href="/scenes" style="text-decoration:none"><button class="btn-secondary" title="Browse — feed grid"><i class="ts-nav-icon ts-nav-icon--scenes"></i></button></a>
+      <a href="/library" style="text-decoration:none"><button class="btn-secondary" title="Library"><i class="ts-nav-icon ts-nav-icon--library"></i></button></a><a href="/news" style="text-decoration:none"><button class="btn-secondary" title="News"><i class="ts-nav-icon ts-nav-icon--news"></i></button></a>
+      <a href="/health" style="text-decoration:none"><button class="btn-secondary" title="Health"><i class="ts-nav-icon ts-nav-icon--health"></i></button></a>
+      <a href="/settings" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="ts-nav-icon ts-nav-icon--settings"></i></button></a>
+      <button class="btn-secondary" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>location.href='/login')" title="Logout"><i class="ts-nav-icon ts-nav-icon--logout"></i></button>
+    </div>
+  </header>
+</div>
+
+<!-- Content lives outside `.app` so the panel + grid get a clean 24px
+     gutter from the viewport edges that lines up with the full-bleed
+     header band above. Mirrors the `#scenesSection` pattern used on
+     /scenes — the global `.app` rule applies `padding-left/right` and
+     `max-width: none !important`, then `header` breaks out via negative
+     margins; non-header content placed inside `.app` would inherit
+     the 20px inset and read as ~4px narrower than the body-level
+     container, which is what the user kept seeing as "misaligned." -->
+<div id="newsSection" style="width:100%;padding:0 var(--shell-page-padding, 24px) 20px;position:relative;z-index:1">
+  <div class="ts-page-head news-page-head">
+    <div class="ts-page-head__row">
+      <div class="ts-page-head__left">
+        <div class="news-panel-title ts-page-title">
+          <i class="ts-page-title__icon ts-nav-icon ts-nav-icon--news" aria-hidden="true"></i>
+          <span class="ts-page-title__text">News Feed</span>
+        </div>
+        <div class="news-panel-meta" id="newsPanelMeta">Loading…</div>
+      </div>
+      <div class="ts-page-head__center" aria-hidden="true"></div>
+      <div class="ts-page-head__right news-panel-tools">
+      <button class="btn-secondary" id="newsRefreshBtn" onclick="loadNews({force:true})" title="Refresh feeds"><i class="fa-solid fa-arrows-rotate"></i></button>
+      <a href="/settings#rss" class="btn-secondary" title="Manage feed sources"><i class="fa-solid fa-gear"></i></a>
+      </div>
+    </div>
+  </div>
+
+  <div class="news-status" id="newsStatus" style="display:none"></div>
+
+  <div class="news-grid" id="newsGrid"></div>
+  <div class="news-empty" id="newsEmpty" style="display:none">
+    <i class="fa-solid fa-newspaper"></i>
+    <div style="font-family:var(--secs);font-size:14px;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:10px">No articles yet</div>
+    <div>Add feed URLs in <a href="/settings#rss">Settings → RSS Feeds → News feeds</a> to start populating this page.</div>
+  </div>
+</div>
+
+<script>
+  const _esc = (s) => String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  // Format an age in hours into a compact label (e.g. "3h", "2d", "3w").
+  function ageLabel(ageHours) {
+    if (ageHours == null || !isFinite(ageHours)) return '';
+    if (ageHours < 1)   return Math.max(1, Math.round(ageHours * 60)) + 'm';
+    if (ageHours < 24)  return Math.round(ageHours) + 'h';
+    if (ageHours < 24 * 7)  return Math.round(ageHours / 24) + 'd';
+    if (ageHours < 24 * 30) return Math.round(ageHours / 24 / 7) + 'w';
+    if (ageHours < 24 * 365) return Math.round(ageHours / 24 / 30) + 'mo';
+    return Math.round(ageHours / 24 / 365) + 'y';
+  }
+
+  // Fallback when an article has no image (or its image fails to load):
+  // serve the shipped `/static/img/missing.webp` placeholder. `onerror`
+  // swaps the broken src to the same placeholder so we never leave a
+  // grey hero box behind.
+  const NEWS_MISSING_IMG = '/static/img/missing.webp';
+
+  // Wrap library performer / studio / vice phrases in `.qs-match`. The
+  // cache is populated by `_refreshLibraryTokens()` (ts-utils.js) before
+  // we render, so titles / summaries get the same accent treatment used
+  // on /scenes, /downloads, /history, etc. Falls back to plain escape
+  // when ts-utils.js hasn't loaded or the cache is still empty.
+  const _hl = (s) => (typeof _libraryHighlight === 'function')
+    ? _libraryHighlight(s || '')
+    : _esc(s || '');
+
+  // Convert ``#RRGGBB`` to ``R, G, B`` so we can drop it straight into
+  // ``rgba(var(--news-tint-rgb), <alpha>)`` blends inside the CSS rules
+  // above. Returns null when the input doesn't match the hex shape so
+  // the renderer can skip stamping the custom property entirely on
+  // untinted feeds (keeps the inline style attribute clean).
+  function _newsTintToRgb(hex) {
+    if (typeof hex !== 'string') return null;
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+    if (!m) return null;
+    const v = m[1];
+    return `${parseInt(v.slice(0,2), 16)}, ${parseInt(v.slice(2,4), 16)}, ${parseInt(v.slice(4,6), 16)}`;
+  }
+
+  function renderNewsTile(item) {
+    const link = item.link || '#';
+    const title = item.title || '(untitled)';
+    const summary = item.summary || '';
+    const source = item.source_label || '';
+    const age = ageLabel(item.age_hours);
+    const heroSrc = item.image || NEWS_MISSING_IMG;
+    const tintRgb = _newsTintToRgb(item.tint);
+    const bodyStyle = tintRgb ? ` style="--news-tint-rgb: ${tintRgb}"` : '';
+    return `<a class="news-tile" href="${_esc(link)}" target="_blank" rel="noopener noreferrer">
+      <div class="news-tile-hero">
+        <img src="${_esc(heroSrc)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="if(this.src.indexOf('missing.jpg')<0){this.onerror=null;this.src='${NEWS_MISSING_IMG}'}">
+        ${source ? `<div class="news-tile-source-pill" title="${_esc(source)}">${_esc(source)}</div>` : ''}
+        ${age ? `<div class="news-tile-age-pill">${_esc(age)}</div>` : ''}
+      </div>
+      <div class="news-tile-body"${bodyStyle}>
+        <div class="news-tile-title">${_hl(title)}</div>
+        ${summary ? `<div class="news-tile-summary">${_hl(summary)}</div>` : ''}
+        <div class="news-tile-foot">Read article <i class="fa-solid fa-arrow-right"></i></div>
+      </div>
+    </a>`;
+  }
+
+  async function loadNews(opts) {
+    const force = !!(opts && opts.force);
+    const grid = document.getElementById('newsGrid');
+    const empty = document.getElementById('newsEmpty');
+    const status = document.getElementById('newsStatus');
+    const meta = document.getElementById('newsPanelMeta');
+    const btn = document.getElementById('newsRefreshBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loader loader--btn" role="status" aria-label="Loading"></span>'; }
+    status.style.display = 'none';
+    if (!grid.children.length) {
+      // Skeleton tiles for first paint so the page doesn't flash empty.
+      grid.innerHTML = Array.from({length: 8}).map(() =>
+        `<div class="news-tile" style="pointer-events:none">
+          <div class="news-tile-hero"><img src="${NEWS_MISSING_IMG}" alt="" style="opacity:0.45" loading="lazy"></div>
+          <div class="news-tile-body">
+            <div class="news-tile-title" style="opacity:0.4">Loading…</div>
+          </div>
+        </div>`
+      ).join('');
+    }
+    try {
+      // Prime the library-token cache in parallel with the feed fetch so
+      // `.qs-match` paints performers / studios / vices on first render
+      // instead of needing a re-paint after the cache fills.
+      const libPromise = (typeof _refreshLibraryTokens === 'function')
+        ? _refreshLibraryTokens()
+        : null;
+      const url = force ? '/api/news/feed?refresh=true' : '/api/news/feed';
+      const r = await fetch(url, { credentials: 'same-origin' });
+      const d = await r.json();
+      if (libPromise) await libPromise;
+      const items = (d && d.results) || [];
+      if (!items.length) {
+        grid.innerHTML = '';
+        empty.style.display = '';
+        meta.textContent = '0 articles · ' + (d.configured_urls || 0) + ' feeds';
+      } else {
+        empty.style.display = 'none';
+        grid.innerHTML = items.map(renderNewsTile).join('');
+        const fetched = d.fetched_at ? new Date(d.fetched_at * 1000) : null;
+        const parts = [
+          `${items.length} article${items.length === 1 ? '' : 's'}`,
+          `${d.configured_urls || 0} feeds`,
+        ];
+        if (fetched) {
+          const stamp = fetched.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+          parts.push('last updated ' + stamp);
+          const ago = ageLabel((Date.now() - fetched.getTime()) / 1000 / 3600);
+          if (ago) parts.push('(' + ago + ' ago)');
+        }
+        meta.textContent = parts.join(' · ');
+      }
+      const errs = (d && d.errors) || [];
+      if (errs.length) {
+        status.style.display = '';
+        status.classList.add('is-error');
+        status.textContent = errs.length + ' feed' + (errs.length === 1 ? '' : 's') + ' failed: ' + errs.slice(0, 3).join(' · ') + (errs.length > 3 ? ' …' : '');
+      }
+    } catch (e) {
+      status.style.display = '';
+      status.classList.add('is-error');
+      status.textContent = 'Could not load news: ' + (e.message || e);
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i>'; }
+    }
+  }
+
+  function wireNewsPullToRefresh() {
+    const section = document.getElementById('newsSection');
+    if (!section || !window.matchMedia('(pointer: coarse)').matches) return;
+    let startY = 0;
+    let pulling = false;
+    section.addEventListener('touchstart', (e) => {
+      if (window.scrollY > 8) return;
+      startY = e.touches[0].clientY;
+      pulling = true;
+    }, { passive: true });
+    section.addEventListener('touchmove', (e) => {
+      if (!pulling || window.scrollY > 8) return;
+      if (e.touches[0].clientY - startY > 72) {
+        pulling = false;
+        loadNews({ force: true });
+      }
+    }, { passive: true });
+    section.addEventListener('touchend', () => { pulling = false; }, { passive: true });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    loadNews();
+    wireNewsPullToRefresh();
+  });
+</script>
+<script defer src="/static/activity-banner.js?v=20260701"></script>
+<script defer src="/static/app-shell.js?v=20260529"></script>
+<script>
+fetch('/api/status').then(r => r.json()).then(d => {
+  const el = document.getElementById('appVersion');
+  if (el && d.version) el.textContent = 'v' + d.version;
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+/* Page-specific CSS extracted from index.html. Loaded only on /index. */
+.dl-prowlarr-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 18px 0; }
+.dl-prowlarr-body { padding: 0; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dl-prowlarr-results {
+    flex: 1;
+    overflow-y: auto;
+    border: 1px solid rgba(var(--brand-purple-rgb),0.14);
+    border-radius: 10px;
+    margin: 12px 18px 18px;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.55) 0%, rgba(var(--panel-lo-rgb),0.65) 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+  }
+.dl-pr-row {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-template-columns:
+      140px                     /* studio logo */
+      minmax(0, 1fr)            /* name + meta */
+      154px                     /* headshots */
+      110px                     /* indexer / type */
+      50px;                     /* grab button */
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    min-height: 64px;
+    background: linear-gradient(145deg,
+      rgba(var(--brand-purple-rgb),0.14) 0%,
+      rgba(var(--panel-hi-rgb),0.5) 55%,
+      rgba(var(--panel-lo-rgb),0.35) 100%);
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    border-radius: 0;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    transition: background 120ms ease;
+  }
+.dl-pr-row:last-child { border-bottom: 1px solid rgba(255,255,255,0.06); }
+.dl-pr-row:hover {
+    background: linear-gradient(145deg,
+      rgba(var(--brand-purple-rgb),0.20) 0%,
+      rgba(var(--panel-hi-rgb),0.55) 55%,
+      rgba(var(--panel-lo-rgb),0.40) 100%);
+  }
+.dl-pr-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+  }
+.dl-pr-cell-name {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    gap: 2px;
+  }
+.dl-pr-cell-headshots {
+    justify-content: flex-end;
+    padding-right: 6px;
+  }
+.dl-pr-cell-badges {
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-end;
+  }
+.dl-pr-title {
+    font-family: var(--secs, "Impact Label Reversed", sans-serif);
+    font-size: 15px;
+    letter-spacing: 0.02em;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  }
+.dl-pr-meta {
+    font-family: var(--secs, "Impact Label Reversed", sans-serif);
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    color: var(--text);
+    opacity: 0.85;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  }
+.dl-pr-type {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    line-height: 1;
+  }
+.dl-pr-type-torrent, .dl-pr-type-nzb { color: inherit; }
+.dl-pr-indexer {
+    font-family: var(--secs, "Impact Label Reversed", sans-serif);
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    color: var(--text);
+    opacity: 0.75;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 110px;
+    text-align: right;
+  }
+.dl-pr-studio-logo {
+    flex-shrink: 0;
+    height: 54px;
+    max-width: 120px;
+    width: auto;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7));
+  }
+.dl-pr-headshots {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0;
+  }
+.dl-pr-headshot {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    object-fit: cover;
+    object-position: center 20%;
+    border: 1.5px solid rgba(var(--brand-purple-rgb),0.55);
+    background: rgba(var(--panel-lo-rgb),0.9);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  }
+.dl-pr-headshot + .dl-pr-headshot {
+    margin-left: -14px;
+  }
