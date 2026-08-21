@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf</title>
+
+<link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
+<link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
+<script src="/static/theme-init.js?v=20260614c"></script>
+<link rel="stylesheet" href="/static/app-shell.css?v=78">
+<!-- Poster-role picker + candidate/preview panes + crop modal all
+     use styles that live in library.css. Without this, opening the
+     "Manage images" modal on /performer/{id} rendered raw full-size
+     candidate images stacked vertically with no chrome. -->
+<link rel="stylesheet" href="/static/library.css?v=20260815">
+<script src="/static/ts-utils.js?v=20260814"></script>
+<script src="/static/lib-entity-actions.js?v=20260612c"></script>
+<script src="/static/popup-loader.js?v=20260811"></script>
+<!-- Poster-role picker (headshot click → Manage images modal) is
+     usually lazy-loaded by popup-loader.js's ensurePosterRolePicker.
+     Load it statically on the entity page so window.openPosterRolePicker
+     is guaranteed to be present the moment the popup renders — a race
+     between the on-demand fetch and the user's first click was causing
+     the fallback path (`window.location.href = /library?focus=...&manage=images`)
+     to fire, which nav'd away from /performer/{id} and left the user
+     stranded on /stars after closing the picker. -->
+<script src="/static/poster-role-picker.js?v=20260815"></script>
+<script defer src="/static/movie-popup.js?v=20260531"></script>
+
+<style>
+  /* Entity page is a shell for the popup — the popup provides all
+   * visible content, so the shell just needs to render the sidebar
+   * and a subtle backdrop while the popup fetches its payload. */
+  body {
+    background: linear-gradient(160deg, rgba(20,16,30,0.98) 0%, rgba(10,8,16,0.98) 100%);
+    min-height: 100vh;
+    margin: 0;
+  }
+  .entity-page-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 60px);
+    padding: 40px 20px;
+    text-align: center;
+    color: rgba(200, 190, 220, 0.7);
+    font-family: var(--acid, monospace);
+    letter-spacing: 0.05em;
+  }
+  .entity-page-placeholder__inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .entity-page-placeholder .loader {
+    width: 40px;
+    height: 40px;
+  }
+  .entity-page-error {
+    color: rgba(255, 120, 120, 0.9);
+    background: rgba(60, 30, 40, 0.6);
+    border: 1px solid rgba(255, 120, 120, 0.35);
+    padding: 20px 26px;
+    border-radius: 10px;
+    max-width: 520px;
+  }
+  .entity-page-error a {
+    color: rgba(var(--brand-accent-rgb, 192, 132, 252), 0.95);
+    text-decoration: none;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body class="ts-has-sidebar ts-entity-page">
+<div class="app">
+  <header class="ts-app-header">
+    <div class="ts-header-left">
+      <a href="/" class="logo" title="Home"><img src="/static/img/logo.webp" alt="Top-Shelf" onerror="this.outerHTML='<span style=font-family:var(--acid);font-size:28px;color:var(--text)>TOP-SHELF</span>'"></a>
+      <span class="version" id="appVersion"></span>
+    </div>
+    <div id="tsActivityBanner" class="ts-header-activity" aria-live="polite"></div>
+    <div class="nav-links">
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary" title="Downloads"><i class="ts-nav-icon ts-nav-icon--downloads"></i></button></a>
+      <a href="/scenes" style="text-decoration:none"><button class="btn-secondary" title="Discover"><i class="ts-nav-icon ts-nav-icon--scenes"></i></button></a>
+      <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="ts-icon-movies" aria-hidden="true"></i></button></a><a href="/jav" style="text-decoration:none"><button class="btn-secondary" title="JAV"><i class="ts-nav-icon ts-nav-icon--jav"></i></button></a><a href="/stars" style="text-decoration:none"><button class="btn-secondary" title="Stars"><i class="ts-nav-icon ts-nav-icon--stars"></i></button></a><a href="/studios" style="text-decoration:none"><button class="btn-secondary" title="Studios"><i class="ts-icon-studios" aria-hidden="true"></i></button></a><a href="/vices" style="text-decoration:none"><button class="btn-secondary" title="Vices"><i class="fa-solid fa-fire"></i></button></a><a href="/news" style="text-decoration:none"><button class="btn-secondary" title="News"><i class="ts-nav-icon ts-nav-icon--news"></i></button></a>
+      <a href="/health" style="text-decoration:none"><button class="btn-secondary" title="Health"><i class="ts-nav-icon ts-nav-icon--health"></i></button></a>
+      <a href="/settings" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="ts-nav-icon ts-nav-icon--settings"></i></button></a>
+      <button class="btn-secondary" onclick="fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'}).then(()=>location.href='/login')" title="Logout"><i class="ts-nav-icon ts-nav-icon--logout"></i></button>
+    </div>
+  </header>
+
+  <div id="entityPagePlaceholder" class="entity-page-placeholder">
+    <div class="entity-page-placeholder__inner">
+      <span class="loader" role="status" aria-label="Loading"></span>
+      <span id="entityPageStatus">Loading…</span>
+    </div>
+  </div>
+</div>
+
+<button type="button" id="tsEntityClose" class="ts-entity-close" title="Close" aria-label="Close">
+  <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+</button>
+
+<script defer src="/static/activity-banner.js?v=20260816"></script>
+<script defer src="/static/app-shell.js?v=20260814"></script>
+<script>
+/* Entity-page dispatcher: read the URL, invoke the right popup.
+ *
+ * Routes:
+ *   /performer/{row_id}                — libraryRowId
+ *   /performer?stash=X                 — stashId
+ *   /performer?name=X                  — name
+ *   /studio/{row_id}                   — libraryRowId
+ *   /studio?stash=X&source=stashdb     — stashId
+ *   /studio?name=X                     — name
+ *   /movie/{tpdb_id}                   — TPDB movie id
+ *
+ * Closing the popup navigates back (history.back) or to a sensible
+ * default landing page when there's no history to return to.
+ */
+(function () {
+  'use strict';
+
+  const path = window.location.pathname || '';
+  const search = new URLSearchParams(window.location.search || '');
+  const status = document.getElementById('entityPageStatus');
+  const placeholder = document.getElementById('entityPagePlaceholder');
+
+  function fallbackHref(kind) {
+    if (kind === 'movie') return '/library';
+    if (kind === 'studio') return '/library';
+    if (kind === 'performer') return '/library';
+    return '/unmatched';
+  }
+
+  // Ensure only one exit happens per session. Escape → close button
+  // → popup-close mutation observer can all fire in quick succession
+  // (Escape triggers the popup's own close handler which then flips
+  // the .open class). Without a guard we'd race two navigations,
+  // sometimes short-circuiting bfcache on the previous page.
+  let _navigatingAway = false;
+
+  function navigateAwayOnClose(kind) {
+    if (_navigatingAway) return;
+    _navigatingAway = true;
+    const home = fallbackHref(kind);
+    // history.back if we came from within the app so bfcache restores
+    // the previous page's scroll + filter state instantly. Fall back
+    // to the home landing when there's no in-app history to return to.
+    try {
+      if (document.referrer && new URL(document.referrer).origin === window.location.origin
+          && document.referrer !== window.location.href) {
+        history.back();
+      } else {
+        window.location.href = home;
+      }
+    } catch (_) {
+      window.location.href = home;
+    }
+  }
+
+  function watchForPopupClose(overlayId, kind) {
+    const overlay = document.getElementById(overlayId);
+    if (!overlay) {
+      // The popup script hasn't injected its DOM yet — try again in a
+      // moment. We give it up to ~3s before giving up.
+      let tries = 0;
+      const iv = setInterval(function () {
+        tries++;
+        const el = document.getElementById(overlayId);
+        if (el) {
+          clearInterval(iv);
+          _wireCloseWatcher(el, kind);
+        } else if (tries > 30) {
+          clearInterval(iv);
+        }
+      }, 100);
+      return;
+    }
+    _wireCloseWatcher(overlay, kind);
+  }
+  function _wireCloseWatcher(overlay, kind) {
+    // Popups signal "closed" via a class flip (`.open` removed) or
+    // `display: none`. Observe both and treat the FIRST transition to
+    // hidden after being visible as the user's dismissal.
+    let wasOpen = false;
+    const check = function () {
+      const isOpen = overlay.classList.contains('open')
+        || (overlay.style.display && overlay.style.display !== 'none');
+      if (isOpen) wasOpen = true;
+      if (wasOpen && !isOpen) {
+        obs.disconnect();
+        navigateAwayOnClose(kind);
+      }
+    };
+    check();
+    const obs = new MutationObserver(check);
+    obs.observe(overlay, { attributes: true, attributeFilter: ['class', 'style'] });
+  }
+
+  function showError(msg) {
+    if (!placeholder) return;
+    placeholder.innerHTML =
+      '<div class="entity-page-error">' +
+      '<p>' + msg.replace(/[<>&"]/g, '') + '</p>' +
+      '<p style="margin-top:12px"><a href="/library">← Back to library</a></p>' +
+      '</div>';
+  }
+
+  function hidePlaceholder() {
+    if (placeholder) placeholder.style.display = 'none';
+  }
+
+  function openPerformer(opts) {
+    if (!opts) return showError('Missing performer reference.');
+    if (typeof window.openPerformerPopup !== 'function') {
+      return showError('Performer viewer failed to load.');
+    }
+    if (status) status.textContent = 'Loading performer…';
+    window.openPerformerPopup(opts);
+    hidePlaceholder();
+    watchForPopupClose('performerPopupModal', 'performer');
+  }
+
+  function openStudio(opts) {
+    if (!opts) return showError('Missing studio reference.');
+    if (typeof window.openStudioPopup !== 'function') {
+      return showError('Studio viewer failed to load.');
+    }
+    if (status) status.textContent = 'Loading studio…';
+    window.openStudioPopup(opts);
+    hidePlaceholder();
+    watchForPopupClose('studioPopupModal', 'studio');
+  }
+
+  function openMovie(tpdbId) {
+    if (!tpdbId) return showError('Missing movie ID.');
+    if (typeof window.openMoviePopup !== 'function') {
+      return showError('Movie viewer failed to load.');
+    }
+    if (status) status.textContent = 'Loading movie…';
+    window.openMoviePopup(tpdbId);
+    hidePlaceholder();
+    watchForPopupClose('movieDetailOverlay', 'movie');
+  }
+
+  function dispatch() {
+    function _optsFromSearch() {
+      const opts = {};
+      const stash = search.get('stash');
+      const tpdb = search.get('tpdb');
+      const fansdb = search.get('fansdb');
+      const javstash = search.get('javstash');
+      const source = search.get('source') || '';
+      const name = search.get('name');
+      if (stash) opts.stashId = stash;
+      if (tpdb) opts.tpdbId = tpdb;
+      if (fansdb) opts.fansdbId = fansdb;
+      if (javstash) opts.javstashId = javstash;
+      if (source) opts.source = source;
+      if (name) opts.name = name;
+      return opts;
+    }
+
+    // /performer/{id} or /performer?stash=X&…&name=X
+    let m = path.match(/^\/performer\/(\d+)\/?$/);
+    if (m) return openPerformer({ libraryRowId: Number(m[1]) });
+    if (path === '/performer' || path === '/performer/') {
+      const opts = _optsFromSearch();
+      if (!Object.keys(opts).length) {
+        return showError('Performer route needs an ID or query parameter (stash=, tpdb=, fansdb=, javstash=, name=).');
+      }
+      return openPerformer(opts);
+    }
+
+    // /studio/{id} or /studio?stash=X&source= or /studio?name=X
+    m = path.match(/^\/studio\/(\d+)\/?$/);
+    if (m) return openStudio({ libraryRowId: Number(m[1]) });
+    if (path === '/studio' || path === '/studio/') {
+      const opts = _optsFromSearch();
+      if (!Object.keys(opts).length) {
+        return showError('Studio route needs an ID or query parameter (stash=, tpdb=, fansdb=, name=).');
+      }
+      return openStudio(opts);
+    }
+
+    // /movie/{tpdb_id}
+    m = path.match(/^\/movie\/([^/]+)\/?$/);
+    if (m) return openMovie(decodeURIComponent(m[1]));
+
+    showError('Unknown entity route: ' + path);
+  }
+
+  // Explicit exit affordances on the entity page: the floating close
+  // button in the top-right and the Esc key. Both run BEFORE the
+  // popup's own Esc handler (capture phase) so we skip the intermediate
+  // "close overlay animation → observer sees .open drop → navigate"
+  // dance — which was reloading the previous page instead of using
+  // bfcache. Now history.back() fires directly on the entity page,
+  // giving the browser the cleanest possible back-navigation signal.
+  function _guessKindFromPath() {
+    if (/^\/performer\b/.test(path)) return 'performer';
+    if (/^\/studio\b/.test(path)) return 'studio';
+    if (/^\/movie\b/.test(path)) return 'movie';
+    return 'performer';
+  }
+  const _closeBtn = document.getElementById('tsEntityClose');
+  if (_closeBtn) {
+    _closeBtn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      navigateAwayOnClose(_guessKindFromPath());
+    });
+  }
+  // Map every stacked modal to its own close function so Escape closes
+  // just the topmost layer instead of navigating away. If none of these
+  // is open, fall through to the entity-page exit (history.back).
+  const _MODAL_CLOSERS = {
+    posterRoleModal: function () { return typeof window.closePosterRolePicker === 'function' && (window.closePosterRolePicker(), true); },
+    cropModal:       function () { return typeof window.closeCropModal === 'function' && (window.closeCropModal(), true); },
+    imagePickModal:  function () { return typeof window.closeImagePickModal === 'function' && (window.closeImagePickModal(), true); },
+    imgUploadModal:  function () { return typeof window.closeImgUploadModal === 'function' && (window.closeImgUploadModal(), true); },
+    searchModal:     function () { return typeof window.closeSearch === 'function' && (window.closeSearch(), true); },
+    extLinkModal:    function () { return typeof window.closeExtLinkModal === 'function' && (window.closeExtLinkModal(), true); },
+  };
+  function _closeTopmostModal() {
+    const openModals = Array.from(document.querySelectorAll('.modal-overlay.open'));
+    if (!openModals.length) return false;
+    // Highest z-index wins as "topmost". modal-overlay ladder is
+    // declared in app-shell.css :8021+; posterRoleModal sits above the
+    // performer popup, so it'll be picked when both are open.
+    openModals.sort(function (a, b) {
+      return (parseInt(getComputedStyle(b).zIndex, 10) || 0)
+           - (parseInt(getComputedStyle(a).zIndex, 10) || 0);
+    });
+    const top = openModals[0];
+    const closer = _MODAL_CLOSERS[top.id];
+    if (closer && closer()) return true;
+    top.classList.remove('open');
+    return true;
+  }
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Escape') return;
+    // If a modal-overlay is stacked on top of the popup (poster
+    // picker, crop, image pick, etc.), close IT and stay on the
+    // entity page. Only navigate away when nothing else is open.
+    //
+    // Use `stopImmediatePropagation` (not just `stopPropagation`) —
+    // app-shell.js registers its own capture-phase Escape handler on
+    // the same `document` element (see :1010), and same-element
+    // handlers in the same phase run in registration order regardless
+    // of stopPropagation. Without ImmediatePropagation, app-shell's
+    // handler still fires, finds the (now-visible) performer popup,
+    // calls closePerformerPopup, which triggers the popup-close
+    // MutationObserver → navigateAwayOnClose → back to /library.
+    if (_closeTopmostModal()) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      return;
+    }
+    ev.preventDefault();
+    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+    navigateAwayOnClose(_guessKindFromPath());
+  }, true);
+
+  // Wait for popup-loader stubs to be present — they set up the
+  // `openPerformerPopup` / `openStudioPopup` window functions
+  // synchronously when popup-loader.js runs.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', dispatch);
+  } else {
+    dispatch();
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top-Shelf</title>
+
+<link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
+<link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
+<script src="/static/theme-init.js?v=20260614c"></script>
+<link rel="stylesheet" href="/static/app-shell.css?v=78">
+<link rel="stylesheet" href="/static/library.css?v=20260815">
+<link rel="stylesheet" href="/static/scenes.css?v=2">
+<script src="/static/ts-utils.js?v=20260814"></script>
+<script src="/static/lib-entity-actions.js?v=20260612c"></script>
+<script src="/static/popup-loader.js?v=20260811"></script>
+<script defer src="/static/movie-popup.js?v=20260531"></script>
+
+<style>
+  /* Home-page layout — sidebar chrome comes from app-shell.js, this
+   * file just paints the two content sections + the search bar. */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { color: var(--text); font-family: var(--mono); }
+
+  .home-wrap {
+    padding: 20px var(--shell-page-padding, 24px) 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+  }
+
+  /* ── Cross-library search bar ─────────────────────────────── */
+  /* Top row: favourites toggle (left) + wide search bar + matching
+   * spacer (right) so the search stays visually centered. Flex —
+   * the earlier grid attempt sized the search to its `width: 100%`
+   * inside an auto column, which resolved to just the input's
+   * intrinsic width. Flex lets .home-search stretch to fill every
+   * pixel between the two flanks up to max-width. */
+  /* Left controls sit at their natural width on the left. Search is
+   * absolutely positioned so it centers on the full page width
+   * (not on the residual flex space between the two flanks) — its
+   * left edge is left:50% then translated back by -50% of its own
+   * width. VHS logo stays absolute-positioned on the right (below). */
+  .home-toprow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 4px;
+    position: relative;
+    min-height: 42px;
+  }
+  .home-toprow__controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    z-index: 2;
+  }
+  .home-toprow > .home-search {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    max-width: none;
+    width: 50%;
+    z-index: 1;
+  }
+  /* Right-slot brand mark — absolutely positioned + auto width so
+   * the natural VHS aspect ratio picks its rendered size without
+   * being letterboxed inside a square grid cell. Height overshoots
+   * the row on purpose so the logo reads big; row height stays
+   * driven by the 40px fav toggle + search input. */
+  .home-toprow__brand {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 75px;
+    width: auto;
+    max-width: 240px;
+    object-fit: contain;
+    display: block;
+    pointer-events: none;
+    filter: drop-shadow(0 0 10px rgba(var(--brand-accent-rgb, 192, 132, 252), 0.4));
+  }
+  /* Inline stars ↔ favourites toggle that sits inside the "Your latest
+   * stars / Your favourite stars" section header. Two buttons rendered
+   * as a segmented pill — the yellow stars mask for "latest", the
+   * crimson lips mask for "favourites". Active side gets an outline +
+   * subtle glow; inactive side dims. Whichever side is active drives
+   * the section text (label ships from JS on toggle). */
+  .home-section-mode-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    margin-right: 6px;
+  }
+  .home-section-mode-btn {
+    width: 30px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    padding: 0;
+    cursor: pointer;
+    color: var(--text);
+    opacity: 0.45;
+    filter: grayscale(0.4);
+    transition: opacity 0.15s ease, filter 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  .home-section-mode-btn:hover {
+    opacity: 0.9;
+    filter: none;
+  }
+  .home-section-mode-btn.is-on {
+    opacity: 1;
+    filter: none;
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+  .home-section-mode-btn .ts-nav-icon {
+    width: 18px;
+    height: 18px;
+    -webkit-mask-size: 18px 18px;
+            mask-size: 18px 18px;
+  }
+  .home-section-mode-btn .fav-lips {
+    width: 20px !important;
+    height: 18px !important;
+    vertical-align: 0;
+    color: #7a0016 !important;
+  }
+
+  .home-search {
+    position: relative;
+    max-width: 1280px;
+    width: 100%;
+    margin: 4px auto 0;
+  }
+  .home-search__input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px 10px 44px;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb), 0.75) 0%, rgba(var(--panel-lo-rgb), 0.65) 100%);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  }
+  .home-search__icon {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(var(--brand-accent-rgb, 192, 132, 252), 0.75);
+    font-size: 14px;
+  }
+  .home-search__input {
+    flex: 1 1 auto;
+    background: transparent;
+    border: 0;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    outline: none;
+    min-width: 0;
+    text-align: center;
+  }
+  .home-search__input::placeholder {
+    color: rgba(200, 190, 220, 0.5);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 12px;
+  }
+  .home-search__clear {
+    background: transparent;
+    border: 0;
+    color: rgba(200, 190, 220, 0.55);
+    font-size: 13px;
+    padding: 4px 6px;
+    cursor: pointer;
+  }
+  .home-search__clear:hover { color: var(--text); }
+
+  .home-search__dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    max-height: 60vh;
+    overflow-y: auto;
+    background: rgba(var(--panel-lo-rgb), 0.98);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.55);
+    border-radius: 10px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    z-index: 30;
+    padding: 8px 0;
+  }
+  .home-search__dropdown[hidden] { display: none; }
+  .home-search__section-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px 4px;
+    font-family: var(--secs, monospace);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(180, 170, 200, 0.55);
+  }
+  .home-search__row {
+    display: grid;
+    grid-template-columns: 40px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    text-decoration: none;
+    color: var(--text);
+    cursor: pointer;
+    border: 0;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  .home-search__row:hover,
+  .home-search__row.is-active {
+    background: rgba(var(--brand-accent-rgb, 192, 132, 252), 0.12);
+  }
+  .home-search__thumb {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .home-search__thumb--placeholder {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(var(--brand-accent-rgb, 192, 132, 252), 0.75);
+    font-size: 16px;
+  }
+  .home-search__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .home-search__kind {
+    font-family: var(--secs, monospace);
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(180, 170, 200, 0.55);
+  }
+  .home-search__empty {
+    padding: 20px;
+    text-align: center;
+    color: rgba(180, 170, 200, 0.55);
+    font-size: 12px;
+    font-family: var(--secs, monospace);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* ── Section chrome (Recent Scenes / Latest Stars) ────────── */
+  .home-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .home-section__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(var(--brand-purple-rgb), 0.18);
+  }
+  .home-section__title {
+    font-family: var(--acid, "Courier New", monospace);
+    font-size: 20px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(var(--brand-accent-rgb, 192, 132, 252), 0.98);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .home-section__title i { font-size: 16px; }
+  .home-section__meta {
+    font-family: var(--secs, monospace);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(180, 170, 200, 0.55);
+  }
+  .home-section__meta[data-state="refreshing"] {
+    color: rgba(34, 197, 94, 0.9);
+  }
+
+  /* ── Grid density overrides for the library-style tile classes ──
+   * Scenes reuse .scene-card (scenes.css); Stars + Movies reuse
+   * .fav-cell (library.css). We force column density here + hard-
+   * cap the visible row count so an over-render (e.g. from a
+   * pre-layout width guess) can't spill a partial 3rd row.
+   *
+   * How the cap works: `grid-template-rows: repeat(N, auto)` names
+   * exactly N explicit rows. `grid-auto-rows: 0` gives every ROW
+   * beyond that zero height. `overflow: hidden` clips the zero-height
+   * children so they don't peek through as thin strips. */
+  #homeScenesGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-rows: repeat(2, auto);
+    grid-auto-rows: 0;
+    row-gap: 14px;
+    column-gap: 14px;
+    overflow: hidden;
+  }
+  #homePerfGrid.fav-grid,
+  #homeDiscoveredGrid.fav-grid,
+  #homeMoviesGrid.fav-grid,
+  #homeJavGrid.fav-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+    grid-template-rows: repeat(1, auto);
+    grid-auto-rows: 0;
+    overflow: hidden;
+  }
+
+  /* Segmented multi-select — one continuous dark-glass pill with
+   * internal 1px dividers between segments. Each segment is a
+   * button that toggles independently; only outer corners are
+   * rounded. */
+  .home-disc-src-chips {
+    box-sizing: border-box;
+    display: inline-flex;
+    gap: 0;
+    height: 42px;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb), 0.72) 0%, rgba(var(--panel-lo-rgb), 0.82) 100%);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
+    border-radius: 12px;
+    overflow: hidden;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+  .home-disc-src-chip {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 76px;
+    height: 100%;
+    padding: 2px 6px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    cursor: pointer;
+    transition: background 0.15s ease, opacity 0.15s ease;
+    position: relative;
+  }
+  /* Divider between segments (skip on the first one). */
+  .home-disc-src-chip + .home-disc-src-chip {
+    border-left: 1px solid rgba(var(--brand-purple-rgb), 0.22);
+  }
+  .home-disc-src-chip img {
+    max-width: 100%;
+    max-height: 32px;
+    object-fit: contain;
+    display: block;
+    transition: filter 0.15s ease;
+  }
+  .home-disc-src-chip:hover {
+    background: rgba(var(--brand-purple-rgb), 0.10);
+  }
+  .home-disc-src-chip.is-on {
+    background: rgba(var(--brand-purple-rgb), 0.22);
+    box-shadow: inset 0 0 12px rgba(var(--brand-purple-rgb), 0.18);
+  }
+  .home-disc-src-chip:not(.is-on) {
+    opacity: 0.4;
+  }
+  .home-disc-src-chip:not(.is-on) img {
+    filter: grayscale(1);
+  }
+
+
+  .home-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: rgba(180, 170, 200, 0.5);
+    font-family: var(--secs, monospace);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px dashed rgba(var(--brand-purple-rgb), 0.25);
+    border-radius: 10px;
+  }
+
+  /* Movie / JAV in-place popup — opened from tile clicks in the
+   * "Your latest movies" / "Your latest JAV" rows. Kept simple on
+   * purpose: poster on the left, meta + cast + actions on the
+   * right, no source-DB fetch. Full edit surface lives on /movies. */
+  .home-movie-popup {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 200;
+    padding: 24px;
+  }
+  .home-movie-popup[hidden] { display: none; }
+  .home-movie-popup__card {
+    position: relative;
+    width: min(920px, 100%);
+    max-height: 90vh;
+    overflow: auto;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb), 0.98) 0%, rgba(var(--panel-lo-rgb), 0.98) 100%);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.5);
+    border-radius: 14px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+    padding: 20px 20px 20px 20px;
+  }
+  .home-movie-popup__close {
+    position: absolute;
+    top: 12px; right: 12px;
+    width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(248, 113, 113, 0.14);
+    border: 1px solid rgba(248, 113, 113, 0.4);
+    color: var(--red, #f87171);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.15s ease;
+  }
+  .home-movie-popup__close:hover { background: rgba(248, 113, 113, 0.28); }
+  .home-movie-popup__body {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 20px;
+    color: var(--text);
+  }
+  .home-movie-popup__loading {
+    grid-column: 1 / -1;
+    padding: 60px 20px; text-align: center; color: var(--dim, #999);
+    font-family: var(--secs, monospace); letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .home-movie-popup__poster {
+    width: 240px; height: 360px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  }
+  .home-movie-popup__poster img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+  }
+  .home-movie-popup__title {
+    font-family: var(--acid, "Courier New", monospace);
+    font-size: 26px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(var(--brand-accent-rgb, 192, 132, 252), 0.98);
+    margin: 0 40px 6px 0;
+    line-height: 1.15;
+  }
+  .home-movie-popup__meta {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(180, 170, 200, 0.75);
+    margin-bottom: 12px;
+    display: flex; flex-wrap: wrap; gap: 6px 14px;
+  }
+  .home-movie-popup__meta strong { color: var(--text); font-weight: 600; }
+  .home-movie-popup__section-label {
+    font-family: var(--secs, monospace);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(180, 170, 200, 0.55);
+    margin: 12px 0 4px;
+  }
+  .home-movie-popup__cast {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .home-movie-popup__cast-chip {
+    display: inline-block;
+    padding: 4px 10px;
+    font-size: 12px;
+    background: rgba(var(--brand-purple-rgb), 0.14);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
+    border-radius: 12px;
+    color: var(--text);
+    text-decoration: none;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .home-movie-popup__cast-chip:hover {
+    background: rgba(var(--brand-purple-rgb), 0.32);
+    border-color: rgba(var(--brand-purple-rgb), 0.65);
+  }
+  .home-movie-popup__synopsis {
+    margin-top: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(220, 210, 235, 0.85);
+    max-height: 160px;
+    overflow: auto;
+  }
+  .home-movie-popup__actions {
+    margin-top: 18px;
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .home-movie-popup__btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px;
+    font-family: var(--secs, monospace);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: rgba(var(--brand-purple-rgb), 0.18);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.5);
+    color: var(--text);
+    border-radius: 8px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .home-movie-popup__btn:hover {
+    background: rgba(var(--brand-purple-rgb), 0.32);
+    border-color: rgba(var(--brand-purple-rgb), 0.72);
+  }
+  @media (max-width: 640px) {
+    .home-movie-popup__body { grid-template-columns: 1fr; }
+    .home-movie-popup__poster { width: 100%; height: auto; aspect-ratio: 2/3; margin: 0 auto; }
+  }
+</style>
+</head>
+<body class="ts-has-sidebar">
+<div class="app">
+  <header class="ts-app-header">
+    <div class="ts-header-left">
+      <a href="/" class="logo" title="Home"><img src="/static/img/logo.webp" alt="Top-Shelf" onerror="this.outerHTML='<span style=font-family:var(--acid);font-size:28px;color:var(--text)>TOP-SHELF</span>'"></a>
+      <span class="version" id="appVersion"></span>
+    </div>
+    <div id="tsActivityBanner" class="ts-header-activity" aria-live="polite"></div>
+    <div class="nav-links">
+      <a href="/downloads" style="text-decoration:none"><button class="btn-secondary" title="Downloads"><i class="ts-nav-icon ts-nav-icon--downloads"></i></button></a>
+      <a href="/scenes" style="text-decoration:none"><button class="btn-secondary" title="Discover"><i class="ts-nav-icon ts-nav-icon--scenes"></i></button></a>
+      <a href="/movies" style="text-decoration:none"><button class="btn-secondary" title="Movies"><i class="ts-icon-movies" aria-hidden="true"></i></button></a><a href="/jav" style="text-decoration:none"><button class="btn-secondary" title="JAV"><i class="ts-nav-icon ts-nav-icon--jav"></i></button></a><a href="/stars" style="text-decoration:none"><button class="btn-secondary" title="Stars"><i class="ts-nav-icon ts-nav-icon--stars"></i></button></a><a href="/studios" style="text-decoration:none"><button class="btn-secondary" title="Studios"><i class="ts-icon-studios" aria-hidden="true"></i></button></a><a href="/vices" style="text-decoration:none"><button class="btn-secondary" title="Vices"><i class="fa-solid fa-fire"></i></button></a><a href="/news" style="text-decoration:none"><button class="btn-secondary" title="News"><i class="ts-nav-icon ts-nav-icon--news"></i></button></a>
+      <a href="/health" style="text-decoration:none"><button class="btn-secondary" title="Health"><i class="ts-nav-icon ts-nav-icon--health"></i></button></a>
+      <a href="/settings" style="text-decoration:none"><button class="btn-secondary" title="Settings"><i class="ts-nav-icon ts-nav-icon--settings"></i></button></a>
+      <button class="btn-secondary" onclick="fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'}).then(()=>location.href='/login')" title="Logout"><i class="ts-nav-icon ts-nav-icon--logout"></i></button>
+    </div>
+  </header>
+
+  <main class="home-wrap">
+    <!-- Cross-library search + favourites toggle -->
+    <div class="home-toprow">
+      <div class="home-toprow__controls">
+        <div class="home-disc-src-chips" id="homeDiscSrcChips" role="group" aria-label="Toggle source databases for the Discovered performers row">
+          <button type="button" class="home-disc-src-chip is-on" data-src="stashdb"  aria-pressed="true" title="Toggle StashDB scenes"><img src="/static/logos/stashdb.webp" alt="StashDB"></button>
+          <button type="button" class="home-disc-src-chip is-on" data-src="fansdb"   aria-pressed="true" title="Toggle FansDB scenes"><img src="/static/logos/fansdb.webp" alt="FansDB"></button>
+          <button type="button" class="home-disc-src-chip is-on" data-src="javstash" aria-pressed="true" title="Toggle JAVStash scenes"><img src="/static/logos/javstash.webp" alt="JAVStash"></button>
+        </div>
+      </div>
+      <div class="home-search">
+        <div class="home-search__input-wrap">
+          <i class="fa-solid fa-magnifying-glass home-search__icon" aria-hidden="true"></i>
+          <input id="homeSearchInput" class="home-search__input" type="text" autocomplete="off" spellcheck="false" placeholder="Search library">
+          <button type="button" id="homeSearchClear" class="home-search__clear" title="Clear" hidden><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="homeSearchDropdown" class="home-search__dropdown" hidden></div>
+      </div>
+      <img class="home-toprow__brand" src="/static/img/logo_vhs.webp" alt="Top-Shelf" loading="lazy">
+    </div>
+
+    <!-- Latest Stars — first row -->
+    <section class="home-section" id="homePerfSection">
+      <div class="home-section__header">
+        <div class="home-section__title" id="homePerfSectionTitle">
+          <div class="home-section-mode-toggle" role="group" aria-label="Toggle stars filter" id="homePerfModeToggle">
+            <button type="button" class="home-section-mode-btn is-on" data-mode="latest" aria-pressed="true" title="Latest stars">
+              <i class="ts-nav-icon ts-nav-icon--stars" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="home-section-mode-btn" data-mode="favs" aria-pressed="false" title="Favourite stars">
+              <span class="fav-lips" aria-hidden="true"></span>
+            </button>
+          </div>
+          <span id="homePerfSectionLabel">Your latest stars</span>
+        </div>
+        <div class="home-section__meta" id="homePerfMeta">Loading…</div>
+      </div>
+      <div class="fav-grid fav-grid--perf" id="homePerfGrid"></div>
+    </section>
+
+    <!-- Discovered performers — non-library performers ranked by
+         appearances across the cached /discover feed pools. Source
+         toggle chips have moved to the top row so they stay
+         reachable even when this section is hidden (empty state). -->
+    <section class="home-section" id="homeDiscoveredSection">
+      <div class="home-section__header">
+        <div class="home-section__title">
+          <i class="ts-icon-newstar" aria-hidden="true"></i>
+          Discovered performers
+        </div>
+        <div class="home-section__meta" id="homeDiscoveredMeta">Loading…</div>
+      </div>
+      <div class="fav-grid fav-grid--perf" id="homeDiscoveredGrid"></div>
+    </section>
+
+    <!-- Recent Scenes -->
+    <section class="home-section" id="homeScenesSection">
+      <div class="home-section__header">
+        <div class="home-section__title">
+          <i class="ts-icon-scenes" aria-hidden="true"></i>
+          Your latest scenes
+        </div>
+        <div class="home-section__meta" id="homeScenesMeta">Loading…</div>
+      </div>
+      <div class="home-scene-grid" id="homeScenesGrid"></div>
+    </section>
+
+    <!-- Latest Movies -->
+    <section class="home-section" id="homeMoviesSection">
+      <div class="home-section__header">
+        <div class="home-section__title">
+          <i class="ts-icon-movies" aria-hidden="true"></i>
+          Your latest movies
+        </div>
+        <div class="home-section__meta" id="homeMoviesMeta">Loading…</div>
+      </div>
+      <div class="fav-grid fav-grid--perf fav-grid--movie" id="homeMoviesGrid"></div>
+    </section>
+
+    <!-- Latest JAV -->
+    <section class="home-section" id="homeJavSection">
+      <div class="home-section__header">
+        <div class="home-section__title">
+          <i class="ts-nav-icon ts-nav-icon--jav" aria-hidden="true" style="width:20px;height:20px;-webkit-mask-size:20px 20px;mask-size:20px 20px"></i>
+          Your latest JAV
+        </div>
+        <div class="home-section__meta" id="homeJavMeta">Loading…</div>
+      </div>
+      <div class="fav-grid fav-grid--perf fav-grid--movie" id="homeJavGrid"></div>
+    </section>
+  </main>
+</div>
+
+<!-- Scene detail overlay — same markup /scenes uses so
+     window.openSceneOverlay (from scenes-common.js) can drive the
+     popup in-place instead of navigating to /scenes and letting the
+     deep-link path reflow it into an inline view. -->
+<div id="sceneOverlay" class="scene-overlay" onclick="if(event.target===this)closeSceneOverlay()">
+  <div class="scene-overlay-card">
+    <div class="scene-overlay-head">
+      <span class="panel-title" id="sceneOverlayTitle">Scene</span>
+      <button type="button" onclick="closeSceneOverlay()" style="background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.35);color:var(--red);width:36px;height:36px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:background 0.15s" onmouseover="this.style.background='rgba(248,113,113,0.22)'" onmouseout="this.style.background='rgba(248,113,113,0.12)'"><i class="fa-solid fa-x"></i></button>
+    </div>
+    <div class="scene-overlay-body">
+      <div id="sceneOverlayStudioLogoRow" class="scene-overlay-studio-logo-row" aria-hidden="true">
+        <img id="sceneOverlayStudioLogo" class="scene-overlay-studio-logo" src="" alt="" loading="lazy">
+      </div>
+      <div class="search-row" style="margin-bottom:10px;align-items:flex-start">
+        <input id="sceneOverlayQuery" class="field-input" type="text" placeholder="Search query..." onkeydown="if(event.key==='Enter')openSceneOverlayProwlarrPopup()">
+        <div style="display:flex;flex-direction:row;gap:6px;flex-shrink:0;align-items:stretch">
+          <button class="btn-primary" onclick="openSceneOverlayProwlarrPopup()" title="Search Prowlarr"><span class="ts-prowlarr-btn-content"><img class="ts-prowlarr-btn-logo" src="/static/logos/prowlarr.webp" alt="Prowlarr"><i class="fa-solid fa-magnifying-glass"></i></span></button>
+          <a id="sceneOverlayTpdbLink" class="btn-secondary scene-overlay-db-link" target="_blank" rel="noopener noreferrer" href="#" style="display:none" title="Open on TPDB"><img src="/static/logos/tpdb.webp" alt="TPDB"></a>
+          <a id="sceneOverlayStashdbLink" class="btn-secondary scene-overlay-db-link" target="_blank" rel="noopener noreferrer" href="#" style="display:none" title="Open on StashDB"><img src="/static/logos/stashdb.webp" alt="StashDB"></a>
+          <a id="sceneOverlayFansdbLink" class="btn-secondary scene-overlay-db-link" target="_blank" rel="noopener noreferrer" href="#" style="display:none" title="Open on FansDB"><img src="/static/logos/fansdb.webp" alt="FansDB"></a>
+          <a id="sceneOverlayJavstashLink" class="btn-secondary scene-overlay-db-link" target="_blank" rel="noopener noreferrer" href="#" style="display:none" title="Open on JAVStash"><img src="/static/logos/javstash.webp" alt="JAVStash"></a>
+        </div>
+      </div>
+      <div id="sceneOverlayMain" style="margin-bottom:12px"></div>
+    </div>
+  </div>
+</div>
+<div id="imgOverlay" class="img-overlay" style="display:none" onclick="closeImageOverlay()">
+  <img id="imgOverlayImg" src="" alt="" loading="lazy">
+</div>
+
+<!-- Compact movie / JAV detail popup — opened in-place when a tile is
+     clicked in "Your latest movies" / "Your latest JAV". Reads the
+     row via /api/favourites/entity-panel so title, poster, studio,
+     cast, and cross-DB links come from the local library, not from a
+     source-DB round trip. "Open in library" link falls through to
+     /movies?focus=<id> for users who want the full edit surface. -->
+<div id="homeMoviePopup" class="home-movie-popup" hidden onclick="if(event.target===this)closeHomeMoviePopup()">
+  <div class="home-movie-popup__card" role="dialog" aria-modal="true" aria-labelledby="homeMoviePopupTitle">
+    <button type="button" class="home-movie-popup__close" onclick="closeHomeMoviePopup()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    <div class="home-movie-popup__body" id="homeMoviePopupBody">
+      <div class="home-movie-popup__loading">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<!-- scenes-common.js exposes window.openSceneOverlay + drives the
+     #sceneOverlay markup above. bootFeed inside guards on
+     #scenesGrid — home page doesn't have one, so the poll loop
+     stays inert; only the overlay opener + shared helpers are used. -->
+<script src="/static/scenes-common.js?v=20260812"></script>
+<script defer src="/static/activity-banner.js?v=20260816"></script>
+<script defer src="/static/app-shell.js?v=20260814"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ── Home data (scenes + performers) ──────────────────────────
+  let _bgPollTimer = null;
+  let _lastUpdatedAt = 0;
+
+  // Cache the full arrays returned by /api/home/data so window-resize
+  // can re-slice to fit the newly-wide (or newly-narrow) row without
+  // a network round-trip. Layout constants match the CSS grid mins:
+  // scenes 220px, stars/movies 140px, grid gap 14px.
+  // Twin caches per section — the un-filtered payload the server
+  // ships alongside the favourites-only variant. The Favourites
+  // toggle swaps which one gets rendered, no round-trip needed.
+  let _allScenes = [];
+  let _allPerformers = [];
+  let _allMovies = [];
+  let _allJav = [];
+  let _allDiscovered = [];
+  // Source toggles for the discovered row. Persisted to localStorage
+  // so the user's on/off picks survive reloads.
+  let _discSources = _loadDiscSources();
+
+  function _loadDiscSources() {
+    const dflt = { stashdb: true, fansdb: true, javstash: true, tpdb: true };
+    try {
+      const raw = localStorage.getItem('ts:home:disc-sources');
+      if (!raw) return dflt;
+      const parsed = JSON.parse(raw);
+      return {
+        stashdb:  parsed.stashdb  !== false,
+        fansdb:   parsed.fansdb   !== false,
+        javstash: parsed.javstash !== false,
+        tpdb:     parsed.tpdb     !== false,
+      };
+    } catch (_) { return dflt; }
+  }
+  function _saveDiscSources() {
+    try { localStorage.setItem('ts:home:disc-sources', JSON.stringify(_discSources)); } catch (_) {}
+  }
+  let _favScenes = [];
+  let _favPerformers = [];
+  let _favMovies = [];
+  let _favJav = [];
+  let _favMode = false;
+
+  function _sceneArr()      { return _favMode ? _favScenes     : _allScenes; }
+  function _perfArr()       { return _favMode ? _favPerformers : _allPerformers; }
+  function _movieArr()      { return _favMode ? _favMovies     : _allMovies; }
+  function _javArr()        { return _favMode ? _favJav        : _allJav; }
+  // Discovered performers deliberately ignore the favourites toggle —
+  // the whole section is about people who are NOT in the library, so
+  // "favourites only" would always render an empty grid. Applies the
+  // source toggles: only per-source counts for enabled chips are
+  // summed, performers whose enabled-sum is 0 drop out, remaining
+  // rows are ranked by the reduced total.
+  function _discoveredArr() {
+    if (!Array.isArray(_allDiscovered) || !_allDiscovered.length) return [];
+    const wanted = _discSources;
+    const reduced = [];
+    for (const p of _allDiscovered) {
+      const s = p.sources || {};
+      let n = 0;
+      if (wanted.stashdb)  n += (s.stashdb  || 0);
+      if (wanted.fansdb)   n += (s.fansdb   || 0);
+      if (wanted.javstash) n += (s.javstash || 0);
+      if (wanted.tpdb)     n += (s.tpdb     || 0);
+      if (n <= 0) continue;
+      reduced.push({ ...p, appearances: n });
+    }
+    reduced.sort((a, b) => b.appearances - a.appearances || (a.name || '').localeCompare(b.name || ''));
+    return reduced;
+  }
+
+  function _showSectionIf(sectionId, hasData) {
+    const el = document.getElementById(sectionId);
+    if (!el) return;
+    el.style.display = hasData ? '' : 'none';
+  }
+  const SCENES_MIN_COL = 220;
+  const LIB_MIN_COL = 140;
+  const GRID_GAP = 14;
+  const SCENES_ROWS = 2;
+  const LIB_ROWS = 1;
+
+  // `-1` = width isn't measurable yet; caller should defer render
+  // instead of guessing (a too-large guess renders extras that then
+  // visibly collapse when the resize handler picks up the real width).
+  function _tilesPerRow(gridEl, minCol) {
+    if (!gridEl) return -1;
+    const w = gridEl.clientWidth || 0;
+    if (w <= 0) return -1;
+    return Math.max(1, Math.floor((w + GRID_GAP) / (minCol + GRID_GAP)));
+  }
+  function _visibleCount(gridEl, minCol, rows) {
+    const perRow = _tilesPerRow(gridEl, minCol);
+    if (perRow < 0) return -1;
+    return perRow * rows;
+  }
+  // Defer rendering until the grid actually has a width. Runs the
+  // callback once per grid on the next animation frame after layout.
+  function _whenGridSized(gridEl, minCol, fn) {
+    const tryNow = () => {
+      const w = gridEl && gridEl.clientWidth;
+      if (w && w > 0) { fn(); return true; }
+      return false;
+    };
+    if (tryNow()) return;
+    // Multiple rAFs — the first paint runs BEFORE layout completes
+    // on some pages; a second frame guarantees the grid has flowed.
+    requestAnimationFrame(() => {
+      if (tryNow()) return;
+      requestAnimationFrame(() => { tryNow() || fn(); });
+    });
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+  }
+
+  function _navigateToPerformer(row) {
+    if (typeof window.tsGotoEntity === 'function') {
+      window.tsGotoEntity({ kind: 'performer', libraryRowId: row.id });
+    } else {
+      window.location.href = '/performer/' + encodeURIComponent(row.id);
+    }
+  }
+
+  async function _openSceneOverlay(sc) {
+    // Open the same scene modal /scenes uses, in-place on the home
+    // page. Requires (1) scenes-common.js loaded — it exposes
+    // window.openSceneOverlay — and (2) the #sceneOverlay markup in
+    // home.html's DOM. If either is missing, fall back to a hard
+    // navigation to /scenes?scene=… (the deep-link handler there
+    // will open the overlay).
+    const src = String(sc.source || 'tpdb').toLowerCase().replace(/^search_/, '');
+    const id  = sc.id || '';
+    if (!id) return;
+    // Carry the tile's own thumb through — /api/scene-info may return
+    // no image_url for some sources, and the popup's only image
+    // fallback is /static/img/missing.webp.
+    const tileThumb = (sc.thumb || '').trim();
+    const fallbackNav = () => {
+      window.location.href = '/scenes?scene=' + encodeURIComponent(src) + '/' + encodeURIComponent(id);
+    };
+    if (typeof window.openSceneOverlay !== 'function' || !document.getElementById('sceneOverlay')) {
+      return fallbackNav();
+    }
+    try {
+      const r = await fetch('/api/scene-info?source=' + encodeURIComponent(src) + '&id=' + encodeURIComponent(id));
+      const info = await r.json();
+      if (!info || !info.ok) return fallbackNav();
+      // Shape the /api/scene-info payload to what openSceneOverlay
+      // expects (mirrors the /scenes deep-link adapter). Any field
+      // not present falls back to '' inside the renderer.
+      const st = info.studio || {};
+      const perfList = (info.performers || []).map((p) => p && p.name).filter(Boolean);
+      const sceneLike = {
+        title: info.title || 'Scene',
+        performer: perfList.join(', '),
+        hover_performers: perfList,
+        tags: (info.tags || []).map((t) => (t && t.name) || t).filter(Boolean),
+        description: info.plot || '',
+        tpdb_id:    src === 'tpdb'    ? info.id : '',
+        stash_id:   src === 'stashdb' ? info.id : '',
+        stashdb_id: src === 'stashdb' ? info.id : '',
+        fansdb_id:  src === 'fansdb'  ? info.id : '',
+        thumb: info.image_url || info.poster_url || tileThumb || '',
+        studio: st.name || '',
+        studio_logo_url: st.logo_url || '',
+        release_date: info.release_date || '',
+      };
+      window.openSceneOverlay(sceneLike);
+    } catch (_) {
+      fallbackNav();
+    }
+  }
+
+  // 16:9 wide "IMAGE NOT AVAILABLE" graphic — right shape for scene
+  // thumbs (which are landscape) and for performer tiles (which get
+  // duotoned into place). NOT used for movie / JAV tiles: those are
+  // portrait, and tsApplyMovieCoverSplit would see the wide aspect
+  // and crop to just one half of the placeholder — showing a
+  // fragment of the graphic instead of the full "not available"
+  // notice. Portrait POSTER_FALLBACK_PORTRAIT is used there.
+  const POSTER_FALLBACK = '/static/img/missing.webp';
+  const POSTER_FALLBACK_PORTRAIT = '/static/img/poster.webp';
+
+  function renderScenes(scenes) {
+    const grid = document.getElementById('homeScenesGrid');
+    if (!grid) return;
+    if (!scenes || !scenes.length) {
+      // Hide the whole section when there's nothing to render — no
+      // empty-state chrome cluttering the page.
+      _showSectionIf('homeScenesSection', false);
+      grid.innerHTML = '';
+      return;
+    }
+    _showSectionIf('homeScenesSection', true);
+    // Mirrors the /scenes .scene-card structure (from scenes.css) so
+    // hover-lift + name plate + duo-tint styling matches the Discover
+    // grid exactly. Omits the overlays (wanted button, headshots
+    // hover, blacklist, tag chips) — those depend on scenes.js state
+    // the home page doesn't bootstrap.
+    let cap = _visibleCount(grid, SCENES_MIN_COL, SCENES_ROWS);
+    if (cap < 0) {
+      // Grid not laid out yet — wait one animation frame then retry
+      // so we don't paint too many tiles and visibly collapse them.
+      _whenGridSized(grid, SCENES_MIN_COL, () => renderScenes(scenes));
+      return;
+    }
+    grid.innerHTML = scenes.slice(0, cap).map((s) => {
+      const thumb = s.thumb || s.poster || POSTER_FALLBACK;
+      const title = s.title || '(untitled)';
+      const studio = s.studio || '';
+      const date = s.date || '';
+      return `<div class="scene-card" data-scene-id="${esc(s.id)}" data-source="${esc(s.source || '')}" data-thumb="${esc(thumb)}" role="button" tabindex="0" aria-label="Open scene">
+        <div class="img-load">
+          <img class="scene-thumb" src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onload="this.closest('.img-load')?.classList.add('ready')" onerror="const w=this.closest('.img-load');this.src='${POSTER_FALLBACK}';w?.classList.add('ready')">
+          <div class="duo-tint" aria-hidden="true"></div>
+        </div>
+        <div class="scene-info">
+          <div class="scene-title" title="${esc(title)}">${esc(title)}</div>
+          <div class="scene-date" title="${esc((date || '') + (studio ? ' · ' + studio : ''))}">
+            <span class="meta-date">${esc(date)}</span>${studio ? `<span class="meta-studio-fallback">${date ? ' · ' : ''}${esc(studio)}</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    grid.onclick = (ev) => {
+      const card = ev.target.closest('.scene-card');
+      if (!card) return;
+      _openSceneOverlay({
+        id: card.getAttribute('data-scene-id') || '',
+        source: card.getAttribute('data-source') || '',
+        thumb: card.getAttribute('data-thumb') || '',
+      });
+    };
+  }
+
+  // Library tile builder — mirrors favourites.js renderCard for
+  // performer / movie rows, minus the interactive overlays. Reads
+  // `image_url` straight off the row so any user-set headshot /
+  // poster tweak in the popup picker shows up on the home page the
+  // moment the row is saved (matches /library / /stars / /movies).
+  function _libraryTileHtml(row, kind) {
+    const id = row.id || 0;
+    const name = row.folder_name || 'Unnamed';
+    const imgUrl = (row.image_url || '').trim();
+    // Movies / JAV need the portrait placeholder so the wide
+    // missing.webp isn't cropped to a fragment by the split-front
+    // rule; performers can keep the standard 16:9 graphic (their
+    // tiles overlay it with a duotone and the aspect matches the
+    // scene-thumb visual language).
+    const tileFallback = (kind === 'movie' || kind === 'jav')
+      ? POSTER_FALLBACK_PORTRAIT
+      : POSTER_FALLBACK;
+    const posterSrc = imgUrl ? imgUrl : tileFallback;
+    const errAttr = imgUrl
+      ? ` onerror="this.onerror=null;this.src='${tileFallback}'"`
+      : '';
+    // Movies / JAV: split wide front+back cover art down to the front
+    // slice, same as /movies. tsApplyMovieCoverSplit is a global from
+    // ts-utils.js — home.html loads that file too.
+    const movieSplitOnload = (kind === 'movie' || kind === 'jav')
+      ? ' onload="typeof tsApplyMovieCoverSplit===\'function\'&&tsApplyMovieCoverSplit(this,\'solo\')"'
+      : '';
+    // TPDB id enables opening the movie popup in-place (movie-popup.js
+    // fetches /api/movies/tpdb/{id}). Absence falls back to navigation
+    // in the click handler. `data-fallback-poster` carries the local
+    // library image_url through so TPDB records with an empty poster
+    // don't drop to the "Image not available" placeholder in the popup.
+    const isMovieOrJav = (kind === 'movie' || kind === 'jav');
+    const tpdbId = isMovieOrJav ? String(row.match_tpdb_id || '').trim() : '';
+    const tpdbAttr = tpdbId ? ` data-tpdb-id="${esc(tpdbId)}"` : '';
+    const fbPoster = isMovieOrJav ? String(row.image_url || '').trim() : '';
+    const fbBg     = isMovieOrJav ? String(row.background_url || '').trim() : '';
+    const fbPosterAttr = fbPoster ? ` data-fallback-poster="${esc(fbPoster)}"` : '';
+    const fbBgAttr     = fbBg     ? ` data-fallback-bg="${esc(fbBg)}"` : '';
+    return `<div class="fav-cell" data-id="${esc(id)}" data-kind="${esc(kind)}"${tpdbAttr}${fbPosterAttr}${fbBgAttr} tabindex="0">
+      <div class="fav-cell-visual">
+        <div class="fav-perf-ph">
+          <div class="duo-inner">
+            <img class="duo-img" src="${esc(posterSrc)}" alt="" loading="lazy" referrerpolicy="no-referrer"${errAttr}${movieSplitOnload}>
+            <div class="duo-tint" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="fav-cell-title">${esc(name)}</div>
+      </div>
+    </div>`;
+  }
+
+  function renderPerformers(rows) {
+    const grid = document.getElementById('homePerfGrid');
+    if (!grid) return;
+    if (!rows || !rows.length) {
+      _showSectionIf('homePerfSection', false);
+      grid.innerHTML = '';
+      return;
+    }
+    _showSectionIf('homePerfSection', true);
+    let cap = _visibleCount(grid, LIB_MIN_COL, LIB_ROWS);
+    if (cap < 0) {
+      _whenGridSized(grid, LIB_MIN_COL, () => renderPerformers(rows));
+      return;
+    }
+    grid.innerHTML = rows.slice(0, cap).map((r) => _libraryTileHtml(r, 'performer')).join('');
+    grid.onclick = (ev) => {
+      const cell = ev.target.closest('.fav-cell');
+      if (!cell) return;
+      const rid = parseInt(cell.getAttribute('data-id'), 10);
+      if (rid) _navigateToPerformer({ id: rid });
+    };
+  }
+
+  // Discovered performer tile — non-library people ranked by scene
+  // appearances across cached /discover pools. Reuses .fav-cell chrome
+  // so the row matches "your latest stars" visually; adds an
+  // appearances count badge in the corner. Click routes to /entity so
+  // the standard performer popup opens against the stash-box id.
+  function _discoveredTileHtml(p) {
+    const name = (p.name || '').trim() || 'Unnamed';
+    const imgUrl = (p.image_url || '').trim();
+    const posterSrc = imgUrl || POSTER_FALLBACK;
+    const errAttr = imgUrl
+      ? ` onerror="this.onerror=null;this.src='${POSTER_FALLBACK}'"`
+      : '';
+    // Every per-DB id the backend surfaces flows through as its own
+    // data-attr so the popup can enrich from every DB the performer
+    // is linked in (not just the source that happened to surface
+    // them first in the ranking pass).
+    const attrs = [
+      `data-name="${esc(name)}"`,
+      p.stash_id    ? `data-stash-id="${esc(p.stash_id)}"`       : '',
+      p.tpdb_id     ? `data-tpdb-id="${esc(p.tpdb_id)}"`         : '',
+      p.fansdb_id   ? `data-fansdb-id="${esc(p.fansdb_id)}"`     : '',
+      p.javstash_id ? `data-javstash-id="${esc(p.javstash_id)}"` : '',
+    ].filter(Boolean).join(' ');
+    return `<div class="fav-cell home-disc-cell" ${attrs} tabindex="0">
+      <div class="fav-cell-visual">
+        <div class="fav-perf-ph">
+          <div class="duo-inner">
+            <img class="duo-img" src="${esc(posterSrc)}" alt="" loading="lazy" referrerpolicy="no-referrer"${errAttr}>
+            <div class="duo-tint" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="fav-cell-title">${esc(name)}</div>
+      </div>
+    </div>`;
+  }
+
+  function renderDiscovered(rows) {
+    const grid = document.getElementById('homeDiscoveredGrid');
+    if (!grid) return;
+    if (!rows || !rows.length) {
+      _showSectionIf('homeDiscoveredSection', false);
+      grid.innerHTML = '';
+      return;
+    }
+    _showSectionIf('homeDiscoveredSection', true);
+    let cap = _visibleCount(grid, LIB_MIN_COL, LIB_ROWS);
+    if (cap < 0) {
+      _whenGridSized(grid, LIB_MIN_COL, () => renderDiscovered(rows));
+      return;
+    }
+    grid.innerHTML = rows.slice(0, cap).map(_discoveredTileHtml).join('');
+    grid.onclick = (ev) => {
+      const cell = ev.target.closest('.fav-cell');
+      if (!cell) return;
+      const name     = (cell.getAttribute('data-name') || '').trim();
+      const stash    = (cell.getAttribute('data-stash-id') || '').trim();
+      const tpdb     = (cell.getAttribute('data-tpdb-id') || '').trim();
+      const fansdb   = (cell.getAttribute('data-fansdb-id') || '').trim();
+      const javstash = (cell.getAttribute('data-javstash-id') || '').trim();
+      const params = new URLSearchParams();
+      // Pass every DB id the discovered payload surfaced so the
+      // performer popup can enrich from all of them, not just the
+      // first source that ranked the performer. Name is always sent
+      // as a fallback lookup key when the popup falls through to a
+      // name-based cross-DB search.
+      if (stash)    params.set('stash',    stash);
+      if (tpdb)     params.set('tpdb',     tpdb);
+      if (fansdb)   params.set('fansdb',   fansdb);
+      if (javstash) params.set('javstash', javstash);
+      if (name)     params.set('name',     name);
+      window.location.href = '/performer?' + params.toString();
+    };
+  }
+
+  function renderMovies(rows) {
+    const grid = document.getElementById('homeMoviesGrid');
+    if (!grid) return;
+    if (!rows || !rows.length) {
+      _showSectionIf('homeMoviesSection', false);
+      grid.innerHTML = '';
+      return;
+    }
+    _showSectionIf('homeMoviesSection', true);
+    let cap = _visibleCount(grid, LIB_MIN_COL, LIB_ROWS);
+    if (cap < 0) {
+      _whenGridSized(grid, LIB_MIN_COL, () => renderMovies(rows));
+      return;
+    }
+    grid.innerHTML = rows.slice(0, cap).map((r) => _libraryTileHtml(r, r.kind || 'movie')).join('');
+    grid.onclick = (ev) => {
+      const cell = ev.target.closest('.fav-cell');
+      if (!cell) return;
+      _openMovieTile(cell, '/movies');
+    };
+  }
+
+  function renderJav(rows) {
+    const grid = document.getElementById('homeJavGrid');
+    if (!grid) return;
+    if (!rows || !rows.length) {
+      _showSectionIf('homeJavSection', false);
+      grid.innerHTML = '';
+      return;
+    }
+    _showSectionIf('homeJavSection', true);
+    let cap = _visibleCount(grid, LIB_MIN_COL, LIB_ROWS);
+    if (cap < 0) {
+      _whenGridSized(grid, LIB_MIN_COL, () => renderJav(rows));
+      return;
+    }
+    grid.innerHTML = rows.slice(0, cap).map((r) => _libraryTileHtml(r, 'jav')).join('');
+    grid.onclick = (ev) => {
+      const cell = ev.target.closest('.fav-cell');
+      if (!cell) return;
+      _openMovieTile(cell, '/jav');
+    };
+  }
+
+  // Movie / JAV tile → open a compact in-place popup on the home
+  // page. Reads the row via /api/favourites/entity-panel so title,
+  // poster, cross-DB links come from LOCAL library data (no TPDB
+  // round trip = no wrong-movie surprises when a row's
+  // match_tpdb_id is stale). "Open in library" button falls
+  // through to /movies?focus=<id> for the full edit surface.
+  function _openMovieTile(cell, fallbackHref) {
+    const rid = parseInt(cell.getAttribute('data-id'), 10);
+    if (!rid) { window.location.href = fallbackHref; return; }
+    _openHomeMoviePopup(rid, fallbackHref);
+  }
+
+  function closeHomeMoviePopup() {
+    const el = document.getElementById('homeMoviePopup');
+    if (el) el.hidden = true;
+  }
+  window.closeHomeMoviePopup = closeHomeMoviePopup;
+
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    const el = document.getElementById('homeMoviePopup');
+    if (el && !el.hidden) { closeHomeMoviePopup(); ev.stopPropagation(); }
+  }, true);
+
+  async function _openHomeMoviePopup(rowId, libraryHref) {
+    const overlay = document.getElementById('homeMoviePopup');
+    const body = document.getElementById('homeMoviePopupBody');
+    if (!overlay || !body) { window.location.href = libraryHref + '?focus=' + encodeURIComponent(rowId); return; }
+    overlay.hidden = false;
+    body.innerHTML = '<div class="home-movie-popup__loading">Loading…</div>';
+    let payload;
+    try {
+      const r = await fetch('/api/favourites/entity-panel?row_id=' + encodeURIComponent(rowId), { credentials: 'same-origin' });
+      payload = await r.json();
+      if (!r.ok || payload.error) throw new Error(payload.error || 'Load failed');
+    } catch (e) {
+      // Hard failure — fall back to the /library page's focus flow.
+      window.location.href = libraryHref + '?focus=' + encodeURIComponent(rowId);
+      return;
+    }
+    const row = payload.row || {};
+    const title = String(row.folder_name || row.display_name || 'Untitled');
+    const kind  = row.kind === 'jav' ? 'JAV' : 'Movie';
+    const posterSrc = String(row.image_url || '').trim() || POSTER_FALLBACK_PORTRAIT;
+    const meta = [];
+    if (row.year) meta.push(`Year: <strong>${esc(row.year)}</strong>`);
+    if (row.match_tpdb_name)     meta.push(`TPDB: <strong>${esc(row.match_tpdb_name)}</strong>`);
+    if (row.match_tmdb_name)     meta.push(`TMDB: <strong>${esc(row.match_tmdb_name)}</strong>`);
+    if (row.match_javstash_name) meta.push(`JAVStash: <strong>${esc(row.match_javstash_name)}</strong>`);
+    const links = [];
+    if (row.match_tpdb_id) {
+      links.push(`<a class="home-movie-popup__btn" target="_blank" rel="noopener noreferrer" href="https://theporndb.net/movies/${encodeURIComponent(row.match_tpdb_id)}"><img src="/static/logos/tpdb.webp" alt="" style="height:14px">TPDB</a>`);
+    }
+    if (row.match_tmdb_id) {
+      links.push(`<a class="home-movie-popup__btn" target="_blank" rel="noopener noreferrer" href="https://www.themoviedb.org/movie/${encodeURIComponent(row.match_tmdb_id)}"><img src="/static/logos/tmdb.webp" alt="" style="height:14px">TMDB</a>`);
+    }
+    if (row.match_javstash_id) {
+      links.push(`<a class="home-movie-popup__btn" target="_blank" rel="noopener noreferrer" href="https://javstash.org/scenes/${encodeURIComponent(row.match_javstash_id)}"><img src="/static/logos/javstash.webp" alt="" style="height:14px">JAVStash</a>`);
+    }
+    links.push(`<a class="home-movie-popup__btn" href="${libraryHref}?focus=${encodeURIComponent(rowId)}"><i class="fa-solid fa-arrow-up-right-from-square"></i>Open in library</a>`);
+    // NFO cast → clickable chips that deep-link to the performer's
+    // /performer permalink (universal popup opens by name lookup so
+    // even non-library cast members resolve to something usable).
+    const cast = Array.isArray(row.nfo_cast) ? row.nfo_cast.filter(Boolean) : [];
+    const castHtml = cast.length
+      ? `<div class="home-movie-popup__section-label">Cast</div>
+         <div class="home-movie-popup__cast">${cast.map((n) => `<a class="home-movie-popup__cast-chip" href="/performer?name=${encodeURIComponent(n)}">${esc(n)}</a>`).join('')}</div>`
+      : '';
+    body.innerHTML = `
+      <div class="home-movie-popup__poster">
+        <img src="${esc(posterSrc)}" alt="" loading="eager" onerror="this.onerror=null;this.src='${POSTER_FALLBACK_PORTRAIT}'">
+      </div>
+      <div>
+        <h2 class="home-movie-popup__title" id="homeMoviePopupTitle">${esc(title)}</h2>
+        <div class="home-movie-popup__meta"><span>${esc(kind)}</span>${meta.length ? ' · ' + meta.join(' · ') : ''}</div>
+        ${castHtml}
+        <div class="home-movie-popup__actions">${links.join('')}</div>
+      </div>`;
+  }
+
+  function _renderAll() {
+    renderScenes(_sceneArr());
+    renderPerformers(_perfArr());
+    renderDiscovered(_discoveredArr());
+    renderMovies(_movieArr());
+    renderJav(_javArr());
+    // Sync the section metadata counts with whichever array is
+    // currently on screen.
+    const scenesGrid = document.getElementById('homeScenesGrid');
+    const perfGrid = document.getElementById('homePerfGrid');
+    const discGrid = document.getElementById('homeDiscoveredGrid');
+    const moviesGrid = document.getElementById('homeMoviesGrid');
+    const javGrid = document.getElementById('homeJavGrid');
+    const nScenes = Math.min(_sceneArr().length, _visibleCount(scenesGrid, SCENES_MIN_COL, SCENES_ROWS));
+    const nPerfs  = Math.min(_perfArr().length,  _visibleCount(perfGrid,   LIB_MIN_COL,    LIB_ROWS));
+    const nDisc   = Math.min(_discoveredArr().length, _visibleCount(discGrid, LIB_MIN_COL, LIB_ROWS));
+    const nMovies = Math.min(_movieArr().length, _visibleCount(moviesGrid, LIB_MIN_COL,    LIB_ROWS));
+    const nJav    = Math.min(_javArr().length,   _visibleCount(javGrid,    LIB_MIN_COL,    LIB_ROWS));
+    const sMeta = document.getElementById('homeScenesMeta');
+    const pMeta = document.getElementById('homePerfMeta');
+    const dMeta = document.getElementById('homeDiscoveredMeta');
+    const mMeta = document.getElementById('homeMoviesMeta');
+    const jMeta = document.getElementById('homeJavMeta');
+    if (sMeta) sMeta.textContent = nScenes + ' scene' + (nScenes === 1 ? '' : 's');
+    if (pMeta) pMeta.textContent = nPerfs + ' star'  + (nPerfs === 1 ? '' : 's');
+    if (dMeta) dMeta.textContent = nDisc + ' performer' + (nDisc === 1 ? '' : 's');
+    if (mMeta) mMeta.textContent = nMovies + ' movie' + (nMovies === 1 ? '' : 's');
+    if (jMeta) jMeta.textContent = nJav + ' title' + (nJav === 1 ? '' : 's');
+  }
+
+  async function loadHomeData(opts) {
+    opts = opts || {};
+    const qs = opts.refresh ? '?refresh=1' : '';
+    try {
+      const r = await fetch('/api/home/data' + qs, { credentials: 'same-origin', cache: 'no-store' });
+      if (!r.ok) return;
+      const d = await r.json();
+      // Server ships BOTH the unfiltered and the favourites-only
+      // variant in a single call. Cache both so the Favourites toggle
+      // can swap arrays instantly with no round trip.
+      _allScenes     = d.scenes     || [];
+      _allPerformers = d.performers || [];
+      _allMovies     = d.movies     || [];
+      _allJav        = d.jav        || [];
+      _allDiscovered = d.discovered || [];
+      _favScenes     = d.scenes_favs     || [];
+      _favPerformers = d.performers_favs || [];
+      _favMovies     = d.movies_favs     || [];
+      _favJav        = d.jav_favs        || [];
+      _renderAll();
+      const sMeta = document.getElementById('homeScenesMeta');
+      if (d.refreshing) {
+        if (sMeta) { sMeta.textContent += ' · refreshing…'; sMeta.setAttribute('data-state', 'refreshing'); }
+        // Poll for the refresh to finish; when updated_at moves forward, re-render.
+        _lastUpdatedAt = d.updated_at || _lastUpdatedAt;
+        _startBgPoll();
+      } else {
+        if (sMeta) sMeta.removeAttribute('data-state');
+        _stopBgPoll();
+        _lastUpdatedAt = d.updated_at || _lastUpdatedAt;
+      }
+    } catch (_) { /* soft-fail; the section stays on its previous paint */ }
+  }
+
+  function _startBgPoll() {
+    if (_bgPollTimer) return;
+    _bgPollTimer = setInterval(async () => {
+      try {
+        const r = await fetch('/api/home/data', { credentials: 'same-origin', cache: 'no-store' });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!d.refreshing && (d.updated_at || 0) > _lastUpdatedAt) {
+          _lastUpdatedAt = d.updated_at || _lastUpdatedAt;
+          _allScenes     = d.scenes     || [];
+          _allPerformers = d.performers || [];
+          _allMovies     = d.movies     || [];
+          _allJav        = d.jav        || [];
+          _allDiscovered = d.discovered || [];
+          _favScenes     = d.scenes_favs     || [];
+          _favPerformers = d.performers_favs || [];
+          _favMovies     = d.movies_favs     || [];
+          _favJav        = d.jav_favs        || [];
+          _renderAll();
+          const sMeta = document.getElementById('homeScenesMeta');
+          if (sMeta) sMeta.removeAttribute('data-state');
+          _stopBgPoll();
+        }
+      } catch (_) {}
+    }, 4000);
+  }
+  function _stopBgPoll() {
+    if (_bgPollTimer) { clearInterval(_bgPollTimer); _bgPollTimer = null; }
+  }
+
+  // ── Cross-library search dropdown ─────────────────────────
+  let _searchSeq = 0;
+  let _searchTimer = null;
+
+  function _renderSearchGroup(label, rows, kindHint) {
+    if (!rows || !rows.length) return '';
+    const iconMap = {
+      performer: 'fa-solid fa-user',
+      movie: 'ts-icon-movies',
+      studio: 'ts-icon-studios',
+      vice: 'fa-solid fa-fire',
+    };
+    return (
+      `<div class="home-search__section-label">${esc(label)}</div>` +
+      rows.map((r) => {
+        const thumb = r.thumb
+          ? `<img class="home-search__thumb" src="${esc(r.thumb)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'home-search__thumb home-search__thumb--placeholder',innerHTML:'<i class=\\'${iconMap[r.kind] || 'fa-solid fa-circle'}\\'></i>'}))">`
+          : `<span class="home-search__thumb home-search__thumb--placeholder"><i class="${iconMap[r.kind] || 'fa-solid fa-circle'}" aria-hidden="true"></i></span>`;
+        return `<button type="button" class="home-search__row" data-kind="${esc(r.kind)}" data-id="${esc(r.id)}" data-name="${esc(r.name)}">
+          ${thumb}
+          <span class="home-search__name">${esc(r.name)}</span>
+          <span class="home-search__kind">${esc(r.kind)}</span>
+        </button>`;
+      }).join('')
+    );
+  }
+
+  function _clickSearchResult(row) {
+    if (!row) return;
+    const kind = row.getAttribute('data-kind');
+    const id   = row.getAttribute('data-id');
+    const name = row.getAttribute('data-name');
+    if (kind === 'performer') {
+      window.location.href = '/performer/' + encodeURIComponent(id);
+    } else if (kind === 'studio') {
+      const q = name ? '?name=' + encodeURIComponent(name) : '';
+      window.location.href = '/studio/' + encodeURIComponent(id) + q;
+    } else if (kind === 'movie') {
+      window.location.href = '/library?focus=' + encodeURIComponent(id);
+    } else if (kind === 'vice') {
+      window.location.href = '/vices';
+    }
+  }
+
+  async function _runHomeSearch(q) {
+    const dd = document.getElementById('homeSearchDropdown');
+    if (!dd) return;
+    const mySeq = ++_searchSeq;
+    if (!q) {
+      dd.hidden = true;
+      dd.innerHTML = '';
+      return;
+    }
+    try {
+      const r = await fetch('/api/library/search?q=' + encodeURIComponent(q), { credentials: 'same-origin' });
+      if (mySeq !== _searchSeq) return;
+      const d = await r.json();
+      const total = (d.performers.length + d.movies.length + d.studios.length + d.vices.length);
+      if (!total) {
+        dd.innerHTML = '<div class="home-search__empty">No matches</div>';
+        dd.hidden = false;
+        return;
+      }
+      let html = '';
+      html += _renderSearchGroup('Stars',   d.performers, 'performer');
+      html += _renderSearchGroup('Movies',  d.movies,     'movie');
+      html += _renderSearchGroup('Studios', d.studios,    'studio');
+      html += _renderSearchGroup('Vices',   d.vices,      'vice');
+      dd.innerHTML = html;
+      dd.hidden = false;
+    } catch (_) {
+      dd.hidden = true;
+    }
+  }
+
+  function _wireSearch() {
+    const inp = document.getElementById('homeSearchInput');
+    const clr = document.getElementById('homeSearchClear');
+    const dd  = document.getElementById('homeSearchDropdown');
+    if (!inp || !clr || !dd) return;
+
+    const sync = () => { clr.hidden = !inp.value.trim(); };
+    inp.addEventListener('input', () => {
+      sync();
+      const v = inp.value.trim();
+      if (_searchTimer) clearTimeout(_searchTimer);
+      _searchTimer = setTimeout(() => _runHomeSearch(v), 180);
+    });
+    inp.addEventListener('focus', () => {
+      if (inp.value.trim()) _runHomeSearch(inp.value.trim());
+    });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { inp.value = ''; sync(); dd.hidden = true; }
+      if (e.key === 'Enter') {
+        const first = dd.querySelector('.home-search__row');
+        if (first) _clickSearchResult(first);
+      }
+    });
+    clr.addEventListener('click', () => { inp.value = ''; sync(); dd.hidden = true; inp.focus(); });
+    dd.addEventListener('click', (e) => {
+      const row = e.target.closest('.home-search__row');
+      if (row) _clickSearchResult(row);
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.home-search')) dd.hidden = true;
+    });
+    sync();
+  }
+
+  // Debounced re-render on viewport resize so the row cap follows
+  // window width (dragging narrower drops overflow tiles; wider
+  // fills the row with cached-but-hidden items without a refetch).
+  let _resizeTimer = null;
+  window.addEventListener('resize', () => {
+    if (_resizeTimer) clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(() => {
+      _renderAll();
+    }, 120);
+  });
+
+  // Sync the section-header stars/favs toggle + section label to the
+  // current _favMode value. Runs after any toggle click and once at
+  // boot so the initial state matches what _favMode holds.
+  function _syncFavModeUI() {
+    const seg = document.getElementById('homePerfModeToggle');
+    if (seg) {
+      seg.querySelectorAll('.home-section-mode-btn').forEach((b) => {
+        const on = (b.getAttribute('data-mode') === 'favs') === _favMode;
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+    const label = document.getElementById('homePerfSectionLabel');
+    if (label) label.textContent = _favMode ? 'Your favourite stars' : 'Your latest stars';
+  }
+
+  function _wireFavToggle() {
+    // Section-header segmented toggle — clicking either side sets the
+    // mode explicitly (rather than toggling), so a mistaken tap on the
+    // already-active side is a no-op instead of a flip.
+    const seg = document.getElementById('homePerfModeToggle');
+    if (seg) {
+      seg.addEventListener('click', (ev) => {
+        const b = ev.target.closest('.home-section-mode-btn');
+        if (!b) return;
+        const wantFavs = b.getAttribute('data-mode') === 'favs';
+        if (_favMode === wantFavs) return;
+        _favMode = wantFavs;
+        _syncFavModeUI();
+        _renderAll();
+      });
+    }
+    _syncFavModeUI();
+  }
+
+  function _wireDiscSourceChips() {
+    const bar = document.getElementById('homeDiscSrcChips');
+    if (!bar) return;
+    // Paint initial chip state from persisted selection.
+    bar.querySelectorAll('.home-disc-src-chip').forEach((chip) => {
+      const src = chip.getAttribute('data-src');
+      const on = !!_discSources[src];
+      chip.classList.toggle('is-on', on);
+      chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    bar.addEventListener('click', (ev) => {
+      const chip = ev.target.closest('.home-disc-src-chip');
+      if (!chip) return;
+      const src = chip.getAttribute('data-src');
+      if (!src) return;
+      _discSources[src] = !_discSources[src];
+      chip.classList.toggle('is-on', _discSources[src]);
+      chip.setAttribute('aria-pressed', _discSources[src] ? 'true' : 'false');
+      _saveDiscSources();
+      // Re-rank + re-render the discovered row in place. Other rows
+      // are unaffected so calling only renderDiscovered here (and
+      // syncing its meta count) keeps the update instant.
+      renderDiscovered(_discoveredArr());
+      const dMeta = document.getElementById('homeDiscoveredMeta');
+      const discGrid = document.getElementById('homeDiscoveredGrid');
+      if (dMeta) {
+        const nDisc = Math.min(_discoveredArr().length, _visibleCount(discGrid, LIB_MIN_COL, LIB_ROWS));
+        dMeta.textContent = nDisc + ' performer' + (nDisc === 1 ? '' : 's');
+      }
+    });
+  }
+
+  function boot() {
+    _wireSearch();
+    _wireFavToggle();
+    _wireDiscSourceChips();
+    loadHomeData();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
+fetch('/api/status').then(r => r.json()).then(d => {
+  const el = document.getElementById('appVersion');
+  if (el && d.version) el.textContent = 'v' + d.version;
+}).catch(() => {});
+</script>
+</body>
+</html>
