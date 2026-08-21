@@ -324,6 +324,14 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ row_id: window._performerPopupActiveId }),
       });
+      // Kick the same background poll the auto-enrich path uses so
+      // /library and the popup both refresh as soon as the enricher
+      // lands new bytes (up to ~32 s). Without this, the manual
+      // "refresh images" only re-opened the popup once at 2.5 s — if
+      // the enricher hadn't finished by then, the user saw the OLD
+      // headshot in both the popup AND on /library for another
+      // however-long, and no further polling ran.
+      startHeadshotPoll(startedFor, 0);
       if (_refreshReopenTimer) clearTimeout(_refreshReopenTimer);
       _refreshReopenTimer = setTimeout(() => {
         _refreshReopenTimer = null;
@@ -1147,20 +1155,42 @@
     if (attempt >= 8) return;
     if (_headshotPollHandle) clearTimeout(_headshotPollHandle);
     _headshotPollHandle = setTimeout(async () => {
-      if (window._performerPopupActiveId !== rowId) return;
+      // Poll the enrichment result even if the user has closed the
+      // popup or moved on to another performer — we still want to tell
+      // /library about the newly-enriched headshot. The popup DOM
+      // update is guarded by an active-id check below.
       try {
         const r = await fetch(`/api/performer/popup?row_id=${rowId}&refresh=1`, { credentials: 'same-origin' });
         const d = await r.json();
         if (d && d.headshot_url) {
-          const slot = document.querySelector('#performerPopupModal .pp-headshot-wrap');
-          if (slot) {
-            slot.innerHTML = `<img class="pp-headshot" src="${ESC(d.headshot_url)}&v=${Date.now()}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div class=pp-headshot-fallback><i class=fa-solid fa-person></i></div>'">`;
+          if (window._performerPopupActiveId === rowId) {
+            const slot = document.querySelector('#performerPopupModal .pp-headshot-wrap');
+            if (slot) {
+              slot.innerHTML = `<img class="pp-headshot" src="${ESC(d.headshot_url)}&v=${Date.now()}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div class=pp-headshot-fallback><i class=fa-solid fa-person></i></div>'">`;
+            }
+            paintBgHero(d);
           }
-          paintBgHero(d);
+          // Nudge /library to refetch this row so the newly-enriched
+          // headshot lands on the grid tile without a manual reload.
+          // The listener in favourites.js hits /api/favourites/row which
+          // reads the DB directly (bypassing the WarmCache), so it will
+          // see the post-enrichment state as soon as the background
+          // enricher's inline cache-bust fires.
+          try {
+            document.dispatchEvent(new CustomEvent('library-row-updated', {
+              detail: { rowId: rowId },
+            }));
+          } catch (_) { /* older browsers */ }
           return;
         }
       } catch (e) { /* swallow */ }
-      startHeadshotPoll(rowId, attempt + 1);
+      // No result yet — keep polling only while the popup is still
+      // showing this row. If the user has moved on, drop the poll to
+      // avoid burning requests; the enrichment will still complete on
+      // the server and the next /library reload picks it up.
+      if (window._performerPopupActiveId === rowId) {
+        startHeadshotPoll(rowId, attempt + 1);
+      }
     }, 4000);
   }
 
@@ -1400,6 +1430,22 @@
             window.refreshPerformerPopup();
           } else {
             closePerformerPopup();
+          }
+          // Nudge /library (if it's the page behind this popup) to
+          // refetch. Without this, remove / delete-from-disk / move /
+          // refresh-images / enrich land on the server and invalidate
+          // the WarmCache, but the /library grid never asks for the
+          // fresh data — the just-deleted tile stays in the DOM until
+          // the user navigates away. rename / merge / group-add /
+          // ungroup dispatch this event themselves from
+          // lib-entity-actions.js; skip them here to avoid a double
+          // refetch.
+          if (action && !['rename', 'merge', 'group-add', 'ungroup'].includes(action)) {
+            try {
+              document.dispatchEvent(new CustomEvent('lib-entity-changed', {
+                detail: { action, id: Number(lib.row_id), kind: 'performer' },
+              }));
+            } catch (_) { /* older browsers */ }
           }
         });
       }

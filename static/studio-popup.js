@@ -1164,7 +1164,19 @@
       name: row.display_name || row.folder_name || _activeName || 'this studio',
       viceId: '',
       canChangeDirectory: false,
-    }, () => closeStudioPopup());
+    }, (action) => {
+      closeStudioPopup();
+      // Same fix as performer-popup.js: without this, /library never
+      // refetches after remove / delete-from-disk fired from the studio
+      // popup, so the just-deleted tile stays visible.
+      if (action && !['rename', 'merge', 'group-add', 'ungroup'].includes(action)) {
+        try {
+          document.dispatchEvent(new CustomEvent('lib-entity-changed', {
+            detail: { action, id: Number(row.id), kind: 'studio' },
+          }));
+        } catch (_) { /* older browsers */ }
+      }
+    });
   }
 
   function renderLinksRow(links) {
