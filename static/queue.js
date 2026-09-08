@@ -633,8 +633,8 @@
     const studio = (f.match_studio || '').trim();
     const logoQ = f.filename || f.display_name || studio;
     const studioLogo = (studio || logoQ)
-      ? `<img class="qi-studio-logo" loading="lazy" decoding="async" src="/api/studio-logo?name=${encodeURIComponent(studio)}&q=${encodeURIComponent(logoQ)}" alt="${esc(studio || '')}" title="${esc(studio || logoQ)}" onerror="this.style.display='none'">`
-      : '';
+      ? `<img class="qi-studio-logo" loading="lazy" decoding="async" src="/api/studio-logo?name=${encodeURIComponent(studio)}&q=${encodeURIComponent(logoQ)}" alt="${esc(studio || '')}" title="${esc(studio || logoQ)}" onerror="this.onerror=null; this.src='/static/icons/studio.svg'">`
+      : `<img class="qi-studio-logo" src="/static/icons/studio.svg" alt="Studio">`;
     const perfRaw = (f.performers || '').trim();
     const perfs = perfRaw
       ? perfRaw.replace(/\|/g, ',').replace(/ \/ /g, ',').split(',').map(s => s.trim()).filter(Boolean)
@@ -1282,7 +1282,7 @@
         <img class="qi-studio-logo qi-folder-logo" loading="lazy" decoding="async"
              src="/api/studio-logo?name=${enc}"
              alt="${nameAttr}" title="${nameAttr}"
-             onerror="this.classList.add('qi-hidden'); this.parentNode && this.parentNode.classList.add('qi-folder-logo-missing');">` : '';
+             onerror="this.onerror=null; this.src='/static/icons/studio.svg';">` : '';
     // Folder-type <img>: starts blank + `data-folder-kind-lookup`
     // so the hydrator can swap the `src` to `dir_star.svg` or
     // `dir_studio.svg` once the favourite lookup resolves. Vices +
@@ -2673,12 +2673,27 @@
       img.decoding = 'async';
       const canvas = document.createElement('canvas');
       img.onload = () => {
-        // Downsample before CSS enlarges the canvas with crisp pixel edges.
-        canvas.width = 48;
-        canvas.height = Math.max(1, Math.round(48 * img.naturalHeight / img.naturalWidth));
+        // Build a low-resolution mosaic, leaving a narrow transparent
+        // gutter after each square so the tile background shows through.
+        const sample = document.createElement('canvas');
+        sample.width = 48;
+        sample.height = Math.max(1, Math.round(48 * img.naturalHeight / img.naturalWidth));
+        const sampleCtx = sample.getContext('2d');
+        if (!sampleCtx) return;
+        sampleCtx.drawImage(img, 0, 0, sample.width, sample.height);
+        const pitch = 8;
+        canvas.width = sample.width * pitch;
+        canvas.height = sample.height * pitch;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(sample, 0, 0, canvas.width, canvas.height);
+        for (let x = pitch - 1; x < canvas.width; x += pitch) {
+          ctx.clearRect(x, 0, 1, canvas.height);
+        }
+        for (let y = pitch - 1; y < canvas.height; y += pitch) {
+          ctx.clearRect(0, y, canvas.width, 1);
+        }
         backdrop.classList.add('is-pixelated');
       };
       img.onerror = () => { backdrop.style.display = 'none'; };
