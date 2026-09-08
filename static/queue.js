@@ -2671,13 +2671,25 @@
       const img = document.createElement('img');
       img.alt = '';
       img.decoding = 'async';
+      const canvas = document.createElement('canvas');
+      img.onload = () => {
+        // Downsample before CSS enlarges the canvas with crisp pixel edges.
+        canvas.width = 48;
+        canvas.height = Math.max(1, Math.round(48 * img.naturalHeight / img.naturalWidth));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        backdrop.classList.add('is-pixelated');
+      };
       img.onerror = () => { backdrop.style.display = 'none'; };
-      backdrop.appendChild(img);
+      backdrop.append(img, canvas);
       cell.prepend(backdrop);
     }
     const img = backdrop.firstElementChild;
     if (img.getAttribute('src') !== sourceUrl) {
       backdrop.style.display = '';
+      backdrop.classList.remove('is-pixelated');
+      backdrop.classList.toggle('is-missing', sourceUrl === '/static/img/missing.webp');
       img.src = sourceUrl;
     }
   }
