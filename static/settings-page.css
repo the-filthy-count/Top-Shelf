@@ -1,0 +1,1339 @@
+/* Top-Shelf settings page.
+ * The shell reads as a single standard .panel (same glass / radius /
+ * shadow as /queue, /scenes, /downloads, /library), with the 10-cat
+ * left-nav living inside the panel body. The whole shell fits the
+ * viewport; the right-column scroll handles long category content,
+ * so the sidebar always stays in view and naturally extends to the
+ * panel bottom (no sticky / no rail trick needed). */
+.app.settings-page-app {
+  position: relative;
+  z-index: 1;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px 16px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+.app.settings-page-app > header.ts-app-header {
+  flex-shrink: 0;
+}
+#settingsRoot {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* .settings-shell carries the `panel` class in markup so it picks up
+ * the standard `.panel` glass chrome AND every per-theme override
+ * (Glass, VHS, Nord, etc.) from app-shell.css automatically. Only
+ * layout-specific rules belong here. */
+#settingsRoot .settings-shell {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  width: 100%;
+  min-width: 0;
+}
+/* Panel header — matches the .panel-header pattern used by every
+ * other page. Gradient underline comes from the global ::after rule
+ * in app-shell.css; do NOT add a solid border-bottom here. */
+#settingsRoot .settings-shell-header:not(.ts-page-head) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  position: relative;
+  flex-shrink: 0;
+}
+#settingsRoot .settings-shell-header.ts-page-head {
+  flex-shrink: 0;
+}
+#settingsRoot .settings-shell-header.ts-page-head::after {
+  display: none;
+}
+#settingsRoot .settings-shell-header:not(.ts-page-head)::after {
+  content: '';
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(var(--brand-purple-rgb), 0.35) 50%,
+    transparent 100%);
+}
+#settingsRoot .settings-shell-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* The settings shell title carries `.panel-title` in markup so it
+ * inherits the same H2 Shatter treatment as every other page panel
+ * title (rule lives in app-shell.css around line 2860). */
+#settingsRoot .settings-shell-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* Laptop / small desktop — sidebar + form column without crowding. */
+@media (max-width: 1280px) {
+  .app.settings-page-app {
+    max-width: 100%;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .settings-nav-sidebar {
+    width: 220px;
+  }
+  .settings-panel-scroll {
+    padding: 14px 16px;
+  }
+  #settingsRoot .settings-shell-header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .settings-page-head__row {
+    row-gap: 8px;
+  }
+}
+@media (max-width: 640px) {
+  .app.settings-page-app { padding: 0 12px 16px; }
+  #settingsRoot .settings-shell { border-radius: 0; }
+}
+  /* ── Collapsible sections ── */
+  .collapsible-header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px;
+    cursor: pointer; user-select: none;
+  }
+  .collapsible-header-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+  }
+  .collapsible-header-main .settings-section-title {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .collapsible-header:hover .settings-section-title { color: var(--text); }
+  .collapsible-arrow { font-size: 12px; color: var(--dim); transition: transform 0.2s; }
+  .collapsible-arrow.open { transform: rotate(90deg); }
+  .collapsible-body { display: none; margin-top: 12px; }
+  .collapsible-body.open { display: block; }
+  .collapsible-arrow--nested {
+    font-size: 10px;
+    color: var(--muted);
+    transition: transform 0.2s;
+  }
+
+  /* Settings modal: top-level category accordion */
+  .settings-accordion {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .settings-category {
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    background: linear-gradient(165deg, rgba(var(--panel-lo-rgb), 0.5) 0%, rgba(var(--bg-rgb), 0.55) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+  .settings-category-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    cursor: pointer;
+    user-select: none;
+    background: rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .settings-category-header:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .settings-category-icon {
+    flex-shrink: 0;
+    width: 1.25em;
+    text-align: center;
+    color: var(--dim);
+    font-size: 14px;
+  }
+  .settings-category-title {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--acid);
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text);
+    line-height: 1.25;
+  }
+  .settings-category-chevron {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--dim);
+    transition: transform 0.28s ease;
+  }
+  .settings-category.is-open .settings-category-chevron {
+    transform: rotate(90deg);
+  }
+  .settings-category-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease;
+  }
+  .settings-category.is-open .settings-category-body {
+    max-height: 12000px;
+  }
+  .settings-category-inner {
+    padding: 0 18px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+  .settings-category-inner .settings-section-title {
+    font-size: 28px;
+  }
+
+  /* ── Toggle switch ──
+   * Themed to match the .btn-secondary recipe in app-shell.css:
+   * brand-purple gradient face + accent-pink border at rest, flips
+   * to an accent-pink gradient face on check. The white pill thumb
+   * keeps the iOS-style affordance so the on/off state still reads
+   * at a glance against either gradient. */
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; }
+  .toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; inset: 0;
+    background: linear-gradient(160deg,
+      rgba(var(--brand-purple-rgb), 0.20) 0%,
+      rgba(var(--brand-purple-rgb), 0.08) 100%);
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.45);
+    border-radius: 22px;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+  .toggle-slider:before {
+    content: ''; position: absolute;
+    width: 16px; height: 16px; left: 2px; bottom: 2px;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    transition: transform 0.2s ease;
+  }
+  .toggle input:checked + .toggle-slider {
+    background: linear-gradient(160deg,
+      rgba(var(--brand-accent-rgb), 0.42) 0%,
+      rgba(var(--brand-accent-rgb), 0.18) 100%);
+    border-color: rgba(var(--brand-accent-rgb), 0.85);
+  }
+  .toggle input:checked + .toggle-slider:before { transform: translateX(18px); }
+  .toggle:hover .toggle-slider {
+    border-color: rgba(var(--brand-accent-rgb), 0.85);
+  }
+
+  /* ── Inline filter row (input + mode dropdown + weight) ──
+   * Used for the Spotlight tag-filter and preferred-studio fields
+   * where the user wants one logical control split across three
+   * inputs on the same line. Wraps under 520px so narrow viewports
+   * don't crush the dropdown. */
+  .ts-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .ts-filter-row__main   { flex: 1 1 220px; min-width: 0; }
+  .ts-filter-row__mode   { flex: 0 0 120px; }
+  .ts-filter-row__weight { flex: 0 0 70px; text-align: center; }
+
+  /* ── Source toggle group ──
+   * Themed iOS-style switch + label cluster for the spotlight
+   * source picker. Sits on the same row as the field label, wraps
+   * to the next line on narrow widths. The toggle inside uses the
+   * existing .toggle / .toggle-slider components so it auto-themes
+   * with the rest of the modal. */
+  .ts-source-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: center;
+  }
+  .ts-source-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.22);
+    background: rgba(var(--brand-purple-rgb), 0.06);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .ts-source-toggle:hover {
+    border-color: rgba(var(--brand-accent-rgb), 0.55);
+    background: rgba(var(--brand-accent-rgb), 0.08);
+  }
+  .ts-source-toggle__label {
+    font-family: var(--secs, var(--mono));
+    font-size: 12px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  /* When the inner checkbox is checked, paint the chip's chrome to
+   * match the accent so the lit state lands across the WHOLE button,
+   * not just the slider thumb. */
+  .ts-source-toggle:has(input:checked) {
+    border-color: rgba(var(--brand-accent-rgb), 0.65);
+    background: rgba(var(--brand-accent-rgb), 0.14);
+  }
+
+  /* ── Cache action buttons ──
+   * Equal-width stacked column for the three spotlight cache wipe
+   * buttons. The "reset" variant uses a destructive red palette so
+   * it reads as a different class of action than the cyan clears. */
+  .ts-cache-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+    width: 100%;
+    max-width: 320px;
+  }
+  .ts-cache-btn {
+    padding: 8px 14px;
+    font-size: 13px;
+    font-family: var(--mono);
+    background: rgba(var(--brand-purple-rgb), 0.10);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.40);
+    border-radius: 6px;
+    color: var(--accent);
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .ts-cache-btn:hover:not(:disabled) {
+    background: rgba(var(--brand-accent-rgb), 0.18);
+    border-color: rgba(var(--brand-accent-rgb), 0.65);
+    color: #fff;
+  }
+  .ts-cache-btn:disabled { opacity: 0.55; cursor: default; }
+  .ts-cache-btn--danger {
+    background: rgba(220, 38, 38, 0.12);
+    border-color: rgba(220, 38, 38, 0.55);
+    color: #fca5a5;
+  }
+  .ts-cache-btn--danger:hover:not(:disabled) {
+    background: rgba(220, 38, 38, 0.28);
+    border-color: rgba(220, 38, 38, 0.85);
+    color: #fff;
+  }
+
+  /* ── Settings modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    /* Near-opaque dim. Earlier versions used 0.5–0.68 alpha so the
+     * page bg showed through, but the page UI behind the modal isn't
+     * uniform — stat-cards at the top, queue table at the bottom,
+     * empty bg in the middle. With a translucent overlay each region
+     * transmits a different brightness, which reads as a horizontal
+     * band across the viewport at the empty middle band. Pushing the
+     * dim to ~0.94 alpha + a strong backdrop-blur fully obscures
+     * underlying UI so the surround is uniformly dark. */
+    background: rgba(8, 6, 18, 0.94);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .settings-saved-toast {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 400;
+    padding: 28px 48px;
+    border-radius: 12px;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.99) 0%, rgba(var(--panel-lo-rgb),0.98) 100%);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.6);
+    box-shadow: 0 24px 64px rgba(0,0,0,0.65), 0 0 0 1px rgba(var(--brand-purple-rgb),0.35);
+    font-family: var(--mono);
+    font-size: 22px;
+    letter-spacing: 0.05em;
+    color: var(--text);
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.25s ease, visibility 0.25s;
+  }
+  .settings-saved-toast.visible {
+    opacity: 1;
+    visibility: visible;
+  }
+  /* Saving state: pin open + inline spinner + slightly tighter
+   * horizontal padding so the spinner+label cluster centres nicely. */
+  .settings-saved-toast.is-saving {
+    display: inline-flex;
+    align-items: center;
+    gap: 18px;
+    padding: 24px 40px;
+  }
+  .settings-saved-toast .loader.loader--toast {
+    flex-shrink: 0;
+  }
+  .settings-saved-toast__msg {
+    line-height: 1.2;
+  }
+  .modal {
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.82) 0%, rgba(var(--panel-lo-rgb),0.78) 100%);
+    border: 1px solid rgba(var(--brand-purple-rgb),0.3);
+    border-radius: 12px;
+    width: 760px;
+    max-width: 96vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    /* Tighter shadow — the previous 80px blur at 50% alpha threw a
+     * 200-300px halo to the L/R of the panel, which read as black
+     * "wings" extending horizontally from the settings tile. */
+    box-shadow: 0 10px 28px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.07);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+  }
+  /* Scrollbar inherits global accent-themed style from app-shell.css. */
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 28px; border-bottom: 1px solid rgba(var(--brand-purple-rgb),0.35);
+    position: sticky; top: 0;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.96) 0%, rgba(var(--panel-lo-rgb),0.94) 100%);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    z-index: 1;
+  }
+  .modal-title { font-family: var(--mono); font-size: 16px; font-weight: 700; }
+  /* #settingsRoot .modal-title — canonical rule lives at the top of
+   * this file; the duplicate that used to live here forced Seconds
+   * 36px and broke chrome consistency with /scenes, /queue, etc. */
+  .modal-body { padding: 24px; display: flex; flex-direction: column; gap: 28px; }
+  .modal-footer { padding: 18px 28px; border-top: 1px solid rgba(var(--brand-purple-rgb),0.35); display: flex; justify-content: flex-end; gap: 12px; background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.96) 0%, rgba(var(--panel-lo-rgb),0.94) 100%); backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); }
+
+  /* Settings modal: two-panel layout */
+  #settingsRoot .modal {
+    width: min(1440px, 96vw);
+    min-width: 900px;
+    max-width: 1440px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  /* Settings-page specific overrides */
+  #settingsRoot .settings-panel-scroll { font-size: 14px; }
+  #settingsRoot .field-label {
+    font-family: var(--secs);
+    font-size: 16px !important;
+    letter-spacing: 0.06em;
+    color: var(--dim);
+    text-transform: uppercase;
+  }
+  #settingsRoot .field-input,
+  #settingsRoot .select-input {
+    font-size: 14px !important;
+    padding: 11px 14px;
+  }
+  #settingsRoot .field-hint {
+    font-size: 13px !important;
+    line-height: 1.6;
+  }
+  #settingsRoot .toggle { width: 52px; height: 28px; }
+  #settingsRoot .toggle-slider { border-radius: 28px; }
+  #settingsRoot .toggle-slider:before { width: 20px; height: 20px; left: 4px; bottom: 4px; }
+  #settingsRoot .toggle input:checked + .toggle-slider:before { transform: translateX(24px); }
+  #settingsRoot .btn-primary,
+  #settingsRoot .btn-secondary {
+    padding: 10px 20px !important;
+    font-size: 14px !important;
+  }
+  #settingsRoot .toggle-row > span,
+  #settingsRoot .toggle-row > label:not(.toggle) {
+    font-size: 14px;
+    color: var(--text);
+  }
+  .settings-subhead {
+    grid-column: 1 / -1;
+    font-family: var(--secs);
+    font-size: calc(15px + 2pt);
+    font-weight: normal;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    padding-top: 12px;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .settings-subhead--first { padding-top: 4px; }
+  .settings-subhead--sep { border-top: 1px solid var(--border); }
+  .settings-service-name {
+    font-family: var(--secs);
+    font-size: calc(15px + 2pt);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  .settings-service-card {
+    border: 1px solid rgba(var(--brand-purple-rgb),0.55);
+    border-radius: 10px;
+    padding: 16px;
+    background: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.45) 0%, rgba(var(--panel-lo-rgb),0.35) 100%);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  #settingsRoot .modal-body {
+    flex: 1;
+    min-height: 0;
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+  }
+  .settings-modal-layout {
+    display: flex;
+    flex: 1 1 0;
+    min-height: 0;
+    min-width: 0;
+    align-items: stretch;
+    position: relative;
+  }
+  /* Sidebar fills the full panel body height (shell is viewport-locked
+   * so the layout has a bounded height to stretch into). Background
+   * lives directly on the nav so the dark always reaches the panel
+   * bottom — no sticky / no rail trick required. */
+  .settings-nav-sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    z-index: 4;
+    background: linear-gradient(180deg,
+      rgba(var(--bg-rgb), 0.80) 0%,
+      rgba(var(--bg-rgb), 0.70) 100%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(var(--brand-purple-rgb), 0.35);
+    display: flex;
+    flex-direction: column;
+    padding: 12px 0;
+    overflow-y: auto;
+  }
+  .settings-nav-item {
+    height: 52px;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border: none;
+    border-left: 3px solid transparent;
+    background: transparent;
+    color: var(--dim);
+    font-family: var(--mono);
+    font-size: 14px;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .settings-nav-item:hover {
+    color: var(--text);
+    background: rgba(255,255,255,0.04);
+  }
+  .settings-nav-item.active {
+    background: rgba(var(--brand-purple-rgb),0.35);
+    border-left-color: var(--accent);
+    color: var(--text);
+  }
+  .settings-nav-item .settings-nav-icon {
+    width: 22px;
+    flex-shrink: 0;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 18px;
+  }
+  .settings-nav-item .settings-nav-label { flex: 1; min-width: 0; font-family: var(--secs); font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .settings-nav-error-dot {
+    display: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    flex-shrink: 0;
+  }
+  .settings-nav-item.has-validation-error .settings-nav-error-dot { display: block; }
+  .settings-panel-outer {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+  }
+  /* The right column owns the scroll. Padding matches the standard
+   * .panel-body recipe (16/18) from app-shell.css so the settings
+   * panel reads consistently with /scenes, /queue, etc. */
+  .settings-panel-scroll {
+    padding: 16px 18px;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+    z-index: 1;
+  }
+  .settings-category-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+  }
+  .settings-category-panel .settings-section + .settings-section {
+    padding-top: 8px;
+  }
+  .settings-section-title {
+    margin-bottom: 20px;
+  }
+  @media (max-width: 600px) {
+    #settingsRoot .modal { min-width: 0; width: 100%; max-width: 100%; }
+    .settings-modal-layout { flex-direction: column; }
+    .settings-nav-sidebar {
+      width: 100%;
+      flex-direction: row;
+      overflow-x: auto;
+      overflow-y: hidden;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      padding: 8px;
+      gap: 4px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .settings-nav-item {
+      flex-shrink: 0;
+      width: auto;
+      min-width: max-content;
+      border-left: none;
+      border-bottom: 3px solid transparent;
+      padding: 0 12px;
+    }
+    .settings-nav-item.active {
+      border-left: none;
+      border-bottom-color: var(--accent);
+    }
+  }
+  body.page-settings #settingsRoot .modal,
+  body.settings-page #settingsRoot .modal {
+    width: min(1000px, 96vw);
+    min-width: min(820px, 96vw);
+    max-width: 1000px;
+  }
+
+  /* Settings sections */
+  .settings-section { display: flex; flex-direction: column; gap: 16px; }
+  .settings-section-title { font-family: var(--secs); font-size: 32px; font-weight: normal; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); padding-bottom: 14px; border-bottom: 1px solid rgba(var(--brand-purple-rgb),0.3); margin-top: 8px; margin-bottom: 12px; }
+  .custom-contrast-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 80px; height: 36px; padding: 0 12px;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: rgba(var(--panel-lo-rgb),0.6);
+    font-family: var(--mono); font-size: 13px; font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--text);
+    cursor: help;
+  }
+  .custom-contrast-badge.is-ok { border-color: rgba(74,222,128,0.55); color: var(--green); }
+  .custom-contrast-badge.is-warn { border-color: rgba(251,191,36,0.55); color: var(--amber); }
+  .custom-contrast-badge.is-bad { border-color: rgba(248,113,113,0.7); color: var(--red); }
+  .field-row { display: flex; flex-direction: column; gap: 6px; }
+  .field-label { font-size: 13px; color: var(--dim); letter-spacing: 0.05em; }
+  .field-input {
+    background: var(--raised); border: 1px solid var(--border); color: var(--text);
+    padding: 9px 12px; border-radius: 6px; font-family: var(--mono); font-size: 12px;
+    width: 100%; transition: border-color 0.15s; outline: none;
+  }
+  .field-input:focus { border-color: var(--accent); }
+  .field-hint { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+  /* Ignore / Prefer / Require mode selector */
+  .mode-seg { display:inline-flex; border:1px solid rgba(var(--brand-purple-rgb),0.35); border-radius:8px; overflow:hidden; }
+  .mode-seg-btn { padding:8px 24px; font-size:14px; font-family:var(--mono); background:none; border:none; border-right:1px solid rgba(var(--brand-purple-rgb),0.4); color:var(--dim); cursor:pointer; transition:background 0.15s,color 0.15s; white-space:nowrap; }
+  .mode-seg-btn:last-child { border-right:none; }
+  .mode-seg-btn.active { background:rgba(var(--brand-purple-rgb),0.4); color:var(--text); }
+  .mode-seg-btn:hover:not(.active) { background:rgba(var(--brand-purple-rgb),0.07); color:var(--text); }
+  .mode-weight-label { display:none; align-items:center; gap:6px; font-size:14px; color:var(--dim); }
+
+  /* Pattern tokens */
+  .token-guide { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .token { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: rgba(var(--brand-purple-rgb),0.65); color: var(--accent); border: 1px solid rgba(var(--brand-purple-rgb),0.2); cursor: default; }
+  .token span { color: var(--dim); }
+
+  /* Directory list — chrome mirrors .ts-row in app-shell.css (file-tree look) */
+  .dir-list { display: flex; flex-direction: column; gap: 0; margin: 0 -18px; }
+  .dir-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: linear-gradient(145deg,
+      rgba(var(--brand-purple-rgb),0.14) 0%,
+      rgba(var(--panel-hi-rgb),0.5) 55%,
+      rgba(var(--panel-lo-rgb),0.35) 100%);
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    border-radius: 0;
+    padding: 12px 18px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    transition: background 0.15s ease;
+  }
+  .dir-list .dir-row:last-child { border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .dir-row:hover {
+    background: linear-gradient(145deg,
+      rgba(var(--brand-purple-rgb),0.20) 0%,
+      rgba(var(--panel-hi-rgb),0.55) 55%,
+      rgba(var(--panel-lo-rgb),0.40) 100%);
+  }
+  .dir-row-main {
+    display: grid;
+    grid-template-columns: 36px 110px 1fr auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .dir-gender-filters {
+    margin-top: 4px;
+    padding: 12px 14px 14px;
+    background: linear-gradient(160deg,
+      rgba(var(--brand-purple-rgb), 0.10) 0%,
+      rgba(var(--brand-purple-rgb), 0.03) 100%);
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.35);
+    border-radius: 10px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+  .dir-gender-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--dim);
+    margin-bottom: 10px;
+  }
+  .dir-gender-label i { color: var(--accent); font-size: 12px; opacity: 0.9; }
+  .dir-gender-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  /* Themed to match the .btn-secondary / .ts-tag-chip recipe: brand-
+   * purple gradient face + accent-pink border at rest, flips to an
+   * accent-pink gradient face when checked. Drops the old 3D vertical
+   * gradient + drop-shadow that made these read like a different
+   * generation of UI. */
+  .dir-gender-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.45);
+    background: linear-gradient(160deg,
+      rgba(var(--brand-purple-rgb), 0.18) 0%,
+      rgba(var(--brand-purple-rgb), 0.06) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  }
+  .dir-gender-chip input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    margin: 0;
+  }
+  .dir-gender-chip-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: rgba(var(--brand-accent-rgb), 0.78);
+    user-select: none;
+  }
+  .dir-gender-chip-inner i { font-size: 12px; opacity: 0.85; }
+  .dir-gender-chip:hover,
+  .dir-gender-chip:focus-within {
+    border-color: rgba(var(--brand-accent-rgb), 0.85);
+  }
+  .dir-gender-chip--on {
+    border-color: rgba(var(--brand-accent-rgb), 0.85);
+    background: linear-gradient(160deg,
+      rgba(var(--brand-accent-rgb), 0.42) 0%,
+      rgba(var(--brand-accent-rgb), 0.18) 100%);
+  }
+  .dir-gender-chip--on .dir-gender-chip-inner { color: #fff; }
+  .dir-gender-chip--on .dir-gender-chip-inner i { color: #fff; opacity: 1; }
+  .dir-gender-hint {
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--dim);
+    letter-spacing: 0.02em;
+  }
+  .dir-rank { font-size: 12px; color: var(--dim); text-align: center; }
+  .dir-type-tag { font-size: 12px; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.06em; text-align: center; }
+  .dir-type-series   { background: rgba(74,222,128,0.1);  color: var(--green); }
+  .dir-type-performer { background: rgba(var(--brand-purple-rgb),0.65); color: var(--accent); }
+  .dir-path { font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dir-reorder { display: flex; flex-direction: column; gap: 1px; }
+  .dir-controls { display: flex; gap: 6px; align-items: center; }
+
+  /* Row action buttons — same chrome as .btn-secondary / gender chips */
+  .dir-btn {
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.45);
+    background: linear-gradient(160deg,
+      rgba(var(--brand-purple-rgb), 0.20) 0%,
+      rgba(var(--brand-purple-rgb), 0.08) 100%);
+    color: rgba(var(--brand-accent-rgb), 1);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    box-sizing: border-box;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.05s ease;
+  }
+  .dir-btn > i {
+    font-size: 12px;
+    text-shadow: 0 0 3px rgba(0, 0, 0, 0.55);
+  }
+  .dir-btn:hover:not(:disabled) {
+    border-color: rgba(var(--brand-accent-rgb), 0.85);
+    background: linear-gradient(160deg,
+      rgba(var(--brand-accent-rgb), 0.30) 0%,
+      rgba(var(--brand-accent-rgb), 0.12) 100%);
+    color: #fff;
+  }
+  .dir-btn:hover:not(:disabled) > i { text-shadow: 0 0 4px rgba(0, 0, 0, 0.7); }
+  .dir-btn:active:not(:disabled) { transform: translateY(1px); }
+  .dir-btn:focus-visible {
+    outline: 2px solid rgba(var(--brand-accent-rgb), 0.75);
+    outline-offset: 2px;
+  }
+  .dir-btn--danger {
+    border-color: rgba(220, 38, 38, 0.55);
+    background: linear-gradient(160deg,
+      rgba(220, 38, 38, 0.18) 0%,
+      rgba(220, 38, 38, 0.06) 100%);
+    color: #fca5a5;
+  }
+  .dir-btn--danger:hover:not(:disabled) {
+    border-color: rgba(220, 38, 38, 0.85);
+    background: linear-gradient(160deg,
+      rgba(220, 38, 38, 0.35) 0%,
+      rgba(220, 38, 38, 0.15) 100%);
+    color: #fff;
+  }
+
+  /* Add directory row */
+  .add-dir-row { display: grid; grid-template-columns: 120px 1fr 120px minmax(88px, 100px); gap: 8px; align-items: end; }
+  .add-dir-row .dir-add-btn {
+    width: 100%;
+    min-height: 40px;
+    font-family: var(--secs, var(--mono));
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* Download client connection test (Settings → Downloads) */
+  .dl-test-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 0;
+  }
+  .dl-test-btn {
+    flex-shrink: 0;
+    font-family: var(--secs, var(--mono));
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .dl-test-status {
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--dim);
+    min-width: 0;
+    flex: 1 1 160px;
+  }
+  .dl-test-status--ok { color: var(--green); }
+  .dl-test-status--err { color: var(--red); }
+  .dl-test-status--busy { color: var(--accent); }
+  .select-input {
+    background: var(--raised); border: 1px solid var(--border); color: var(--text);
+    padding: 9px 12px; border-radius: 6px; font-family: var(--mono); font-size: 12px;
+    outline: none; cursor: pointer;
+  }
+  .select-input:focus { border-color: var(--accent); }
+
+  /* Dedicated settings page mode */
+    /* Settings page: shrink `.app` to header height. `#settingsRoot`
+   * is a sibling of `.app` (body-level), so flex:1 on it doesn't
+   * resolve — instead we fix-position the modal below the header. */
+    /* Settings page inherits the same body backdrop as every other page
+   * (boot-splash recipe: html radial green + body::before noise grain
+   * + body::after vignette). The earlier "purple gradient on body" +
+   * "hide body pseudos" overrides existed to mask the L/R black bars
+   * coming from app-shell.css's global `.modal-overlay { background:
+   * rgba(0,0,0,0.78) !important }` — that's now fixed at the source
+   * via `!important` overrides on `#settingsRoot`, so nothing here
+   * needs to mask anymore. */
+  /* Legacy block: when /settings was an overlay modal opened on top
+   * of /queue, `body.page-settings` triggered `position: fixed` on
+   * #settingsRoot to keep the panel pinned inside the viewport. Now
+   * that /settings is a standalone page, that pin blocks the document
+   * scroll, leaving everything below the viewport unreachable. The
+   * old rule set has been removed — chrome lives in the top-of-file
+   * `#settingsRoot .settings-shell` block and the layout flows with
+   * the document like every other page. */
+
+  @media (max-width: 1280px) {
+    .layout-grid {
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: auto auto minmax(200px, 1fr);
+    }
+    .layout-grid .panel-queue { grid-column: 1 / -1; }
+  }
+
+  @media (max-width: 980px) {
+    .app { padding: 0 14px 20px; }
+    header:not(.ts-app-header) { flex-direction: column; align-items: stretch; gap: 12px; }
+    .header-right { flex-wrap: wrap; justify-content: flex-start; }
+    .layout-grid {
+      grid-template-columns: 1fr;
+      grid-template-rows: repeat(4, auto) minmax(200px, 1fr);
+    }
+    .layout-grid .panel-queue { grid-column: 1 / 2; }
+  }
+
+  /* Portrait: 2×2 stat tiles (matches /library’s two-column stats tier), not three-across or a single column of four. */
+  @media (orientation: portrait) and (max-width: 1280px) {
+    .layout-grid {
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: auto auto minmax(200px, 1fr);
+    }
+    .layout-grid .stat-card:nth-child(1) { grid-column: 1; grid-row: 1; }
+    .layout-grid .stat-card:nth-child(2) { grid-column: 2; grid-row: 1; }
+    .layout-grid .stat-card:nth-child(3) { grid-column: 1; grid-row: 2; }
+    .layout-grid .stat-card:nth-child(4) { grid-column: 2; grid-row: 2; }
+    .layout-grid .panel-queue { grid-column: 1 / -1; grid-row: 3; }
+  }
+
+  @media (max-width: 540px) {
+    :root {
+      --counter-value-size: clamp(52px, 13vw, 68px);
+      --counter-label-size: 14px;
+    }
+  }
+
+  /* ── /queue mobile optimisation (≤640px) ──
+     The page has both a queue list + settings modal. On phones the
+     stat tiles shrink, the panel header wraps so its filter + action
+     buttons drop to their own row, and the settings modal's sidebar
+     collapses to an icon-only scrolling strip (labels already hide
+     via the shared .btn-label rule — we hide .settings-nav-label on
+     top of that because this is its own class, not .btn-label). */
+  @media (max-width: 640px) {
+    .stat-card { min-height: 96px !important; padding: 10px 12px !important; }
+    .panel-queue .panel-header {
+      flex-wrap: wrap;
+      gap: 8px !important;
+    }
+    .panel-queue .panel-header .header-actions {
+      flex-wrap: wrap;
+      width: 100%;
+    }
+    .panel-queue .panel-header .queue-filter {
+      flex: 1 1 100%;
+      min-width: 0;
+    }
+    /* Mode toggle (Scenes / Movies) takes its own full-width row so
+     * the desktop ``min(340px, 46vw)`` clamp doesn't leave it
+     * wedged awkwardly between the title and the icon buttons. */
+    .panel-queue .panel-header .queue-mode-toggle {
+      flex: 1 1 100% !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      align-self: stretch !important;
+      margin-right: 0 !important;
+    }
+    /* Settings modal: full-width edge-to-edge, sidebar icons only. */
+    #settingsRoot .modal {
+      width: 100vw !important;
+      max-width: 100vw !important;
+      min-width: 0 !important;
+      height: 100vh;
+      max-height: 100vh;
+      border-radius: 0 !important;
+    }
+    .settings-nav-sidebar {
+      padding: 6px !important;
+    }
+    .settings-nav-item {
+      padding: 0 10px !important;
+      height: 44px !important;
+    }
+    .settings-nav-item .settings-nav-label {
+      display: none !important;
+    }
+    .settings-nav-item .settings-nav-icon {
+      font-size: 16px;
+    }
+    .settings-panel-scroll {
+      padding: 18px 16px !important;
+    }
+    .settings-section-title {
+      font-size: 22px !important;
+    }
+    /* Settings form field rows that use explicit 2-col grids inline
+       collapse to single column. Targeting the inline style is blunt
+       but reliable — most of the settings modal's inline grids use
+       this exact shape for paired inputs. */
+    [style*="grid-template-columns:1fr 1fr"],
+    [style*="grid-template-columns: 1fr 1fr"] {
+      grid-template-columns: 1fr !important;
+    }
+  }
+
+  /* ── 2x2 per-source tag grid (blacklist + each vice) ────────────
+   * Four fixed-height scrollable boxes, one per source (TPDB,
+   * StashDB, FansDB, JAVStash). Each box lists its tags one per row
+   * with the remove button right-aligned. */
+  .ts-tag-source-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .ts-tag-source-box {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.30);
+    border-radius: 8px;
+    background: linear-gradient(160deg,
+      rgba(var(--panel-hi-rgb), 0.40) 0%,
+      rgba(var(--panel-lo-rgb), 0.30) 100%);
+    overflow: hidden;
+  }
+  .ts-tag-source-box__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 12px;
+    background: rgba(var(--brand-purple-rgb), 0.15);
+    border-bottom: 1px solid rgba(var(--brand-purple-rgb), 0.28);
+    flex-shrink: 0;
+  }
+  .ts-tag-source-box__logo {
+    height: 16px;
+    width: auto;
+    object-fit: contain;
+    flex-shrink: 0;
+    opacity: 0.92;
+  }
+  .ts-tag-source-box__label {
+    font-family: var(--secs, var(--mono));
+    font-size: 12px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: var(--text);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ts-tag-source-box__count {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: rgba(var(--brand-purple-rgb), 0.22);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
+    min-width: 24px;
+    text-align: center;
+  }
+  .ts-tag-source-box__body {
+    height: 200px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px 0;
+  }
+  .ts-tag-source-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    border-bottom: 1px solid rgba(var(--brand-purple-rgb), 0.08);
+    line-height: 1.4;
+  }
+  .ts-tag-source-row:last-child { border-bottom: none; }
+  .ts-tag-source-row:hover {
+    background: rgba(var(--brand-accent-rgb), 0.06);
+  }
+  .ts-tag-source-row__name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ts-tag-source-row__remove {
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(220, 38, 38, 0.18);
+    color: rgba(220, 38, 38, 0.95);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .ts-tag-source-row__remove:hover {
+    background: rgba(220, 38, 38, 0.55);
+    color: #fff;
+  }
+  .ts-tag-source-empty {
+    padding: 16px 12px;
+    text-align: center;
+    color: var(--dim);
+    font-size: 11px;
+    font-style: italic;
+  }
+
+  /* ── Grouped tag-search result row ──────────────────────────────
+   * One row per unique tag name, with a clickable pill per source
+   * that returned that name plus an 'All' pill when more than one
+   * source returned it. Pills toggle the per-source list membership. */
+  .ts-tag-result.ts-tag-result--grouped {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: default;
+  }
+  .ts-tag-result--grouped:hover {
+    background: transparent;
+    color: var(--text);
+  }
+  .ts-tag-result--grouped .ts-tag-result__name {
+    flex: 1;
+    min-width: 0;
+  }
+  .ts-tag-result__pills {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .ts-tag-pill {
+    appearance: none;
+    padding: 3px 9px;
+    font-size: 11px;
+    font-family: var(--secs, var(--mono));
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1.4;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.45);
+    background: rgba(var(--brand-purple-rgb), 0.10);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  }
+  .ts-tag-pill:hover {
+    border-color: rgba(var(--brand-accent-rgb), 0.85);
+    background: rgba(var(--brand-accent-rgb), 0.20);
+    color: #fff;
+  }
+  .ts-tag-pill.is-added {
+    background: rgba(var(--brand-accent-rgb), 0.32);
+    border-color: rgba(var(--brand-accent-rgb), 0.90);
+    color: #fff;
+  }
+  .ts-tag-pill.is-added:hover {
+    background: rgba(220, 38, 38, 0.32);
+    border-color: rgba(220, 38, 38, 0.75);
+  }
+  .ts-tag-pill--all {
+    background: rgba(var(--brand-accent-rgb), 0.18);
+    border-color: rgba(var(--brand-accent-rgb), 0.60);
+    color: var(--accent);
+  }
+  .ts-tag-pill--all:hover {
+    background: rgba(var(--brand-accent-rgb), 0.36);
+    color: #fff;
+  }
+
+  /* ── Vice card (collapsible) ─────────────────────────────────────
+   * Head shows fire icon + name + per-source count pills + delete.
+   * Body (2x2 tag grid + search) is hidden until `.is-open`. */
+  .vice-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(var(--panel-lo-rgb), 0.45);
+    overflow: hidden;
+  }
+  .vice-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+  }
+  .vice-card-toggle {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--dim);
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.12s ease, background 0.12s ease;
+  }
+  .vice-card-toggle:hover {
+    color: var(--text);
+    background: rgba(var(--brand-purple-rgb), 0.18);
+  }
+  .vice-card-chevron {
+    font-size: 11px;
+    transition: transform 0.18s ease;
+  }
+  .vice-card.is-open .vice-card-chevron {
+    transform: rotate(90deg);
+  }
+  .vice-card-icon {
+    color: var(--accent);
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .vice-card-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    padding: 6px 10px;
+  }
+  .vice-card-counts {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .vice-count-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(var(--brand-purple-rgb), 0.15);
+    border: 1px solid rgba(var(--brand-purple-rgb), 0.32);
+    font-family: var(--secs, var(--mono));
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dim);
+    line-height: 1;
+  }
+  .vice-count-pill__label { color: var(--dim); }
+  .vice-count {
+    color: var(--text);
+    font-family: var(--mono);
+    font-weight: 600;
+    min-width: 14px;
+    text-align: center;
+  }
+  .vice-card-delete {
+    padding: 6px 10px;
+    flex-shrink: 0;
+  }
+  .vice-card-body {
+    display: none;
+    padding: 8px 12px 14px;
+    border-top: 1px solid rgba(var(--brand-purple-rgb), 0.20);
+    background: rgba(var(--panel-hi-rgb), 0.30);
+  }
+  .vice-card.is-open .vice-card-body { display: block; }
+  .vice-card-search {
+    position: relative;
+    margin-bottom: 10px;
+  }
+  .vice-card-search .field-input {
+    font-size: 13px;
+    padding: 6px 10px;
+  }
+  /* Dropdown sits above the per-source grid so it's always reachable.
+   * Without this the boxes' stacking context would obscure the
+   * absolute-positioned results panel. */
+  .vice-card-search .ts-tag-results { z-index: 60; }
+
+  /* Vice card grid lives inside an already-narrow column, so shrink
+   * the per-source box height a touch so the card doesn't dominate. */
+  .vice-card .ts-tag-source-box__body { height: 160px; }
+
+  @media (max-width: 720px) {
+    .vice-card-counts { display: none; }
+    .ts-tag-source-grid { grid-template-columns: 1fr; }
+  }
