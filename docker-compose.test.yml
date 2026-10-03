@@ -1,0 +1,13 @@
+services:
+  top-shelf-test:
+    image: thefilthycount/top-shelf:latest
+    container_name: top-shelf-test
+    restart: unless-stopped
+    ports:
+      - "8892:8891"
+    volumes:
+      - /volume4/docker/top-shelf-test/database:/app/database
+      - /volume3/Top-Shelf:/library
+      - /volume4/Downloads:/downloads
+    environment:
+      - TZ=Europe/London
