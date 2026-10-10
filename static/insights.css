@@ -1,0 +1,41 @@
+.stats-main{max-width:1500px;margin:0 auto;padding:32px;box-sizing:border-box}.stats-heading,.stats-section-head{display:flex;justify-content:space-between;align-items:center;gap:24px}.stats-main h1{font-size:var(--text-title,24px);margin:0 0 12px}.stats-main h1 i{color:var(--accent);margin-right:12px}.stats-main h2{font-size:var(--text-heading,20px);margin:0 0 10px}.stats-main p{color:var(--dim);line-height:1.6;font-size:var(--text-body,14px)}.stats-main button,.stats-main select{padding:10px 14px}.stats-totals{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin:24px 0}.stats-total,.stats-panel{border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);background:var(--surface,#171a1b);border-radius:14px;padding:26px;min-width:0}.stats-total strong{display:block;color:var(--accent);font-size:36px;font-variant-numeric:tabular-nums;margin-bottom:8px;overflow-wrap:anywhere}.stats-total span{color:var(--dim)}.stats-panel{margin-bottom:22px}.composite{background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 9%,var(--surface)),var(--surface))}.stats-section-head label{display:flex;align-items:center;gap:12px;white-space:nowrap}.composite-layout{display:grid;grid-template-columns:1fr 220px 1fr;gap:36px;align-items:center;padding:28px 20px}.traits{display:grid;gap:24px;margin:0}.traits div{padding:14px 0;border-bottom:1px solid color-mix(in srgb,var(--accent) 25%,transparent)}.traits dt{color:var(--dim);font-size:var(--text-small,12px);margin-bottom:8px}.traits dd{margin:0;font-size:var(--text-heading,20px);overflow-wrap:anywhere}.traits small{display:block;color:var(--dim);font-size:var(--text-small,12px);margin-top:8px}.figure-wrap{display:flex;flex-direction:column;align-items:center;gap:18px;color:var(--accent)}#composite-figure{font-size:260px;filter:drop-shadow(0 0 18px color-mix(in srgb,var(--accent) 18%,transparent))}.figure-wrap>span{font-size:var(--text-small,12px);color:var(--dim)}.figure-options{display:flex;gap:8px}.figure-options i{font-size:22px}.figure-options [aria-pressed=true]{--button-surface:color-mix(in srgb,var(--accent) 25%,var(--surface))}.stats-rankings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.stats-rankings ol{padding:0;list-style:none;margin:24px 0 0}.stats-rankings li{position:relative;display:flex;gap:12px;justify-content:space-between;padding:12px 8px;margin:6px 0;border-radius:4px;background:linear-gradient(to right,color-mix(in srgb,var(--accent) 15%,transparent) var(--bar),transparent var(--bar));line-height:1.4}.stats-rankings li span{overflow-wrap:anywhere}.stats-rankings li strong{color:var(--accent);font-variant-numeric:tabular-nums}.stats-note{font-size:var(--text-small,12px)!important}.months{display:flex;gap:12px;align-items:end;height:200px;overflow-x:auto;padding-top:24px}.month{display:flex;flex:1;min-width:65px;flex-direction:column;justify-content:end;height:100%;gap:8px;text-align:center;font-size:var(--text-small,12px)}.month .bar{height:var(--height);min-height:3px;background:var(--accent);opacity:.65;border-radius:5px 5px 0 0}.month strong{color:var(--accent)}@media(max-width:900px){.stats-main{padding:18px 12px}.stats-heading,.stats-section-head{align-items:flex-start;flex-wrap:wrap}.stats-totals{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.stats-total,.stats-panel{padding:18px}.stats-rankings{grid-template-columns:1fr}.composite-layout{grid-template-columns:1fr 1fr;gap:18px;padding:16px 0}.figure-wrap{grid-column:1/-1;grid-row:1}#composite-figure{font-size:180px}.traits dd{font-size:var(--text-body,14px)}.traits{align-self:start}.stats-total strong{font-size:28px}}
+.stats-main{color:var(--text)}
+body{margin:0}.app{box-sizing:border-box}
+
+/* Use the shared LED strip, padding/fitter and canonical stat-card skin. */
+.stats-totals .stat-card{container-type:inline-size;min-width:0;min-height:100px;padding:14px 12px;box-sizing:border-box}
+.stats-totals .stat-label{font-size:var(--text-small);color:var(--dim);text-align:center}
+.stats-rankings li{background:linear-gradient(to right,var(--accent) var(--bar),transparent var(--bar)) bottom left / 100% 3px no-repeat;padding-bottom:16px}
+.month .bar{background:var(--accent);opacity:1}
+
+body .stats-main .stats-panel,body .stats-main .stat-card{border-color:var(--accent)!important}
+#composite-figure[hidden]{display:none}
+/* Match the shared secondary accent token used by other tile borders. */
+body .stats-main .stats-panel,body .stats-main .stat-card{border-color:color-mix(in srgb,var(--accent) 42%,transparent)!important}
+.stats-rankings li{background-image:linear-gradient(to right,var(--accent) var(--bar),transparent var(--bar))}
+.month .bar{background:var(--accent)}
+html[data-theme] body .stats-main button.insights-help{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;min-height:0;padding:2px!important;border:0!important;background:transparent!important;color:var(--accent)!important;vertical-align:middle;font-size:14px!important;cursor:help}
+.insights-help:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.insights-tooltip{position:fixed;inset:auto;margin:0;box-sizing:border-box;width:max-content;max-width:min(340px,calc(100vw - 24px));padding:14px 16px;background:var(--bg,#141719);color:var(--text,#fff);border:1px solid color-mix(in srgb,var(--accent) 60%,transparent);border-radius:8px;font:var(--text-body,14px)/1.5 var(--mono,monospace);box-shadow:0 8px 28px #0008;overflow-wrap:anywhere}
+
+#body-view{width:240px;max-width:100%;height:390px}#body-view canvas{width:100%!important;height:100%!important;object-fit:contain}.body-credit{font-size:10px;color:var(--dim)}.figure-wrap{gap:12px}
+
+/* Information icons are unboxed controls, including shared hover styles. */
+html[data-theme] body #insights-page button.insights-help,
+html[data-theme] body #insights-page button.insights-help:hover,
+html[data-theme] body #insights-page button.insights-help:active {
+  border:0!important;background:transparent!important;box-shadow:none!important;
+  border-radius:0!important;min-width:0!important;
+}
+#insights-page .insights-help::before,#insights-page .insights-help::after{display:none!important}
+#insights-page #refresh{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0}
+
+/* Size the complete LED strip against this tile, independent of page zoom. */
+#insights-page .stats-totals .sky-counter {
+  font-size:min(64px,calc(90cqi / var(--counter-length,6) / .8))!important;
+  line-height:1.2!important;
+  width:100%;min-width:0;max-width:100%;padding:0!important;
+  text-align:center;overflow:hidden;
+}
+
+.insights-filters{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0;align-items:start}.insights-filters details{position:relative;min-width:200px;border:1px solid var(--accent);border-radius:8px;background:var(--bg)}.insights-filters summary{padding:12px;cursor:pointer}.insights-filters summary span{color:var(--accent);margin-left:12px}.filter-options{position:absolute;z-index:20;top:100%;left:0;min-width:100%;width:300px;max-width:80vw;max-height:320px;overflow:auto;padding:12px;box-sizing:border-box;background:var(--bg,#141719);border:1px solid var(--accent);border-radius:8px;box-shadow:0 12px 30px #0009}.filter-options label{display:flex;align-items:center;gap:10px;padding:8px;cursor:pointer}.filter-options input{flex-shrink:0}.insights-filters button{min-height:44px}

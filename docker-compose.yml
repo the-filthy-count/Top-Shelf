@@ -1,0 +1,30 @@
+services:
+  top-shelf:
+    image: thefilthycount/top-shelf:latest
+    container_name: top-shelf
+    restart: unless-stopped
+    ports:
+      - "8891:8891"
+    volumes:
+      # App config (settings stored in database, this is for future use)
+      - /volume4/docker/top-shelf/conf:/app/conf
+      # Persistent database
+      - /volume4/docker/top-shelf/database:/app/database
+      # Media library (Series, Stars, Erotica, E-Girls live here)
+      - /volume3/Top-Shelf:/library
+      # Source/processing folder
+      - /volume4/Downloads:/downloads
+    # Tune these from observed normal/peak usage on your NAS.
+    mem_limit: ${TOP_SHELF_MEMORY_LIMIT:-6g}
+    cpus: ${TOP_SHELF_CPUS:-2.0}
+    pids_limit: ${TOP_SHELF_PIDS_LIMIT:-256}
+    stop_grace_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      - TZ=Europe/London

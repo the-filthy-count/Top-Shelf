@@ -1,0 +1,3 @@
+# Install into a fresh virtual environment; do not mix with system packages.
+-c requirements-test-lock.txt
+-r requirements.txt

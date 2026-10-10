@@ -1,0 +1,212 @@
+@layer canonical-controls {
+/* Canonical component skin, loaded after page and mobile styles.
+ * Page CSS owns layout; this file owns control appearance and states.
+ * Text sizes live in app-shell.css. Content tiles retain their imagery. */
+:root {
+  --control-radius: 8px;
+  --control-height: 28px;
+  --control-surface: var(--raised);
+  --control-border: color-mix(in srgb, var(--text) 30%, var(--surface));
+  --control-hover: color-mix(in srgb, var(--accent) 18%, var(--raised));
+  --control-primary: color-mix(in srgb, var(--accent) 25%, var(--raised));
+  --control-danger: color-mix(in srgb, var(--red) 14%, var(--raised));
+}
+html[data-theme] body :is(button, a.btn-primary, a.btn-secondary, a.btn-icon):not(:where(
+  .fav-cell, .scene-card, .movie-card, .studio-logo-pick-tile, .pp-member-tile, .pp-gallery-tile,
+  .qfs-thumb, .stat-card, .emb-summary-card, .theme-card, .theme-swatch,
+  [role="switch"], .toggle-switch, .ts-sidebar-backdrop, .settings-nav-item,
+  .ts-seg button, .home-section-mode-btn, .home-disc-src-chip, .fav-filter-ibtn
+)) {
+  --ui-control: 1;
+  background: var(--button-surface, var(--control-surface)) !important;
+  color: var(--button-ink, var(--text)) !important;
+  border: 1px solid var(--button-border, var(--accent)) !important;
+  border-radius: var(--control-radius) !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  font-size: var(--text-body) !important;
+  line-height: 1.25;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+/* Matching segmented and filter controls share the action-button outline. */
+html[data-theme] body :is(
+  .ts-seg button, .home-section-mode-btn, .home-disc-src-chip, .fav-filter-ibtn
+) {
+  border-color: var(--accent) !important;
+}
+/* Alphabet filters use navigation styling rather than individual buttons. */
+html[data-theme] body button.fav-alpha-btn {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  color: var(--dim) !important;
+  transform: none !important;
+}
+html[data-theme] body button.fav-alpha-btn:hover {
+  background: var(--control-hover) !important;
+  color: var(--text) !important;
+}
+html[data-theme] body button.fav-alpha-btn.is-active {
+  background: var(--control-primary) !important;
+  border-bottom-color: var(--accent) !important;
+  color: var(--text) !important;
+}
+/* Settings categories are navigation rows, not raised action buttons. */
+html[data-theme] body button.settings-nav-item {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  transform: none !important;
+}
+/* Image actions stay transparent, including hover and selected states. */
+html[data-theme] body :is(button, a, span, div, img):is(
+  .fav-card-heart, .fav-card-lock, .fav-card-icon-btn, .fav-cell-menu,
+  .fav-overlay-x, .fav-overlay-lock, .fav-overlay-heart, .spotlight-exclude-btn,
+  .spotlight-score-badge, .rss-tile-fav-heart,
+  .scene-studio-logo, .rss-tile-studio-logo
+) {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-radius: 0 !important;
+}
+/* Match the lock glyph to the favourite artwork, not the body text size. */
+html[data-theme] body button:is(.fav-card-lock, .fav-overlay-lock) {
+  font-size: 32px !important;
+  line-height: 1;
+}
+html[data-theme] body button:is(.fav-card-lock, .fav-overlay-lock) > i {
+  font-size: inherit !important;
+}
+/* Logout belongs to the sidebar navigation, without a button outline. */
+html[data-theme] body button.ts-sidebar__item[data-ts-sidebar-logout] {
+  border-color: transparent !important;
+  background: transparent !important;
+}
+html[data-theme] body :is(.btn-primary, .emb-btn-accent, .ts-confirm-ok, [data-variant="primary"]) {
+  --button-surface: var(--control-primary);
+  --button-border: var(--accent);
+}
+html[data-theme] body :is(button, a.btn-primary, a.btn-secondary, a.btn-icon):hover:not(:disabled):not([aria-disabled="true"]) {
+  --button-surface: var(--control-hover);
+  --button-border: var(--accent);
+}
+html[data-theme] body :is(button, a.btn-secondary):is(
+  .active, .is-active, .is-active-tab, .is-added, .selected, .is-selected, .is-on, .active-nav,
+  [aria-pressed="true"], [aria-selected="true"], [aria-checked="true"]
+) {
+  --button-surface: var(--control-primary);
+  --button-border: var(--accent);
+}
+html[data-theme] body :is(
+  .btn-danger, .btn-icon-danger, .is-danger, [data-variant="danger"],
+  .qi-delete-btn, .btn-dup-row-delete, .btn-dup-rank-remove,
+  .emb-action-btn--danger, .emb-pill-remove, .emb-hs-remove,
+  .scene-card-blacklist-btn, .vice-card-delete, .dir-btn--danger, .fav-pill-x,
+  .history-lib-purge-btn,
+  .dl-row-remove, .perf-alias-chip-remove, .pp-member-tile-remove,
+  .pp-profile-action-btn.is-remove, .studio-popup-linked-remove,
+  .ts-tag-source-row__remove, .wanted-action-btn--danger, .btn-icon-health--danger
+) {
+  --button-surface: var(--control-danger) !important;
+  --button-border: var(--red) !important;
+  --button-ink: var(--red) !important;
+}
+html[data-theme] body :is(.btn-prowlarr-grab--sent, [data-variant="success"]) {
+  --button-surface: color-mix(in srgb, var(--green) 16%, var(--raised));
+  --button-border: var(--green);
+  --button-ink: var(--green);
+}
+/* Tri-state filters retain their meaning through semantic theme colors. */
+html[data-theme] body :is([data-filter-state="no"], [data-filter-state="locked"], [data-filter-state="missing"]) {
+  --button-surface: color-mix(in srgb, var(--amber) 14%, var(--raised));
+  --button-border: var(--amber);
+  --button-ink: var(--amber);
+}
+html[data-theme] body :is([data-filter-state="ok"], [data-filter-state="linked"], [data-filter-state="unlocked"], .btn-prowlarr-grab:not(.nzb)) {
+  --button-surface: color-mix(in srgb, var(--green) 14%, var(--raised));
+  --button-border: var(--green);
+  --button-ink: var(--green);
+}
+html[data-theme] body :is([data-filter-state="unlinked"], .btn-prowlarr-grab.nzb) {
+  --button-surface: color-mix(in srgb, var(--blue) 14%, var(--raised));
+  --button-border: var(--blue);
+  --button-ink: var(--blue);
+}
+html[data-theme] body :is(button, a.btn-primary, a.btn-secondary, a.btn-icon):is(:disabled, [aria-disabled="true"]) {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  filter: none !important;
+  transform: none !important;
+}
+html[data-theme] body :is(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 3px;
+}
+html[data-theme] body :is(.btn-primary, .btn-secondary):not(.ts-sidebar__item) {
+  min-height: var(--control-height) !important;
+  padding: 8px 12px;
+  gap: 8px;
+}
+html[data-theme] body :is(input, select, textarea):not(:where(
+  [type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="hidden"]
+)) {
+  background: var(--control-surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--control-border) !important;
+  border-radius: var(--control-radius) !important;
+  font-size: var(--text-section) !important;
+}
+html[data-theme] body :is(input, textarea)::placeholder { color: var(--dim); opacity: 1; }
+html[data-theme] body :is(input[type="checkbox"], input[type="radio"], input[type="range"]) { accent-color: var(--accent); }
+@media (max-width: 900px) { :root { --control-height: 44px; } }
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme] body :is(button, a.btn-primary, a.btn-secondary) { transition: none !important; }
+}
+
+/* Token fields have one outer frame; typing happens inside that frame. */
+html[data-theme] body .qs-pill-input {
+  background: var(--control-surface);
+  border: 1px solid var(--control-border);
+  border-radius: var(--control-radius);
+  min-height: 38px !important;
+  padding: 8px 10px !important;
+}
+html[data-theme] body .qs-pill-input:focus-within {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+html[data-theme] body .qs-pill-input > input {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  min-width: 0 !important;
+  min-height: 24px;
+  line-height: 1.4;
+}
+
+html[data-theme] body .home-search__input-wrap:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The enclosing search field already supplies the surface and focus chrome. */
+html[data-theme] body input.home-search__input {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+}

@@ -1,0 +1,498 @@
+/* Phone and small-tablet layouts. Keep desktop geometry in the page styles. */
+@media (max-width: 900px) {
+  :root {
+    --ts-mobile-height: calc(100 * var(--ts-unit-dvh, 1dvh));
+    --ts-mobile-top: 0px;
+  }
+  body.ts-has-sidebar > .app {
+    padding-top: calc(60px + env(safe-area-inset-top, 0px)) !important;
+  }
+  body.ts-has-sidebar .ts-page-head,
+  body.ts-has-sidebar .fav-sticky { position: relative; top: auto; }
+  #tsSidebarToggle {
+    width: 44px; height: 44px;
+    top: calc(8px + env(safe-area-inset-top, 0px));
+    left: calc(10px + env(safe-area-inset-left, 0px));
+  }
+  .ts-sidebar { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .ts-sidebar:not(.is-open) { visibility: hidden; }
+  .ts-sidebar.is-open { visibility: visible; }
+  .ts-sidebar__item { min-height: 44px; }
+  body.ts-mobile-layer-open { overflow: hidden !important; }
+
+  /* Avoid zoom-on-focus and make dense toolbar actions tappable. */
+  body button:not(.studio-logo-pick-tile):not(.fav-cell):not(.scene-card):not(.home-disc-dismiss):not(.fav-card-icon-btn):not(.scene-card-blacklist-btn):not(.scene-wanted-btn),
+  body .btn-secondary, body .btn-primary, body .fav-icon-btn {
+    min-height: 44px !important;
+    min-width: 44px !important;
+    touch-action: manipulation;
+  }
+  body input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]),
+  body select, body textarea {
+    min-height: 44px !important;
+    min-width: 0;
+    max-width: 100%;
+    font-size: var(--text-section) !important;
+    box-sizing: border-box;
+  }
+  body textarea { min-height: 96px !important; }
+  body input[type=checkbox], body input[type=radio] { width: 22px; height: 22px; flex-shrink: 0; }
+  .header-actions, .settings-shell-header-actions, .emb-filter-bar { flex-wrap: wrap; }
+  .header-actions > input, .emb-filter-bar > input { flex: 1 1 160px; }
+  .btn-label { display: inline !important; }
+  .fav-card-icon-btn, .scene-wanted-btn, .home-disc-dismiss { opacity: 1 !important; pointer-events: auto !important; }
+
+  /* VisualViewport height also covers browsers that overlay the keyboard. */
+  .modal-overlay, .queue-modal-overlay, .performer-popup-overlay,
+  .studio-popup-overlay, .movie-detail-overlay, .scene-overlay,
+  .entity-panel-overlay, .fav-filter-sheet {
+    box-sizing: border-box;
+    top: var(--ts-mobile-top, 0px) !important;
+    bottom: auto !important;
+    height: var(--ts-mobile-height, calc(100 * var(--ts-unit-dvh, 1dvh))) !important;
+    padding: 8px max(8px, env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)) !important;
+    overflow: hidden;
+  }
+  .modal-overlay > .modal-box, .queue-modal-overlay > .queue-modal,
+  .performer-popup-shell, .studio-popup-shell, .movie-detail-card,
+  .scene-overlay-card, .entity-panel-box, .fav-filter-sheet-panel {
+    box-sizing: border-box;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .modal-overlay > .modal-box { padding: 16px !important; }
+  .modal-foot, .modal-footer, .ts-link-modal-foot { flex-shrink: 0; flex-wrap: wrap; }
+  .ts-link-modal-row { flex-wrap: wrap; }
+  .ts-link-modal-row input { flex: 1 1 180px; }
+  .ts-link-modal-box .ts-link-modal-results { min-height: 80px; }
+  body.ts-entity-page .performer-popup-shell,
+  body.ts-entity-page .studio-popup-shell,
+  body.ts-entity-page .movie-detail-card,
+  body.ts-entity-page .scene-overlay-card { height: 100% !important; }
+
+  #studioLogoPickModal .modal-box {
+    display: flex; flex-direction: column; height: 100% !important;
+    overflow: hidden;
+  }
+  #studioLogoPickModal label { min-height: 44px; font-size: var(--text-body) !important; }
+  #studioLogoPickModal .studio-logo-pick-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(130px, 100%), 1fr)) !important;
+    gap: 10px !important;
+  }
+  #studioLogoPickModal .ts-link-modal-foot > button { flex: 1; font-size: var(--text-body) !important; }
+  #studioLogoPickError { max-height: 25%; overflow-y: auto; }
+
+  .app.settings-page-app { height: var(--ts-mobile-height, calc(100 * var(--ts-unit-dvh, 1dvh))); max-height: none; }
+  .settings-modal-layout { flex-direction: column; }
+  .settings-nav-sidebar {
+    width: 100% !important; flex-direction: row; flex-shrink: 0;
+    overflow-x: auto; overflow-y: hidden; padding: 6px !important;
+    border-right: 0; border-bottom: 1px solid var(--border); gap: 4px;
+  }
+  .settings-nav-item { flex: 0 0 auto; width: auto; padding: 0 12px !important; }
+  .settings-nav-item .settings-nav-label { display: inline !important; font-size: var(--text-body); }
+  .settings-panel-scroll { min-width: 0; overscroll-behavior: contain; }
+  .settings-shell-header-actions .btn-label { display: inline !important; }
+  .emb-table-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+  .emb-table-wrap > table { min-width: 560px; }
+}
+
+@media (max-width: 640px) {
+  .ts-page-head__row, .fav-sticky-title-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 12px;
+  }
+  .ts-page-head__center, .fav-sticky-title-center,
+  .ts-page-head__right, .fav-sticky-title-spacer {
+    grid-column: 1 !important; justify-self: stretch;
+  }
+  .fav-sticky-title-spacer:empty { display: none; }
+  .ts-page-head__center > .ts-seg, .fav-sticky-title-center > .ts-seg { width: 100%; }
+  .ts-page-title, .fav-page-title { flex-wrap: wrap; overflow-wrap: anywhere; }
+  .queue-section .queue-stats-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  .queue-section .stat-card { min-width: 0; min-height: 84px !important; padding: 10px !important; }
+  .queue-section .stat-value { max-width: 100%; font-size: 28px; }
+  .queue-section .stat-label { font-size: var(--text-small) !important; }
+  .q-panel-header .header-actions { gap: 8px !important; flex-wrap: wrap; }
+  .q-panel-header .queue-filter { flex-basis: 100% !important; }
+  .queue-section .q-panel-body .queue-item:not(.queue-item-folder) .qi-actions {
+    position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; justify-content: flex-start;
+  }
+  .queue-section .q-panel-body .queue-item:not(.queue-item-folder) .qi-actions > button {
+    height: 44px; width: 44px;
+  }
+  .movie-detail-body, .movie-detail-grid, .entity-panel-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .movie-detail-poster { min-width: 0 !important; max-width: 100% !important; }
+  .fav-roles-header { flex-wrap: wrap; }
+  .fav-roles-header-url-row, .fav-roles-header-url-row input { min-width: 0 !important; }
+  .settings-panel-scroll { padding: 12px !important; }
+}
+
+@media (max-width: 900px) {
+  /* Separate icons and words on touch controls instead of overlapping them. */
+  .ts-seg button { gap: 6px; padding: 6px 8px; white-space: normal; }
+  .ts-seg button .btn-label { margin: 0 !important; font-size: var(--text-body); }
+  .ts-seg button > i, .ts-seg button > svg, .ts-seg button > .fa {
+    width: 22px !important; height: 22px !important; flex: 0 0 22px;
+    font-size: 22px !important; margin: 0 !important;
+  }
+  .ts-seg button > i[class*="ts-icon-"], .ts-seg button > i.ts-nav-icon { font-size: 0 !important; }
+  .movie-detail-poster-wrap { width: min(100%, 360px) !important; min-width: 0 !important; max-width: 100% !important; }
+}
+@media (max-width: 640px) {
+  .queue-mode-toggle, .ts-seg--4, .ts-seg--6 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .ts-seg--5, .ts-seg--7 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .ts-seg button { border-bottom: 1px solid rgba(var(--brand-accent-rgb), 0.25); }
+}
+
+@media (max-width: 900px) {
+  .lib-match-modal, .detail-overlay, .prowlarr-overlay, .img-overlay,
+  #qFilmstripOverlay, #queueImageOverlay, #qSearchOverlay, #wantedSearchOverlay, #suggestionsOverlay {
+    box-sizing: border-box;
+    top: var(--ts-mobile-top, 0px) !important;
+    bottom: auto !important;
+    height: var(--ts-mobile-height, calc(100 * var(--ts-unit-dvh, 1dvh))) !important;
+    max-height: var(--ts-mobile-height, calc(100 * var(--ts-unit-dvh, 1dvh))) !important;
+    overscroll-behavior: contain;
+  }
+  .lib-match-dialog { width: 100% !important; max-width: 100% !important; max-height: 100% !important; }
+  .fav-roles-header-row { flex-wrap: wrap; }
+  .fav-roles-header-actions { flex-wrap: wrap; min-width: 0 !important; }
+  .fav-roles-modal-box .modal-body { min-height: 0; }
+}
+@media (max-width: 640px) {
+  .queue-section .q-pager { flex-wrap: wrap; gap: 8px; }
+  .queue-section .q-pager-status { flex: 1 1 100%; order: -1; text-align: center; }
+  .queue-section .q-pager-size { flex: 1 1 80px; }
+  #qFilmstripStage { width: 100%; max-height: 100%; padding: 64px 8px 16px; box-sizing: border-box; overflow-y: auto; }
+  #qFilmstripStrip { display: flex; overflow-x: auto; max-width: 100%; box-sizing: border-box; scroll-snap-type: x mandatory; }
+  #qFilmstripStrip .qfs-thumb { flex: 0 0 78%; scroll-snap-align: center; }
+}
+
+@media (max-width: 900px) {
+  .performer-popup-header {
+    flex: 0 0 auto; flex-wrap: wrap; gap: 8px;
+    height: auto; min-height: 0; padding: 10px 12px;
+  }
+  .performer-popup-header .pp-name { flex: 1 1 180px; overflow-wrap: anywhere; }
+  .performer-popup-header .pp-profiles-grid--header {
+    flex: 1 1 100%; order: 2; justify-content: flex-start;
+  }
+  .performer-popup-grid {
+    display: flex; flex-direction: column; overflow-y: auto;
+    min-height: 0; gap: 12px; padding: 12px;
+  }
+  .performer-popup-grid > * { flex: 0 0 auto; min-width: 0; }
+  .pp-bio-layout { height: auto; grid-template-columns: minmax(90px, 120px) minmax(0, 1fr); }
+  .pp-headshot-wrap { width: 100%; height: auto; align-self: start; }
+  .pp-cell-films, .pp-cell-gallery, .pp-cell-carousel { height: 300px; }
+  .performer-popup-grid > .pp-cell-posters { flex-direction: row; height: 260px; }
+}
+@media (max-width: 900px) {
+  .performer-popup-header { box-sizing: border-box; width: 100%; margin: 0 !important; }
+  .performer-popup-header .pp-profiles-grid--header {
+    flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start;
+  }
+  .performer-popup-header .pp-profile-pill { flex-shrink: 0; }
+  .fav-roles-header-row { display: flex; flex-direction: column; align-items: stretch; }
+  .fav-roles-modal-header h3 { white-space: normal; overflow-wrap: anywhere; }
+  .fav-roles-header-actions { justify-content: flex-start; max-width: 100%; }
+  .fav-roles-header-spacer { display: none; }
+}
+
+/* Density and mobile navigation: compact browsing rather than desktop controls
+ * squeezed into a narrow column. */
+#tsSidebarClose { display: none; }
+.ts-mobile-desktop-notice { display: none; }
+@media (min-width: 901px) {
+  :root {
+    --text-small: 10px;
+    --text-body: 12px;
+    --text-section: 14px;
+    --text-title: 20px;
+    --ts-sidebar-width: 180px;
+    --control-height: 28px;
+  }
+  body.ts-has-sidebar > .app { padding: 12px 14px !important; }
+  .ts-sidebar__item { min-height: 34px; padding: 7px 12px; gap: 10px; }
+  .ts-sidebar__brand { padding: 10px 12px; min-height: 50px; }
+  .ts-sidebar__item i, .ts-sidebar__item .ts-nav-icon { width: 22px; height: 22px; font-size: 18px; }
+  .ts-page-title__icon, .ts-page-title__icon.fa-solid { width: 32px !important; height: 32px !important; font-size: 32px !important; }
+  .fav-grid { gap: 10px !important; }
+  #homePerfGrid.fav-grid, #homeDiscoveredGrid.fav-grid,
+  #homeMoviesGrid.fav-grid, #homeJavGrid.fav-grid { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)) !important; }
+  #homeScenesGrid { grid-template-columns: repeat(auto-fill, minmax(262.5px, 1fr)); }
+  .home-toprow { display: grid; grid-template-columns: auto minmax(180px, 1fr) 140px; }
+  .home-toprow > .home-search { position: static; transform: none; width: 100%; }
+  .home-toprow__brand { position: static; transform: none; max-width: 140px; height: 50px; justify-self: end; object-position: right center; }
+}
+@media (max-width: 900px) {
+  :root { --text-small: 12px; --text-body: 14px; --text-section: 16px; --text-title: 20px; }
+  .ts-sidebar {
+    inset: 0 !important; width: 100% !important; max-width: none !important;
+    height: calc(100 * var(--ts-unit-dvh, 1dvh)); height: var(--ts-mobile-height, calc(100 * var(--ts-unit-dvh, 1dvh)));
+    background: var(--bg) !important; z-index: 10000;
+    padding: 12px 16px env(safe-area-inset-bottom, 12px); box-sizing: border-box;
+    transform: none; transition: none;
+  }
+  .ts-sidebar.is-open { transform: none; }
+  .ts-sidebar.is-open ~ #tsSidebarToggle { visibility: hidden; }
+  #tsSidebarToggle { z-index: 10001; }
+  #tsSidebarClose { display: flex; align-items: center; justify-content: center; gap: 8px; align-self: flex-end; flex-shrink: 0; padding: 8px 12px; }
+  .ts-sidebar__brand { justify-content: flex-start; padding: 6px 10px; min-height: 40px; }
+  .ts-sidebar__brand img { width: 150px; max-height: 40px; object-fit: contain; }
+  .ts-sidebar__nav { flex: 1; overflow-y: auto; min-height: 0; }
+  .ts-sidebar__item { min-height: 44px; padding: 8px 12px; }
+  .ts-sidebar__label { display: inline !important; }
+  .ts-sidebar__item[href="/health"], .ts-sidebar__item[href="/log"] { display: none !important; }
+  .ts-sidebar__footer { flex-shrink: 0; }
+  .home-wrap { padding: 0 !important; gap: 18px; }
+  .home-toprow { display: flex; flex-direction: column; align-items: stretch; gap: 10px; min-height: 0; }
+  .home-toprow > .home-search { position: static; transform: none; width: 100%; order: -1; }
+  .home-toprow__brand { display: none; }
+  .home-toprow__controls { justify-content: center; }
+  .home-disc-src-chips { width: 100%; height: 44px; }
+  .home-disc-src-chip { width: auto; flex: 1; min-width: 0 !important; }
+  .home-disc-src-chip img { max-width: 70px; max-height: 26px; }
+  .home-section__header { flex-wrap: wrap; align-items: center; gap: 6px; }
+  .home-section__title { min-width: 0; flex-wrap: wrap; gap: 6px; letter-spacing: 0; }
+  .home-section__meta { letter-spacing: 0; font-size: var(--text-small); }
+  .home-section__header > div:last-child { flex-wrap: wrap; }
+  .home-section-mode-toggle { flex-shrink: 0; }
+  .fav-grid, .fav-grid--perf, .scene-grid, #homeScenesGrid,
+  #homePerfGrid.fav-grid, #homeDiscoveredGrid.fav-grid,
+  #homeMoviesGrid.fav-grid, #homeJavGrid.fav-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important; padding: 0 !important;
+  }
+  .fav-cell { min-width: 0 !important; }
+  .fav-cell-title { font-size: var(--text-small) !important; padding: 6px 3px !important; }
+  html body .home-disc-dismiss, html body .fav-card-icon-btn,
+  html body .scene-card-blacklist-btn, html body .scene-wanted-btn {
+    min-width: 28px !important; min-height: 28px !important; width: 28px; height: 28px; padding: 0;
+  }
+  .ts-mobile-desktop-notice { margin: 72px 16px 24px; padding: 20px; border: 1px solid var(--border); border-radius: 8px; }
+  body.ts-mobile-health > .app { display: none !important; }
+  body.ts-mobile-health > .ts-mobile-desktop-notice { display: block; }
+}
+@media (min-width: 480px) and (max-width: 900px) {
+  .fav-grid, .scene-grid, #homeScenesGrid,
+  #homePerfGrid.fav-grid, #homeDiscoveredGrid.fav-grid,
+  #homeMoviesGrid.fav-grid, #homeJavGrid.fav-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+}
+
+@media (max-width: 900px) {
+  .ts-sidebar__footer { flex: 0 0 auto; }
+  .ts-sidebar__activity-slot { display: none; }
+  .ts-sidebar.is-open ~ #tsSidebarToggle { display: none !important; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+}
+@media (min-width: 901px) {
+  .ts-sidebar__brand img { max-width: 100%; height: auto; }
+  .home-search__input-wrap { padding: 4px 12px 4px 36px; }
+  .home-search__input { min-height: 30px; }
+}
+@media (min-width: 901px) {
+  .home-wrap { padding: 0 !important; gap: 18px; }
+  .fav-grid--perf { grid-template-columns: repeat(10, minmax(0, 1fr)) !important; }
+  .scene-grid { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)) !important; gap: 10px; }
+  .queue-section .stat-card, #statsBar .stat-card { min-height: 72px !important; padding: 8px !important; }
+  .ts-page-head { margin-bottom: 12px; gap: 8px; }
+  .settings-panel-scroll { padding: 12px !important; }
+  .settings-nav-item { min-height: 34px; padding: 8px 12px; }
+}
+.fav-cell-title { display: block; }
+@media (max-width: 900px) {
+  /* On phones, tap a record to manage it in its detail page. Hover-only
+   * library actions otherwise cover much of a compact card. */
+  .fav-cell .fav-overlay, .fav-card-lock, .fav-card-heart,
+  .fav-cell .fav-card-icon-btn { display: none !important; }
+  .fav-cell-title { min-height: 0; padding: 8px 3px !important; }
+}
+
+/* Match the Releases Stars grid on desktop; retain compact phone browsing. */
+@media (min-width: 901px) and (max-width: 1200px) {
+  .fav-grid--perf { grid-template-columns: repeat(7, minmax(0, 1fr)) !important; }
+}
+
+/* Larger home imagery, with whole cards reflowing rather than overlapping. */
+@media (max-width: 900px) {
+  #homeScenesGrid, #homePerfGrid.fav-grid, #homeDiscoveredGrid.fav-grid,
+  #homeMoviesGrid.fav-grid, #homeJavGrid.fav-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+@media (min-width: 480px) and (max-width: 900px) {
+  #homeScenesGrid, #homePerfGrid.fav-grid, #homeDiscoveredGrid.fav-grid,
+  #homeMoviesGrid.fav-grid, #homeJavGrid.fav-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+/* Studios and Discover entity feeds use one responsive sizing rule. */
+:root { --studio-grid-columns: 5; --studio-grid-gap: 10px; }
+@media (max-width: 1200px) { :root { --studio-grid-columns: 4; } }
+@media (max-width: 900px) { :root { --studio-grid-columns: 4; --studio-grid-gap: 8px; } }
+@media (max-width: 479px) { :root { --studio-grid-columns: 3; } }
+.fav-grid--studio,
+.fav-grid--vice,
+#scenesGrid[data-feed-mode="performers"],
+#scenesGrid[data-feed-mode="studios"],
+#scenesGrid[data-feed-mode="tags"] {
+  grid-template-columns: repeat(var(--studio-grid-columns), minmax(0, 1fr)) !important;
+  gap: var(--studio-grid-gap) !important;
+  padding: 0 !important;
+}
+
+/* Mobile records: one compact image, information, then download results. */
+@media (max-width: 900px) {
+  body.ts-has-sidebar .ts-header-nav-toggle,
+  body.ts-has-sidebar .ts-header-nav-menu { display: none !important; }
+  .lib-entity-menu-btn .fa-bars::before { content: "\f142"; }
+  .performer-popup-header, .studio-popup-header, .entity-panel-header {
+    padding-left: 64px !important; min-height: 56px; box-sizing: border-box;
+  }
+  .performer-popup-bg, .performer-popup-bg-overlay,
+  .studio-popup-bg, .studio-popup-bg-overlay,
+  .movie-panel-bg, .movie-panel-bg-overlay, .movie-detail-bg,
+  .pp-cell-carousel, .pp-cell-gallery, .pp-cell-posters,
+  .studio-popup-latest-cell, .studio-popup-scenes-cell,
+  .studio-popup-parent-box, .studio-popup-linked-row,
+  .movie-panel-vhs-bg, .movie-panel-vhs-title-rotated,
+  .movie-panel-studio-logo-rotated, .movie-detail-scenes,
+  .movie-detail-vhs-bg, .movie-detail-vhs-title-rotated, .movie-detail-studio-logo-rotated,
+  .jav-duo-slot--back { display: none !important; }
+  .pp-cell-bio::before, .pp-cell-bio::after,
+  .studio-popup-info-cell::before, .studio-popup-info-cell::after { display: none !important; }
+  .pp-bio-layout, .studio-popup-info-cell, .movie-detail-inner,
+  .movie-panel-layout, .vice-panel-2col {
+    display: flex !important; flex-direction: column !important;
+    height: auto !important; min-height: 0 !important; gap: 16px;
+  }
+  .pp-headshot-wrap { width: 120px !important; height: 180px !important; margin: 0 auto; flex: none; }
+  .pp-headshot { width: 100%; height: 100%; object-fit: contain; }
+  .pp-bio-text { overflow: visible !important; }
+  .studio-popup-grid { display: flex !important; flex-direction: column; overflow-y: auto; gap: 12px; padding: 12px; }
+  .studio-popup-grid > * { flex: none; }
+  .studio-popup-logo-box, .vice-panel-logo-wrap { width: min(200px, 100%) !important; height: 112px !important; margin: 0 auto; flex: none; }
+  .studio-popup-logo, .vice-panel-logo-wrap > img { width: 100% !important; height: 100% !important; object-fit: contain !important; }
+  .movie-panel-poster-col { display: block !important; order: -1; width: 140px !important; height: auto !important; padding: 0 !important; margin: 0 auto; flex: none; }
+  .movie-panel-poster-card, .movie-detail-poster-card { transform: none !important; width: 100% !important; height: auto !important; position: static !important; }
+  .movie-detail-poster-wrap { width: 140px !important; height: auto !important; margin: 0 auto; flex: none; }
+  .movie-panel-poster-card .img-load, .movie-detail-poster-card .img-load { width: 100%; height: 210px !important; }
+  .movie-panel-poster-card .movie-poster, .movie-detail-poster-card .movie-poster { object-fit: contain !important; }
+  .movie-panel-stats-col, .movie-panel-info-col, .vice-panel-left, .vice-panel-right { overflow: visible !important; padding: 12px !important; width: auto !important; }
+  .pp-cell-films, .studio-popup-prowlarr-cell { height: auto !important; min-height: 300px; overflow: visible; }
+  .pp-films-panel, .pp-films-panel-body, .pp-films-tab--prowlarr { height: auto !important; overflow: visible !important; }
+  .mobile-record-downloads { padding: 12px; min-width: 0; }
+  .mobile-record-downloads .ts-prowlarr-embed-results { overflow-x: auto; }
+}
+@media (min-width: 901px) { .mobile-record-downloads { display: none !important; } }
+@media (max-width: 900px) {
+  .performer-popup-header .pp-profiles-grid,
+  .performer-popup-header .pp-profiles-grid--header,
+  .studio-popup-links, .studio-popup-linked-row,
+  .movie-panel-stats-col .pp-profiles-grid,
+  .entity-panel-body .pp-profiles-grid,
+  .movie-detail-actions .movie-btn-link,
+  .pp-bio-text .bio-links-block, .pp-bio-text .pp-bio-search-btn,
+  .pp-bio-text [data-edit-bio], .pp-bio-text .pp-alias-edit,
+  .studio-popup-logo-box button, .vice-panel-logo-btn,
+  .pp-films-source-toggle, .pp-films-tab--iafd { display: none !important; }
+  .pp-films-tab--prowlarr { display: block !important; }
+  .entity-panel-head { padding-left: 64px !important; min-height: 56px; flex-wrap: wrap; }
+  .performer-popup-header .pp-name { flex: 1 1 0 !important; min-width: 0; }
+  .performer-popup-header .performer-popup-toolbar { position: static !important; margin-left: auto; flex: none; }
+  .performer-popup-header .pp-name .lib-entity-menu-wrap { position: static; }
+  .pp-bio-text .pp-stats { padding-right: 0 !important; }
+  .pp-bio-text, .studio-popup-desc-box, .studio-popup-desc { max-height: none !important; height: auto !important; overflow: visible !important; min-width: 0; }
+  .pp-bio-layout .pp-headshot-wrap { align-self: center; }
+  .mobile-record-downloads { flex: 0 0 auto; }
+}
+@media (max-width: 900px) {
+  .movie-panel-stats-col .bio-links-block,
+  .vice-panel-left .bio-links-block,
+  .movie-panel-perf img, .movie-panel-perf .mp-perf-ph,
+  .performer-popup-header .pp-name-action,
+  .performer-popup-header .pp-header-lib-pill { display: none !important; }
+  .movie-panel-body, .vice-panel-body { overflow-y: auto !important; display: block !important; min-height: 0; }
+  .movie-panel-poster-card { height: 210px !important; position: relative !important; }
+  .movie-panel-poster-card .img-load { position: relative !important; }
+  .movie-panel-synopsis { max-height: none !important; overflow: visible !important; }
+  .movie-panel-perf { width: auto; }
+  .movie-panel-perf-name { white-space: normal; }
+  .entity-panel-head h3 { min-width: 0; overflow-wrap: anywhere; }
+  .lib-entity-menu-dropdown { left: 0; min-width: min(220px, calc(calc(100 * var(--ts-unit-vw, 1vw)) - 96px)); max-width: calc(calc(100 * var(--ts-unit-vw, 1vw)) - 96px); }
+}
+/* Releases: stack the real header wrappers; never position controls off-canvas. */
+@media (max-width: 900px) {
+  .index-page-head .ts-page-head__row {
+    display: flex !important;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px !important;
+  }
+  .index-page-head .ts-page-head__row > :is(.ts-page-head__left, .ts-page-head__center, .ts-page-head__right) {
+    position: static !important;
+    transform: none !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100%;
+    margin: 0 !important;
+    box-sizing: border-box;
+  }
+  .index-page-head #indexPageTitle { width: 100%; flex-wrap: nowrap; gap: 10px; }
+  .index-page-head .ts-page-title__text { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+  .index-page-head .index-mode-seg {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+  .index-page-head .index-mode-seg > button { min-width: 0 !important; min-height: 44px; padding: 6px 2px !important; }
+  .index-page-head .index-mode-seg .btn-label { display: none; }
+  .index-page-head .ts-page-head__right { display: flex !important; gap: 8px; flex-wrap: nowrap; }
+  .index-page-head #dlRssFilter { flex: 1 1 0; width: 0 !important; min-width: 0; }
+  .index-page-head .ts-page-head__right > button { flex: 0 0 44px; width: 44px !important; padding: 0 !important; }
+}
+
+/* Keep landscape tile content legible in the compact mobile grids. */
+@media (max-width: 900px) {
+  :is(.fav-grid--studio, .fav-grid--vice) .fav-studio-ph img.duo-img {
+    padding: 8px !important;
+    box-sizing: border-box;
+    object-fit: contain !important;
+    mix-blend-mode: normal !important;
+    opacity: 1 !important;
+  }
+  :is(.fav-grid--studio, .fav-grid--vice) .fav-cell-title,
+  #scenesGrid:is([data-feed-mode="studios"], [data-feed-mode="tags"]) .scene-title {
+    font-size: var(--text-small) !important;
+    line-height: 1.25 !important;
+    padding: 5px 4px !important;
+    min-width: 0;
+  }
+  #scenesGrid .discovery-dismiss { display: none !important; }
+  #scenesGrid:is([data-feed-mode="studios"], [data-feed-mode="tags"]) .scene-card .scene-studio-logo {
+    top: 8px !important;
+    right: 8px !important;
+    width: calc(100% - 16px) !important;
+    max-width: none !important;
+    height: 35% !important;
+    max-height: 40px !important;
+    object-fit: contain !important;
+    opacity: 1 !important;
+  }
+}
+
+@media (min-width: 901px) {
+  .ts-sidebar__label { font-size: var(--text-section); }
+}
