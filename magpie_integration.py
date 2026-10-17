@@ -311,11 +311,11 @@ def job_progress(job):
         except (ValueError, TypeError):
             return None
     if job.get('status') == 'completed':
-        return 100, 'Overall'
+        return 100, 'Album'
     handled = (number('files') or 0) + (number('skipped') or 0)
     total = number('total_files')
     if total and total >= handled:
-        return 100 * handled / total, 'Overall'
+        return 100 * handled / total, 'Album'
     downloaded, size = number('file_bytes'), number('file_total')
     if size and downloaded is not None:
         return min(100, 100 * downloaded / size), 'Current file'
@@ -363,18 +363,39 @@ def merge_downloads(payload, category=None):
         if not job.get('file_total'):
             file_progress = None
         album_progress, album_label = job_progress({**job, 'status': '', 'file_total': None})
-        if album_label != 'Overall':
+        if album_label != 'Album':
             album_progress = None
         file_progress = explicit_progress(job, 'file_progress_percent', file_progress)
         album_progress = explicit_progress(job, 'album_progress_percent', album_progress)
         if status == 'completed':
-            progress, progress_label = 100, 'Overall'
+            progress, progress_label = 100, 'Album'
         elif album_progress is not None:
-            progress, progress_label = album_progress, 'Overall'
+            progress, progress_label = album_progress, 'Album'
         elif file_progress is not None:
             progress, progress_label = file_progress, 'Current file'
         else:
             progress, progress_label = None, 'Total unknown'
+        if progress_label == 'Album':
+            try:
+                total_files = float(job.get('total_files'))
+                count = int(total_files) if math.isfinite(total_files) and total_files >= 0 and total_files.is_integer() else None
+            except (TypeError, ValueError, OverflowError):
+                count = None
+            progress_label = f"Album · {count} {'file' if count == 1 else 'files'}" if count is not None else 'Album · file count unknown'
+        try:
+            raw_total = float(job.get('total_files'))
+            file_total = int(raw_total) if math.isfinite(raw_total) and raw_total >= 1 and raw_total.is_integer() else None
+        except (TypeError, ValueError, OverflowError):
+            file_total = None
+        completed_files = max(0, int(job.get('files') or 0))
+        if file_total is not None:
+            file_count_label = f"{file_total} {'file' if file_total == 1 else 'files'}"
+        elif status == 'downloading' and job.get('current_filename'):
+            file_count_label = f'{completed_files} complete · 1 downloading' if completed_files else '1 file downloading'
+        elif status in {'queued', 'downloading'}:
+            file_count_label = f'{completed_files} files complete' if completed_files else 'Finding files'
+        else:
+            file_count_label = f"{completed_files} {'file' if completed_files == 1 else 'files'}"
         selected = saved_categories.get(job_category_key(job['id']))
         labels = [CATEGORIES[k] for k,v in mapped.items() if v and v == job.get('destination_id')]
         # Legacy/external jobs cannot be assigned a category from a shared destination.
@@ -390,7 +411,7 @@ def merge_downloads(payload, category=None):
             'size_mb':float(job.get('bytes') or 0)/1048576,
             'failed':status in {'failed','interrupted'}, 'failure_reason':job.get('error') or '',
             'magpie_action':'cancel' if active else ('retry' if status in {'failed','cancelled','interrupted'} else ''),
-            'magpie_files':job.get('files',0), 'destination_name':job.get('destination_name',''),
+            'magpie_files':job.get('files',0), 'magpie_file_count_label':file_count_label, 'destination_name':job.get('destination_name',''),
             'completed':status == 'completed'})
         if status == 'downloading':
             speed += max(0,float(job.get('speed') or 0))

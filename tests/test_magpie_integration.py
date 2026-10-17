@@ -23,6 +23,19 @@ class MagpieTests(unittest.TestCase):
         app=FastAPI();app.include_router(magpie.router);self.client=TestClient(app)
         self.addCleanup(self.client.close)
 
+    def test_file_count_includes_current_download_without_inventing_total(self):
+        for extra, expected in [({'total_files':1},'1 file'), ({},'1 file downloading'), ({'files':3},'3 complete · 1 downloading')]:
+            job={'id':'a'*32,'status':'downloading','current_filename':'example.mp4','files':0,**extra}
+            with patch.object(magpie,'job_snapshot',return_value=([job],None)):
+                self.assertEqual(magpie.merge_downloads({})['items'][0]['magpie_file_count_label'],expected)
+
+    def test_album_label_uses_total_files(self):
+        for total, expected in [(12,'Album · 12 files'),(1,'Album · 1 file'),(None,'Album · file count unknown')]:
+            job={'id':'a'*32,'status':'downloading','album_progress_percent':50,'total_files':total,'files':0}
+            with patch.object(magpie,'job_snapshot',return_value=([job],None)):
+                row=magpie.merge_downloads({})['items'][0]
+            self.assertEqual(row['progress_label'],expected)
+
     def test_selected_category_survives_shared_destination(self):
         self.settings['magpie_categories']='{"scenes":"shared","stars":"shared"}'
         ident='c'*32
@@ -199,13 +212,13 @@ class MagpieTests(unittest.TestCase):
 
     def test_progress_uses_overall_then_current_file_and_handles_unknown_totals(self):
         cases = [
-            ({'files':2,'skipped':1,'total_files':10,'file_bytes':50,'file_total':100}, (30,'Overall')),
+            ({'files':2,'skipped':1,'total_files':10,'file_bytes':50,'file_total':100}, (30,'Album')),
             ({'file_bytes':25,'file_total':100}, (25,'Current file')),
             ({'file_bytes':125,'file_total':100}, (100,'Current file')),
             ({'files':2}, (None,'Total unknown')),
             ({'file_bytes':0,'file_total':0}, (None,'Finding media')),
             ({'file_bytes':'bad','file_total':100}, (None,'Finding media')),
-            ({'status':'completed'}, (100,'Overall')),
+            ({'status':'completed'}, (100,'Album')),
         ]
         for job, expected in cases:
             with self.subTest(job=job):
