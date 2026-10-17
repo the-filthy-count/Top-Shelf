@@ -23,6 +23,19 @@ class MagpieTests(unittest.TestCase):
         app=FastAPI();app.include_router(magpie.router);self.client=TestClient(app)
         self.addCleanup(self.client.close)
 
+    def test_selected_category_survives_shared_destination(self):
+        self.settings['magpie_categories']='{"scenes":"shared","stars":"shared"}'
+        ident='c'*32
+        with patch.object(magpie,'request',return_value={'id':ident}):
+            response=self.client.post('/api/magpie/downloads',json={'url':'https://example.com/gallery','category':'scenes'})
+        self.assertEqual(response.status_code,200)
+        jobs=[{'id':ident,'destination_id':'shared','destination_name':'Library','status':'queued'},
+              {'id':'d'*32,'destination_id':'shared','destination_name':'Library','status':'queued'}]
+        with patch.object(magpie,'job_snapshot',return_value=(jobs,None)):
+            rows=magpie.merge_downloads({})['items']
+        self.assertEqual(rows[0]['category'],'Scenes')
+        self.assertEqual(rows[1]['category'],'Library')
+
     def test_history_removal_keeps_files_and_rejects_active_jobs(self):
         ident='a'*32
         with patch.object(magpie,'request',side_effect=[{'status':'completed'},{'ok':True}]) as upstream:

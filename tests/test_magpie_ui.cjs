@@ -47,7 +47,7 @@ test('Magpie renders inside the original grid with its own logo and safe control
  const ctx={document:{getElementById:el},URLSearchParams,_downloadsFetchGen:0,getDlSearchMode:()=> 'downloads',_refreshLibraryStudios:async()=>{},fetch:async()=>({ok:true,json:async()=>({items})}),_paintDlStats(){},_hydrateDownloadHeadshots(){},spaceifyReleaseName:s=>s,esc:String};
  vm.createContext(ctx);vm.runInContext(extract('neonProgressSvg')+'\n'+extract('magpieProgressRings')+'\n'+extract('_dlEmptyHtml')+'\n'+extract('loadDownloads'),ctx);await ctx.loadDownloads();
  const rendered=el('rows').innerHTML;assert.doesNotMatch(rendered,/>Error:/);assert.match(rendered,/magpie_logo\.webp/);assert.match(rendered,/nzb\.webp/);
- assert.match(rendered,/data-magpie-action="cancel"/);assert.match(rendered,/data-magpie-action="remove"/);assert.match(rendered,/Remove from history/);assert.doesNotMatch(rendered,new RegExp("chooseDownloadRemoval\\('"+'a'.repeat(32)));
+ assert.match(rendered,/class="dl-row-remove dl-tile-remove"[^>]*data-magpie-action="cancel"[^>]*aria-label="Cancel download"/);assert.doesNotMatch(rendered,/>Cancel<\/button>/);assert.match(rendered,/data-magpie-action="remove"/);assert.match(rendered,/Remove from history/);assert.doesNotMatch(rendered,new RegExp("chooseDownloadRemoval\\('"+'a'.repeat(32)));
 });
 
 test('completed Magpie rings show overall completion despite cleared totals',()=>{

@@ -598,14 +598,12 @@
     opacity: 0.78;
     margin-left: 1px;
   }
-  /* Source-type logo (NZB / Torrent) — small badge anchored just
-   * outside the ring's bottom-right edge so it never covers any
-   * part of the conic progress arc. The negative offsets push it
-   * past the ring's bounding box on the down-right diagonal. */
+  /* Overlap the lower-right rim, above both the portrait and progress LEDs. */
   .dl-tile-type-badge {
     position: absolute;
-    right: -8px;
-    bottom: -8px;
+    right: 6%;
+    bottom: 6%;
+    z-index: 4;
     width: 38px;
     height: 38px;
     border-radius: 50%;
@@ -1210,7 +1208,7 @@
   .magpie-tabs [aria-selected="true"] {background:rgba(var(--brand-accent-rgb),.22);border-color:var(--accent);}
   #magpiePanel {min-width:0;} #magpiePanel[hidden] {display:none;}
   .dl-magpie-gauge {position:absolute;inset:0;border-radius:50%;--tube-width:7px;--tube-color:var(--gauge-color,var(--accent));--tube-progress:var(--gauge-pct,0);}
-  .dl-magpie-gauge--file {inset:7px;--gauge-color:#fff;}
+  .dl-magpie-gauge--file {inset:17px;--gauge-color:#ffd280;}
   .dl-magpie-gauge-arc {position:absolute;inset:0;border-radius:50%;}
   .dl-magpie-readouts {position:absolute;inset:30px;display:flex;flex-direction:column;justify-content:center;gap:8px;text-align:center;pointer-events:none;}
   .dl-magpie-readout {font-family:var(--secs);font-size:16px;line-height:1.2;}
@@ -1268,6 +1266,16 @@
   #rows .dl-tile-hero > .dl-bar-headshots {position:absolute;inset:14px;display:block;width:auto;height:auto;max-width:none;overflow:hidden;border-radius:50%;z-index:3;pointer-events:none;}
   #rows .dl-tile-hero > .dl-bar-headshots img {width:100%;height:100%;object-fit:cover;object-position:center 20%;}
   #rows .dl-has-headshot .dl-tile-pct {visibility:hidden;}
+  #rows .dl-has-headshot .dl-tile-hero:hover .dl-tile-pct,
+  #rows .dl-has-headshot .dl-tile-hero:focus-within .dl-tile-pct {
+    visibility:visible;
+    z-index:4;
+    inset:14px;
+    border-radius:50%;
+    background:rgba(0,0,0,.72);
+    pointer-events:none;
+  }
+
   .dl-progress-studio {display:none;}
   #rows .dl-studio-only .dl-header-studio {visibility:hidden;}
   #rows .dl-studio-only .dl-tile-hero {width:100%;flex-basis:100%;display:flex;flex-direction:column;gap:24px;}
@@ -1301,6 +1309,10 @@
   @media(prefers-reduced-motion:reduce){#rows .dl-studio-only .is-running.is-unknown .dl-magpie-gauge-arc {animation:none;}}
 
 
+  #rows .dl-bar[data-source="magpie"] .dl-tile-hero > .dl-bar-headshots {inset:28px;}
+  #rows .dl-magpie-rings::before {inset:28px;}
+  #rows .dl-bar[data-source="magpie"].dl-has-headshot .dl-tile-hero:hover .dl-tile-pct,
+  #rows .dl-bar[data-source="magpie"].dl-has-headshot .dl-tile-hero:focus-within .dl-tile-pct {inset:28px;}
   /* Use actual circular LEDs so dots stay round on both paths. */
   #rows .dl-tile-ring::after {display:none;}
   #rows .dl-tile-ring,#rows .dl-magpie-gauge {filter:none;}
@@ -1313,7 +1325,7 @@
   #rows .dl-studio-only .dl-tile-ring,#rows .dl-studio-only .dl-magpie-gauge {background:none;}
   #rows .dl-studio-only .led-ring {display:none;}
   #rows .dl-studio-only .led-line {display:block;height:14px;}
-  #rows .dl-studio-only .dl-magpie-gauge--file {top:16px;}
+  #rows .dl-studio-only .dl-magpie-gauge--file {top:23px;}
   .led-pending {animation:led-breathe 1.6s ease-in-out infinite alternate;}
   @keyframes led-breathe {to{opacity:.4;}}
   @media(prefers-reduced-motion:reduce){.led-pending{animation:none;}}
@@ -1593,7 +1605,9 @@
           ].filter(Boolean).join('\n');
           filedChip = `<span class="dl-tile-chip dl-tile-chip-filed" title="${esc(fullTip)}"><i class="fa-solid fa-check dl-tile-chip-ico"></i>Library match</span>`;
         }
-        const rmBtn = isMagpie && it.completed && it.id
+        const rmBtn = isMagpie && it.magpie_action === 'cancel' && it.id
+          ? `<button type="button" class="dl-row-remove dl-tile-remove" data-magpie-job="${esc(it.id)}" data-magpie-action="cancel" title="Cancel download" aria-label="Cancel download"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>`
+          : isMagpie && it.completed && it.id
           ? `<button type="button" class="dl-row-remove dl-tile-remove" data-magpie-job="${esc(it.id)}" data-magpie-action="remove" title="Remove from history · keep downloaded files" aria-label="Remove from history; keep downloaded files"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>`
           : !isMagpie && it.id
           ? `<button class="dl-row-remove dl-tile-remove" title="Remove download…" onclick="chooseDownloadRemoval('${esc(it.id)}', this)"><i class="fa-solid fa-xmark"></i></button>`
@@ -1713,7 +1727,7 @@
               </div>`}
             </div>
           </div>
-          <div class="dl-tile-chips">${catChip}${sizeChip}${statusChip}${queueChip}${filedChip}${sourceChip}${lifecycleHelp}${isMagpie && it.magpie_action ? `<button type="button" class="btn-secondary" data-magpie-job="${esc(it.id)}" data-magpie-action="${esc(it.magpie_action)}">${it.magpie_action==='cancel'?'Cancel':'Retry'}</button>` : ''}${isMagpie && !it.completed && !failed ? `<span class="dl-tile-chip">${esc(it.progress_label || 'Total unknown')}</span>` : ''}${isMagpie ? `<span class="dl-tile-chip dl-tile-chip-wide">${Number(it.magpie_files)||0} files${it.destination_name ? ` · ${esc(it.destination_name)}` : ''}</span>` : ''}${it.can_retry ? `<button type="button" class="btn" data-retry-id="${esc(it.id)}" onclick="retryDownload(this)"><i class="fas fa-redo" aria-hidden="true"></i> Retry download</button>` : ""}</div>
+          <div class="dl-tile-chips">${catChip}${sizeChip}${statusChip}${queueChip}${filedChip}${sourceChip}${lifecycleHelp}${isMagpie && it.magpie_action === 'retry' ? `<button type="button" class="btn-secondary" data-magpie-job="${esc(it.id)}" data-magpie-action="${esc(it.magpie_action)}">${it.magpie_action==='cancel'?'Cancel':'Retry'}</button>` : ''}${isMagpie && !it.completed && !failed ? `<span class="dl-tile-chip">${esc(it.progress_label || 'Total unknown')}</span>` : ''}${isMagpie ? `<span class="dl-tile-chip dl-tile-chip-wide">${Number(it.magpie_files)||0} files${it.destination_name ? ` · ${esc(it.destination_name)}` : ''}</span>` : ''}${it.can_retry ? `<button type="button" class="btn" data-retry-id="${esc(it.id)}" onclick="retryDownload(this)"><i class="fas fa-redo" aria-hidden="true"></i> Retry download</button>` : ""}</div>
         </div>`;
       }).join('');
       // Batch-fetch headshots for all matched performers in one request,
@@ -1751,10 +1765,10 @@
       const percent=done?100:known?Math.max(0,Math.min(100,Number(value))):0;
       return {label,known,percent};
     });
-    const rings=gauges.map(({label,known,percent})=>`<div class="dl-magpie-gauge dl-magpie-gauge--${label.toLowerCase()}${known?'':' is-unknown'}${running?' is-running':''}" role="progressbar" aria-label="${label} progress" aria-valuemin="0" aria-valuemax="100" ${known?`aria-valuenow="${percent}"`:'aria-valuetext="Total unknown"'} style="--gauge-pct:${percent}">${neonProgressSvg(percent,!known)}</div>`).join('');
+    const rings=gauges.map(({label,known,percent})=>`<div class="dl-magpie-gauge dl-magpie-gauge--${label.toLowerCase()}${known?'':' is-unknown'}${running?' is-running':''}" role="progressbar" title="${label}: ${known?Math.round(percent)+'%':'total unknown'}" aria-label="${label} progress" aria-valuemin="0" aria-valuemax="100" ${known?`aria-valuenow="${percent}"`:'aria-valuetext="Total unknown"'} style="--gauge-pct:${percent}">${neonProgressSvg(percent,!known)}</div>`).join('');
     const progress=gauges[0].known?gauges[0]:gauges[1];
     const readout=failed?'  !':progress.known?String(Math.round(progress.percent)).padStart(3,' '):'Unknown';
-    return `<div class="dl-magpie-rings">${rings}<div class="dl-tile-pct"><span class="${!failed && !progress.known?'dl-magpie-unknown':'dl-tile-pct-num'}" title="${progress.known?progress.label+' progress':'Progress total unavailable'}">${readout}</span>${!failed && progress.known?'<span class="dl-tile-pct-sym">%</span>':''}</div><div class="dl-tile-type-badge">${logo}</div></div>`;
+    return `<div class="dl-magpie-rings" title="${gauges.map(g=>g.label+': '+(g.known?Math.round(g.percent)+'%':'total unknown')).join(' · ')}">${rings}<div class="dl-tile-pct"><span class="${!failed && !progress.known?'dl-magpie-unknown':'dl-tile-pct-num'}" title="${progress.known?progress.label+' progress':'Progress total unavailable'}">${readout}</span>${!failed && progress.known?'<span class="dl-tile-pct-sym">%</span>':''}</div><div class="dl-tile-type-badge">${logo}</div></div>`;
   }
 
   function spaceifyReleaseName(name) {

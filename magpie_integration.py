@@ -31,8 +31,21 @@ class PrivateValidationRoute(APIRoute):
 router = APIRouter(prefix='/api/magpie', route_class=PrivateValidationRoute)
 _slots = BoundedSemaphore(3)
 CATEGORIES = {'scenes':'Scenes', 'movies':'Movies', 'jav':'JAV', 'stars':'Stars', 'studios':'Studios', 'vices':'Vices', 'other':'Other'}
+_category_lock = Lock()
 _cache_lock = Lock()
 _cache = (None, 0, [], None)
+
+def job_categories():
+    try:
+        data = json.loads(db.get_settings().get('magpie_job_categories', '{}'))
+        return data if isinstance(data, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def job_category_key(ident):
+    return str(db.get_settings().get('magpie_url', '')).rstrip('/') + ':' + str(ident)
+
 
 def invalidate():
     global _cache
@@ -191,6 +204,13 @@ def enqueue(body: Download):
     if body.custom_fields:
         payload.update(custom_fields=body.custom_fields, filename_position='start')
     result = request('POST', 'downloads', body=payload)
+    if body.category and isinstance(result, dict):
+        ident = result.get('id') or result.get('download_id')
+        if ident:
+            with _category_lock:
+                saved = job_categories()
+                saved[job_category_key(ident)] = body.category
+                db.save_settings({'magpie_job_categories': json.dumps(saved)})
     invalidate()
     return result
 
@@ -321,6 +341,7 @@ def merge_downloads(payload, category=None):
     items = list(payload.get('items') or [])
     jobs, error = job_snapshot()
     mapped = mappings()
+    saved_categories = job_categories()
     only = category.removeprefix('@magpie:') if category and category.startswith('@magpie:') else None
     if only:
         items = []
@@ -354,12 +375,15 @@ def merge_downloads(payload, category=None):
             progress, progress_label = file_progress, 'Current file'
         else:
             progress, progress_label = None, 'Total unknown'
+        selected = saved_categories.get(job_category_key(job['id']))
         labels = [CATEGORIES[k] for k,v in mapped.items() if v and v == job.get('destination_id')]
+        # Legacy/external jobs cannot be assigned a category from a shared destination.
+        category_label = CATEGORIES.get(selected) or (labels[0] if len(labels) == 1 else job.get('destination_name', ''))
         items.append({'id':job['id'], 'source':'magpie', 'client':'magpie',
             'source_url':job.get('url') or '',
             'name':job.get('current_filename') or job.get('url') or 'Magpie download',
             'display_name':job.get('current_filename') or job.get('url') or 'Magpie download',
-            'category':', '.join(labels) or job.get('destination_name',''),
+            'category':category_label,
             'queue':'active' if active else 'history', 'status':status,
             'progress_pct':progress, 'progress_label':progress_label,
             'file_progress_pct':file_progress, 'album_progress_pct':album_progress,
