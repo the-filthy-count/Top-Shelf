@@ -37,7 +37,7 @@ test('empty combined download page renders without missing helpers',async()=>{
  const els={};const el=id=>els[id]??={value:'',innerHTML:'',insertAdjacentHTML(){}};
  const ctx={document:{getElementById:el},URLSearchParams,_downloadsFetchGen:0,getDlSearchMode:()=> 'downloads',_refreshLibraryStudios:async()=>{},fetch:async()=>({ok:true,json:async()=>({items:[]})}),_paintDlStats(){},esc:String};
  vm.createContext(ctx);vm.runInContext(extract('magpieProgressRings')+'\n'+extract('_dlEmptyHtml')+'\n'+extract('loadDownloads'),ctx);await ctx.loadDownloads();
- assert.match(el('rows').innerHTML,/Nothing in your download clients/);
+ assert.match(el('rows').innerHTML,/>nada</);
 });
 test('Magpie renders inside the original grid with its own logo and safe controls',async()=>{
  const els={};const el=id=>els[id]??={value:'',innerHTML:'',insertAdjacentHTML(){},querySelectorAll(){return[];}};
@@ -54,7 +54,7 @@ test('completed Magpie rings show overall completion despite cleared totals',()=
  const ctx={};vm.createContext(ctx);vm.runInContext(extract('magpieProgressRings'),ctx);
  const rendered=ctx.magpieProgressRings({status:'completed',file_progress_pct:null,album_progress_pct:null},'');
  assert.equal((rendered.match(/aria-valuenow="100"/g)||[]).length,2);
- assert.match(rendered,/dl-tile-pct-num">100</);
+ assert.match(rendered,/dl-tile-pct-num"[^>]*>100</);
  assert.doesNotMatch(rendered,/inner|outer|Done/);
  assert.doesNotMatch(rendered,/is-unknown/);
 });
@@ -62,6 +62,16 @@ test('completed Magpie rings show overall completion despite cleared totals',()=
 test('failed Magpie shows a right-aligned warning without a percent sign',()=>{
  const ctx={};vm.createContext(ctx);vm.runInContext(extract('magpieProgressRings'),ctx);
  const rendered=ctx.magpieProgressRings({status:'failed',failed:true,album_progress_pct:30},'');
- assert.match(rendered,/dl-tile-pct-num">  !</);
+ assert.match(rendered,/dl-tile-pct-num"[^>]*>  !</);
  assert.doesNotMatch(rendered,/dl-tile-pct-sym|is-running/);
 });
+
+ test('Magpie uses file percentage when album total is unknown',()=>{
+ const ctx={};vm.createContext(ctx);vm.runInContext(extract('magpieProgressRings'),ctx);
+ const rendered=ctx.magpieProgressRings({status:'downloading',file_progress_pct:42,album_progress_pct:null},'');
+ assert.match(rendered,/title="File progress"> 42</);
+ assert.match(rendered,/dl-tile-pct-sym/);
+ const unknown=ctx.magpieProgressRings({status:'downloading'},'');
+ assert.match(unknown,/dl-magpie-unknown"[^>]*>Unknown</);
+ assert.doesNotMatch(unknown,/dl-tile-pct-sym/);
+ });

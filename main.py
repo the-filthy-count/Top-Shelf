@@ -66,7 +66,7 @@ from app.core.matching import (
     _extract_trailing_index_from_filename, _candidate_performer_names,
     _performer_name_tokens_match, _required_performers_in_cast,
     _suggestion_performer_names, _build_file_meta, _score_name_match,
-    _release_name_with_folders,
+    _release_name_with_folders, _suggestion_identity_matches, _strip_release_noise,
 )
 from app.core.filing import (
     _stashbox_normalize_match_source, normalise, _performer_weight,
@@ -2836,7 +2836,7 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
     leak into the background pipeline."""
     cleaned, title_only, performer, studio, performers = _split_query_for_search(filename)
     perf_names = _suggestion_performer_names(performers, performer)
-    if not cleaned or not perf_names:
+    if not cleaned or not (perf_names or studio):
         db.queue_suggestions_clear(filename)
         return 0
     # File-side signals (duration, year, cast count, scene index) shape
@@ -2883,7 +2883,7 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
     perf_names = _suggestion_performer_names(performers, performer)
     strict_pool: list[dict] = []
     for scene in results:
-        if not _required_performers_in_cast(perf_names, scene):
+        if not _suggestion_identity_matches(perf_names, studio, scene):
             continue
         if not _scene_passes_settings_filters(scene):
             continue
@@ -2906,14 +2906,14 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
         # Reasons are collected only on the pool the candidate actually
         # ends up in — strict if the performer matches, loose otherwise
         # — so the pills the UI shows match the score that's persisted.
-        if is_strict_perf:
+        if is_strict_perf or _suggestion_identity_matches([], studio, scene):
             strict_reasons: list[dict] = []
             score_strict = _score_name_match(
                 cleaned, scene,
                 query_performer=performer,
                 query_title=title_only or cleaned,
                 query_performers=performers,
-                require_performers_in_cast=True,
+                require_performers_in_cast=is_strict_perf,
                 file_meta=file_meta,
                 reasons=strict_reasons,
             )
@@ -2925,7 +2925,7 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
                 strict_pool.append(sug_strict)
     strict_pool.sort(key=lambda candidate: candidate["score"], reverse=True)
     top = strict_pool[:limit]
-    emit(f"  Name-search {filename!r}: {len(top)} performer match(es)")
+    emit(f"  Name-search {filename!r}: {len(top)} performer/studio match(es)")
     if not top and not search_complete:
         return 0
     db.queue_suggestions_clear(filename)
@@ -5576,7 +5576,7 @@ _TITLE_NOISE_RE = re.compile(
 def _strip_title_noise(title: str) -> str:
     if not title:
         return title
-    out = title
+    out = _strip_release_noise(title)
     #: Loop because multiple noise tokens can stack ("Title Scene 2 Part 1").
     for _ in range(3):
         new = _TITLE_NOISE_RE.sub("", out).strip()
@@ -10171,16 +10171,17 @@ def _filter_suggestion_file_list(files: list[dict]) -> list[dict]:
     """Drop candidates (and files with none left) that fail content filters."""
     out: list[dict] = []
     for f in files or []:
-        _, _, performer, _, performers = _split_query_for_search(f.get("filename") or "")
+        _, _, performer, studio, performers = _split_query_for_search(f.get("filename") or "")
         required = _suggestion_performer_names(performers, performer)
-        if not required:
+        if not (required or studio):
             continue
         kept = []
         for candidate in f.get("candidates") or []:
             scene = dict(candidate.get("payload") or {})
             if not scene.get("performers"):
                 scene["performers"] = [name.strip() for name in (candidate.get("performers") or "").split(",") if name.strip()]
-            if _required_performers_in_cast(required, scene) and _suggestion_candidate_passes_filters(candidate):
+            scene.setdefault("studio", {"name": candidate.get("studio") or ""})
+            if _suggestion_identity_matches(required, studio, scene) and _suggestion_candidate_passes_filters(candidate):
                 kept.append(candidate)
         if not kept:
             continue
@@ -19561,6 +19562,9 @@ def search_scenes(payload: dict):
         if title or term:
             from scene_relevance import rank_manual_results
             results = rank_manual_results(results, title or term, performer or "")
+        if performer or studio:
+            required = [name.strip() for name in (performer or "").split(",") if name.strip()]
+            results = [scene for scene in results if _suggestion_identity_matches(required, studio or "", scene)]
         # Format for UI
         formatted = []
         for scene in results:

@@ -3439,7 +3439,6 @@
     if (parsed.title && titleEl && !titleEl.value.trim()) titleEl.value = parsed.title;
     if (dateEl && !dateEl.value.trim()) {
       if (parsed.date) dateEl.value = parsed.date;
-      else if (parsed.file_mtime) dateEl.value = parsed.file_mtime;
     }
     if (!libStudio && parsed.site && studEl && !studEl.value.trim()) studEl.value = parsed.site;
     if (!libPerfs.length && parsed.performers && perfEl && !perfEl.value.trim()) perfEl.value = parsed.performers;

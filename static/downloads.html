@@ -553,6 +553,7 @@
    * tiles use across /health and /downloads. Skipping the .sky-counter
    * class itself because that one auto-pads to 6 chars and triggers
    * fitSkyCounter; we want a tight, fixed-size readout in the ring. */
+  .dl-magpie-unknown {font-family:var(--mono);font-size:12px;color:var(--text);}
   .dl-tile-pct-num {
     font-family: "LedCounter", "VCRMono", ui-monospace, monospace;
     font-variant-numeric: tabular-nums;
@@ -1657,9 +1658,9 @@
       return {label,known,percent};
     });
     const rings=gauges.map(({label,known,percent})=>`<div class="dl-magpie-gauge dl-magpie-gauge--${label.toLowerCase()}${known?'':' is-unknown'}${running?' is-running':''}" role="progressbar" aria-label="${label} progress" aria-valuemin="0" aria-valuemax="100" ${known?`aria-valuenow="${percent}"`:'aria-valuetext="Total unknown"'} style="--gauge-pct:${percent}"><span class="dl-magpie-gauge-arc"></span></div>`).join('');
-    const album=gauges[0];
-    const readout=failed?'  !':album.known?String(Math.round(album.percent)).padStart(3,' '):'  —';
-    return `<div class="dl-magpie-rings">${rings}<div class="dl-tile-pct"><span class="dl-tile-pct-num">${readout}</span>${!failed && album.known?'<span class="dl-tile-pct-sym">%</span>':''}</div><div class="dl-tile-type-badge">${logo}</div></div>`;
+    const progress=gauges[0].known?gauges[0]:gauges[1];
+    const readout=failed?'  !':progress.known?String(Math.round(progress.percent)).padStart(3,' '):'Unknown';
+    return `<div class="dl-magpie-rings">${rings}<div class="dl-tile-pct"><span class="${!failed && !progress.known?'dl-magpie-unknown':'dl-tile-pct-num'}" title="${progress.known?progress.label+' progress':'Progress total unavailable'}">${readout}</span>${!failed && progress.known?'<span class="dl-tile-pct-sym">%</span>':''}</div><div class="dl-tile-type-badge">${logo}</div></div>`;
   }
 
   function spaceifyReleaseName(name) {

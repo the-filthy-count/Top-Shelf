@@ -106,6 +106,30 @@ def _release_name_with_folders(filename: str) -> str:
     return f"{parent.replace('/', ' ')} {stem}"
 
 
+
+def _suggestion_identity_matches(performers: list[str], studio: str, scene: dict) -> bool:
+    """Require a cast match or an exact normalized studio/alias match."""
+    if performers and _required_performers_in_cast(performers, scene):
+        return True
+    normalize = lambda value: re.sub(r"[^\w]", "", str(value).casefold())
+    wanted = normalize(studio)
+    if not wanted:
+        return False
+    source = scene.get("studio") or {}
+    if isinstance(source, str):
+        names = [source]
+    else:
+        names = [source.get("name", ""), *(source.get("aliases") or [])]
+    return any(wanted == normalize(name) for name in names if isinstance(name, str))
+
+
+def _strip_release_noise(text: str) -> str:
+    """Remove technical release metadata without discarding names or title numbers."""
+    text = re.sub(r"(?i)\b(?:https?://)?(?:www\.)?[a-z0-9-]+\.(?:com|net|org|xxx)\b", " ", text)
+    text = re.sub(r"(?i)\b(?:web[ ._-]*dl|web[ ._-]*rip|h[ ._-]*26[45]|x26[45]|hevc|avc|aac(?:[ ._-]*2[ .]0)?|ac3|2160p|1080p|720p|480p|4k|8k|uhd|hdr10?|10bit|8bit|\d{2,3}fps|\d{3,4}x\d{3,4}|\d+(?:\.\d+)?[ ._-]*(?:mb|gb))\b", " ", text)
+    text = re.sub(r"(?i)\b[a-f0-9]{16,64}\b", " ", text)
+    return re.sub(r"\s+", " ", text).strip(" ._-[]()")
+
 def _clean_filename_for_search(filename: str) -> str:
     """Strip extension, ts-uid tag, and release-noise tokens from a
     filename. Includes any parent folder(s) so a performer / studio
@@ -115,9 +139,8 @@ def _clean_filename_for_search(filename: str) -> str:
         return ""
     base = _release_name_with_folders(filename)
     cleaned, _ = _strip_ts_uid(base)
-    cleaned = re.sub(r"\[[^\]]*\]", " ", cleaned)
-    cleaned = re.sub(r"\([^)]*\)", " ", cleaned)
-    cleaned = re.sub(r"\{[^}]*\}", " ", cleaned)
+    cleaned = _strip_release_noise(cleaned)
+    cleaned = re.sub(r"[\[\](){}]", " ", cleaned)
     cleaned = _SCENE_NUMBER_RE.sub(" ", cleaned)
     cleaned = re.sub(r"[._\-]+", " ", cleaned)
     parts = []
@@ -295,15 +318,6 @@ def _build_file_meta(filename: str) -> dict:
             if 1970 <= y <= next_year:
                 meta["year"] = y
                 break
-        if not meta["year"]:
-            settings = settings if 'settings' in dir() else db.get_settings()
-            src_root = (settings.get("source_dir") or "").strip()
-            if src_root:
-                path = Path(src_root) / filename
-                if path.is_file():
-                    mt = datetime.fromtimestamp(path.stat().st_mtime).year
-                    if 1970 <= mt <= next_year:
-                        meta["year"] = mt
     except Exception:
         pass
     try:

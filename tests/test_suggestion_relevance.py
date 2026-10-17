@@ -40,4 +40,34 @@ class SuggestionTests(unittest.TestCase):
             self.assertEqual(ns['_run_name_search_for_file']('Fixture 3.mp4'),0)
             self.assertEqual(db.queue_suggestions_clear.call_count,0 if batch.warnings else 1)
 
+class FilenameIdentityTests(unittest.TestCase):
+    def helpers(self):
+        tree=ast.parse((ROOT/'app/core/matching.py').read_text())
+        names={'_strip_release_noise','_suggestion_identity_matches','_required_performers_in_cast','_candidate_performer_names','_performer_name_tokens_match','_name_match_tokenize'}
+        nodes=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in names or isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_NAME_SEARCH_NOISE_TOKENS' for t in n.targets)]
+        ns={'re':re};exec(compile(ast.Module(body=nodes,type_ignores=[]),'matching.py','exec'),ns)
+        return ns
+
+    def test_identity_requires_cast_or_studio(self):
+        match=self.helpers()['_suggestion_identity_matches']
+        scene={'studio':{'name':'Example Studio'},'performers':[{'performer':{'name':'Alice Smith'}}]}
+        self.assertTrue(match(['Alice Smith'],'',scene))
+        self.assertTrue(match([], 'Example.Studio',scene))
+        self.assertFalse(match(['Other Person'],'Unrelated',scene))
+        self.assertFalse(match([], 'Example',scene))
+        self.assertFalse(match([], '',scene))
+
+    def test_release_noise_preserves_names_and_volume(self):
+        clean=self.helpers()['_strip_release_noise']
+        self.assertEqual(clean('Alice Smith - Great Adventure 2 1080p WEB-DL H.264 60fps 1.5GB'), 'Alice Smith - Great Adventure 2')
+        self.assertEqual(clean('Studio 54 - Part 3'), 'Studio 54 - Part 3')
+        self.assertEqual(clean('Alice Smith abcdef0123456789abcdef0123456789'), 'Alice Smith')
+
+    def test_no_filesystem_date_fallback(self):
+        js=(ROOT/'static/queue.js').read_text()
+        self.assertNotIn('dateEl.value = parsed.file_mtime',js)
+        tree=ast.parse((ROOT/'app/core/matching.py').read_text())
+        node=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='_build_file_meta')
+        self.assertNotIn('st_mtime',ast.unparse(node))
+
 if __name__=='__main__':unittest.main()
