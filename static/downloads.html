@@ -1336,6 +1336,17 @@
   .led-track {stroke:#444c50;stroke-width:7;}
   .led-tube {stroke:var(--tube-color);stroke-width:7;stroke-linecap:round;filter:drop-shadow(0 0 3px var(--tube-color)) drop-shadow(0 0 7px var(--tube-color));}
   .led-core {fill:none;stroke:color-mix(in srgb,var(--tube-color) 15%,white);stroke-width:2.5;stroke-linecap:round;}
+
+  /* Both geometries share one screen-space tube treatment. */
+  #rows .dl-tile-ring, #rows .dl-magpie-rings, #rows .dl-magpie-gauge {
+    box-shadow:none;
+    border:0;
+  }
+  .led-track, .led-tube, .led-core {vector-effect:non-scaling-stroke;}
+  .led-ring, .led-line {
+    filter:drop-shadow(0 0 3px var(--tube-color)) drop-shadow(0 0 7px var(--tube-color));
+  }
+  .led-tube {filter:none;}
 </style>
 <link rel="stylesheet" href="/static/mobile.css?v=20260930-desktop-scale">
 <link rel="stylesheet" href="/static/design-system.css?v=20261011-toggle-layer-fix">
