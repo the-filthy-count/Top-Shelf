@@ -7885,6 +7885,52 @@ def _group_video_into_hint_subfolder(
     return dest, new_filename
 
 
+def _rename_unfiled_match(video: Path, filename: str, settings: dict, plan: dict) -> tuple[Path, str]:
+    """Name a matched queue video without creating a library destination."""
+    root_raw = (settings.get("source_dir") or "").strip()
+    if not root_raw:
+        return video, filename
+    try:
+        root = Path(root_raw).expanduser().resolve()
+        old_key = video.resolve().relative_to(root).as_posix()
+        require_complete_download(video, shared_root=video.resolve().parent == root)
+        parts = [plan.get("studio"), plan.get("date"),
+                 ", ".join(plan.get("perf_names") or []), plan.get("title")]
+        base = _sanitize_fs_component(" - ".join(str(p).strip() for p in parts if p))
+        _, uid = _strip_ts_uid(video.name)
+        if uid:
+            base += f" [ts-{uid}]"
+        # Leave room for the extension under the filesystem byte limit.
+        budget = 240 - len(video.suffix.encode("utf-8"))
+        base = base.encode("utf-8")[:budget].decode("utf-8", "ignore").rstrip(" .")
+        if not base:
+            return video, old_key
+        target = video.with_name(base + video.suffix)
+        new_key = target.relative_to(root).as_posix() if target.is_absolute() else target.resolve().relative_to(root).as_posix()
+        if target == video or target.exists():
+            return video, old_key
+        # Sidecars need a coordinated rename; leave these packages intact.
+        if any(p != video and p.stem == video.stem for p in video.parent.iterdir()):
+            return video, old_key
+        safe_move(video, target)
+        try:
+            if not db.rename_file(old_key, new_key):
+                safe_move(target, video)
+                return video, old_key
+        except Exception:
+            safe_move(target, video)
+            raise
+        try:
+            _carry_queue_thumbs(old_key, new_key)
+        except OSError:
+            pass
+        emit(f"  Named matched queue file: {target.name}")
+        return target, new_key
+    except (OSError, ValueError, PartialDownloadPending) as exc:
+        emit(f"  Queue rename deferred: {exc}")
+        return video, filename
+
+
 def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: str) -> dict:
     """
     Resolve studio/performer route and naming for a stash-box-shaped scene.
@@ -8496,9 +8542,10 @@ def _file_scene_from_match_impl(video: Path, scene: dict, source: str = "") -> d
             if performers_full
             else list(plan.get("perf_names") or [])
         )
-        _, new_filename = _group_video_into_hint_subfolder(
+        video, new_filename = _group_video_into_hint_subfolder(
             video, filename, settings, priority_names, plan.get("studio") or "",
         )
+        video, new_filename = _rename_unfiled_match(video, new_filename, settings, plan)
         db.update_file(
             new_filename,
             status="no_dir",
@@ -18412,6 +18459,7 @@ async def get_status():
     return {
         "running": processing_state["running"],
         "current_file": processing_state["current_file"],
+        "pipeline_phase": processing_state.get("pipeline_phase") or "Matching",
         "pipeline_total": int(processing_state.get("pipeline_total") or 0),
         "pipeline_done": int(processing_state.get("pipeline_done") or 0),
         "manual_queue_pending": len(snap["pending"]),
@@ -18632,6 +18680,7 @@ async def api_activity_banner():
     return {
         "running": processing_state["running"],
         "current_file": processing_state["current_file"] or "",
+        "pipeline_phase": processing_state.get("pipeline_phase") or "Matching",
         "pipeline_total": int(processing_state.get("pipeline_total") or 0),
         "pipeline_done": int(processing_state.get("pipeline_done") or 0),
         "notifications": db.notifications_fetch_active(limit=8),

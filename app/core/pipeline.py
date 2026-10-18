@@ -34,6 +34,7 @@ class ProcessingPipeline:
         self.callbacks = callbacks
 
     async def process_single(self, video: Path) -> dict:
+        self.state["pipeline_phase"] = "Reading media"
         settings = db.get_settings()
         # DB filename key = posix path relative to source_dir when the
         # file sits in a subdirectory (``Jane Smith/scene.mp4``); bare
@@ -74,6 +75,7 @@ class ProcessingPipeline:
         # the entire event loop sits frozen for ~5–15s per file.
         # `_phash_semaphore` (2 concurrent) inside compute_phash still
         # enforces the seek-concurrency cap.
+        self.state["pipeline_phase"] = "Fingerprinting"
         cached = db.get_phash(filename)
         if cached:
             phash = cached
@@ -92,6 +94,7 @@ class ProcessingPipeline:
 
         # Early-resolve against the indexed library. Touches the
         # filesystem (file delete on dup discard) so off-thread.
+        self.state["pipeline_phase"] = "Checking library"
         early = await asyncio.to_thread(
             self.callbacks.get("queue_resolve_phash"), video, filename, phash,
         )
@@ -145,6 +148,7 @@ class ProcessingPipeline:
                         scene["_force_vice"] = import_vice
                     # File move + image download + NFO write — all sync I/O,
                     # off-thread so the event loop stays responsive.
+                    self.state["pipeline_phase"] = "Filing"
                     result = await asyncio.to_thread(
                         self.callbacks.get("file_scene_from_match"),
                         video, scene, label,
@@ -158,6 +162,7 @@ class ProcessingPipeline:
 
         # Lookup (Async)
         try:
+            self.state["pipeline_phase"] = "Matching"
             self.emit("  Lookup: querying databases...")
             matches, source = await query_with_fallback(phash, api_keys, emit_cb=self.emit)
         except Exception as e:
@@ -181,6 +186,7 @@ class ProcessingPipeline:
                     studio_hint = (guess.get("studio") or "").strip()
                 except Exception:
                     perfs, studio_hint = [], ""
+                self.state["pipeline_phase"] = "Grouping files"
                 _, filename = await asyncio.to_thread(
                     group_hint, video, filename, settings, perfs, studio_hint,
                 )
@@ -196,6 +202,7 @@ class ProcessingPipeline:
         if import_vice and isinstance(matched_scene, dict):
             matched_scene["_force_vice"] = import_vice
         # File move + image download + NFO write — sync I/O off-thread.
+        self.state["pipeline_phase"] = "Filing"
         return await asyncio.to_thread(
             self.callbacks.get("file_scene_from_match"),
             video, matched_scene, source,
@@ -206,6 +213,9 @@ class ProcessingPipeline:
             return
 
         try:
+            self.state["pipeline_phase"] = "Scanning files"
+            self.state["pipeline_total"] = 0
+            self.state["pipeline_done"] = 0
             self.state["running"] = True
             self.state["log"] = []
             settings = db.get_settings()
@@ -213,30 +223,33 @@ class ProcessingPipeline:
             vdl_raw = (settings.get("vice_download_watch_dir") or "").strip()
             vdl_root = Path(vdl_raw).expanduser() if vdl_raw else None
 
-            if filenames:
-                video_files = [
-                    p for f in filenames
-                    if (p := db.resolve_source_video_path(source_dir, f, vice_dl_root=vdl_root)) is not None
-                ]
-            else:
-                # "Run all" — walk recursively so files nested under
-                # performer- or studio-named folders (e.g.
-                # ``Jane Smith/scene.mp4``) are picked up alongside
-                # root-level files. Vice download inbox is walked too
-                # so vice-scope files stuck in ``<vice_dl>/<Vice>/…``
-                # process on Run All alongside everything in source_dir.
-                collected: list[Path] = []
-                if source_dir.exists() and source_dir.is_dir():
-                    for p in source_dir.rglob("*"):
-                        if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS:
-                            collected.append(p)
-                if vdl_root and vdl_root.exists() and vdl_root.is_dir():
-                    for p in vdl_root.rglob("*"):
-                        if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS:
-                            if "sample" in p.name.lower():
-                                continue
-                            collected.append(p)
-                video_files = sorted(collected)
+            def collect_videos():
+                if filenames:
+                    return [
+                        p for f in filenames
+                        if (p := db.resolve_source_video_path(source_dir, f, vice_dl_root=vdl_root)) is not None
+                    ]
+                else:
+                    # "Run all" — walk recursively so files nested under
+                    # performer- or studio-named folders (e.g.
+                    # ``Jane Smith/scene.mp4``) are picked up alongside
+                    # root-level files. Vice download inbox is walked too
+                    # so vice-scope files stuck in ``<vice_dl>/<Vice>/…``
+                    # process on Run All alongside everything in source_dir.
+                    collected: list[Path] = []
+                    if source_dir.exists() and source_dir.is_dir():
+                        for p in source_dir.rglob("*"):
+                            if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS:
+                                collected.append(p)
+                    if vdl_root and vdl_root.exists() and vdl_root.is_dir():
+                        for p in vdl_root.rglob("*"):
+                            if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS:
+                                if "sample" in p.name.lower():
+                                    continue
+                                collected.append(p)
+                    return sorted(collected)
+
+            video_files = await asyncio.to_thread(collect_videos)
 
             n = len(video_files)
             self.state["pipeline_total"] = n
@@ -297,6 +310,7 @@ class ProcessingPipeline:
                 pass
             self.flush_emit_buffer()
         finally:
+            self.state["pipeline_phase"] = None
             self.state["running"] = False
             self.state["current_file"] = None
             self.state["pipeline_total"] = 0

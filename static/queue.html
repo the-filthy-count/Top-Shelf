@@ -3145,7 +3145,10 @@
     max-height: 110px;
   }
   .queue-section .q-panel-body .queue-item:not(.queue-item-folder) .qi-cell-name {
-    inset: 10px 42px auto;
+    /* Reserve the icon's 12px offset + 72px width + 12px clearance
+       for the whole title/metadata stack, including wrapped badges. */
+    inset: 10px 12px auto 96px;
+    min-width: 0;
     padding: 0 !important;
     gap: 5px;
   }

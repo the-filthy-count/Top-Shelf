@@ -254,8 +254,8 @@
     var cur = healthBasename(data.current_file || "");
     var ind = total <= 0;
     var pct = total > 0 ? (done / total) * 100 : 0;
-    var count = total > 0 ? fmtCount(done) + " / " + fmtCount(total) : fmtCount(done);
-    var tip = "Matching · " + count + (cur ? " · " + cur : "");
+    var count = total > 0 ? "File " + fmtCount(Math.min(done + 1, total)) + " of " + fmtCount(total) : "Preparing";
+    var tip = (data.pipeline_phase || "Matching") + " · " + count + (cur ? " · " + cur : "");
     return circleHtml({
       slot: "pipeline",
       iconHtml: '<i class="fa-solid fa-magnifying-glass"></i>',
@@ -517,11 +517,11 @@
       var done = Math.max(0, parseInt(data.pipeline_done, 10) || 0);
       _emit("pipeline", {
         slot: "pipeline",
-        label: "Matching",
+        label: data.pipeline_phase || "Matching",
         iconHtml: '<i class="fa-solid fa-magnifying-glass"></i>',
         pct: total > 0 ? (done / total) * 100 : 0,
         indeterminate: total <= 0,
-        tooltip: "Matching · " + (total > 0 ? fmtCount(done) + " / " + fmtCount(total) : fmtCount(done)),
+        tooltip: (data.pipeline_phase || "Matching") + " · " + (total > 0 ? "File " + fmtCount(Math.min(done + 1, total)) + " of " + fmtCount(total) : "Preparing") + (data.current_file ? " · " + healthBasename(data.current_file) : ""),
       });
     } else {
       _sidebarNoteIdle("pipeline");
