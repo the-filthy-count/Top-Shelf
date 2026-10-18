@@ -21,7 +21,7 @@ import secrets
 import math
 import mimetypes
 import os
-from download_safety import require_complete_download, cleanup_download_directory
+from download_safety import require_complete_download, cleanup_download_directory, PartialDownloadPending
 import stat
 import re
 import errno
@@ -3962,7 +3962,7 @@ def _process_download_entry(entry_path: Path, dest_dir: Path) -> list[Path]:
       source_dir so process_single can match it back to scene_grab_log.
     Returns paths of video files after move (for movie queue → auto-filing).
     """
-    require_complete_download(entry_path)
+    require_complete_download(entry_path, shared_root=entry_path.is_file())
     emit(f"DOWNLOAD {entry_path.name}")
     moved_videos: list[Path] = []
 
@@ -4165,6 +4165,25 @@ def _auto_enqueue_vice_jav_from_snapshot(rel: str, f: Path, scope: str) -> None:
     emit(f"{scope.upper()} auto-queue: {top_entry.name} (hold {hold}s)")
 
 
+def _retry_partial_download(path_str: str, pending: dict, settings: dict) -> None:
+    """Retry without shortening a newer filesystem event's settling period."""
+    fire_at = time.time() + max(30, int(settings.get("download_watch_hold_secs", "300")))
+    with _download_lock:
+        pending[path_str] = max(pending.get(path_str, 0), fire_at)
+
+
+def _seed_pending_downloads(root: Path, pending: dict) -> None:
+    """Queue existing entries without touching them or resetting pending holds."""
+    settings = db.get_settings()
+    if settings.get("download_watch_enabled", "false").lower() != "true":
+        return
+    fire_at = time.time() + max(30, int(settings.get("download_watch_hold_secs", "300")))
+    entries = [entry for entry in root.iterdir() if not entry.name.startswith(".")]
+    with _download_lock:
+        for entry in entries:
+            pending.setdefault(str(entry), fire_at)
+
+
 def _check_pending_downloads() -> None:
     """Called by scheduler every 30s - fires download processor for entries past hold time."""
     now = time.time()
@@ -4235,6 +4254,8 @@ def _check_pending_downloads() -> None:
                 folder_name = entry.name
                 _process_download_entry(entry, dest_dir)
                 _remove_client_jobs_matching_watch_folder(folder_name, s)
+            except PartialDownloadPending:
+                _retry_partial_download(path_str, _pending_downloads, s)
             except Exception as e:
                 emit(f"  Download process error: {e}")
     if ready_m:
@@ -4267,6 +4288,8 @@ def _check_pending_downloads() -> None:
                         rels = _movie_queue_relpaths_after_download(moved, dest_queue)
                         if rels:
                             run_movie_pipeline(rels)
+                    except PartialDownloadPending:
+                        _retry_partial_download(path_str, _pending_movie_downloads, s)
                     except Exception as e:
                         emit(f"  Movie download process error: {e}")
     if ready_v:
@@ -4283,6 +4306,8 @@ def _check_pending_downloads() -> None:
                 completed = _process_vice_download_entry(entry, Path(""), s, startup_only=path_str in _boot_download_entries)
                 if completed is not False:
                     _boot_download_entries.discard(path_str)
+            except PartialDownloadPending:
+                _retry_partial_download(path_str, _pending_vice_downloads, s)
             except Exception as e:
                 emit(f"  Vice download process error: {e}")
     if ready_j:
@@ -4300,6 +4325,8 @@ def _check_pending_downloads() -> None:
                 completed = _process_jav_download_entry(entry, s, startup_only=path_str in _boot_download_entries)
                 if completed is not False:
                     _boot_download_entries.discard(path_str)
+            except PartialDownloadPending:
+                _retry_partial_download(path_str, _pending_jav_downloads, s)
             except Exception as e:
                 emit(f"  JAV download process error: {e}")
     if ready_vs:
@@ -4314,6 +4341,8 @@ def _check_pending_downloads() -> None:
                 continue
             try:
                 _process_vice_stage_entry(entry, s)
+            except PartialDownloadPending:
+                _retry_partial_download(path_str, _pending_vice_stage_downloads, s)
             except Exception as e:
                 emit(f"  Vice stage process error: {e}")
     if ready_js:
@@ -4327,6 +4356,8 @@ def _check_pending_downloads() -> None:
                 continue
             try:
                 _process_jav_stage_entry(entry, s)
+            except PartialDownloadPending:
+                _retry_partial_download(path_str, _pending_jav_stage_downloads, s)
             except Exception as e:
                 emit(f"  JAV stage process error: {e}")
     # Any vice / jav drain that ran mutated `processed_files` status
@@ -4595,11 +4626,19 @@ def _start_download_watcher() -> None:
         if dl_dir.exists():
             obs.schedule(DownloadWatchHandler(), str(dl_dir), recursive=True)
             scheduled = True
+            try:
+                _seed_pending_downloads(dl_dir, _pending_downloads)
+            except OSError as exc:
+                emit(f"Download startup scan failed: {exc}")
     if dl_enabled and mdl_raw:
         mdl_dir = Path(mdl_raw)
         if mdl_dir.exists():
             obs.schedule(MovieDownloadWatchHandler(), str(mdl_dir), recursive=True)
             scheduled = True
+            try:
+                _seed_pending_downloads(mdl_dir, _pending_movie_downloads)
+            except OSError as exc:
+                emit(f"Download startup scan failed: {exc}")
     if dl_enabled and vstage_raw:
         vstage_dir = Path(vstage_raw)
         if vstage_dir.exists():

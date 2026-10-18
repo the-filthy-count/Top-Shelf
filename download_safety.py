@@ -7,10 +7,20 @@ class PartialDownloadPending(RuntimeError):
     pass
 
 
-def require_complete_download(entry):
+def require_complete_download(entry, *, shared_root=False):
     entry = Path(entry)
     if entry.name.lower().endswith('.part'):
         raise PartialDownloadPending(f'Waiting for partial download: {entry.name}')
+    if shared_root and entry.is_file():
+        # Loose files in staging are independent downloads, not one release.
+        # Preserve the default recursive check for files inside release folders.
+        related = {entry.name.lower() + '.part', entry.stem.lower() + '.part'}
+        try:
+            if any(child.name.lower() in related for child in entry.parent.iterdir()):
+                raise PartialDownloadPending(f'Waiting for partial download: {entry.name}')
+        except OSError as error:
+            raise PartialDownloadPending(f'Cannot verify download directory: {error}') from error
+        return
     # A directly queued video must also respect unfinished siblings.
     root = entry if entry.is_dir() else entry.parent
     def failed(error):
