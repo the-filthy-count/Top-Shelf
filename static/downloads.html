@@ -656,51 +656,21 @@
     white-space: normal;
     overflow-wrap: anywhere;
   }
-  .dl-tile-chips .dl-tile-chip-cat {
-    /* Category chip — reads as part of the tile surface (matching the
-     * panel's translucency) rather than a darker sticker layered on
-     * top. A 1px bottom border separates it cleanly from the 2-col
-     * stat chips below, mirroring the divider rhythm of every other
-     * stacked element in the tile. */
-    background: linear-gradient(160deg,
-      rgba(255, 255, 255, 0.04) 0%,
-      rgba(255, 255, 255, 0.02) 50%,
-      rgba(var(--brand-accent-rgb), 0.08) 100%);
-    border-left-width: 4px;
-    border-bottom: 1px solid rgba(var(--brand-accent-rgb), 0.18);
-    border-radius: 8px 8px 0 0;
-    margin-bottom: 2px;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.20);
-  }
   .dl-tile-chip {
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 7px 11px 7px 9px;
+    padding: 10px 12px;
+    min-height: 36px;
     border-radius: 8px;
     font-family: var(--mono);
     font-size: var(--text-small);
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--text);
-    /* Burned-in glass pill — recessed into the tile surface.
-     * Inverted bevel (dark inner highlight on top, light catch on
-     * the bottom edge), darker translucent gradient, and a soft
-     * outer top shadow that suggests the pill is sunk below the
-     * surrounding surface. The left accent stripe still carries the
-     * meaning colour. */
-    background: linear-gradient(160deg,
-      rgba(0, 0, 0, 0.35) 0%,
-      rgba(0, 0, 0, 0.22) 50%,
-      rgba(var(--brand-purple-rgb), 0.10) 100%);
-    border: none;
-    border-left: 3px solid rgba(var(--brand-purple-rgb), 0.55);
-    box-shadow:
-      inset 0 2px 4px rgba(0, 0, 0, 0.55),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.05),
-      inset 0 1px 0 rgba(0, 0, 0, 0.45);
+    background: linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.015));
+    border: 1px solid rgba(255,255,255,.09);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1347,6 +1317,23 @@
     filter:drop-shadow(0 0 3px var(--tube-color)) drop-shadow(0 0 7px var(--tube-color));
   }
   .led-tube {filter:none;}
+
+  #rows .dl-tile-chips {gap:8px;padding-top:10px;}
+  #rows .dl-tile-chip {border-left-width:1px;text-shadow:none;line-height:1.35;}
+  #rows .dl-tile-chip-cat {
+    background:rgba(var(--brand-accent-rgb),.07);
+    border-color:rgba(var(--brand-accent-rgb),.16);
+    border-radius:8px;
+    color:var(--text);
+    margin:0;
+  }
+  #rows .dl-tile-chip-cat .dl-tile-chip-ico {color:var(--accent);}
+  #rows .dl-tile-chip-status {border-color:rgba(255,255,255,.09);}
+  #rows .dl-tile-chip-status::before {content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;}
+  #rows .complete .dl-tile-chip-status {color:#8de5b0;background:rgba(77,190,118,.07);}
+  #rows .dl-failed .dl-tile-chip-status {color:#ff9393;background:rgba(235,87,87,.07);}
+  #rows .dl-tile-chip-wide {background:rgba(0,0,0,.10);color:var(--dim);}
+
 </style>
 <link rel="stylesheet" href="/static/mobile.css?v=20260930-desktop-scale">
 <link rel="stylesheet" href="/static/design-system.css?v=20261011-toggle-layer-fix">

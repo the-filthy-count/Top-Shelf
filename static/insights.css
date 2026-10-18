@@ -51,3 +51,73 @@ html[data-theme] body #insights-page button.insights-help:active {
 .analysis-bars{list-style:none;padding:0;margin:0}.analysis-bars li{position:relative;display:flex;justify-content:space-between;gap:12px;padding:10px;margin:7px 0;background:linear-gradient(to right,color-mix(in srgb,var(--accent) 22%,transparent) var(--bar),transparent var(--bar));border-left:3px solid var(--accent);overflow-wrap:anywhere}.analysis-bars strong{flex-shrink:0}.analysis-pie{width:min(240px,100%);aspect-ratio:1;border-radius:50%;margin:auto;border:1px solid var(--accent)}
 .insights-analysis select{max-width:100%;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--accent);border-radius:6px}
 @media(max-width:650px){.insights-analysis{padding:18px}.analysis-summary{grid-template-columns:1fr 1fr}.analysis-columns{grid-template-columns:1fr}.insights-analysis th,.insights-analysis td{padding:7px 4px}}
+
+/* Charts use readable typography, with labels outside the data marks. */
+.insights-analysis .analysis-bars,
+.insights-analysis table,
+.insights-analysis .analysis-summary,
+.insights-analysis .analysis-note,
+.insights-analysis .analysis-pie-total {
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:15px;line-height:1.5;text-transform:none;letter-spacing:normal;
+}
+.insights-analysis .analysis-note {color:#b9c4cd;}
+.insights-analysis .analysis-bars li {display:block;background:none;border:0;padding:0;margin:0 0 20px;}
+.analysis-bar-heading {display:flex;align-items:baseline;justify-content:space-between;gap:20px;margin-bottom:7px;}
+.analysis-bar-name {display:flex;align-items:center;gap:10px;color:#edf2f6;}
+.analysis-bar-name::before {content:'';width:10px;height:10px;border-radius:3px;background:var(--chart-color);flex-shrink:0;}
+.analysis-bar-values {display:flex;gap:14px;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.analysis-bar-values strong {font:600 16px system-ui,sans-serif;color:#fff;}
+.analysis-bar-values>span {min-width:52px;text-align:right;color:#bdc9d3;}
+.analysis-bar-track {height:9px;border-radius:5px;background:#30383e;overflow:hidden;}
+.analysis-bar-track::before {content:'';display:block;width:var(--bar);height:100%;background:var(--chart-color);border-radius:inherit;}
+.analysis-pie {position:relative;border:0;width:min(260px,100%);box-shadow:0 0 0 1px #ffffff18;}
+.analysis-pie::before {content:'';position:absolute;inset:25%;border-radius:50%;background:#171b1e;}
+.insights-analysis .analysis-pie-total {position:absolute;inset:25%;display:flex;align-items:center;justify-content:center;text-align:center;white-space:pre-line;color:#f1f5f8;font-weight:600;}
+@media(max-width:650px){.analysis-bar-heading{gap:10px}.analysis-bar-values{gap:8px}.analysis-pie{width:200px}}
+
+/* Editorial profile: biography first, measurements attached to the figure. */
+.composite-bio,.composite-ratios {padding:22px 0;border-bottom:1px solid #ffffff18;}
+.composite-bio .traits {grid-template-columns:repeat(5,minmax(0,1fr));gap:20px;}
+.composite-ratios .traits {grid-template-columns:repeat(2,minmax(0,1fr));}
+.composite .traits>div {padding:8px 0;border:0;}
+.composite .traits dt {font:12px/1.4 system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;}
+.composite .traits dd {font:500 18px/1.4 system-ui,sans-serif;}
+html body #insights-page button.trait-analysis,
+html body #insights-page button.trait-analysis:hover,
+html body #insights-page button.trait-analysis:active {
+ background:none!important;border:0!important;box-shadow:none!important;border-radius:0!important;
+ padding:0!important;min-height:0!important;width:auto!important;min-width:0!important;
+ font:inherit!important;text-transform:none!important;text-decoration:none;letter-spacing:normal;
+}
+#insights-page button.trait-analysis::before,#insights-page button.trait-analysis::after{display:none!important;}
+#insights-page button.trait-analysis:hover {text-decoration:underline;text-underline-offset:4px;}
+#insights-page button.trait-analysis:focus-visible {outline:2px solid var(--accent);outline-offset:5px;}
+.physical-heading{margin:26px 0 0;}
+.composite-layout {position:relative;grid-template-columns:minmax(140px,1fr) 380px minmax(140px,1fr);gap:48px;padding:24px 0;align-items:start;}
+.composite-layout .traits {gap:20px;position:relative;z-index:1;padding-top:10px;}
+.composite-layout .figure-wrap {position:relative;z-index:1;}
+#body-view {width:380px;height:618px;}
+.body-callouts {position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;}
+.body-callouts path {fill:none;stroke:var(--accent);stroke-opacity:.65;stroke-width:1.2;}
+.body-callouts circle {fill:var(--accent);}
+#traits-right [data-field=hair_color]{order:0;}#traits-right [data-field=eye_color]{order:1;}#traits-right [data-field=cup_size]{order:2;}
+@media(max-width:1000px){.composite-layout{gap:30px;grid-template-columns:minmax(120px,1fr) 280px minmax(120px,1fr)}#body-view{width:280px;height:455px}.composite-bio .traits{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:800px){.body-callouts{display:none}.composite-layout{grid-template-columns:1fr 1fr;gap:24px}.composite-layout .figure-wrap{grid-column:1/-1;grid-row:1}.composite-bio .traits{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Compact anatomical annotations, aligned with their target instead of a list. */
+.composite-layout {max-width:940px;margin:auto;grid-template-columns:190px 380px 190px;gap:60px;justify-content:center;}
+.composite-layout .traits {height:618px;padding:0;display:block;}
+.composite-layout .traits>div {position:absolute;left:0;right:0;padding:0;}
+#traits-left {text-align:right;}
+#insights-page a.trait-analysis {display:inline-block;width:auto;padding:0;border:0;background:none;box-shadow:none;font:500 20px/1.4 system-ui,sans-serif;text-decoration:none;color:var(--text);cursor:pointer;}
+#insights-page a.trait-analysis:hover {color:var(--accent);text-decoration:underline;text-underline-offset:4px;}
+#insights-page a.trait-analysis:focus-visible {outline:2px solid var(--accent);outline-offset:4px;}
+.composite-bio .traits {gap:24px;}
+.composite-bio .traits dt,.composite-layout .traits dt {font-size:12px;margin-bottom:5px;}
+.body-callouts path {stroke:#92b6bd;stroke-opacity:.55;stroke-width:1;}
+.body-callouts circle {fill:#92b6bd;}
+@media(min-width:801px) and (max-width:1100px){.composite-layout{grid-template-columns:150px 280px 150px;gap:28px}.composite-layout .traits{height:455px}#body-view{width:280px;height:455px}}
+@media(max-width:800px){.composite-layout{grid-template-columns:1fr 1fr;gap:24px}.composite-layout .traits{height:auto;display:grid;gap:22px}.composite-layout .traits>div{position:static}#traits-left{text-align:left}}
+
+.composite-ratios .traits{grid-template-columns:repeat(3,minmax(0,1fr))}@media(max-width:800px){.composite-ratios .traits{grid-template-columns:1fr}}

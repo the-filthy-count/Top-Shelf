@@ -13,7 +13,17 @@
   dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)close();}});
   function section(title){const s=el('section');s.append(el('h3',title));dialog.append(s);return s;}
   function table(root,headers,rows){const t=el('table'),head=el('thead'),tr=el('tr');headers.forEach(x=>tr.append(el('th',x)));head.append(tr);t.append(head);const b=el('tbody');rows.forEach(row=>{const r=el('tr');row.forEach(x=>r.append(el('td',x)));b.append(r);});t.append(b);root.append(t);}
-  function bars(root,rows,denominator){const list=el('ol',null,'analysis-bars');const max=Math.max(1,...rows.map(r=>r.count));rows.forEach(row=>{const li=el('li');li.style.setProperty('--bar',row.count/max*100+'%');li.append(el('span',row.name),el('strong',fmt(row.count)+(denominator?' · '+(row.count/denominator*100).toFixed(1)+'%':'')));list.append(li);});root.append(list);}
+  const chartColors=['#5bc8ff','#ffb65b','#b69bff','#64d6aa','#f58fae','#a5b1c2'];
+  function bars(root,rows,denominator,colored=false){
+    const list=el('ol',null,'analysis-bars');const max=Math.max(1,...rows.map(r=>r.count));
+    rows.forEach((row,i)=>{
+      const li=el('li');li.style.setProperty('--bar',row.count/max*100+'%');li.style.setProperty('--chart-color',colored?chartColors[i%chartColors.length]:chartColors[0]);
+      const heading=el('div',null,'analysis-bar-heading');
+      const name=el('span',row.name,'analysis-bar-name');
+      const value=el('span',null,'analysis-bar-values');value.append(el('strong',fmt(row.count)),el('span',denominator?(row.count/denominator*100).toFixed(1)+'%':''));
+      heading.append(name,value);li.append(heading,el('div',null,'analysis-bar-track'));list.append(li);
+    });root.append(list);
+  }
   window.openInsightsAnalysis=({profile:p,group,field,kind,label,method})=>{
     if(dialog.open)close();opener=document.activeElement;dialog.replaceChildren();
     const header=el('header');const title=el('h2',label+' analysis');title.id='analysis-title';const button=el('button','×','analysis-close');button.type='button';button.setAttribute('aria-label','Close analysis');button.addEventListener('click',close);header.append(title,button);dialog.append(header);
@@ -41,8 +51,8 @@
       }else section('National reference').append(el('p','No comparable national reference is included for this trait.'));
     }else{
       const counts=detail.slice(0,5),rest=detail.slice(5).reduce((s,r)=>s+r.count,0);if(rest)counts.push({name:'Other recorded values',count:rest});
-      const chart=section('Composition');const layout=el('div',null,'analysis-columns');const pie=el('div',null,'analysis-pie');pie.setAttribute('role','img');pie.setAttribute('aria-label',counts.map(r=>`${r.name}: ${(r.count/v.samples*100).toFixed(1)}%`).join(', '));let cursor=0;const stops=counts.map((r,i)=>{const end=cursor+r.count/v.samples*100;const color=`color-mix(in srgb,var(--accent) ${100-i*13}%,var(--bg))`;const stop=`${color} ${cursor}% ${end}%`;cursor=end;return stop;});pie.style.background=`conic-gradient(${stops.join(',')})`;layout.append(pie);const legend=el('div');bars(legend,counts,v.samples);layout.append(legend);chart.append(layout);
-      const all=section('Recorded values');table(all,['Value','Performers','Share of recorded'],detail.map(r=>[r.name,fmt(r.count),(r.count/v.samples*100).toFixed(1)+'%']));all.append(el('p','Missing values are excluded from percentages. Labels reflect saved metadata; equivalent provider terms may be recorded separately.','analysis-note'));
+      const chart=section('Composition');const layout=el('div',null,'analysis-columns');const pie=el('div',null,'analysis-pie');pie.setAttribute('role','img');pie.setAttribute('aria-label',counts.map(r=>`${r.name}: ${(r.count/v.samples*100).toFixed(1)}%`).join(', '));let cursor=0;const stops=counts.map((r,i)=>{const end=cursor+r.count/v.samples*100;const color=chartColors[i%chartColors.length];const stop=`${color} ${cursor}% ${end}%`;cursor=end;return stop;});pie.style.background=`conic-gradient(${stops.join(',')})`;pie.append(el('span',fmt(v.samples)+'\nrecorded','analysis-pie-total'));layout.append(pie);const legend=el('div');bars(legend,counts,v.samples,true);layout.append(legend);chart.append(layout);
+      const all=section('Recorded values');table(all,['Value','Performers','Share of recorded'],detail.map(r=>[r.name,fmt(r.count),(r.count/v.samples*100).toFixed(1)+'%']));all.append(el('p','Missing values are excluded from percentages. Known country codes and nationality labels are grouped together. Other labels reflect saved metadata.','analysis-note'));
     }
     dialog.showModal();dialog.scrollTop=0;
   };

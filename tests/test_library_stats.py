@@ -4,6 +4,18 @@ from datetime import date
 from library_stats import build, height_cm, profile
 
 class InsightsTests(unittest.TestCase):
+    def test_country_codes_names_and_demonyms_are_one_group(self):
+        values=['US','American','United States','USA','RU','Russian','Russia','JP','Japanese','JPN',' GB ','British','unknown','']
+        result=profile([{'country':v} for v in values],date.today())
+        counts={v['name']:v['count'] for v in result['analysis']['categorical']['country']}
+        self.assertEqual(counts,{'United States':4,'Russia':3,'Japan':3,'United Kingdom':2})
+        self.assertEqual(result['categorical']['country']['samples'],12)
+        self.assertEqual(result['categorical']['country']['values'],['United States'])
+
+    def test_unrecognized_country_values_are_retained(self):
+        result=profile([{'country':'Unlisted place'},{'country':' unlisted  place '}],date.today())
+        self.assertEqual(result['analysis']['categorical']['country'],[{'name':'Unlisted Place','count':2}])
+
     def test_analysis_distribution_and_paired_ratios(self):
         p=profile([{'folder_name':'A','height':'160','measurements':'34C-26-36'},
                    {'folder_name':'B','height':'180'},

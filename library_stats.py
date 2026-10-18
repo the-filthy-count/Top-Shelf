@@ -1,4 +1,5 @@
 """Read-only library statistics. No media/filesystem scans or remote requests."""
+from country_names import normalise_country
 from collections import Counter, defaultdict
 from datetime import date, datetime, timezone
 import json
@@ -175,10 +176,10 @@ def profile(rows, today):
             if len(values)>previous[field]: people[field].append({'name':row.get('folder_name') or row.get('name') or 'Unnamed performer','value':round(values[-1],2)})
         for field, counts in categories.items():
             raw = str(row.get(field) or '').strip()
-            normalized = key(raw)
+            normalized = normalise_country(raw) if field == 'country' else key(raw)
             if normalized and normalized not in {'unknown', 'n/a', 'none', 'null', 'unspecified'}:
                 counts[normalized] += 1
-                labels.setdefault((field, normalized), raw.replace('_',' ').title())
+                labels.setdefault((field, normalized), (normalized if field == 'country' else raw).replace('_',' ').title())
     return {
         'population': len(rows),
         'analysis': {'numeric':{field:numeric_analysis(values,people[field]) for field,values in numeric.items()},
