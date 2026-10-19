@@ -1752,8 +1752,15 @@
 
   function neonProgressSvg(value, unknown=false) {
     const pct=Math.max(0,Math.min(100,Number(value)||0));
-    const arc=pct>0?`<circle class="led-tube" cx="100" cy="100" r="94" pathLength="100" stroke-dasharray="${pct} 100" transform="rotate(-90 100 100)"/><circle class="led-core" cx="100" cy="100" r="94" pathLength="100" stroke-dasharray="${pct} 100" transform="rotate(-90 100 100)"/>`:'';
-    const line=pct>0?`<path class="led-tube" d="M6 7H214" pathLength="100" stroke-dasharray="${pct} 100"/><path class="led-core" d="M6 7H214" pathLength="100" stroke-dasharray="${pct} 100"/>`:'';
+    // Use geometry rather than dash lengths: non-scaling strokes can leave
+    // scaled SVG dashes short of the circumference, even at 100%.
+    const angle=pct/100*Math.PI*2;
+    const x=100+94*Math.sin(angle), y=100-94*Math.cos(angle);
+    const shape=pct>=100 ? 'circle cx="100" cy="100" r="94"'
+      : `path d="M100 6 A94 94 0 ${pct>50?1:0} 1 ${x} ${y}"`;
+    const arc=pct>0?`<${shape} class="led-tube"/><${shape} class="led-core"/>`:'';
+    const end=6+208*pct/100;
+    const line=pct>0?`<path class="led-tube" d="M6 7H${end}"/><path class="led-core" d="M6 7H${end}"/>`:'';
     return `<svg class="led-ring${unknown?' led-pending':''}" viewBox="0 0 200 200" aria-hidden="true"><circle class="led-track" cx="100" cy="100" r="94"/>${arc}</svg><svg class="led-line${unknown?' led-pending':''}" viewBox="0 0 220 14" preserveAspectRatio="none" aria-hidden="true"><path class="led-track" d="M6 7H214"/>${line}</svg>`;
   }
 
