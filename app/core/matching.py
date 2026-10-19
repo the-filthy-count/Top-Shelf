@@ -89,21 +89,12 @@ def _extract_trailing_index_from_filename(filename: str) -> int | None:
 
 
 def _release_name_with_folders(filename: str) -> str:
-    """Return the filename's stem with any parent folder(s) folded in as
-    leading tokens. Mirrors what `_build_queue_snapshot` does when it
-    computes a library guess for a queue row (main.py:16164-16167): a
-    file living under ``Megan Mistakes/dirty talkin.mp4`` should carry
-    the folder name into name-search / performer detection, otherwise
-    the parent-folder performer signal is discarded.
-    """
+    """Include parent names, keeping boundaries so names cannot span folders."""
     if not filename:
         return ""
-    p = Path(filename)
-    stem = p.stem
-    parent = p.parent.as_posix()
-    if parent in ("", "."):
-        return stem
-    return f"{parent.replace('/', ' ')} {stem}"
+    path = Path(filename.replace("\\", "/"))
+    return "/".join((*path.parts[:-1], path.stem))
+
 
 
 

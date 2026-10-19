@@ -5627,6 +5627,25 @@ def _strip_title_noise(title: str) -> str:
 
 
 def parse_filename(filename: str, settings: dict) -> dict:
+    from filename_dates import extract_filename_date
+    result = _parse_filename_parts(filename, settings)
+    parsed, token = extract_filename_date(Path(filename).stem)
+    if parsed:
+        result["date"] = parsed
+        # The fallback title includes the original date; remove it after parsing.
+        for variant in (token, token.replace(".", " ").replace("_", " ")):
+            result["title"] = result["title"].replace(variant, " ")
+        result["title"] = re.sub(r"\s+", " ", result["title"]).strip(" -_.")
+    elif result.get("date"):
+        raw = result["date"]
+        try:
+            datetime.strptime(raw, "%Y" if len(raw) == 4 else "%Y-%m-%d")
+        except ValueError:
+            result["date"] = ""
+    return result
+
+
+def _parse_filename_parts(filename: str, settings: dict) -> dict:
     """
     Attempt to extract site, date, performers, and title from a filename.
     Returns a dict with keys: site, date, performers, title (all may be empty).
@@ -5714,7 +5733,7 @@ def parse_filename(filename: str, settings: dict) -> dict:
 
         # site - YYYY-MM-DD - title
         elif pattern == "dash_date":
-            m = re.match(r'^(.+?)\s*[-–]\s*(20\d{2}|19\d{2}-\d{2}-\d{2})\s*[-–]\s*(.+)$', stem)
+            m = re.match(r'^(.+?)\s*[-–]\s*((?:20\d{2}|19\d{2})-\d{2}-\d{2})\s*[-–]\s*(.+)$', stem)
             if m:
                 result["site"]  = expand_abbrev(m.group(1).strip())
                 result["date"]  = m.group(2).strip()
@@ -8511,7 +8530,7 @@ def _submit_scene_phash_after_filing(source: str, scene_id: str, filename: str) 
 def _file_scene_from_match_impl(video: Path, scene: dict, source: str = "") -> dict:
     filename = video.name
     settings = db.get_settings()
-    scene = _merge_filename_performers_into_scene(scene, filename)
+    # Keep confirmed cast intact; filename guesses are search hints, not cast metadata.
     # Preserve BTS / Bloopers / Outtakes (etc.) markers picked off the
     # source filename so the filed destination + NFO carry the label.
     # The UI sets ``_extra_kind`` explicitly (including an empty string
@@ -8821,22 +8840,7 @@ def process_single(video: Path) -> dict:
 
     if not matches:
         emit("  Lookup: no match found")
-        # Phash missed — but the filename tokeniser may still recognise a
-        # library performer / studio. Use the same group-into-subfolder
-        # mechanism the ``no_dir`` path uses so an unmatched-but-hinted
-        # file lands in ``<source_dir>/<canonical>/<file>`` right on Run
-        # instead of waiting for the next snapshot's auto-group sweep.
-        priority_names: list[str] = []
-        studio_hint = ""
-        try:
-            guess = db._library_guess_from_release_name(_release_name_with_folders(filename))
-            priority_names = [p for p in (guess.get("performers") or []) if p]
-            studio_hint = (guess.get("studio") or "").strip()
-        except Exception:
-            pass
-        video, filename = _group_video_into_hint_subfolder(
-            video, filename, settings, priority_names, studio_hint,
-        )
+        # Unconfirmed filename hints must not move files into identity folders.
         db.update_file(filename, status="unmatched")
         #: Pre-warm the queue thumbnail filmstrip so when the user
         #: opens this row to investigate, the frames are already on
@@ -17577,7 +17581,7 @@ def _resolve_library_folder_name(candidate_name: str, kind: str) -> str:
 def _pick_queue_group_name_from_row(row: dict) -> str:
     """Extract a preferred studio or performer name from a processed_files
     row and resolve it to a library-canonical folder name. Prefers a
-    real pipeline match, falls back to the library-index guess. Within
+    real pipeline match; filename guesses never move files. Within
     each layer, **studio/series wins over performer** — matches how the
     real filing plan routes, so an unmatched file staged into a subdir
     while it waits for a scene match lands under the same folder it
@@ -17587,7 +17591,6 @@ def _pick_queue_group_name_from_row(row: dict) -> str:
         return ""
     for performers_key, studio_key in (
         ("performers", "match_studio"),
-        ("guess_performers", "guess_studio"),
     ):
         studio_str = (row.get(studio_key) or "").strip()
         if studio_str:
@@ -17922,16 +17925,8 @@ def _build_queue_snapshot() -> dict:
     filed_skipped = 0
     for rel, f in rel_entries:
         f_stem = Path(rel).stem
-        # Folder components as extra tokens for the guess pass — a file
-        # nested under ``Jane Smith/scene.mp4`` gets ``Jane Smith`` merged
-        # into the release name so the tokeniser can match the performer
-        # or studio. Root-level files (``rel == basename``) contribute no
-        # extra tokens.
-        folder_prefix = Path(rel).parent.as_posix()
-        if folder_prefix in ("", "."):
-            guess_release_name = f_stem
-        else:
-            guess_release_name = f"{folder_prefix.replace('/', ' ')} {f_stem}"
+        # Parent names contribute independently; never join name words across paths.
+        guess_release_name = _release_name_with_folders(rel)
         # Path-based JAV detection: entries folded in from the JAV
         # download watch dir are prefixed `JAV/…` above, and their
         # status lives in processed_movies (the movie pipeline writes

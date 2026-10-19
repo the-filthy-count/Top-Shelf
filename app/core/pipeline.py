@@ -172,24 +172,7 @@ class ProcessingPipeline:
 
         if not matches:
             self.emit("  Lookup: no match found")
-            # Phash missed — but the filename tokeniser may still
-            # recognise a library performer / studio. Reuse the same
-            # group-into-subfolder mechanism the ``no_dir`` path uses so
-            # an unmatched-but-hinted file lands in
-            # ``<source_dir>/<canonical>/<file>`` right on Run instead
-            # of waiting for the next snapshot's auto-group sweep.
-            group_hint = self.callbacks.get("group_video_into_hint_subfolder")
-            if callable(group_hint):
-                try:
-                    guess = db._library_guess_from_release_name(_release_name_with_folders(filename))
-                    perfs = [p for p in (guess.get("performers") or []) if p]
-                    studio_hint = (guess.get("studio") or "").strip()
-                except Exception:
-                    perfs, studio_hint = [], ""
-                self.state["pipeline_phase"] = "Grouping files"
-                _, filename = await asyncio.to_thread(
-                    group_hint, video, filename, settings, perfs, studio_hint,
-                )
+            # Unconfirmed filename hints must not move files into identity folders.
             db.update_file(filename, status="unmatched")
             # These two callbacks fire-and-forget (thumb prewarm + async
             # name-search), but call them off-thread anyway so any sync

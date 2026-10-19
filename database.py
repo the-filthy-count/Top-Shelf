@@ -3749,7 +3749,7 @@ def library_match_generation() -> str:
             "SELECT MAX(last_fetched_at) AS m, COUNT(*) AS n "
             "FROM studio_logos WHERE logo_path IS NOT NULL"
         ).fetchone()
-    return "{}:{}:{}:{}:{}:{}".format(
+    return "exact-path-names-v4:{}:{}:{}:{}:{}:{}".format(
         (fav_p["m"] if fav_p else "") or "",
         (fav_p["n"] if fav_p else 0) or 0,
         (fav_s["m"] if fav_s else "") or "",
@@ -4792,7 +4792,13 @@ def _library_guess_from_release_name(
             studio = display
             best_studio_len = len(slug_key)
 
-    release_tokens = _tokenize_for_match(release_name)
+    # Keep a non-name boundary between path components. A folder ending in
+    # "Dare" and a filename starting in "Taylor" must not invent Dare Taylor.
+    release_tokens = []
+    for component in re.split(r"[/\\]", release_name):
+        if release_tokens:
+            release_tokens.append("\x00")
+        release_tokens.extend(_tokenize_for_match(component))
     perfs: list[str] = []
     if release_tokens and performer_index:
         # Track token ranges already claimed by a matched performer so
@@ -4812,15 +4818,27 @@ def _library_guess_from_release_name(
         for ptokens, display, row_id in performer_index:
             if row_id in matched_row_ids:
                 continue
-            n = len(ptokens)
-            if n == 0 or n > len(release_tokens):
+            wanted = "".join(ptokens)
+            if not wanted:
                 continue
-            for i in range(len(release_tokens) - n + 1):
-                if release_tokens[i:i + n] == list(ptokens):
-                    if not _overlaps(i, i + n - 1):
-                        used.append((i, i + n - 1))
-                        matched_row_ids.add(row_id)
-                        perfs.append(display)
+            found = False
+            for i in range(len(release_tokens)):
+                joined = ""
+                for end in range(i, len(release_tokens)):
+                    token = release_tokens[end]
+                    if token == "\x00":
+                        break
+                    joined += token
+                    if not wanted.startswith(joined):
+                        break
+                    if joined == wanted:
+                        if not _overlaps(i, end):
+                            used.append((i, end))
+                            matched_row_ids.add(row_id)
+                            perfs.append(display)
+                        found = True
+                        break
+                if found:
                     break
     return {"studio": studio, "performers": perfs}
 
@@ -4928,8 +4946,13 @@ def _build_library_match_indexes() -> tuple[list[tuple[str, str]], list[tuple[tu
                 s = (name_str or "").strip()
                 if not s:
                     return
-                tokens = tuple(_tokenize_for_match(s))
+                tokens = tuple(_tokenize_for_match(s, release=False))
                 if not tokens:
+                    return
+                canonical_tokens = tuple(_tokenize_for_match(folder_name, release=False))
+                # Reordered names can identify entirely different people.
+                # Do not import a reverse-name alias as equivalent identity.
+                if alias_safe and tokens != canonical_tokens and sorted(tokens) == sorted(canonical_tokens):
                     return
                 # Min char-length stays at 5 so pathological 1-2 letter
                 # tokens (stray initials) don't match.
@@ -5037,7 +5060,7 @@ _TOKEN_SPLIT_RE = re.compile(
 )
 
 
-def _tokenize_for_match(name: str) -> list[str]:
+def _tokenize_for_match(name: str, *, release: bool = True) -> list[str]:
     """Lowercase alnum tokens with dot/camelCase/digit-boundary awareness.
 
     Used by performer matching so "Ana Rose" does NOT match "Alana Rose"
@@ -5049,12 +5072,12 @@ def _tokenize_for_match(name: str) -> list[str]:
     if not name:
         return []
     s = name.strip()
-    if "." in s:
-        stem, ext = s.rsplit(".", 1)
-        if 1 <= len(ext) <= 5 and ext.isalnum():
-            s = stem
-    s = re.sub(r"-[a-z0-9]{1,20}$", "", s, flags=re.IGNORECASE)
-    s = _RELEASE_TAG_RE.sub(" ", s)
+    if release:
+        if "." in s:
+            stem, ext = s.rsplit(".", 1)
+            if ext.lower() in {"mp4", "mkv", "avi", "mov", "wmv", "m4v", "webm", "ts", "mpg", "mpeg"}:
+                s = stem
+        s = _RELEASE_TAG_RE.sub(" ", s)
     parts = _TOKEN_SPLIT_RE.split(s)
     return [p.lower() for p in parts if p]
 
