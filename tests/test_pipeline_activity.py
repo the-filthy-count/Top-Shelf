@@ -26,7 +26,14 @@ class PipelineActivityTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(state['current_file'],'clip.mp4')
                 return {'status':'unmatched'}
             owner=SimpleNamespace(state=state,lock=threading.Lock(),emit=Mock(),flush_emit_buffer=Mock(),process_single=process)
-            await env['run_pipeline'](owner,['clip.mp4'])
+            # Simulate queue grouping owning the lock when Run is clicked.
+            owner.lock.acquire()
+            state['running'] = True
+            task = asyncio.create_task(env['run_pipeline'](owner,['clip.mp4']))
+            await asyncio.sleep(.02)
+            self.assertFalse(task.done(), 'Run must not be silently discarded')
+            owner.lock.release()
+            await asyncio.wait_for(task, 2)
             self.assertNotEqual(seen[0][0],loop_thread)
             self.assertEqual(seen[0][1],'Scanning files')
             self.assertFalse(state['running']);self.assertIsNone(state['pipeline_phase'])

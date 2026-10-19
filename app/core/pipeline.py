@@ -209,8 +209,13 @@ class ProcessingPipeline:
         )
 
     async def run_pipeline(self, filenames: list = None) -> None:
-        if not self.lock.acquire(blocking=False):
-            return
+        # Queue snapshot grouping briefly shares this lock. The HTTP handler
+        # has already marked the request running; dropping it here would leave
+        # that flag set forever without an actual matching worker.
+        # Poll asynchronously rather than blocking the event loop or occupying
+        # an executor thread needed by the current lock owner.
+        while not self.lock.acquire(blocking=False):
+            await asyncio.sleep(.25)
 
         try:
             self.state["pipeline_phase"] = "Scanning files"

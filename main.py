@@ -18459,7 +18459,7 @@ async def get_status():
     return {
         "running": processing_state["running"],
         "current_file": processing_state["current_file"],
-        "pipeline_phase": processing_state.get("pipeline_phase") or "Matching",
+        "pipeline_phase": processing_state.get("pipeline_phase") or ("Preparing files" if not processing_state.get("pipeline_total") else "Matching"),
         "pipeline_total": int(processing_state.get("pipeline_total") or 0),
         "pipeline_done": int(processing_state.get("pipeline_done") or 0),
         "manual_queue_pending": len(snap["pending"]),
@@ -18680,7 +18680,7 @@ async def api_activity_banner():
     return {
         "running": processing_state["running"],
         "current_file": processing_state["current_file"] or "",
-        "pipeline_phase": processing_state.get("pipeline_phase") or "Matching",
+        "pipeline_phase": processing_state.get("pipeline_phase") or ("Preparing files" if not processing_state.get("pipeline_total") else "Matching"),
         "pipeline_total": int(processing_state.get("pipeline_total") or 0),
         "pipeline_done": int(processing_state.get("pipeline_done") or 0),
         "notifications": db.notifications_fetch_active(limit=8),
@@ -19582,6 +19582,10 @@ async def run_all(background_tasks: BackgroundTasks):
     # race ahead of run_pipeline and miss the running→idle transition that
     # triggers the queue refresh in the UI. run_pipeline sets this again
     # inside its own try block — idempotent.
+    processing_state["pipeline_phase"] = "Waiting to start"
+    processing_state["pipeline_total"] = 0
+    processing_state["pipeline_done"] = 0
+    processing_state["current_file"] = None
     processing_state["running"] = True
     background_tasks.add_task(run_pipeline, None)
     return {"started": True}
@@ -19597,6 +19601,7 @@ async def run_file(filename: str, background_tasks: BackgroundTasks):
         # Flip running=True synchronously so the next /api/status poll
         # cannot race ahead of run_pipeline and miss the running→idle
         # transition that triggers the queue refresh in the UI.
+        processing_state["pipeline_phase"] = "Waiting to start"
         processing_state["running"] = True
         processing_state["pipeline_total"] = 1
         processing_state["pipeline_done"] = 0
