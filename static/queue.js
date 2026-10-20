@@ -2908,14 +2908,17 @@
       const drawVhs = () => {
         if (!img.complete || !img.naturalWidth) return;
         const ratio = Math.min(window.devicePixelRatio || 1, 2);
-        const rect = backdrop.getBoundingClientRect();
-        const width = Math.round(rect.width * ratio);
-        const height = Math.round(rect.height * ratio);
+        // Layout dimensions are unscaled. getBoundingClientRect includes the
+        // app's UI transform, which would shrink the canvas a second time.
+        const cssWidth = backdrop.clientWidth;
+        const cssHeight = backdrop.clientHeight;
+        const width = Math.round(cssWidth * ratio);
+        const height = Math.round(cssHeight * ratio);
         if (!width || !height) return;
         canvas.width = width;
         canvas.height = height;
-        canvas.style.width = rect.width + 'px';
-        canvas.style.height = rect.height + 'px';
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
         const sample = document.createElement('canvas');
