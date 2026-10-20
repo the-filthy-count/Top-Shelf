@@ -27998,7 +27998,7 @@ async def api_performer_popup(
       name      — fallback when no id is known
 
     Resolution order: row_id → stash_id crosswalk → tpdb_id crosswalk
-    → name lookup. If still no library row but tpdb_id is set, the
+    → name lookup only when no external ID was supplied. If still no library row but tpdb_id is set, the
     endpoint fetches the performer from TPDB and uses that to populate
     the popup (so cast clicks on TPDB scenes show real bios + images
     instead of empty stubs). Cached to metadata/performer_popup/
@@ -28013,7 +28013,8 @@ async def api_performer_popup(
     if not (rid_arg or sid_arg or tid_arg or fans_arg or jav_id_arg or name_arg):
         return JSONResponse({"error": "row_id, stash_id, tpdb_id, fansdb_id, javstash_id, or name required"}, status_code=400)
 
-    prefix = "v2_" + ("solo_" if standalone else "")
+    has_external_id = bool(sid_arg or tid_arg or fans_arg or jav_id_arg)
+    prefix = "v3_" + ("solo_" if standalone else "")
     if rid_arg:
         cache_key = f"{prefix}row_{rid_arg}"
     elif sid_arg:
@@ -28074,7 +28075,13 @@ async def api_performer_popup(
             full = db.favourite_get(int(r["id"]))
             if full and full.get("kind") == "performer":
                 row = dict(full)
-    if not row and name_arg and not bypass_library:
+    if not row and (fans_arg or jav_id_arg) and not bypass_library:
+        r = db.favourite_find_performer_folder_by_crosswalk(None, None, fans_arg, jav_id_arg)
+        if r:
+            full = db.favourite_get(int(r["id"]))
+            if full and full.get("kind") == "performer":
+                row = dict(full)
+    if not row and name_arg and not bypass_library and not has_external_id:
         r = db.favourite_lookup_performer_by_name(name_arg)
         if not r:
             r = db.favourite_lookup_performer_by_alias(name_arg)
@@ -28108,7 +28115,7 @@ async def api_performer_popup(
         # The original code only ran name search when id lookup
         # returned None. Run it eagerly when id lookup wouldn't fire
         # at all, otherwise leave to the post-gather conditional.
-        if (not tid_arg) and (not row) and (not sid_arg) and name_arg:
+        if not has_external_id and not row and name_arg:
             return await run_in_threadpool(_tpdb_performer_fetch_by_name, name_arg)
         return None
 
@@ -28196,9 +28203,6 @@ async def api_performer_popup(
 
     # Resolve precedence — preserves original cascade semantics.
     tpdb_data: dict | None = tpdb_by_id or tpdb_by_name_eager
-    if (not tpdb_data) and (not row) and (not sid_arg) and tid_arg and name_arg:
-        # tpdb_by_id was attempted but missed; fall back to name search.
-        tpdb_data = await run_in_threadpool(_tpdb_performer_fetch_by_name, name_arg)
 
     sb_bio: dict | None = sb_from_sid or sb_from_fans_arg
     if not sb_bio and row:
