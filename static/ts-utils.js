@@ -25,7 +25,17 @@
         if (scope.wasOpen && !open) {
           window.tsCancelModalLoads(owner);
           scope.closed = true;
-          el.querySelectorAll('img').forEach(img => { img.onload = null; img.onerror = null; img.removeAttribute('src'); img.removeAttribute('srcset'); });
+          el.querySelectorAll('img').forEach(img => {
+            // Permanent button artwork survives reopening the dialog. Only
+            // record-specific images need their outstanding loads cancelled.
+            const src = img.getAttribute('src') || '';
+            const url = new URL(src, location.href);
+            if (url.origin === location.origin && /^\/static\/(logos|icons)\//.test(url.pathname)) return;
+            img.onload = null;
+            img.onerror = null;
+            img.removeAttribute('src');
+            img.removeAttribute('srcset');
+          });
           el.querySelectorAll('.ts-prowlarr-embed, .mobile-record-downloads').forEach(host => window.unmountEmbeddedProwlarrSearch?.(host));
         }
         scope.wasOpen = open;
