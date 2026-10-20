@@ -17584,15 +17584,27 @@ def _tag_queue_folder_files(root: Path) -> None:
             video = folder / name
             if video.suffix.lower() not in VIDEO_EXTENSIONS or video.is_symlink():
                 continue
-            if name.casefold().startswith(prefix.casefold()) or not _queue_group_hold_ready(video):
+            if not _queue_group_hold_ready(video):
                 continue
-            target = folder / (prefix + name)
+            # Replace stacked leading directory labels from earlier passes.
+            # Download IDs are identity metadata, not directory labels.
+            remainder = name
+            while True:
+                leading = re.match(r"^\[([^\[\]]+)\]\s+", remainder)
+                if not leading or leading.group(1).casefold().startswith("ts-"):
+                    break
+                remainder = remainder[leading.end():]
+            if not remainder or remainder == video.suffix:
+                continue
+            target = folder / (prefix + remainder)
+            if target.name == name:
+                continue
             if len(target.name.encode("utf-8")) > 255 or target.exists():
                 continue
             # Keep exact-stem metadata/subtitles alongside their video.
             companions = [folder / n for n in files if n != name and Path(n).stem == video.stem
                           and Path(n).suffix.lower() not in VIDEO_EXTENSIONS]
-            moves = [(video, target)] + [(p, p.with_name(prefix + p.name)) for p in companions]
+            moves = [(video, target)] + [(p, p.with_name(target.stem + p.suffix)) for p in companions]
             if any(dst.exists() or src.is_symlink() or len(dst.name.encode("utf-8")) > 255 for src, dst in moves):
                 continue
             old_key = video.relative_to(root).as_posix()
