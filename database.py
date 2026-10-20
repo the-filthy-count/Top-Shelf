@@ -3749,7 +3749,7 @@ def library_match_generation() -> str:
             "SELECT MAX(last_fetched_at) AS m, COUNT(*) AS n "
             "FROM studio_logos WHERE logo_path IS NOT NULL"
         ).fetchone()
-    return "exact-path-names-v4:{}:{}:{}:{}:{}:{}".format(
+    return "exact-path-names-v5:{}:{}:{}:{}:{}:{}".format(
         (fav_p["m"] if fav_p else "") or "",
         (fav_p["n"] if fav_p else 0) or 0,
         (fav_s["m"] if fav_s else "") or "",
@@ -5071,7 +5071,8 @@ def _tokenize_for_match(name: str, *, release: bool = True) -> list[str]:
     """
     if not name:
         return []
-    s = name.strip()
+    s = "".join(c for c in unicodedata.normalize("NFKD", name.strip())
+                if not unicodedata.combining(c))
     if release:
         if "." in s:
             stem, ext = s.rsplit(".", 1)

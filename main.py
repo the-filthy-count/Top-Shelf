@@ -17641,6 +17641,7 @@ def _group_queue_root_files_by_hint_locked(source_dir: Path) -> int:
     except Exception:
         guess_cache = {}
     moved = 0
+    library_indexes = None
     for child in source_dir.iterdir():
         try:
             if not child.is_file():
@@ -17655,6 +17656,20 @@ def _group_queue_root_files_by_hint_locked(source_dir: Path) -> int:
         row = guess_cache.get(filename) or guess_cache.get(child.stem) or {}
         group_name = _pick_queue_group_name_from_row(row)
         if not group_name:
+            # Recompute using the current exact-name matcher, never reuse stale
+            # guesses from before the identity-matching fixes.
+            if library_indexes is None:
+                library_indexes = db._build_library_match_indexes()
+            guess = db._library_guess_from_release_name(filename, *library_indexes)
+            group_name = _pick_queue_group_name_from_row({
+                "performers": ", ".join(guess.get("performers") or []),
+                "match_studio": guess.get("studio") or "",
+            })
+        if not group_name:
+            continue
+        try:
+            require_complete_download(child, shared_root=True)
+        except PartialDownloadPending:
             continue
         safe_group = _sanitize_fs_component(group_name)
         if not safe_group:
