@@ -7904,52 +7904,6 @@ def _group_video_into_hint_subfolder(
     return dest, new_filename
 
 
-def _rename_unfiled_match(video: Path, filename: str, settings: dict, plan: dict) -> tuple[Path, str]:
-    """Name a matched queue video without creating a library destination."""
-    root_raw = (settings.get("source_dir") or "").strip()
-    if not root_raw:
-        return video, filename
-    try:
-        root = Path(root_raw).expanduser().resolve()
-        old_key = video.resolve().relative_to(root).as_posix()
-        require_complete_download(video, shared_root=video.resolve().parent == root)
-        parts = [plan.get("studio"), plan.get("date"),
-                 ", ".join(plan.get("perf_names") or []), plan.get("title")]
-        base = _sanitize_fs_component(" - ".join(str(p).strip() for p in parts if p))
-        _, uid = _strip_ts_uid(video.name)
-        if uid:
-            base += f" [ts-{uid}]"
-        # Leave room for the extension under the filesystem byte limit.
-        budget = 240 - len(video.suffix.encode("utf-8"))
-        base = base.encode("utf-8")[:budget].decode("utf-8", "ignore").rstrip(" .")
-        if not base:
-            return video, old_key
-        target = video.with_name(base + video.suffix)
-        new_key = target.relative_to(root).as_posix() if target.is_absolute() else target.resolve().relative_to(root).as_posix()
-        if target == video or target.exists():
-            return video, old_key
-        # Sidecars need a coordinated rename; leave these packages intact.
-        if any(p != video and p.stem == video.stem for p in video.parent.iterdir()):
-            return video, old_key
-        safe_move(video, target)
-        try:
-            if not db.rename_file(old_key, new_key):
-                safe_move(target, video)
-                return video, old_key
-        except Exception:
-            safe_move(target, video)
-            raise
-        try:
-            _carry_queue_thumbs(old_key, new_key)
-        except OSError:
-            pass
-        emit(f"  Named matched queue file: {target.name}")
-        return target, new_key
-    except (OSError, ValueError, PartialDownloadPending) as exc:
-        emit(f"  Queue rename deferred: {exc}")
-        return video, filename
-
-
 def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: str) -> dict:
     """
     Resolve studio/performer route and naming for a stash-box-shaped scene.
@@ -8564,7 +8518,6 @@ def _file_scene_from_match_impl(video: Path, scene: dict, source: str = "") -> d
         video, new_filename = _group_video_into_hint_subfolder(
             video, filename, settings, priority_names, plan.get("studio") or "",
         )
-        video, new_filename = _rename_unfiled_match(video, new_filename, settings, plan)
         db.update_file(
             new_filename,
             status="no_dir",
@@ -17611,12 +17564,67 @@ def _pick_queue_group_name_from_row(row: dict) -> str:
     return ""
 
 
+def _tag_queue_folder_files(root: Path) -> None:
+    """Prefix stable nested queue videos with their immediate directory name."""
+    if not root.is_dir():
+        return
+    root = root.resolve()
+    for directory, dirs, files in os.walk(root, followlinks=False):
+        folder = Path(directory)
+        dirs[:] = [d for d in dirs if not (folder / d).is_symlink()]
+        if folder == root:
+            continue
+        try:
+            require_complete_download(folder)
+        except PartialDownloadPending:
+            dirs[:] = []
+            continue
+        prefix = f"[{folder.name}] "
+        for name in files:
+            video = folder / name
+            if video.suffix.lower() not in VIDEO_EXTENSIONS or video.is_symlink():
+                continue
+            if name.casefold().startswith(prefix.casefold()) or not _queue_group_hold_ready(video):
+                continue
+            target = folder / (prefix + name)
+            if len(target.name.encode("utf-8")) > 255 or target.exists():
+                continue
+            # Keep exact-stem metadata/subtitles alongside their video.
+            companions = [folder / n for n in files if n != name and Path(n).stem == video.stem
+                          and Path(n).suffix.lower() not in VIDEO_EXTENSIONS]
+            moves = [(video, target)] + [(p, p.with_name(prefix + p.name)) for p in companions]
+            if any(dst.exists() or src.is_symlink() or len(dst.name.encode("utf-8")) > 255 for src, dst in moves):
+                continue
+            old_key = video.relative_to(root).as_posix()
+            new_key = target.relative_to(root).as_posix()
+            completed = []
+            try:
+                db.upsert_file(old_key)
+                for src, dst in moves:
+                    safe_move(src, dst)
+                    completed.append((src, dst))
+                if not db.rename_file(old_key, new_key):
+                    raise OSError("queue record could not be renamed")
+            except Exception as exc:
+                for src, dst in reversed(completed):
+                    safe_move(dst, src)
+                emit(f"  Folder tag deferred for {name}: {exc}")
+                continue
+            try:
+                _carry_queue_thumbs(old_key, new_key)
+            except OSError as exc:
+                emit(f"  Folder tag thumbnail cache: {exc}")
+            emit(f"  Folder tag: {new_key}")
+
+
 def _group_queue_root_files_by_hint(source_dir: Path) -> int:
     # Snapshot maintenance must not rename files under an active pipeline.
     if not _pipeline_lock.acquire(blocking=False):
         return 0
     try:
-        return _group_queue_root_files_by_hint_locked(source_dir)
+        moved = _group_queue_root_files_by_hint_locked(source_dir)
+        _tag_queue_folder_files(source_dir)
+        return moved
     finally:
         _pipeline_lock.release()
 
