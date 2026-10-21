@@ -717,6 +717,7 @@
   function setView(kind) {
     _view = kind;
     _favPage = 1;  // each tab starts on its first page
+    _syncFavPageUrl();
     _persistPageState();
     if (typeof tsSetPageTitleText === 'function') {
       tsSetPageTitleText(document.getElementById('favPageTitle'), _FAV_VIEW_TITLES[kind] || 'Library', 'library');
@@ -2545,6 +2546,9 @@
       : `${total} ${kindLabel}`;
 
     if (!list.length) {
+      _favPage = 1;
+      _syncFavPageUrl();
+      _renderFavPager(0);
       grid.innerHTML = `<div class="empty-tile">${_view === 'studio'
         ? 'No studio folders. Set <strong>Series Library Directory</strong> in Settings, then Scan.'
         : _view === 'movie'
@@ -2555,6 +2559,8 @@
       return;
     }
     if (!filtered.length) {
+      _favPage = 1;
+      _syncFavPageUrl();
       grid.innerHTML = '<div class="empty-tile">No folders match these filters.</div>';
       _renderFavPager(0);
       return;
@@ -2566,6 +2572,7 @@
     const totalPages = Math.max(1, Math.ceil(filtered.length / _FAV_PAGE_SIZE));
     if (_favPage > totalPages) _favPage = totalPages;
     if (_favPage < 1) _favPage = 1;
+    _syncFavPageUrl();
     const start = (_favPage - 1) * _FAV_PAGE_SIZE;
     const slice = filtered.slice(start, start + _FAV_PAGE_SIZE);
     // Lazy-render: emit a lightweight placeholder for every row in
@@ -2598,7 +2605,24 @@
   // first-paint in ~20 ms. Page resets to 1 whenever filters or the
   // active tab change so the user doesn't land on an out-of-range page.
   const _FAV_PAGE_SIZE = 100;
-  let _favPage = 1;
+  function _readFavPageUrl() {
+    const raw = new URLSearchParams(window.location.search).get('page') || '';
+    const page = Number(raw);
+    return /^\d+$/.test(raw) && Number.isSafeInteger(page) && page > 0 ? page : 1;
+  }
+  function _syncFavPageUrl(push = false) {
+    const url = new URL(window.location.href);
+    if (_view === 'search') url.searchParams.delete('page');
+    else url.searchParams.set('page', String(_favPage));
+    if (url.href !== window.location.href) {
+      history[push ? 'pushState' : 'replaceState'](history.state, '', url);
+    }
+  }
+  let _favPage = _readFavPageUrl();
+  window.addEventListener('popstate', () => {
+    _favPage = _readFavPageUrl();
+    render();
+  });
   function _renderFavPager(totalRows) {
     const pager = document.getElementById('favPager');
     if (!pager) return;
@@ -2622,6 +2646,7 @@
     const next = Math.max(1, Math.floor(Number(p) || 1));
     if (next === _favPage) return;
     _favPage = next;
+    _syncFavPageUrl(true);
     render();
     // Scroll the grid back to its top so the new page lands in view.
     const scroll = document.querySelector('.fav-scroll');
@@ -4084,7 +4109,7 @@
   // there's no ?focus= deep link and the stored state actually says the
   // user was on the search view.
   function _bootRestoreSearchView() {
-    if (_focusId) return false;
+    if (_focusId || _initParams.has('page')) return false;
     const s = _readPageState();
     if (!s || s.view !== 'search') return false;
     if (typeof setView !== 'function') return false;
