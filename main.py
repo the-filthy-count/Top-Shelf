@@ -6418,19 +6418,22 @@ def _performer_objects_in_match_order(performers: list) -> list:
     return [p.get("performer") or {} for p in performers]
 
 
-def _performer_crosswalk_ids(pf: dict, source: str) -> tuple[str, str, str]:
+def _performer_crosswalk_ids(pf: dict, source: str) -> tuple[str, str, str, str]:
     """Map scene performer id to favourite_entities columns for the active match source."""
     pid = str((pf or {}).get("id") or "").strip()
     if not pid:
-        return "", "", ""
+        return "", "", "", ""
     s = (source or "").upper()
-    if "MANUAL" in s:
-        return pid, pid, pid
+    if "JAVSTASH" in s:
+        return "", "", "", pid
     if "STASH" in s:
-        return "", pid, ""
+        return "", pid, "", ""
     if "FANS" in s:
-        return "", "", pid
-    return pid, "", ""
+        return "", "", pid, ""
+    if "TPDB" in s or "PORNDB" in s:
+        return pid, "", "", ""
+    # Unknown/manual source IDs cannot safely be compared across databases.
+    return "", "", "", ""
 
 
 def _find_performer_dir_via_library_index(
@@ -6447,8 +6450,10 @@ def _find_performer_dir_via_library_index(
     out: list[tuple[Path, str, dict | None]] = []
     seen_paths: set[str] = set()
     for pf in _performer_objects_in_match_order(performers):
-        tid, sid, fid = _performer_crosswalk_ids(pf, source)
-        row = db.favourite_find_performer_folder_by_crosswalk(tid, sid, fid)
+        ids = _performer_crosswalk_ids(pf, source)
+        if not any(ids):
+            continue
+        row = db.favourite_find_performer_folder_by_crosswalk(*ids)
         if not row:
             continue
         path = Path(row["path"])
@@ -8093,30 +8098,14 @@ def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: s
         dest_season = studio_dir / season_token
         route      = f"Series/{studio_dir.name}"
     else:
-        # Collect every performer-folder candidate the scene resolves to
-        # and pick the highest-weighted. Crosswalk-id matches come first,
-        # then exact-name, then aliases (opt-in). Dedup by folder path so
-        # the same folder surfaced by two layers is only scored once.
-        candidates: list[tuple[Path, str, dict | None]] = []
-        seen_paths: set[str] = set()
-        def _extend(layer_hits: list[tuple[Path, str, dict | None]]) -> None:
-            for path, nm, fav in layer_hits or []:
-                key = str(path)
-                if key in seen_paths:
-                    continue
-                seen_paths.add(key)
-                candidates.append((path, nm, fav))
-        if cross_on:
-            _extend(_find_performer_dir_via_library_index(performers, source))
-        _extend(find_performer_dir(performers, performer_dirs))
-        if not candidates and settings.get("alias_lookup_enabled", "false") == "true":
-            emit("  No direct performer match — checking aliases...")
-            _extend(_find_performer_dir_with_aliases(performers, performer_dirs))
+        # Final performer filing requires verified database identity. Filename
+        # pre-sorting is only a hint; neither names, aliases nor folder weights
+        # may introduce a performer absent from the matched scene's IDs.
+        candidates = _find_performer_dir_via_library_index(performers, source)
         result = None
         if candidates:
             # Highest weight wins; ties resolved by the original order
-            # (which already reflects the crosswalk > exact > alias
-            # precedence + scene performer ordering inside each layer).
+            # (the scene performer ordering among verified ID matches).
             best = max(range(len(candidates)), key=lambda i: _performer_weight(candidates[i][2]))
             best_path, best_name, best_fav = candidates[best]
             if len(candidates) > 1:

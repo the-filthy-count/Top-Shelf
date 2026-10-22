@@ -2566,43 +2566,23 @@
       return;
     }
     // Pagination — slice to one page so the DOM never holds more
-    // than `_FAV_PAGE_SIZE` tiles. With pagination + the lazy-render
-    // observer working on the rendered slice, even a 2000-row library
-    // pays the cost of ~100 tiles per page.
+    // than `_FAV_PAGE_SIZE` tiles, even for a large library.
     const totalPages = Math.max(1, Math.ceil(filtered.length / _FAV_PAGE_SIZE));
     if (_favPage > totalPages) _favPage = totalPages;
     if (_favPage < 1) _favPage = 1;
     _syncFavPageUrl();
     const start = (_favPage - 1) * _FAV_PAGE_SIZE;
     const slice = filtered.slice(start, start + _FAV_PAGE_SIZE);
-    // Lazy-render: emit a lightweight placeholder for every row in
-    // the current page slice (preserves grid layout + scroll height)
-    // and only paint the expensive renderCard markup for tiles
-    // entering the viewport. With page size 100 + ~60 visible per
-    // viewport, this trims the first-paint of any page to ~20 ms.
-    const LAZY_THRESHOLD = 60;
-    if (slice.length <= LAZY_THRESHOLD) {
-      grid.innerHTML = slice.map(renderCard).join('');
-    } else {
-      // Skeleton placeholder retains data-id (used by _replaceTileInDom
-      // for in-place actions) and a `data-fav-lazy` marker the observer
-      // matches against. Aspect-ratio matches both performer (2/3) and
-      // studio (4/3 via .fav-grid--studio override) — the wrapper sizes
-      // off the parent grid track either way.
-      grid.innerHTML = slice.map(row =>
-        `<div class="fav-cell fav-cell--skeleton fav-cell--lazy" data-id="${row.id}" data-fav-lazy="1" aria-hidden="true"><div class="fav-cell-visual" style="aspect-ratio:2/3"></div></div>`
-      ).join('');
-      _ensureFavLazyObserver();
-      grid.querySelectorAll('[data-fav-lazy="1"]').forEach(el => _favLazyObserver.observe(el));
-    }
+    // Pagination already caps this at 100 cards. Render their final layout
+    // together so replacing off-screen skeletons cannot shift scroll anchors.
+    // Images retain native lazy loading without replacing the card elements.
+    grid.innerHTML = slice.map(renderCard).join('');
     _renderFavPager(filtered.length);
   }
 
   // ── Pagination ───────────────────────────────────────────────────
   // Slices the filtered set to a single page so the DOM never carries
-  // more than `_FAV_PAGE_SIZE` tiles at a time. Combined with the
-  // lazy-render observer above, even 2000-row libraries render
-  // first-paint in ~20 ms. Page resets to 1 whenever filters or the
+  // more than `_FAV_PAGE_SIZE` tiles at a time. Page resets to 1 whenever filters or the
   // active tab change so the user doesn't land on an out-of-range page.
   const _FAV_PAGE_SIZE = 100;
   function _readFavPageUrl() {
@@ -2650,7 +2630,7 @@
     render();
     // Scroll the grid back to its top so the new page lands in view.
     const scroll = document.querySelector('.fav-scroll');
-    if (scroll) scroll.scrollTo({ top: 0, behavior: 'smooth' });
+    if (scroll) scroll.scrollTo({ top: 0, behavior: 'instant' });
   }
   // Wire up once at script load — buttons exist in the static HTML.
   document.getElementById('favPagerFirst')?.addEventListener('click', () => _favGoToPage(1));
@@ -2661,39 +2641,6 @@
     const filtered = (list || []).filter(r => rowPassesFilters(r));
     _favGoToPage(Math.max(1, Math.ceil(filtered.length / _FAV_PAGE_SIZE)));
   });
-
-  // ── Lazy-render observer ────────────────────────────────────────
-  // Watches placeholder tiles and swaps in the real markup the moment
-  // they enter the viewport (or come within `rootMargin` of it). Once
-  // a tile is painted it's no longer observed, so memory grows
-  // monotonically with what the user has scrolled past — the trade
-  // we want (smooth scroll-up + no re-paint flicker).
-  let _favLazyObserver = null;
-  function _ensureFavLazyObserver() {
-    if (_favLazyObserver) return;
-    _favLazyObserver = new IntersectionObserver((entries) => {
-      for (const ent of entries) {
-        if (!ent.isIntersecting) continue;
-        const cell = ent.target;
-        _favLazyObserver.unobserve(cell);
-        const id = parseInt(cell.getAttribute('data-id'), 10);
-        if (!id) continue;
-        const row = _findRowAcrossLists(id);
-        if (!row) continue;
-        // Match the wrapper renderCard would have produced. Swapping
-        // outerHTML preserves the grid track this tile occupies.
-        const wrap = document.createElement('div');
-        wrap.innerHTML = renderCard(row);
-        const fresh = wrap.firstElementChild;
-        if (fresh) cell.replaceWith(fresh);
-      }
-    }, {
-      // Render ~one viewport ahead in either direction so the user
-      // never sees a placeholder while scrolling at normal speeds.
-      rootMargin: '600px 0px 600px 0px',
-      threshold: 0.01,
-    });
-  }
 
   // Track which tabs have data loaded so we don't refetch on every
   // tab-switch. `load()` (no arg) wipes these so a full refresh after
