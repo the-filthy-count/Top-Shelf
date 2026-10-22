@@ -51,13 +51,17 @@ def _studio_crosswalk_ids(studio_obj: dict, source: str) -> tuple[str, str, str]
     if not sid:
         return "", "", ""
     s = (source or "").upper()
-    if "MANUAL" in s:
-        return sid, sid, sid
+    # Never interpret an unknown/manual ID as belonging to every source.
+    # JAVStash is not a StashDB ID; studio crosswalks do not support it yet.
+    if "JAVSTASH" in s:
+        return "", "", ""
     if "STASH" in s:
         return "", sid, ""
     if "FANS" in s:
         return "", "", sid
-    return sid, "", ""
+    if "TPDB" in s or "PORNDB" in s:
+        return sid, "", ""
+    return "", "", ""
 
 
 def _library_index_queue_matching_enabled(settings: dict) -> bool:
