@@ -8075,16 +8075,19 @@ def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: s
             "tags": tag_names,
         }
 
-    # Final studio routing requires a source-specific linked ID. Names and
-    # pre-sort directory hints cannot establish studio identity.
+    cross_on = _library_index_queue_matching_enabled(settings)
+
     studio_dir = None
-    studio_ids = _studio_crosswalk_ids(studio_obj, source)
-    row_st = db.favourite_find_studio_folder_by_crosswalk(*studio_ids) if any(studio_ids) else None
-    if row_st:
-        cand = Path(row_st["path"])
-        if cand.is_dir():
-            studio_dir = cand
-            emit(f"  Series: library index → {row_st['folder_name']}")
+    if cross_on:
+        st_tp, st_st, st_fn = _studio_crosswalk_ids(studio_obj, source)
+        row_st = db.favourite_find_studio_folder_by_crosswalk(st_tp, st_st, st_fn)
+        if row_st:
+            cand = Path(row_st["path"])
+            if cand.is_dir():
+                studio_dir = cand
+                emit(f"  Series: library index → {row_st['folder_name']}")
+    if studio_dir is None:
+        studio_dir = find_studio_dir(studio, settings) if studio else None
 
     if studio_dir:
         fields     = {**base_fields, "performer": _sanitize_fs_component(perf_names[0] if perf_names else "Unknown")}
