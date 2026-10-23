@@ -2163,6 +2163,7 @@ async def startup():
             _log.warning(f"studio-logo normalise failed: {e}")
         try:
             _sync_manual_studio_logos_from_disk()
+            _backfill_studio_posters()
         except Exception as e:
             _log.warning(f"studio-logo disk sync failed: {e}")
     _boot_maintenance.submit(_studio_logos_boot_tasks)
@@ -11671,7 +11672,7 @@ _FAVOURITE_STUDIO_LOCAL_LOGO_NAMES = (
     "clearart.jpg",
     "clearart.webp",
 )
-_FAVOURITE_STUDIO_LOCAL_POSTER_NAMES = ("poster.jpg", "folder.jpg")
+_FAVOURITE_STUDIO_LOCAL_POSTER_NAMES = ("poster.webp", "poster.jpg", "folder.jpg")
 _STUDIO_ART_IMAGE_EXT = frozenset({".png", ".webp", ".jpg", ".jpeg"})
 _STUDIO_LOGO_STEMS_EXACT = frozenset(
     {
@@ -13731,6 +13732,54 @@ def build_studio_tvshow_nfo(data: dict) -> str:
     buf = io.BytesIO()
     tree.write(buf, encoding="utf-8", xml_declaration=True)
     return buf.getvalue().decode("utf-8")
+
+
+def _ensure_studio_folder_poster(folder: Path, name: str = "") -> bool:
+    from app.utils.studio_poster import ensure_studio_poster, has_poster
+    import tempfile
+    try:
+        folder = Path(folder)
+        if not folder.is_dir() or has_poster(folder):
+            return False
+        logos = _favourite_studio_root_logo_candidates(folder)
+        if not logos:
+            cached = _resolve_studio_logo_sync(name or folder.name, "")
+            if cached:
+                logos = [cached]
+        for logo in logos:
+            try:
+                # Existing normalizer also handles SVG logos and transparent artwork.
+                with tempfile.TemporaryDirectory(prefix=".poster-logo-", dir=folder) as tmp:
+                    raster = Path(tmp) / "logo.png"
+                    if not _normalise_studio_logo_to_png(logo.read_bytes(), raster, target_width=900):
+                        continue
+                    created = ensure_studio_poster(folder, raster)
+                if created:
+                    _ensure_library_filed_permissions(folder / "poster.webp")
+                return created
+            except Exception as exc:
+                _log.warning(f"Studio poster logo failed for {folder.name}: {exc}")
+        return False  # Retry when a usable studio logo becomes available.
+    except Exception as exc:
+        _log.warning(f"Studio poster generation failed for {folder}: {exc}")
+        return False
+
+
+def _backfill_studio_posters() -> int:
+    """Only indexed studios and configured Series folders; never performers."""
+    folders = {}
+    for row in db.favourite_list(kind="studio"):
+        raw = (row.get("path") or "").strip()
+        if raw:
+            folders[Path(raw)] = row.get("folder_name") or Path(raw).name
+    raw = (db.get_settings().get("series_dir") or "").strip()
+    if raw:
+        root = Path(raw).expanduser()
+        if root.is_dir():
+            for folder in root.iterdir():
+                if folder.is_dir() and not folder.name.startswith('.'):
+                    folders.setdefault(folder, folder.name)
+    return sum(_ensure_studio_folder_poster(folder, name) for folder, name in folders.items())
 
 
 def create_tvshow_folder(
@@ -31234,6 +31283,7 @@ def _studio_logo_fetcher_job(max_items: int = 50, budget_s: float = 60.0) -> dic
     # drops visible within the next 6-hour window without a restart.
     try:
         _sync_manual_studio_logos_from_disk()
+        _backfill_studio_posters()
     except Exception as e:
         _log.warning(f"studio-logo disk sync failed: {e}")
 
@@ -31260,6 +31310,8 @@ def _studio_logo_fetcher_job(max_items: int = 50, budget_s: float = 60.0) -> dic
                 db.studio_logo_mark_attempt_failed(int(row["id"]), reason)
             except Exception:
                 pass
+    if fetched:
+        _backfill_studio_posters()
     emit(f"studio-logo fetcher: {fetched} fetched, {failed} failed (of {len(pending)} pending)")
     return {"fetched": fetched, "failed": failed, "pending": len(pending)}
 
@@ -37212,10 +37264,10 @@ def _health_apply_tvshow_nfo_from_index(folder_raw: str, roots: list[dict]) -> d
     target = folder / "tvshow.nfo"
     target.write_text(nfo, encoding="utf-8")
     _ensure_library_filed_permissions(target)
-    _health_maybe_download_show_poster(
-        folder, poster_url,
-        aspect_2x3=(kind == "performer"),
-    )
+    if kind == "studio":
+        _ensure_studio_folder_poster(folder, row.get("folder_name") or folder.name)
+    else:
+        _health_maybe_download_show_poster(folder, poster_url, aspect_2x3=True)
     trigger_media_scans()
     return {"ok": True, "path": folder_raw, "nfo": str(target)}
 
@@ -40844,8 +40896,9 @@ def metadata_create(payload: dict):
             except Exception:
                 logo_url = None
         folder = create_tvshow_folder(
-            folder_label, dest_path, nfo, poster_url, logo_url=logo_url
+            folder_label, dest_path, nfo, None, logo_url=logo_url or poster_url
         )
+        _ensure_studio_folder_poster(folder, db_name)
         name = folder_label
         has_poster = bool(logo_url or poster_url)
         performer_initial_aliases = None
