@@ -29,9 +29,12 @@ class PartialDownloadTests(unittest.TestCase):
     def test_cleanup_never_unlinks_partial_created_after_precheck(self):
         part=self.partial()
         with patch('download_safety.require_complete_download'):
-            cleanup_download_directory(self.folder)
+            with self.assertRaises(PartialDownloadPending):
+                cleanup_download_directory(self.folder)
         self.assertEqual(part.read_bytes(),b'partial');self.assertTrue(self.folder.exists())
     def test_finished_cleanup_removes_junk_and_empty_folders(self):
+        self.video.unlink()  # The importer has already moved the video.
+        (self.folder / 'info.nfo').write_text('metadata')
         cleanup_download_directory(self.folder)
         self.assertFalse(self.folder.exists())
     def test_all_download_entrypoints_guard_before_any_processing(self):
@@ -40,7 +43,10 @@ class PartialDownloadTests(unittest.TestCase):
         funcs=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in names]
         self.assertEqual(len(funcs),4)
         for f in funcs:
-            call=f.body[1].value
-            self.assertIsInstance(call,ast.Call);self.assertEqual(call.func.id,'require_complete_download')
+            # Root-scope calculation may precede the guard, but no processing call may.
+            calls = [n.value for n in f.body if isinstance(n, ast.Expr)
+                     and isinstance(n.value, ast.Call)]
+            self.assertIsInstance(calls[0].func, ast.Name)
+            self.assertEqual(calls[0].func.id, 'require_complete_download')
 
 if __name__=='__main__':unittest.main()

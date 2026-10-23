@@ -2,11 +2,11 @@ import asyncio
 import threading
 from pathlib import Path
 import database as db
+from download_safety import require_complete_queue_video, PartialDownloadPending, VIDEO_EXTENSIONS
 from app.core.phash import compute_phash, get_video_duration
 from app.core.matching import _strip_ts_uid, _release_name_with_folders
 from app.integrations.stashbox import query_with_fallback
 
-VIDEO_EXTENSIONS = {".mp4", ".mkv", ".m4v", ".avi", ".wmv", ".mov", ".flv", ".webm", ".ts", ".m2ts", ".mpg", ".mpeg"}
 
 import json
 
@@ -41,12 +41,10 @@ class ProcessingPipeline:
         # basename otherwise. Keeps root-level files backwards-compatible
         # with existing rows while nested files carry their folder name
         # for disambiguation and metadata matching.
-        try:
-            src_root = Path(settings.get("source_dir", "")).expanduser().resolve()
-            filename = video.resolve().relative_to(src_root).as_posix()
-        except (ValueError, OSError):
-            filename = video.name
+        filename = db.queue_file_key(video, settings)
+        await asyncio.to_thread(require_complete_queue_video, video, settings)
         db.upsert_file(filename)
+        signature = await asyncio.to_thread(db.validate_media_cache, filename, video)
         self.emit(f"FILE {filename}")
         api_keys = {
             "stashdb": settings.get("api_key_stashdb", ""),
@@ -90,6 +88,9 @@ class ProcessingPipeline:
                 db.update_file(filename, status="error", error=str(e))
                 return {"status": "error", "error": str(e)}
 
+        if await asyncio.to_thread(db.media_file_signature, video) != signature:
+            raise PartialDownloadPending(f"File changed during fingerprinting: {video.name}")
+        await asyncio.to_thread(require_complete_queue_video, video, settings)
         db.update_file(filename, status="processing", phash=phash)
 
         # Early-resolve against the indexed library. Touches the
@@ -143,11 +144,13 @@ class ProcessingPipeline:
                 label = _stashbox_normalize_match_source(grab.get("source_db") or "")
                 self.emit(f"  Grab tag: matched {label}/{grab.get('source_id')} — auto-filing without phash lookup")
                 try:
-                    scene = _scene_dict_from_grab_row(grab)
+                    scene = await asyncio.to_thread(self.callbacks["fetch_grab_scene"], grab)
+                except Exception as exc:
+                    scene = None
+                    self.emit(f"  Grab tag: scene retrieval failed ({exc}), falling back to phash")
+                if scene:
                     if import_vice:
                         scene["_force_vice"] = import_vice
-                    # File move + image download + NFO write — all sync I/O,
-                    # off-thread so the event loop stays responsive.
                     self.state["pipeline_phase"] = "Filing"
                     result = await asyncio.to_thread(
                         self.callbacks.get("file_scene_from_match"),
@@ -155,10 +158,8 @@ class ProcessingPipeline:
                     )
                     if result.get("status") == "filed":
                         db.mark_scene_grab_consumed(grab.get("id"))
-                        return result
-                    self.emit(f"  Grab tag: file_scene_from_match returned {result.get('status')!r}, falling back to phash")
-                except Exception as exc:
-                    self.emit(f"  Grab tag: filing failed ({exc}), falling back to phash")
+                    return result
+                self.emit("  Grab tag: authoritative scene unavailable, falling back to phash")
 
         # Lookup (Async)
         try:
@@ -245,10 +246,17 @@ class ProcessingPipeline:
             self.emit(f"PIPELINE START - {n} file(s)")
             self.emit("---")
             
-            outcomes = {"filed": 0, "unmatched": 0, "no_dir": 0, "error": 0}
+            outcomes = {"filed": 0, "unmatched": 0, "no_dir": 0, "error": 0, "deferred": 0}
             for i, video in enumerate(video_files):
                 self.state["current_file"] = video.name
-                result = await self.process_single(video)
+                try:
+                    result = await self.process_single(video)
+                except PartialDownloadPending as exc:
+                    self.emit(f"  Deferred: {exc}")
+                    result = {"status": "deferred"}
+                except Exception as exc:
+                    self.emit(f"  File failed: {video.name}: {exc}")
+                    result = {"status": "error"}
                 st = (result or {}).get("status", "error")
                 if st in outcomes:
                     outcomes[st] += 1
@@ -267,6 +275,8 @@ class ProcessingPipeline:
                         msg = f"Sorted: {sole}"
                     elif outcomes["no_dir"]:
                         msg = f"No directory for {sole}"
+                    elif outcomes["deferred"]:
+                        msg = f"Waiting for download: {sole}"
                     elif outcomes["unmatched"]:
                         msg = f"Unmatched: {sole}"
                     else:
@@ -282,6 +292,8 @@ class ProcessingPipeline:
                         parts.append(f"{outcomes['no_dir']} no-dir")
                     if outcomes["error"]:
                         parts.append(f"{outcomes['error']} errors")
+                    if outcomes["deferred"]:
+                        parts.append(f"{outcomes['deferred']} waiting for download")
                     summary = " · ".join(parts) if parts else "no changes"
                     db.notification_add(
                         "pipeline",

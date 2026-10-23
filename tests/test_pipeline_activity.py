@@ -19,7 +19,7 @@ class PipelineActivityTests(unittest.IsolatedAsyncioTestCase):
                 seen.append((threading.get_ident(),state['pipeline_phase']))
                 return video
             db=SimpleNamespace(get_settings=lambda:{'source_dir':tmp},resolve_source_video_path=resolve,notification_add=Mock())
-            env=dict(asyncio=asyncio,Path=Path,db=db,VIDEO_EXTENSIONS={'.mp4'})
+            env=dict(PartialDownloadPending=type("PartialDownloadPending", (Exception,), {}),asyncio=asyncio,Path=Path,db=db,VIDEO_EXTENSIONS={'.mp4'})
             exec(compile(ast.Module(body=[method],type_ignores=[]),'pipeline.py','exec'),env)
             async def process(path):
                 self.assertEqual(state['pipeline_total'],1)

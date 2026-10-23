@@ -491,6 +491,27 @@ def _one_time_migrate_processed_filename_to_stem(conn: sqlite3.Connection) -> No
     _migrate_processed_filename_to_stem_core(conn, skip_if_done=True, progress=None)
 
 
+def queue_file_key(video: Path, settings: dict) -> str:
+    """Use the same root namespaces as queue path resolution."""
+    path = Path(video).resolve()
+    for setting, prefix in (("vice_download_watch_dir", "Vices"), ("jav_download_watch_dir", "JAV"), ("source_dir", "")):
+        raw = (settings.get(setting) or "").strip()
+        if not raw:
+            continue
+        try:
+            relative = path.relative_to(Path(raw).expanduser().resolve()).as_posix()
+        except ValueError:
+            continue
+        return f"{prefix}/{relative}" if prefix else relative
+    return str(path)
+
+
+def queue_cached_row(rows: dict, filename: str) -> dict:
+    # Legacy extensionless keys retain their parent path. Never borrow a
+    # root-level record for an unrelated nested file with the same basename.
+    return rows.get(filename) or rows.get(str(Path(filename).with_suffix(""))) or {}
+
+
 def resolve_source_video_path(
     source_dir: Path,
     db_filename: str,
@@ -585,6 +606,7 @@ def init_db() -> None:
             "ALTER TABLE processed_files ADD COLUMN destination_ext TEXT",
             "ALTER TABLE processed_files ADD COLUMN match_external_id TEXT",
             "ALTER TABLE processed_files ADD COLUMN media_duration INTEGER",
+            "ALTER TABLE processed_files ADD COLUMN media_signature TEXT",
             # Cached filename-parser output: a JSON blob shaped like
             # ``{title, date, site, performers, file_mtime, parsed_at}``.
             # Populated lazily by the queue snapshot builder so the
@@ -3440,12 +3462,12 @@ def favourite_delete_missing_paths(valid_paths: set[str]) -> int:
         return removed
 
 
-def favourite_find_performer_folder_by_crosswalk(
+def favourite_find_performer_folders_by_crosswalk(
     tpdb_id: str | None,
     stash_id: str | None,
     fans_id: str | None,
     javstash_id: str | None = None,
-) -> dict | None:
+) -> list[dict]:
     """Resolve library folder via entity index (Favourites DB table) by TPDB / StashDB / FansDB / JAVStash performer id.
 
     Also matches group folders (is_group=1) where the requested ID appears in
@@ -3456,7 +3478,7 @@ def favourite_find_performer_folder_by_crosswalk(
     fid = (fans_id or "").strip()
     jid = (javstash_id or "").strip()
     if not (tid or sid or fid or jid):
-        return None
+        return []
     parts: list[str] = []
     args: list[str] = []
     if tid:
@@ -3472,20 +3494,19 @@ def favourite_find_performer_folder_by_crosswalk(
         parts.append("trim(COALESCE(match_javstash_id,'')) = ?")
         args.append(jid)
     if not parts:
-        return None
+        return []
     where = " OR ".join(parts)
     with get_conn() as conn:
         # Pull the weighting + is_group flag alongside path/folder_name so
         # the scene-filing router can both score and detect group folders
         # without a second query per performer.
-        row = conn.execute(
+        rows = conn.execute(
             f"SELECT id, path, folder_name, is_favourite, weight, is_group, group_ids_json "
             f"FROM favourite_entities "
-            f"WHERE kind = 'performer' AND ({where}) LIMIT 1",
+            f"WHERE kind = 'performer' AND ({where}) ORDER BY id",
             args,
-        ).fetchone()
-        if row:
-            return dict(row)
+        ).fetchall()
+        result = {row["id"]: dict(row) for row in rows}
         # Fallback: group folders with additional linked IDs in group_ids_json
         group_rows = conn.execute(
             "SELECT id, path, folder_name, is_favourite, weight, group_ids_json "
@@ -3509,7 +3530,7 @@ def favourite_find_performer_folder_by_crosswalk(
                 or (fid and fid in fans_list)
                 or (jid and jid in jav_list)
             ):
-                return {
+                result[gr["id"]] = {
                     "id": gr["id"],
                     "path": gr["path"],
                     "folder_name": gr["folder_name"],
@@ -3518,7 +3539,13 @@ def favourite_find_performer_folder_by_crosswalk(
                     "is_group": 1,
                     "group_ids_json": gr["group_ids_json"],
                 }
-        return None
+        return list(result.values())
+
+def favourite_find_performer_folder_by_crosswalk(tpdb_id, stash_id, fans_id, javstash_id=None):
+    """Compatibility wrapper for callers requiring one indexed record."""
+    rows = favourite_find_performer_folders_by_crosswalk(tpdb_id, stash_id, fans_id, javstash_id)
+    return rows[0] if rows else None
+
 
 
 def favourite_find_studio_folder_by_crosswalk(
@@ -3852,6 +3879,24 @@ def processed_files_map_by_filename(limit: int = 10000) -> dict[str, dict]:
         return {r["filename"]: dict(r) for r in cur.fetchall()}
 
 
+def media_file_signature(video: Path) -> str:
+    st = Path(video).stat()
+    return json.dumps([st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns])
+
+
+def validate_media_cache(filename: str, video: Path) -> str:
+    """Invalidate filename-keyed media caches when the underlying file changes."""
+    signature = media_file_signature(video)
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE processed_files SET phash=NULL, media_duration=NULL, media_signature=? "
+            "WHERE filename=? AND (media_signature IS NULL OR media_signature != ?)",
+            (signature, filename, signature),
+        )
+        conn.commit()
+    return signature
+
+
 def get_phash(filename: str) -> str | None:
     """Return cached phash for a filename, or None if not yet computed."""
     fst, _ = _filename_stem_ext(filename)
@@ -3936,7 +3981,9 @@ def rename_file(old_filename: str, new_filename: str) -> bool:
         if not row:
             return False
         conn.execute(
-            "UPDATE processed_files SET filename = ?, filename_stem = ?, filename_ext = ? WHERE id = ?",
+            "UPDATE processed_files SET filename = ?, filename_stem = ?, filename_ext = ?, "
+            "parsed_meta_json=NULL, guess_studio=NULL, guess_performers=NULL, "
+            "guess_lib_gen=NULL, perf_resolver_json=NULL WHERE id = ?",
             (new_filename, new_stem, new_ext, int(row["id"])),
         )
         # Migrate side tables keyed by filename so per-file state (cached
@@ -4070,6 +4117,10 @@ def update_movie(filename: str, status: str, tmdb_id: str = None, tpdb_id: str =
                  year: str = None, overview: str = None, poster_url: str = None,
                  destination: str = None, error: str = None) -> None:
     fields = {"status": status, "processed_at": datetime.now().isoformat(timespec="seconds")}
+    # None clears obsolete errors; source changes must not retain another DB's ID.
+    fields["error"] = error
+    if match_source is not None:
+        fields.update(tmdb_id=tmdb_id, tpdb_id=tpdb_id, javstash_id=javstash_id)
     for k, v in [
         ("tmdb_id", tmdb_id),
         ("tpdb_id", tpdb_id),
@@ -4116,10 +4167,10 @@ def get_movie_rows_map() -> dict[str, dict]:
 
 
 def get_movie_terminal_filenames() -> set[str]:
-    """Filenames that are done (filed or skipped) — do not auto-queue again."""
+    """Explicitly skipped filenames. A reappearing filed filename is new work."""
     with get_conn() as conn:
         cur = conn.execute(
-            "SELECT filename FROM processed_movies WHERE status IN ('filed', 'skipped')"
+            "SELECT filename FROM processed_movies WHERE status = 'skipped'"
         )
         return {r["filename"] for r in cur.fetchall()}
 
@@ -4141,38 +4192,44 @@ def get_movie_stats() -> dict:
     return {k: 0 if row[k] is None else row[k] for k in row}
 
 
-def reconcile_movies_source(source_dir) -> int:
-    """
-    Walk processed_movies rows whose source file should still be present
-    (anything that isn't already terminal) and flip to 'removed' when
-    the file is gone from the movies source dir. Returns the number of
-    rows updated. Prevents the stats counter from counting orphans.
-    """
+def reconcile_movies_source(source_dir, jav_source_dir=None) -> int:
+    """Remove orphan history only after checking every configured movie inbox."""
     from pathlib import Path as _Path
+    roots = [_Path(str(raw)).expanduser() for raw in (source_dir, jav_source_dir) if raw and str(raw).strip()]
+    if not roots:
+        return 0
+    # An offline inbox is not evidence that its files have been removed.
     try:
-        base = _Path(str(source_dir)) if source_dir else None
-    except Exception:
+        if any(not root.is_dir() for root in roots):
+            return 0
+    except OSError:
         return 0
     with get_conn() as conn:
-        cur = conn.execute("""
-            SELECT filename FROM processed_movies
-            WHERE status NOT IN ('filed','removed','pending')
-        """)
-        candidates = [r["filename"] for r in cur.fetchall()]
+        candidates = conn.execute(
+            "SELECT filename FROM processed_movies WHERE status NOT IN ('filed','removed','pending')"
+        ).fetchall()
         updated = 0
-        for fname in candidates:
-            exists = False
-            if base is not None and base.exists():
-                try:
-                    exists = (base / fname).exists()
-                except OSError:
-                    exists = False
-            if not exists:
-                conn.execute(
-                    "UPDATE processed_movies SET status = 'removed', processed_at = ? WHERE filename = ?",
-                    (datetime.now().isoformat(timespec="seconds"), fname),
-                )
-                updated += 1
+        for row in candidates:
+            fname = row["filename"]
+            if fname.startswith("jav://"):
+                if not jav_source_dir:
+                    continue
+                check_roots = [_Path(str(jav_source_dir)).expanduser()]
+                relative = fname[len("jav://"):]
+            else:
+                # Legacy unscoped rows remain intact wherever their file survives.
+                check_roots = roots
+                relative = fname
+            try:
+                if any((root / relative).exists() for root in check_roots):
+                    continue
+            except OSError:
+                continue
+            conn.execute(
+                "UPDATE processed_movies SET status = 'removed', processed_at = ? WHERE filename = ?",
+                (datetime.now().isoformat(timespec="seconds"), fname),
+            )
+            updated += 1
         if updated:
             conn.commit()
     return updated

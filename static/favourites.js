@@ -714,10 +714,10 @@
     search: 'Search Library',
   };
 
-  function setView(kind) {
+  function setView(kind, options = {}) {
     _view = kind;
-    _favPage = 1;  // each tab starts on its first page
-    _syncFavPageUrl();
+    _favPage = options.page || 1;
+    _syncFavPageUrl(options.history !== "replace");
     _persistPageState();
     if (typeof tsSetPageTitleText === 'function') {
       tsSetPageTitleText(document.getElementById('favPageTitle'), _FAV_VIEW_TITLES[kind] || 'Library', 'library');
@@ -2592,16 +2592,22 @@
   }
   function _syncFavPageUrl(push = false) {
     const url = new URL(window.location.href);
-    if (_view === 'search') url.searchParams.delete('page');
-    else url.searchParams.set('page', String(_favPage));
+    if (_view === 'search') {
+      url.searchParams.set('view', 'search');
+      url.searchParams.delete('page');
+    } else {
+      url.searchParams.delete('view');
+      url.searchParams.set('page', String(_favPage));
+    }
     if (url.href !== window.location.href) {
       history[push ? 'pushState' : 'replaceState'](history.state, '', url);
     }
   }
   let _favPage = _readFavPageUrl();
   window.addEventListener('popstate', () => {
-    _favPage = _readFavPageUrl();
-    render();
+    const params = new URLSearchParams(window.location.search);
+    const kind = params.get('view') === 'search' ? 'search' : (window.__FAV_INITIAL_VIEW || 'performer');
+    setView(kind, {page: _readFavPageUrl(), history: 'replace'});
   });
   function _renderFavPager(totalRows) {
     const pager = document.getElementById('favPager');
@@ -4058,10 +4064,10 @@
   function _bootRestoreSearchView() {
     if (_focusId || _initParams.has('page')) return false;
     const s = _readPageState();
-    if (!s || s.view !== 'search') return false;
+    if (_initParams.get('view') !== 'search' && (!s || s.view !== 'search')) return false;
     if (typeof setView !== 'function') return false;
-    try { setView('search'); } catch (_) { return false; }
-    const q = String(s.searchQ || '').trim();
+    try { setView('search', {history: 'replace'}); } catch (_) { return false; }
+    const q = String(s?.searchQ || '').trim();
     if (q) {
       const inp = document.getElementById('favSearchQ');
       if (inp) inp.value = q;
