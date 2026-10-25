@@ -1,0 +1,22 @@
+services:
+  top-shelf-test:
+    image: thefilthycount/top-shelf:latest
+    container_name: top-shelf-test
+    restart: unless-stopped
+    ports:
+      - "8892:8891"
+    volumes:
+      - /volume4/docker/top-shelf-test/database:/app/database
+      - /volume4/docker/top-shelf-test/library:/library
+      - /volume4/docker/top-shelf-test/downloads:/downloads
+    mem_limit: ${TOP_SHELF_TEST_MEMORY_LIMIT:-2g}
+    cpus: ${TOP_SHELF_TEST_CPUS:-1.0}
+    pids_limit: 128
+    stop_grace_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      - TZ=Europe/London
