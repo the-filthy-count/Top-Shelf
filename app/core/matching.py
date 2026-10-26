@@ -338,6 +338,7 @@ def _score_name_match(query: str, candidate: dict, *,
                        query_title: str | None = None,
                        query_performers: list[str] | None = None,
                        require_performers_in_cast: bool = True,
+                       allow_joint_cast: bool = False,
                        file_meta: dict | None = None,
                        reasons: list[dict] | None = None) -> float:
     """Require title/volume agreement before applying cast and media signals.
@@ -355,9 +356,9 @@ def _score_name_match(query: str, candidate: dict, *,
     from scene_relevance import rank_manual_results, title_query, _score
     title = title_query(query if query_title is None else query_title, ", ".join(performers))
     title = _SCENE_NUMBER_RE.sub(" ", title).strip()
-    if not title:
-        return 0.0  # Cast alone is not enough to suggest a particular scene.
-    if not rank_manual_results([candidate], title):
+    joint_cast = allow_joint_cast and len(performers) > 1 and _required_performers_in_cast(performers, candidate)
+    title_matches = bool(title and rank_manual_results([candidate], title))
+    if not title_matches and not joint_cast:
         return 0.0
     titles = [candidate.get("title") or ""]
     for item in candidate.get("movies") or []:
@@ -365,7 +366,11 @@ def _score_name_match(query: str, candidate: dict, *,
             movie = item.get("movie") or item
             if isinstance(movie, dict):
                 titles.append(movie.get("title") or movie.get("name") or "")
-    base = max((_score(t, title) or 0.0) for t in titles)
+    base = max((_score(t, title) or 0.0) for t in titles) if title_matches else 0.0
+    if joint_cast and not title_matches:
+        if reasons is not None:
+            reasons.append({"kind": "cast", "label": "All detected performers present; title unconfirmed", "ok": True})
+        return 0.5  # Reviewable cast-only suggestion; never an automatic filing match.
     perf_names = _candidate_performer_names(candidate)
     if reasons is not None:
         reasons.append({"kind": "title", "label": "Title relevance " + str(round(base * 100)) + "%", "ok": True})

@@ -2487,6 +2487,45 @@ def search_scenes_on_db(endpoint: str, api_key: str, term: str, limit: int = 25)
     return list(by_id.values())
 
 
+def search_scenes_with_all_performers(performers: list[str]) -> tuple[list, bool]:
+    """Find joint appearances using unambiguous, source-local performer IDs."""
+    from app.core.matching import _performer_name_tokens_match
+    keys = get_api_keys()
+    results = []
+    complete = True
+    for source, endpoint, key in (
+        ("StashDB", STASHDB_ENDPOINT, keys["stashdb"]),
+        ("TPDB", TPDB_ENDPOINT, keys["tpdb"]),
+        ("FansDB", FANSDB_ENDPOINT, keys["fansdb"]),
+        ("JAVStash", JAVSTASH_ENDPOINT, keys["javstash"]),
+    ):
+        if not key:
+            continue
+        try:
+            ids = []
+            for name in performers:
+                data = _stashbox_post(endpoint, key, SEARCH_PERFORMER_QUERY, {"term": name, "limit": 25})
+                matches = {p["id"] for p in data.get("searchPerformer") or []
+                           if p.get("id") and _performer_name_tokens_match(name, p.get("name", ""))}
+                if len(matches) != 1:
+                    break
+                ids.append(next(iter(matches)))
+            if len(ids) != len(performers) or len(set(ids)) != len(performers):
+                continue
+            data = _stashbox_post(endpoint, key, QUERY_SCENES_QUERY, {"input": {
+                "page": 1, "per_page": 100, "sort": "DATE", "direction": "DESC",
+                "performers": {"value": ids, "modifier": "INCLUDES_ALL"},
+            }})
+            for scene in (data.get("queryScenes") or {}).get("scenes") or []:
+                cast_ids = {(p.get("performer") or {}).get("id") for p in scene.get("performers") or []}
+                if set(ids).issubset(cast_ids):
+                    results.append(dict(scene, _source=source))
+        except Exception as exc:
+            complete = False
+            emit(f"  Joint-performer search failed ({source}): {exc}")
+    return results, complete
+
+
 def query_scenes_by_date(endpoint: str, api_key: str, term: str,
                          date_from: str = None, date_to: str = None,
                          per_page: int = 25) -> list:
@@ -2879,6 +2918,14 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
                 continue
             seen_ids.add(key)
             results.append(scene)
+    if len(perf_names) > 1:
+        cast_results, cast_complete = search_scenes_with_all_performers(perf_names)
+        search_complete = search_complete and cast_complete
+        for scene in cast_results:
+            key = (scene.get("_source", "").lower(), scene.get("id"))
+            if key[1] and key not in seen_ids:
+                seen_ids.add(key)
+                results.append(scene)
     if not results:
         if search_complete:
             db.queue_suggestions_clear(filename)
@@ -2887,6 +2934,8 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
     perf_names = _suggestion_performer_names(performers, performer)
     strict_pool: list[dict] = []
     for scene in results:
+        if len(perf_names) > 1 and not _required_performers_in_cast(perf_names, scene):
+            continue
         if not _suggestion_identity_matches(perf_names, studio, scene):
             continue
         if not _scene_passes_settings_filters(scene):
@@ -2902,6 +2951,7 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
             query_title=title_only or cleaned,
             query_performers=performers,
             require_performers_in_cast=False,
+            allow_joint_cast=len(perf_names) > 1,
             file_meta=file_meta,
         )
         if score_loose < _SUGGESTION_MIN_SCORE:
@@ -2918,6 +2968,7 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
                 query_title=title_only or cleaned,
                 query_performers=performers,
                 require_performers_in_cast=is_strict_perf,
+                allow_joint_cast=len(perf_names) > 1,
                 file_meta=file_meta,
                 reasons=strict_reasons,
             )
