@@ -16,6 +16,7 @@ class WatchRetryTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         self.settings = {'download_watch_enabled':'true', 'download_watch_hold_secs':'30'}
         self.env = dict(Path=Path, time=time, _download_lock=threading.Lock(),
+                        _last_empty_download_sweep=0, _sweep_empty_download_folders=Mock(),
                         db=SimpleNamespace(get_settings=lambda:self.settings),
                         PartialDownloadPending=PartialDownloadPending, emit=Mock())
         for name in ('downloads','movie_downloads','vice_downloads','jav_downloads','vice_stage_downloads','jav_stage_downloads'):

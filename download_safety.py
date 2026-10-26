@@ -82,3 +82,37 @@ def require_complete_queue_video(video, settings):
             require_complete_download(root / relative.parts[0])
         return
     require_complete_download(video)
+
+
+def sweep_empty_download_dirs(root, *, preserve_top_level=False, min_age_seconds=300, protected_roots=()):
+    """Remove settled empty folders only, preserving partial releases and roots."""
+    import time
+    root = Path(root)
+    if not root.is_dir():
+        return 0
+    protected = {Path(p).resolve() for p in protected_roots}
+    removed = 0
+    cutoff = time.time() - min_age_seconds
+    for entry in root.iterdir():
+        if entry.is_symlink() or not entry.is_dir() or entry.name.startswith('.'):
+            continue
+        try:
+            require_complete_download(entry)
+            # Snapshot ages before removing children changes parent mtimes.
+            candidates = []
+            for directory, dirs, files in os.walk(entry, followlinks=False):
+                dirs[:] = [name for name in dirs if not (Path(directory)/name).is_symlink()]
+                path = Path(directory)
+                if path.stat().st_mtime <= cutoff:
+                    candidates.append(path)
+            for path in reversed(candidates):
+                if (preserve_top_level and path == entry) or path.resolve() in protected:
+                    continue
+                try:
+                    path.rmdir()  # Atomic empty-only removal; never deletes files.
+                    removed += 1
+                except OSError:
+                    pass
+        except (OSError, PartialDownloadPending):
+            continue
+    return removed

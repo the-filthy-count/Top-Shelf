@@ -4257,6 +4257,30 @@ def _seed_pending_downloads(root: Path, pending: dict) -> None:
             pending.setdefault(str(entry), fire_at)
 
 
+_last_empty_download_sweep = 0.0
+
+
+def _sweep_empty_download_folders(settings: dict) -> None:
+    from download_safety import sweep_empty_download_dirs
+    keys = ("source_dir", "movies_source_dir", "download_watch_dir", "movie_download_watch_dir",
+            "vice_download_watch_dir", "jav_download_watch_dir", "vice_download_stage_dir", "jav_download_stage_dir")
+    roots = {key: Path(settings[key]).expanduser() for key in keys if (settings.get(key) or "").strip()}
+    protected = list(roots.values())
+    vice = roots.get("vice_download_watch_dir")
+    if vice and vice.is_dir():
+        protected.extend(p for p in vice.iterdir() if p.is_dir())
+    for key, root in roots.items():
+        if key in {"download_watch_dir", "movie_download_watch_dir", "vice_download_stage_dir", "jav_download_stage_dir"} and settings.get("download_watch_enabled", "false").lower() != "true":
+            continue
+        try:
+            removed = sweep_empty_download_dirs(root, protected_roots=protected,
+                min_age_seconds=max(300, int(settings.get("download_watch_hold_secs", "300"))))
+            if removed:
+                emit(f"Download cleanup: removed {removed} empty folder(s) under {root}")
+        except OSError as exc:
+            emit(f"Download cleanup skipped {root}: {exc}")
+
+
 def _check_pending_downloads() -> None:
     """Called by scheduler every 30s - fires download processor for entries past hold time."""
     now = time.time()
@@ -4272,6 +4296,10 @@ def _check_pending_downloads() -> None:
     # their queue dirs are configured independently of "Enable download
     # folder watch"; only the scene / movie / stage drains are.
     s_check = db.get_settings()
+    global _last_empty_download_sweep
+    if now - _last_empty_download_sweep >= 300:
+        _last_empty_download_sweep = now
+        _sweep_empty_download_folders(s_check)
     dl_enabled = s_check.get("download_watch_enabled", "false").lower() == "true"
     with _download_lock:
         for path_str, fire_at in list(_pending_downloads.items()):
