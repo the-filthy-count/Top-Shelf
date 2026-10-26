@@ -227,7 +227,8 @@ def _split_query_for_search(filename: str) -> tuple[str, str, str, str, list[str
         title_parts = [re.sub(pattern, " ", part, flags=re.IGNORECASE) for part in title_parts]
     # The cleaner expects a filename; attach a dummy extension to retain the
     # final title token even when the original name contained dots.
-    title_only = _clean_filename_for_search("/".join(title_parts) + ".mp4")
+    from scene_relevance import split_title_words
+    title_only = split_title_words(_clean_filename_for_search("/".join(title_parts) + ".mp4"))
     return (full, title_only, performer, studio, performers)
 
 

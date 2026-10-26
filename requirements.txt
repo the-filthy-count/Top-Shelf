@@ -10,3 +10,5 @@ bcrypt
 curl_cffi
 lxml
 httpx
+
+wordninja==2.0.0

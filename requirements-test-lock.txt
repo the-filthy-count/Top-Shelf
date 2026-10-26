@@ -34,3 +34,5 @@ uvloop==0.22.1
 watchdog==6.0.0
 watchfiles==1.2.0
 websockets==17.1
+
+wordninja==2.0.0

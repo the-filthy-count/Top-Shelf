@@ -5,8 +5,15 @@ from difflib import SequenceMatcher
 
 _STOP = {'the', 'a', 'an', 'to', 'of', 'and', 'in', 'on', 'for', 'with'}
 
+def split_title_words(value):
+    """Recover word boundaries from CamelCase without guessing lowercase words."""
+    text = str(value or '')
+    text = re.sub(r'([A-Z])([A-Z][a-z])', r'\1 \2', text)
+    return re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
+
+
 def normal(value):
-    text = unicodedata.normalize('NFKD', str(value or '')).casefold()
+    text = unicodedata.normalize('NFKD', split_title_words(value)).casefold()
     text = ''.join(c for c in text if not unicodedata.combining(c))
     text = text.replace("'", '').replace('’', '').replace('&', ' and ')
     return ' '.join(re.sub(r'[^a-z0-9]+', ' ', text).split())
@@ -32,9 +39,11 @@ def _score(title, query):
     if title == query:
         return 1.0
     qt, tt = query.split(), title.split()
-    qn, tn = set(re.findall(r'\b\d+\b', query)), set(re.findall(r'\b\d+\b', title))
+    qn, tn = set(re.findall(r'\d+', query)), set(re.findall(r'\d+', title))
     if qn != tn and (qn or tn):
         return None
+    if title.replace(' ', '') == query.replace(' ', ''):
+        return 1.0
     significant_q = set(qt) - _STOP
     significant_t = set(tt) - _STOP
     if not significant_q or not significant_t:

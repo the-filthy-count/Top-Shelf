@@ -2848,7 +2848,8 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
     # how many candidates come back.
     file_meta = _build_file_meta(filename)
     # Bare trailing numbers identify volumes; only explicit Scene N is a scene hint.
-    search_queries = [(title_only, "")] if title_only else [("", cleaned)]
+    from title_search_queries import title_search_queries
+    search_queries = [(query, "") for query in title_search_queries(title_only)] if title_only else [("", cleaned)]
     search_complete = True
     results: list = []
     seen_ids: set[tuple[str, str]] = set()
