@@ -60,3 +60,18 @@ class JointCastTests(unittest.TestCase):
         self.assertEqual(run('file.mp4'),1)
         self.assertEqual(db.queue_suggestions_add.call_args.args[1][0]['source_id'],'both')
         env['search_scenes_with_all_performers'].assert_called_once_with(names)
+
+    def test_tpdb_uses_rest_not_stashbox_scene_filter(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        post=Mock(side_effect=lambda endpoint,key,query,v:{'searchPerformer':[{'id':v['term'],'name':v['term']}]})
+        env=dict(get_api_keys=lambda:dict(stashdb='',tpdb='key',fansdb='',javstash=''),
+                 STASHDB_ENDPOINT='stash',TPDB_ENDPOINT='tpdb',FANSDB_ENDPOINT='fans',JAVSTASH_ENDPOINT='jav',
+                 SEARCH_PERFORMER_QUERY='performers',QUERY_SCENES_QUERY='scenes',_stashbox_post=post,
+                 requests=SimpleNamespace(get=Mock()),emit=Mock())
+        search=load('main.py','search_scenes_with_all_performers',env)
+        with patch('tpdb_joint_scenes.joint_scenes',return_value=([{'id':'both','_source':'TPDB'}],False)) as rest:
+            rows,complete=search(['Alecia Fox','Kira Kyox'])
+            self.assertFalse(complete);self.assertEqual(rows[0]['id'],'both')
+            rest.assert_called_once_with(['Alecia Fox','Kira Kyox'],'key',env['requests'].get)
+        self.assertEqual(post.call_count,2)

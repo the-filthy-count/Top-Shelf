@@ -2512,6 +2512,12 @@ def search_scenes_with_all_performers(performers: list[str]) -> tuple[list, bool
                 ids.append(next(iter(matches)))
             if len(ids) != len(performers) or len(set(ids)) != len(performers):
                 continue
+            if source == "TPDB":
+                from tpdb_joint_scenes import joint_scenes
+                scenes, source_complete = joint_scenes(ids, key, requests.get)
+                results.extend(scenes)
+                complete = complete and source_complete
+                continue
             data = _stashbox_post(endpoint, key, QUERY_SCENES_QUERY, {"input": {
                 "page": 1, "per_page": 100, "sort": "DATE", "direction": "DESC",
                 "performers": {"value": ids, "modifier": "INCLUDES_ALL"},
@@ -3921,7 +3927,14 @@ def _clean_and_rename_on_disk(
     p = Path(rel)
     parent = p.parent  # PosixPath("") if root-level
     base = p.name
-    cleaned = _clean_release_filename(base)
+    # Directory labels are queue metadata, not release junk. Cleaning them
+    # away makes the snapshot tagger add them again on every watcher pass.
+    prefix = f"[{parent.name}] " if parent != Path(".") else ""
+    has_folder_tag = bool(prefix and base.startswith(prefix))
+    clean_input = base[len(prefix):] if has_folder_tag else base
+    cleaned = _clean_release_filename(clean_input)
+    if has_folder_tag and cleaned:
+        cleaned = prefix + cleaned
     if not cleaned or cleaned == base:
         return rel
     src = root / rel
