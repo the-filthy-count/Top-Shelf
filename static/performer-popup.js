@@ -1882,9 +1882,12 @@
         <div class="pp-films-panel-body">
           <div class="pp-films-tab pp-films-tab--prowlarr is-active" data-pp-films-pane="prowlarr" role="tabpanel">
             <div class="ts-prowlarr-embed pp-films-prowlarr-embed">
-              <div class="pp-release-tools" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
-                <button type="button" class="pp-alias-chip" data-vice-filter title="Vice keyword filter" aria-label="Vice keyword filter" aria-pressed="false"><span class="ts-icon-vices" aria-hidden="true"></span></button>
-                <span data-vice-label></span>
+              <div class="pp-release-tools">
+                <label class="pp-release-keyword">
+                  <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                  <input type="search" data-release-keyword placeholder="Filter releases…" title="Match all words in any order; filters loaded titles" aria-label="Filter release titles" maxlength="150" autocomplete="off">
+                </label>
+                <button type="button" class="pp-release-clear" data-release-clear aria-label="Clear release filter" title="Clear filter" disabled>×</button>
               </div>
               <div class="ts-prowlarr-embed-status ts-prowlarr-popup-status">${name ? 'Searching Prowlarr…' : 'No performer name to search.'}</div>
               <div class="ts-prowlarr-embed-filters ts-prowlarr-popup-filters ts-prowlarr-filter-bar" hidden></div>
@@ -1919,32 +1922,32 @@
         dotVariant: true, dedupe: true, kind: 'scene',
       }).then(() => wirePpScrollAffordance(el));
     };
-    const viceButton = embedHost.querySelector('[data-vice-filter]');
-    viceButton.onclick = () => {
-      const dialog = document.createElement('dialog');
-      dialog.style.cssText = 'background:var(--panel,#181b1c);color:var(--text,#eee);border:1px solid var(--brand-purple,#087f83);border-radius:16px;padding:24px;max-width:420px;width:90vw';
-      dialog.innerHTML = `<form method="dialog"><h3>Vice keyword filter</h3><label>Show release titles containing<input name="keyword" type="text" maxlength="150" style="display:block;width:100%;margin:16px 0" autocomplete="off"></label><p>Filters loaded results. Leave blank to show all titles.</p><div style="display:flex;gap:12px;justify-content:flex-end"><button value="cancel">Cancel</button><button type="button" data-clear>Clear</button><button value="apply">Apply</button></div></form>`;
-      const input = dialog.querySelector('input');
-      input.value = embedHost.dataset.viceKeyword || '';
-      dialog.querySelector('[data-clear]').onclick = () => { input.value = ''; dialog.close('apply'); };
-      dialog.addEventListener('cancel', ev => ev.stopPropagation());
-      dialog.addEventListener('keydown', ev => { if (ev.key === 'Escape') ev.stopPropagation(); });
-      dialog.addEventListener('close', () => {
-        if (dialog.returnValue === 'apply' && embedHost.isConnected) {
-          const keyword = input.value.trim();
-          window.filterEmbeddedProwlarrKeyword(embedHost, keyword);
-          viceButton.setAttribute('aria-pressed', String(!!keyword));
-          viceButton.classList.toggle('is-selected', !!keyword);
-          embedHost.querySelector('[data-vice-label]').textContent = keyword;
-        }
-        dialog.remove();
-      });
-      document.body.appendChild(dialog);
-      dialog.showModal();
-      input.focus();
-    };
+    wireReleaseKeywordFilter(embedHost);
     el._searchReleaseName(name);
     wirePpScrollAffordance(el);
+  }
+
+  function wireReleaseKeywordFilter(host) {
+    const input = host.querySelector('[data-release-keyword]');
+    const clear = host.querySelector('[data-release-clear]');
+    const apply = () => {
+      window.filterEmbeddedProwlarrKeyword(host, input.value);
+      clear.disabled = !input.value;
+    };
+    input.value = host.dataset.viceKeyword || '';
+    clear.disabled = !input.value;
+    input.addEventListener('input', apply);
+    input.addEventListener('search', apply);
+    input.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault(); ev.stopPropagation(); apply();
+      } else if (ev.key === 'Escape' && input.value) {
+        ev.preventDefault(); ev.stopPropagation(); input.value = ''; apply();
+      }
+    });
+    clear.addEventListener('click', () => {
+      input.value = ''; apply(); input.focus();
+    });
   }
 
   function renderFilmography(el, data) {

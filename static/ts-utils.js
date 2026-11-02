@@ -2026,11 +2026,23 @@ window.countryFlagHtml = function (raw, extraClass) {
   let _embedHighlightedIdx = -1;
   let _embedPaintGen = 0;
 
+  function _releaseKeywordMatches(title, query) {
+    const words = value => String(value || '').normalize('NFKD')
+      .replace(/\p{M}/gu, '').toLowerCase()
+      .replace(/[’']/g, '').match(/[\p{L}\p{N}]+/gu) || [];
+    const terms = words(query);
+    if (!terms.length) return true;
+    const titleWords = words(title);
+    // AND across terms, independent of release punctuation and word order.
+    // Prefixes allow "1080" → "1080p", without "anal" matching "canal".
+    return terms.every(term => titleWords.some(word => word.startsWith(term)));
+  }
+
   function _embedCtx() {
     return {
       get all() {
-        const keyword = (_embedHost?.dataset.viceKeyword || '').trim().toLocaleLowerCase();
-        return keyword ? _embedAllReleases.filter(rel => String(rel.title || '').toLocaleLowerCase().includes(keyword)) : _embedAllReleases;
+        const keyword = (_embedHost?.dataset.viceKeyword || '').trim();
+        return keyword ? _embedAllReleases.filter(rel => _releaseKeywordMatches(rel.title, keyword)) : _embedAllReleases;
       },
       getFilterSpec: () => _embedFilterSpec,
       setFilterSpec: (v) => { _embedFilterSpec = v; },
