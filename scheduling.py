@@ -1,6 +1,8 @@
 """Background schedule settings and validation shared by the API and scheduler."""
 # id, callback name, label, unit, default interval, minimum, maximum
 INTERVAL_JOBS = (
+    ("file_job_recovery", "_resume_file_jobs", "Interrupted file processing retries", "seconds", 30, 10, 3600),
+    ("queue_paths", "_maintain_queue_paths", "Queue folder maintenance", "seconds", 60, 30, 3600),
     ("download_cleanup", "_retry_download_cleanup", "Completed download cleanup retries", "minutes", 2, 1, 1440),
     ("library_reconcile", "_reconcile_filed_library", "Post-processing library checks", "minutes", 2, 1, 1440),
     ("pending_check", "_check_pending_files", "Unmatched file checks", "seconds", 30, 10, 3600),

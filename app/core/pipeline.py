@@ -32,9 +32,15 @@ class ProcessingPipeline:
         self.flush_emit_buffer = flush_emit_buffer_cb
         self.lock = pipeline_lock
         self.callbacks = callbacks
+        self.job_id = None
+
+    def set_phase(self, phase):
+        self.state["pipeline_phase"] = phase
+        if self.job_id:
+            db.processing_job_checkpoint(self.job_id, phase)
 
     async def process_single(self, video: Path) -> dict:
-        self.state["pipeline_phase"] = "Reading media"
+        self.set_phase("Reading media")
         settings = db.get_settings()
         # DB filename key = posix path relative to source_dir when the
         # file sits in a subdirectory (``Jane Smith/scene.mp4``); bare
@@ -73,7 +79,7 @@ class ProcessingPipeline:
         # the entire event loop sits frozen for ~5–15s per file.
         # `_phash_semaphore` (2 concurrent) inside compute_phash still
         # enforces the seek-concurrency cap.
-        self.state["pipeline_phase"] = "Fingerprinting"
+        self.set_phase("Fingerprinting")
         cached = db.get_phash(filename)
         if cached:
             phash = cached
@@ -95,7 +101,7 @@ class ProcessingPipeline:
 
         # Early-resolve against the indexed library. Touches the
         # filesystem (file delete on dup discard) so off-thread.
-        self.state["pipeline_phase"] = "Checking library"
+        self.set_phase("Checking library")
         early = await asyncio.to_thread(
             self.callbacks.get("queue_resolve_phash"), video, filename, phash,
         )
@@ -151,7 +157,7 @@ class ProcessingPipeline:
                 if scene:
                     if import_vice:
                         scene["_force_vice"] = import_vice
-                    self.state["pipeline_phase"] = "Filing"
+                    self.set_phase("Filing")
                     result = await asyncio.to_thread(
                         self.callbacks.get("file_scene_from_match"),
                         video, scene, label,
@@ -163,7 +169,7 @@ class ProcessingPipeline:
 
         # Lookup (Async)
         try:
-            self.state["pipeline_phase"] = "Matching"
+            self.set_phase("Matching")
             self.emit("  Lookup: querying databases...")
             matches, source = await query_with_fallback(phash, api_keys, emit_cb=self.emit)
         except Exception as e:
@@ -186,14 +192,14 @@ class ProcessingPipeline:
         if import_vice and isinstance(matched_scene, dict):
             matched_scene["_force_vice"] = import_vice
         # File move + image download + NFO write — sync I/O off-thread.
-        self.state["pipeline_phase"] = "Filing"
+        self.set_phase("Filing")
         return await asyncio.to_thread(
             self.callbacks.get("file_scene_from_match"),
             video, matched_scene, source,
         )
 
     async def run_pipeline(self, filenames: list = None) -> None:
-        # Queue snapshot grouping briefly shares this lock. The HTTP handler
+        # Queue maintenance briefly shares this lock. The HTTP handler
         # has already marked the request running; dropping it here would leave
         # that flag set forever without an actual matching worker.
         # Poll asynchronously rather than blocking the event loop or occupying
@@ -202,7 +208,7 @@ class ProcessingPipeline:
             await asyncio.sleep(.25)
 
         try:
-            self.state["pipeline_phase"] = "Scanning files"
+            self.set_phase("Scanning files")
             self.state["pipeline_total"] = 0
             self.state["pipeline_done"] = 0
             self.state["running"] = True
@@ -240,6 +246,14 @@ class ProcessingPipeline:
 
             video_files = await asyncio.to_thread(collect_videos)
 
+            # Keep durable queue writes off the event loop, especially on NAS storage.
+            def register_work():
+                for video in video_files:
+                    filename = db.queue_file_key(video, settings)
+                    db.upsert_file(filename)
+                    db.processing_job_enqueue(filename)
+
+            await asyncio.to_thread(register_work)
             n = len(video_files)
             self.state["pipeline_total"] = n
             self.state["pipeline_done"] = 0
@@ -249,6 +263,11 @@ class ProcessingPipeline:
             outcomes = {"filed": 0, "unmatched": 0, "no_dir": 0, "error": 0, "deferred": 0}
             for i, video in enumerate(video_files):
                 self.state["current_file"] = video.name
+                filename = db.queue_file_key(video, settings)
+                self.job_id = await asyncio.to_thread(db.processing_job_start, filename)
+                if not self.job_id:
+                    self.state["pipeline_done"] = i + 1
+                    continue
                 try:
                     result = await self.process_single(video)
                 except PartialDownloadPending as exc:
@@ -256,8 +275,10 @@ class ProcessingPipeline:
                     result = {"status": "deferred"}
                 except Exception as exc:
                     self.emit(f"  File failed: {video.name}: {exc}")
-                    result = {"status": "error"}
+                    result = {"status": "error", "error": str(exc)}
                 st = (result or {}).get("status", "error")
+                await asyncio.to_thread(db.processing_job_finish, self.job_id, st, (result or {}).get("error"))
+                self.job_id = None
                 if st in outcomes:
                     outcomes[st] += 1
                 self.state["pipeline_done"] = i + 1
@@ -310,6 +331,13 @@ class ProcessingPipeline:
                 pass
             self.flush_emit_buffer()
         finally:
+            if self.job_id:
+                try:
+                    await asyncio.to_thread(db.processing_job_finish, self.job_id, "error", "Worker interrupted before completion")
+                except Exception as exc:
+                    self.emit(f"Could not persist interrupted job: {exc}")
+                finally:
+                    self.job_id = None
             self.state["pipeline_phase"] = None
             self.state["running"] = False
             self.state["current_file"] = None

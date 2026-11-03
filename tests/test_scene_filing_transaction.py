@@ -20,7 +20,7 @@ class SceneFilingSafetyTests(unittest.TestCase):
                 def build(*a,**kw):
                     if case=='resumed_partial':(release/'unfinished.part').touch()
                     return 'new metadata'
-                def restore(a,b):
+                def restore(a,b,**kw):
                     if case=='rollback_failure':raise OSError('restore denied')
                     a.rename(b)
                 env={'Path':Path,'os':os,'require_complete_queue_video':require_complete_queue_video,

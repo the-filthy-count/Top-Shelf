@@ -301,7 +301,9 @@
   let _qIsRunning = false;
   let _qSelectedFile = null;
   let _qSelectedMovieFile = null;
+  let _qSelectedMovieId = null;
   let _qManualFile = null;
+  let _qManualFileId = null;
   let queueMode = localStorage.getItem('ts_queue_mode') || 'scenes';
   let _queuePollTimer = null;
   /** Bumped on `pagehide` so async queue work skips DOM writes after navigate away. */
@@ -320,11 +322,15 @@
     const read = { controller };
     read.promise = (async () => {
       try {
-        const response = await fetch(url, { signal: controller.signal });
-        if (!response.ok) throw new Error('Queue request failed: ' + response.status);
-        const payload = await response.json();
-        controller.signal.throwIfAborted();
-        return payload;
+        for (;;) {
+          controller.signal.throwIfAborted();
+          const response = await fetch(url, { signal: controller.signal });
+          if (!response.ok) throw new Error('Queue request failed: ' + response.status);
+          const payload = await response.json();
+          controller.signal.throwIfAborted();
+          if (!payload.loading) return payload;
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       } finally {
         clearTimeout(timeout);
         if (_queuePayloadReads.get(url) === read) _queuePayloadReads.delete(url);
@@ -408,12 +414,13 @@
    */
   function _qCall(fnName, iOrEl, extra) {
     let filename = '';
+    let fileId = '';
     //: Preferred path: the button/event target lets us walk to the
     //: actual row that was clicked and read its data-filename. Immune
     //: to poll-triggered reorders of window._queueFiles.
     if (iOrEl && typeof iOrEl === 'object') {
       const row = (iOrEl.closest && iOrEl.closest('.queue-item')) || null;
-      if (row) filename = row.getAttribute('data-filename') || '';
+      if (row) { filename = row.getAttribute('data-filename') || ''; fileId = row.getAttribute('data-file-id') || ''; }
     }
     //: Legacy numeric-index path. Kept for callers that pass an int;
     //: reads the current _queueFiles so it at least uses the freshest
@@ -422,6 +429,7 @@
     if (!filename && typeof iOrEl === 'number') {
       const f = (window._queueFiles || [])[iOrEl];
       filename = (f && f.filename) || '';
+      fileId = (f && f.file_id) || '';
     }
     if (!filename) {
       if (typeof window.toast === 'function') {
@@ -431,7 +439,8 @@
     }
     const fn = window[fnName];
     if (typeof fn !== 'function') return;
-    if (arguments.length > 2) fn(filename, extra);
+    if (fnName === 'confirmDeleteQueueFile' || ['openMovieManualSearch', 'openManualSearch', 'openManual', 'openVice'].includes(fnName)) fn(filename, {file_id:fileId, queue_kind:queueMode === 'movies' ? 'movie' : 'scene'});
+    else if (arguments.length > 2) fn(filename, extra);
     else fn(filename);
   }
   window._qCall = _qCall;
@@ -636,6 +645,7 @@
     if (_qsp) _qsp.style.display = 'none';
     closeMovieSearchPanel();
     _qSelectedMovieFile = null;
+    _qSelectedMovieId = null;
     clearSelectedFile();
     _renderQueueStatusChip();
     loadQueue({ preserveView: true });
@@ -796,14 +806,14 @@
       const inLib = Array.isArray(f.performers_in_library) ? f.performers_in_library : [];
       const missingLib = Array.isArray(f.performers_missing_in_library) ? f.performers_missing_in_library : [];
       const droppedByFilename = Array.isArray(f.performers_dropped_by_filename) ? f.performers_dropped_by_filename : [];
-      const tipBits = [];
-      if (_ndStudio) tipBits.push('Studio "' + _ndStudio + '" has no library folder');
+      const tipBits = ['Scene record found; no eligible filing destination was resolved. Performer filing requires a matching database ID'];
+      if (_ndStudio) tipBits.push('Matched studio: ' + _ndStudio);
       if (missingLib.length) tipBits.push('No folder for: ' + missingLib.join(', '));
-      if (inLib.length) tipBits.push('Library has: ' + inLib.join(', ') + ' — re-run to file here');
+      if (inLib.length) tipBits.push('Names found in library: ' + inLib.join(', ') + ' — database identity and folder availability must also match');
       if (droppedByFilename.length) tipBits.push('Dropped (not in filename): ' + droppedByFilename.join(', '));
       if (!tipBits.length) tipBits.push('No filing destination for this match');
       const _reason = tipBits.join(' · ');
-      const _label = inLib.length ? 'Re-run to file' : 'No library folder';
+      const _label = 'No filing destination';
       noDirChip = '<span class="qi-nodir-chip" title="' + esc(_reason) + '"><i class="fa-solid fa-folder-tree"></i><span class="qi-nodir-chip-msg">' + esc(_label) + '</span></span>';
     }
     const matchLinkEl = _queueMatchLinkHtml(f);
@@ -835,7 +845,7 @@
     const _titleHtml = (typeof _libraryAndTokenHighlight === 'function')
       ? _libraryAndTokenHighlight(_titleText, _hl)
       : esc(_titleText);
-    return `<div class="queue-item" id="qi-${i}" data-filename="${esc(f.filename)}" tabindex="0" onclick="queueTileSearch(event,this,'openManualSearch')" onkeydown="queueTileSearch(event,this,'openManualSearch')">
+    return `<div class="queue-item" id="qi-${i}" data-filename="${esc(f.filename)}" data-file-id="${esc(f.file_id || '')}" tabindex="0" onclick="queueTileSearch(event,this,'openManualSearch')" onkeydown="queueTileSearch(event,this,'openManualSearch')">
       <div class="qi-cell">${statusEl}</div>
       <div class="qi-cell">${studioLogo}${displayPerfs.length ? `<div class="qi-performer-label">${esc(displayPerfs.join(', '))}</div>` : ''}</div>
       <div class="qi-cell-name" title="${esc(f.filename)}">
@@ -849,15 +859,19 @@
       </div>
       <div class="qi-cell qi-cell-headshots">${headshotSlot}</div>
       <div class="qi-cell"><span class="badge-size">${f.size_mb} MB</span></div>
-      <div class="qi-cell">${f.has_phash ? `<button type="button" class="badge-cached qi-phash-btn" title="Click to view phash — matches Stash's fingerprint format" data-phash="${esc(f.phash || '')}" data-filename="${esc(f.filename || '')}" onclick="showQueuePhashPopup(event, this)"><i class="fa-solid fa-fingerprint queue-phash-fa"></i></button>` : ''}${f.in_duplicate_group ? `<span class="q-dup-badge" title="Duplicate — ${esc(String(f.duplicate_group_size || 2))} files share the same phash"><i class="fa-solid fa-clone"></i><span>${esc(String(f.duplicate_group_size || 2))}</span></span>` : ''}</div>
+      <div class="qi-cell">${f.has_phash ? `<button type="button" class="badge-cached qi-phash-btn" title="Click to view phash — matches Stash's fingerprint format" data-phash="${esc(f.phash || '')}" data-filename="${esc(f.filename || '')}" onclick="showQueuePhashPopup(event, this)"><i class="fa-solid fa-fingerprint queue-phash-fa"></i></button>` : ''}${f.in_duplicate_group ? `<span class="q-dup-badge" title="Duplicate — ${esc(String(f.duplicate_group_size || 2))} files share the same phash"><i class="fa-solid fa-clone"></i><span>${esc(String(f.duplicate_group_size || 2))}</span></span>` : ''}${_queueHistoryButton(f)}</div>
       <div class="qi-cell qi-actions">
         ${profileButton}
         <button type="button" class="btn-icon" onclick="_qCall('openQueueFilmstrip', this)" title="Filmstrip"><i class="fa-solid fa-photo-film"></i></button>
         <button type="button" class="btn-icon qi-filing-btn ${_viceMatchesFilename(f.filename) ? 'is-vice-match' : ''}" onclick="_qCall('openManualSearch', this)" title="Search / manual (includes suggested matches + Vice)"><span style="display:inline-block;width:1.1em;height:1.1em;background-color:currentColor;-webkit-mask:url(/static/icons/search.svg) center/contain no-repeat;mask:url(/static/icons/search.svg) center/contain no-repeat;vertical-align:middle"></span></button>
-        <button type="button" class="btn-icon qi-delete-btn" onclick="_qCall('confirmDeleteQueueFile', this)" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        <button type="button" class="btn-icon qi-delete-btn" onclick="_qCall('confirmDeleteQueueFile', this)" title="Move to recovery"><i class="fa-solid fa-trash"></i></button>
         <button type="button" class="btn-run-file" onclick="_qCall('runQueueFile', this)" title="Run"><i class="fa-solid fa-play"></i></button>
       </div>
     </div>`;
+  }
+
+  function _queueHistoryButton(f) {
+    return f.file_id ? `<button type="button" class="btn-icon qi-history-btn" onclick="QueueDetails.history(this.closest('.queue-item').dataset.fileId)" title="File history" aria-label="File history"><i class="fa-solid fa-clock-rotate-left"></i></button>` : '';
   }
 
   function _queueMatchLinkHtml(f) {
@@ -921,7 +935,7 @@
     // rows show the studio logo — is otherwise empty. Fill it with the
     // Movies dir icon so the row visually reads as a movie release and
     // matches the Vices / JAV tab's folder-tile aesthetic.
-    return `<div class="queue-item" id="qi-${i}" data-filename="${esc(f.filename)}" tabindex="0" onclick="queueTileSearch(event,this,'openMovieManualSearch')" onkeydown="queueTileSearch(event,this,'openMovieManualSearch')">
+    return `<div class="queue-item" id="qi-${i}" data-filename="${esc(f.filename)}" data-file-id="${esc(f.file_id || '')}" tabindex="0" onclick="queueTileSearch(event,this,'openMovieManualSearch')" onkeydown="queueTileSearch(event,this,'openMovieManualSearch')">
       <div class="qi-cell">${statusEl}</div>
       <div class="qi-cell"><img class="qi-studio-logo" data-logo-fallback="${_queueFileLogoFallback()}" ${f.match_studio ? `data-logo-src="/api/studio-logo?name=${encodeURIComponent(f.match_studio)}"` : `src="${_queueFileLogoFallback()}"`} alt="Studio" onerror="this.onerror=null; this.src=this.dataset.logoFallback"></div>
       <div class="qi-cell-name" title="${esc(f.filename)}">
@@ -930,10 +944,10 @@
       </div>
       <div class="qi-cell"></div>
       <div class="qi-cell"><span class="badge-size">${f.size_mb} MB</span></div>
-      <div class="qi-cell"></div>
+      <div class="qi-cell">${_queueHistoryButton(f)}</div>
       <div class="qi-cell qi-actions">
         <button type="button" class="btn-icon" onclick="_qCall('openMovieManualSearch', this)" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
-        <button type="button" class="btn-icon qi-delete-btn" onclick="_qCall('confirmDeleteQueueFile', this)" title="Delete"><i class="fa-solid fa-trash"></i></button>
+        <button type="button" class="btn-icon qi-delete-btn" onclick="_qCall('confirmDeleteQueueFile', this)" title="Move to recovery"><i class="fa-solid fa-trash"></i></button>
         <button type="button" class="btn-run-file" onclick="_qCall('runQueueFile', this)" title="Auto-match"><i class="fa-solid fa-play"></i></button>
       </div>
     </div>`;
@@ -2702,29 +2716,25 @@
     }
   }
 
-  //: Delete a queued video from disk. Uses the native confirm prompt
-  //: so the user gets a blocking "are you sure?" that shows the full
-  //: filename before we fire the DELETE — the action is irreversible
-  //: so a fancy styled modal here would be overkill. Refreshes the
-  //: queue in place (preserveView) so the row disappears without
-  //: losing scroll position.
-  async function confirmDeleteQueueFile(filename) {
+  // Keep removed media recoverable and preserve the current queue view.
+  async function confirmDeleteQueueFile(filename, identity = {}) {
     if (!filename) return;
-    const ok = confirm(`Delete this file from disk?\n\n${filename}\n\nThis cannot be undone — the video and any matching .nfo / poster sidecars will be removed.`);
+    const ok = confirm(`Move this file to recovery?\n\n${filename}\n\nThe video and sidecars will be retained so you can restore them. This does not free disk space.`);
     if (!ok) return;
     try {
       const r = await fetch('/api/queue/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename }),
+        body: JSON.stringify({ filename, ...identity }),
       });
       const d = await r.json();
-      if (d.error) { window.toast(`Delete failed: ${d.error}`); return; }
+      if (!r.ok || d.error) { window.toast(`Delete failed: ${d.error}`); return; }
       //: If this was the file currently selected for search/confirm,
       //: drop that state so the now-orphaned panel doesn't stay docked.
       if (_qSelectedFile === filename) { clearSelectedFile(); clearSearch(); }
       loadQueue({ preserveView: true });
       loadQueueStats();
+      if (d.recovery_id) window.toast('Moved to recovery — use the recovery button to restore it.');
     } catch (e) {
       window.toast('Delete failed: ' + (e.message || e));
     }
@@ -3489,7 +3499,8 @@
     fit();
   }
 
-  async function openManualSearch(filename) {
+  async function openManualSearch(filename, action = {}) {
+    _qManualFileId = action.file_id || (window._queueFiles || []).find(f => f.filename === filename)?.file_id || null;
     const mySeq = ++_qOpenSearchSeq;
     _qSelectedFile = filename;
     document.getElementById('searchFileLabel').textContent = `Filing: ${filename}`;
@@ -4339,6 +4350,7 @@
   async function _postManualFileWithRetry(body, onWait, url) {
     const RETRY_DELAY_MS  = 2500;
     const MAX_WAIT_MS     = 60000;
+    body = {...body, file_id: body.file_id || _qManualFileId};
     const target = url || '/api/file/manual';
     const start = Date.now();
     let attempt = 0;
@@ -4885,14 +4897,16 @@
       ov.classList.remove('open');
     }
     _qSelectedMovieFile = null;
+    _qSelectedMovieId = null;
     const lbl = document.getElementById('movieSearchFileLabel');
     if (lbl) lbl.style.display = 'none';
     document.querySelectorAll('.queue-section .queue-item').forEach(el => el.classList.remove('active'));
   }
   function clearMovieSearchPick() { closeMovieSearchPanel(); }
 
-  async function openMovieManualSearch(filename) {
+  async function openMovieManualSearch(filename, action = {}) {
     _qSelectedMovieFile = filename;
+    _qSelectedMovieId = action.file_id || (window._queueFiles || []).find(f => f.filename === filename)?.file_id || null;
     const lbl = document.getElementById('movieSearchFileLabel');
     if (lbl) {
       lbl.textContent = filename;
@@ -4983,7 +4997,7 @@
   async function pickMovieTmdb(btn) {
     const tmdbId = btn.getAttribute('data-tmdb-id');
     if (!_qSelectedMovieFile) { window.toast('No file selected'); return; }
-    const r = await fetch('/api/movies/file', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ filename: _qSelectedMovieFile, tmdb_id: tmdbId }) });
+    const r = await fetch('/api/movies/file', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ filename: _qSelectedMovieFile, file_id: _qSelectedMovieId, tmdb_id: tmdbId }) });
     const d = await r.json().catch(() => ({}));
     if (d.error) { window.toast(d.error); return; }
     _toastIfQueued(d, 'movie filing');
@@ -4995,7 +5009,7 @@
   async function pickMovieTpdb(btn) {
     const tpdbId = btn.getAttribute('data-tpdb-id');
     if (!_qSelectedMovieFile) { window.toast('No file selected'); return; }
-    const r = await fetch('/api/movies/file', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ filename: _qSelectedMovieFile, tpdb_id: tpdbId }) });
+    const r = await fetch('/api/movies/file', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ filename: _qSelectedMovieFile, file_id: _qSelectedMovieId, tpdb_id: tpdbId }) });
     const d = await r.json().catch(() => ({}));
     if (d.error) { window.toast(d.error); return; }
     _toastIfQueued(d, 'movie filing');
@@ -5007,7 +5021,7 @@
   async function pickMovieJavstash(btn) {
     const jid = btn.getAttribute('data-javstash-id');
     if (!_qSelectedMovieFile) { window.toast('No file selected'); return; }
-    const r = await fetch('/api/movies/file', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ filename: _qSelectedMovieFile, javstash_id: jid }) });
+    const r = await fetch('/api/movies/file', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ filename: _qSelectedMovieFile, file_id: _qSelectedMovieId, javstash_id: jid }) });
     const d = await r.json().catch(() => ({}));
     if (d.error) { window.toast(d.error); return; }
     _toastIfQueued(d, 'movie filing');
@@ -5446,8 +5460,8 @@
   // fields + manual-extras state) and then auto-expand the extras
   // section so the user sees the thumb / plot / DB-submit controls
   // straight away.
-  async function openManual(filename) {
-    await openManualSearch(filename);
+  async function openManual(filename, action = {}) {
+    await openManualSearch(filename, action);
     _setManualExtrasOpen(true);
   }
 
@@ -5708,6 +5722,7 @@
   // or dropped file into a Vice without switching pages. Backend
   // endpoint is shared: POST /api/file/manual/vice.
   let _viceFile = null;
+  let _viceFileId = null;
   let _viceSubmitInFlight = false;
   let vThumbMode = null;
   let vThumbDataUrl = null;
@@ -5734,7 +5749,8 @@
     _vShowRandBtn();
   }
 
-  async function openVice(filename) {
+  async function openVice(filename, action = {}) {
+    _viceFileId = action.file_id || (window._queueFiles || []).find(f => f.filename === filename)?.file_id || null;
     _viceFile = filename;
     document.getElementById('viceFilename').textContent = filename;
     const titleEl = document.getElementById('vTitle');
@@ -5935,6 +5951,7 @@
     }
     const payload = {
       filename: _viceFile,
+      file_id: _viceFileId,
       vice_name, title, date, performers,
       image_url: imageUrl,
     };
@@ -6669,7 +6686,7 @@
     if (!keepFn) { _toastBelow('No recommended keeper for this group'); return; }
     const deleteFns = (g.files || []).map(f => f.current_filename).filter(fn => fn && fn !== keepFn);
     if (!deleteFns.length) return;
-    if (!confirm(`Keep “${keepFn}” and delete ${deleteFns.length} other duplicate(s) from the queue folder?`)) return;
+    if (!confirm(`Keep “${keepFn}” and move ${deleteFns.length} other duplicate(s) to recovery? Their disk space will remain in use.`)) return;
     try {
       const r = await fetch('/api/queue/duplicates/resolve-one', {
         method: 'POST',
@@ -6690,7 +6707,7 @@
 
   async function queueDupDeleteOne(fn, gi) {
     if (!fn) return;
-    if (!confirm(`Delete “${fn}” from the queue folder?`)) return;
+    if (!confirm(`Move “${fn}” to recovery? Its disk space will remain in use.`)) return;
     try {
       const r = await fetch('/api/queue/delete', {
         method: 'POST',
@@ -7303,7 +7320,7 @@
     fetch('/api/queue/suggestions/accept', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename, source_db, source_id, scene_override: scene_override || null }),
+      body: JSON.stringify({ filename, file_id: failedFile?.file_id || null, source_db, source_id, scene_override: scene_override || null }),
     }).then(r => r.json()).then(d => {
       if (d && (d.ok || d.status === 'filed')) {
         loadQueueStats();
@@ -7528,8 +7545,10 @@
     fetch('/api/queue/suggestions/reject', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename, source_db, source_id }),
-    }).then(() => {
+      body: JSON.stringify({ filename, file_id: file?.file_id || null, source_db, source_id }),
+    }).then(async response => {
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.error || 'Reject failed');
       loadQueueStats();
     }).catch(e => {
       console.error('Reject persist failed:', e);

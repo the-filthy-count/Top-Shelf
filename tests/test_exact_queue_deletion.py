@@ -14,7 +14,7 @@ class ExactQueueDeletionTests(unittest.TestCase):
                 (folder/'clip.nfo').write_text('keep metadata')
                 lookup=Mock(side_effect=AssertionError('alternate resolver must not run'))
                 db=SimpleNamespace(get_settings=lambda:{setting:str(root)},update_file=Mock(),update_movie=Mock())
-                delete=load('main.py','_queue_delete_filename_sync',{'Path':Path,'db':db,'emit':Mock(),'_resolve_queue_file_path':lookup})
+                delete=load('main.py','_queue_delete_filename_sync',{'Path':Path,'db':db,'emit':Mock(),'_resolve_queue_file_path':lookup,'_archive_queue_file':lambda fn,p,*args: p.unlink() or {'recovery_id':'retained'}})
                 result=delete(prefix+'clip.mp4')
                 self.assertTrue(result['already_missing']);self.assertFalse(result['deleted']);self.assertEqual(result['freed_bytes'],0)
                 for ext in ('.mkv','.avi'):self.assertEqual((folder/('clip'+ext)).read_bytes(),ext.encode())

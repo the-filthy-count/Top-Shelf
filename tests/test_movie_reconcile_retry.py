@@ -26,7 +26,7 @@ class MovieReconcileRetryTests(unittest.TestCase):
             root=Path(tmp);video=root/'movie.mp4';video.touch();clock=SimpleNamespace(now=100)
             settings={'movies_source_dir':str(root),'folder_watch_hold_secs':'0'}
             process=Mock(side_effect=[{'status':'deferred'},{'status':'filed'}])
-            env={'Path':Path,'time':SimpleNamespace(time=lambda:clock.now),'db':SimpleNamespace(get_settings=lambda:settings,get_movie_terminal_filenames=lambda:set(),rename_movie=Mock(),update_movie=Mock()),
+            env={'Path':Path,'time':SimpleNamespace(time=lambda:clock.now),'db':SimpleNamespace(get_settings=lambda:settings,get_movie_terminal_filenames=lambda:set(),rename_movie=Mock(),update_movie=Mock(),upsert_movie=Mock(),processing_job_enqueue=Mock()),
                 '_movie_pipeline_lock':threading.Lock(),'_pending_lock':threading.Lock(),'_pending_movie_files':{},'_movie_poll_seen':set(),
                 'processing_state':{'running':False},'emit':Mock(),'process_movie_file':process,
                 '_movie_source_video_relpaths':lambda *a:[('movie.mp4',video)],'_clean_and_rename_on_disk':lambda root,rel,**kw:rel}
@@ -38,7 +38,7 @@ class MovieReconcileRetryTests(unittest.TestCase):
 
     def test_retry_preserves_later_event_deadline(self):
         with tempfile.TemporaryDirectory() as tmp:
-            env={'Path':Path,'time':SimpleNamespace(time=lambda:100),'db':SimpleNamespace(get_settings=lambda:{'movies_source_dir':tmp}),
+            env={'Path':Path,'time':SimpleNamespace(time=lambda:100),'db':SimpleNamespace(get_settings=lambda:{'movies_source_dir':tmp},upsert_movie=Mock(),processing_job_enqueue=Mock()),
                 '_movie_pipeline_lock':threading.Lock(),'_pending_lock':threading.Lock(),'_pending_movie_files':{'movie.mp4':500},
                 'processing_state':{'running':False},'emit':Mock(),'process_movie_file':lambda *a:{'status':'deferred'}}
             load('main.py','run_movie_pipeline',env)(['movie.mp4'])

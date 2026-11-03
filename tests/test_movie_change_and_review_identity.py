@@ -28,7 +28,7 @@ class MovieAndReviewTests(unittest.TestCase):
                      'file_movie':file,'_cleanup_superseded_library_copies':Mock()}
                 env['re']=__import__('re')
                 load('main.py','_verified_movie_candidate',env)
-                result=load('main.py','process_movie_file',env)(video.name,src=video.parent)
+                result=load('main.py','_process_movie_file_impl',env)(video.name,src=video.parent)
                 self.assertEqual(result['status'],'filed' if stage=='stable' else 'deferred')
                 self.assertEqual(file.call_count,1 if stage=='stable' else 0)
                 self.assertEqual(compare.call_count,0 if stage=='hash' else 1)

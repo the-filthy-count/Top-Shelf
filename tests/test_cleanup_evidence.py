@@ -32,7 +32,7 @@ class CleanupEvidenceTests(unittest.TestCase):
             env={'Path':Path,'db':db,'emit':Mock(),'require_complete_queue_video':lambda *a:None,
                  'PartialDownloadPending':type('PartialDownloadPending',(Exception,),{}),'compute_phash':compute,
                  '_queue_resolve_phash_vs_indexed_library':lambda *a,**k:{'status':'removed'}}
-            result=load('main.py','process_movie_file',env)('movie.mp4',src=root)
+            result=load('main.py','_process_movie_file_impl',env)('movie.mp4',src=root)
             self.assertEqual(result,{'status':'removed'})
             compute.assert_called_once_with(video)
             db.update_movie.assert_called_once_with('movie.mp4',status='processing')

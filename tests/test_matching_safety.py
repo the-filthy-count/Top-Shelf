@@ -59,9 +59,11 @@ class MatchingSafetyTests(unittest.TestCase):
                 return {'status':'filed'}
             notify=Mock()
             env={'Path':Path,'asyncio':SimpleNamespace(to_thread=inline),'PartialDownloadPending':PartialDownloadPending,
-                 'db':SimpleNamespace(get_settings=lambda:{'source_dir':tmp},notification_add=notify),'VIDEO_EXTENSIONS':{'.mp4'}}
+                 'db':SimpleNamespace(get_settings=lambda:{'source_dir':tmp},notification_add=notify,
+                     queue_file_key=lambda p,s:p.name,upsert_file=Mock(),processing_job_enqueue=Mock(),
+                     processing_job_start=Mock(return_value='asset'),processing_job_finish=Mock()),'VIDEO_EXTENSIONS':{'.mp4'}}
             exec(compile(ast.Module(body=[fn],type_ignores=[]),'pipeline','exec'),env)
-            owner=SimpleNamespace(state={},lock=threading.Lock(),emit=Mock(),flush_emit_buffer=Mock(),process_single=process)
+            owner=SimpleNamespace(job_id=None,set_phase=Mock(),state={},lock=threading.Lock(),emit=Mock(),flush_emit_buffer=Mock(),process_single=process)
             asyncio.run(env['run_pipeline'](owner))
             self.assertEqual(seen,['a.mp4','b.mp4','c.mp4'])
             self.assertFalse(owner.state['running']);self.assertFalse(owner.lock.locked())

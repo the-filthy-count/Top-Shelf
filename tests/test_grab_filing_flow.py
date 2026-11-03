@@ -26,7 +26,7 @@ class GrabFlowTests(unittest.IsolatedAsyncioTestCase):
             env={'require_complete_queue_video':lambda *a:None,'Path':Path,'asyncio':asyncio,'db':db,'_strip_ts_uid':lambda s:(s,''),'query_with_fallback':query}
             exec(compile(ast.Module(body=[method],type_ignores=[]),'pipeline.py','exec'),env)
             file_scene=Mock(return_value={'status':status})
-            owner=SimpleNamespace(state={},emit=Mock(),callbacks={
+            owner=SimpleNamespace(state={},set_phase=Mock(),emit=Mock(),callbacks={
                 'queue_resolve_phash':lambda *args:None,
                 'fetch_grab_scene':lambda grab:scene if fetched else None,
                 'file_scene_from_match':file_scene})

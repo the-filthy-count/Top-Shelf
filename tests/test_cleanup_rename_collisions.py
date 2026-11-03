@@ -45,7 +45,7 @@ class FolderTagCleanupTests(unittest.TestCase):
                 src.rename(dst);return dst
             moved=Mock(side_effect=move)
             env={'Path':Path,'_clean_release_filename':cleaner,'_move_staged_video':moved,
-                 'db':SimpleNamespace(rename_file=Mock()),'emit':Mock()}
+                 'db':SimpleNamespace(rename_file=Mock(),upsert_file=Mock()),'emit':Mock()}
             clean=load('main.py','_clean_and_rename_on_disk',env)
             result=clean(root,'Sybil/'+video.name)
             self.assertEqual(result,'Sybil/[Sybil] Olga Sybil.mp4')

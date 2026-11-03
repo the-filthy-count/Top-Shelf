@@ -22,3 +22,12 @@ Failed NZBGet and SABnzbd history jobs have an explicit retry button. Other clie
 - https://sabnzbd.org/wiki/configuration/5.1/api (`mode=retry`)
 
 Alerts are deduplicated in SQLite independently of dismissal; a successful observed state resets the failure so a later failure can alert again.
+
+# Migration regression checks
+
+Run the Python suite above plus `node --test tests/*.cjs`. The migration tests
+exercise temporary databases and media files: stable identities, restart recovery,
+bounded retries, cancellation, retained removals, restore/purge, collision and
+rollback behaviour, delayed manual actions, and TPDB canonical performer routing.
+Do not start the application's watchers against live settings for verification.
+The migration has also been tested with the production Python 3.12 runtime.

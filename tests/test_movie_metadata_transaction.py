@@ -14,7 +14,7 @@ class MovieMetadataTransactionTests(unittest.TestCase):
                 root=Path(tmp);library=root/'library';library.mkdir();src=root/'movie.mp4';src.write_bytes(b'video')
                 folder=library/'Movie (2020)';folder.mkdir();nfo=folder/'Movie (2020).nfo';nfo.write_text('old metadata')
                 updates=Mock();gate=Mock(side_effect=lambda a,b,**kw:a.rename(b))
-                def restore(a,b):
+                def restore(a,b,**kw):
                     if stage=='rollback_failure':raise OSError('restore denied')
                     a.rename(b)
                 env={'Path':Path,'os':os,'require_complete_queue_video':require_complete_queue_video,'db':SimpleNamespace(get_settings=lambda:{'features_dir':str(library)},upsert_movie=Mock(),update_movie=updates,wanted_mark_acquired=Mock()),

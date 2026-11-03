@@ -1,4 +1,7 @@
 import ast
+import asyncio
+from fastapi import FastAPI, Body
+from fastapi.responses import JSONResponse
 import json
 import tempfile
 import unittest
@@ -11,7 +14,8 @@ class SuggestionInboxTests(unittest.TestCase):
     def test_uses_configured_inbox_over_legacy_namesake(self):
         tree=ast.parse((ROOT/'main.py').read_text())
         endpoint=next(n for n in tree.body if isinstance(n,ast.AsyncFunctionDef) and n.name=='api_queue_suggestions_accept')
-        accept=next(n for n in endpoint.body if isinstance(n,ast.FunctionDef) and n.name=='_accept')
+        async def inline(fn):
+            return fn()
         for scope,setting in [('Vices/Category','vice_download_watch_dir'),('JAV','jav_download_watch_dir')]:
             with self.subTest(scope=scope),tempfile.TemporaryDirectory() as tmp:
                 root=Path(tmp);scenes=root/'scenes';inbox=root/'inbox';scenes.mkdir();inbox.mkdir()
@@ -23,13 +27,14 @@ class SuggestionInboxTests(unittest.TestCase):
                 resolver=load('database.py','resolve_source_video_path',{'Path':Path,'_VIDEO_SUFFIXES_TRY':('.mp4',)})
                 db=SimpleNamespace(get_settings=lambda:settings,resolve_source_video_path=resolver,
                     queue_suggestions_for_file=lambda f:[{'source_db':'StashDB','source_id':'scene','payload_json':'{"id":"scene"}'}],queue_suggestions_clear=clear)
-                env={'Path':Path,'json':json,'db':db,'filename':filename,'source_db':'StashDB','source_id':'scene','scene_override':None,
+                env={'app': FastAPI(), 'Body': Body, 'JSONResponse': JSONResponse, 'run_in_threadpool': inline, 'Path':Path,'json':json,'db':db,'filename':filename,'source_db':'StashDB','source_id':'scene','scene_override':None,
                      '_extract_scene_number_from_filename':lambda f:None,'file_scene_from_match':filing}
                 load('main.py','_resolve_queue_file_path',env)
-                exec(compile(ast.Module(body=[accept],type_ignores=[]),'<test>','exec'),env)
-                self.assertEqual(env['_accept'](),{'status':'filed'})
+                exec(compile(ast.Module(body=[endpoint],type_ignores=[]),'<test>','exec'),env)
+                payload={'filename':filename,'source_db':'StashDB','source_id':'scene'}
+                self.assertEqual(asyncio.run(env['api_queue_suggestions_accept'](payload)),{'ok':True,'status':'filed'})
                 self.assertEqual(filing.call_args.args[0],actual);clear.assert_called_once_with(filename)
                 self.assertTrue(legacy.exists())
                 filing.reset_mock();clear.reset_mock();actual.unlink();legacy.unlink()
-                self.assertEqual(env['_accept']()['status'],'error')
+                self.assertEqual(asyncio.run(env['api_queue_suggestions_accept'](payload))['status'],'error')
                 filing.assert_not_called();clear.assert_not_called()

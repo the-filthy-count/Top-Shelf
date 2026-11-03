@@ -20,7 +20,7 @@
 <script src="/static/theme-init.js?v=20260614c"></script>
 <link rel="stylesheet" href="/static/app-shell.css?v=20261012-bio-layout">
 <script src="/static/ts-utils.js?v=20261014-navigation-2"></script>
-<script src="/static/lib-entity-actions.js?v=20261004-modal-lifecycle"></script>
+<script src="/static/lib-entity-actions.js?v=20261103-library-recovery"></script>
 <script src="/static/popup-loader.js?v=20261014-primary-search-name"></script>
 <style>
   /* Font tokens (--mono / --acid / --secs) live in /static/app-shell.css?v=20261012-bio-layout */
@@ -3616,6 +3616,7 @@
             <button id="btnQueueIafdBulk" class="btn-secondary queue-matched-toggle" onclick="openIafdBulkPicker()" title="IAFD bulk match"><img src="/static/logos/iafd.webp" alt="IAFD" style="height:14px;width:auto;display:block" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'IAFD',style:'font-size:var(--text-small);font-weight:600;letter-spacing:0.04em'}))"></button>
             <button id="btnQueueSuggestions" class="btn-secondary queue-matched-toggle" onclick="openSuggestionsModal()" title="Review suggestions"><i class="fa-solid fa-brain"></i></button>
             <button id="btnQueueDuplicates" class="btn-secondary queue-matched-toggle" onclick="openQueueDuplicatesModal()" title="Queue duplicates (same phash)"><i class="fa-solid fa-clone"></i></button>
+            <button class="btn-secondary queue-matched-toggle" onclick="QueueDetails.recovery()" title="Recover removed files" aria-label="Recover removed files"><i class="fa-solid fa-trash-arrow-up"></i></button>
             <button id="btnRunAll" class="btn-secondary queue-matched-toggle" onclick="runAll()" title="Run All"><i class="fa-solid fa-play"></i></button>
           </div>
         </div>
@@ -4062,7 +4063,9 @@
   </div>
 </div>
 
-<script defer src="/static/queue.js?v=20261014-navigation-3"></script>
+<link rel="stylesheet" href="/static/queue-history.css?v=20261103">
+<script defer src="/static/queue-history.js?v=20261103"></script>
+<script defer src="/static/queue.js?v=20261103-recovery"></script>
 
 <!-- Queue duplicates modal — same phash grouping / keeper rules as Library Health. -->
 <div id="queueDupOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);z-index:9998;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeQueueDuplicatesModal()">

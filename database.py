@@ -1454,6 +1454,12 @@ def init_db() -> None:
         # any DB where ``stash_compat_phash_rehash_pending`` is still
         # 'true' — a rebuild that hadn't completed by the time this
         # code shipped will still resume on next start.)
+        from app.core.file_history import install as install_file_history
+        install_file_history(conn)
+        from app.core.recovery import install as install_recovery
+        install_recovery(conn)
+        from app.core.jobs import install as install_jobs
+        install_jobs(conn)
         conn.commit()
 
 
@@ -3671,7 +3677,7 @@ def upsert_file(filename: str, scope: str | None = None) -> int:
     with get_conn() as conn:
         # 1) Prefer exact filename match (current behavior target).
         cur = conn.execute(
-            "SELECT id, filename FROM processed_files WHERE filename = ? LIMIT 1",
+            "SELECT id, filename, status FROM processed_files WHERE filename = ? LIMIT 1",
             (filename,),
         )
         row = cur.fetchone()
@@ -3679,7 +3685,7 @@ def upsert_file(filename: str, scope: str | None = None) -> int:
         if not row:
             cur = conn.execute(
                 """
-                SELECT id, filename
+                SELECT id, filename, status
                 FROM processed_files
                 WHERE filename = ?
                 LIMIT 1
@@ -3687,6 +3693,14 @@ def upsert_file(filename: str, scope: str | None = None) -> int:
                 (fst,),
             )
             row = cur.fetchone()
+        if row and row['status'] == 'removed':
+            # A newly admitted file at a previously removed path is a new asset.
+            # The old asset and recovery manifest remain independent of this row.
+            old_key = row['filename']
+            conn.execute('DELETE FROM processed_files WHERE id=?', (row['id'],))
+            for table in ('queue_suggestions', 'queue_suggestion_rejects', 'queue_suggestion_attempts'):
+                conn.execute(f'DELETE FROM {table} WHERE filename=?', (old_key,))
+            row = None
         if row:
             rid = int(row["id"])
             stored = (row["filename"] or "").strip()
@@ -4130,8 +4144,11 @@ def rename_movie(old_filename: str, new_filename: str) -> bool:
 
 def upsert_movie(filename: str) -> int:
     with get_conn() as conn:
-        cur = conn.execute("SELECT id FROM processed_movies WHERE filename = ?", (filename,))
+        cur = conn.execute("SELECT id, status FROM processed_movies WHERE filename = ?", (filename,))
         row = cur.fetchone()
+        if row and row['status'] == 'removed':
+            conn.execute('DELETE FROM processed_movies WHERE id=?', (row['id'],))
+            row = None
         if row:
             return row["id"]
         cur = conn.execute(
@@ -7691,3 +7708,82 @@ def download_cleanup_complete(name):
     with get_conn() as conn:
         conn.execute("DELETE FROM download_cleanup_pending WHERE name=?", (name,))
         conn.commit()
+
+# Durable file provenance and processing jobs. Paths remain compatibility keys;
+# identity and history survive their changes and removal of old queue rows.
+def file_operation_connection():
+    """Own connection: journaling must never commit a caller's transaction."""
+    from contextlib import contextmanager
+
+    @contextmanager
+    def connection():
+        conn = sqlite3.connect(str(DB_PATH), timeout=10.0)
+        try:
+            conn.execute("PRAGMA synchronous=FULL")
+            yield conn
+        finally:
+            conn.close()
+
+    return connection()
+
+
+def file_identity(filename: str, table: str = 'processed_files') -> dict | None:
+    if table not in ('processed_files', 'processed_movies'):
+        raise ValueError('Unknown queue')
+    with get_conn() as conn:
+        row = conn.execute(f'''SELECT a.* FROM file_assets a JOIN {table} p
+            ON p.id=a.queue_id AND a.queue_table=? WHERE p.filename=?''',(table, filename)).fetchone()
+        return dict(row) if row else None
+
+
+def processing_job_enqueue(filename: str, table: str = "processed_files"):
+    from app.core.jobs import enqueue
+    asset = file_identity(filename, table)
+    if asset:
+        with get_conn() as conn:
+            enqueue(conn, asset['id'])
+            conn.commit()
+
+
+def file_identity_map():
+    with get_conn() as conn:
+        return {(r['queue_table'], r['filename']): dict(r) for r in conn.execute(
+            "SELECT a.*,p.filename FROM file_assets a JOIN processed_files p ON p.id=a.queue_id WHERE a.queue_table='processed_files' "
+            "UNION ALL SELECT a.*,p.filename FROM file_assets a JOIN processed_movies p ON p.id=a.queue_id WHERE a.queue_table='processed_movies'")}
+
+
+def processing_job_start(filename: str, table: str = "processed_files") -> str | None:
+    from app.core import jobs
+    asset = file_identity(filename, table)
+    if not asset:
+        return None
+    with get_conn() as conn:
+        jobs.enqueue(conn, asset['id'])
+        claimed = jobs.claim(conn, asset['id'])
+        conn.commit()
+    return asset['id'] if claimed else None
+
+
+def processing_job_checkpoint(file_id: str, phase: str):
+    from app.core.jobs import checkpoint
+    with get_conn() as conn:
+        checkpoint(conn, file_id, phase)
+        conn.commit()
+
+
+def processing_job_finish(file_id: str, outcome: str, error=None):
+    from app.core.jobs import finish
+    with get_conn() as conn:
+        finish(conn, file_id, outcome, error)
+        conn.commit()
+
+
+def processing_jobs_ready(limit=20, table="processed_files"):
+    if table not in ('processed_files', 'processed_movies'):
+        raise ValueError('Unknown processing queue')
+    with get_conn() as conn:
+        return [r[0] for r in conn.execute(f"""SELECT p.filename FROM processing_jobs j
+            JOIN file_assets a ON a.id=j.file_id AND a.queue_table=?
+            JOIN {table} p ON p.id=a.queue_id
+            WHERE j.state='pending' AND j.available_at<=? ORDER BY j.updated_at LIMIT ?""",
+            (table, time.time(), max(1, min(int(limit), 100))))]

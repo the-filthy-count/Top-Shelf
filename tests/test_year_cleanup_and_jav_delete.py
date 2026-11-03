@@ -23,11 +23,13 @@ class YearAndDeleteTests(unittest.TestCase):
             root=Path(tmp);jav=root/'jav';jav.mkdir();video=jav/'clip.mp4';video.write_bytes(b'video')
             outside=root/'outside.mp4';outside.touch();(jav/'escape.mp4').symlink_to(outside)
             db=SimpleNamespace(get_settings=lambda:{'jav_download_watch_dir':str(jav)},update_movie=Mock(),update_file=Mock())
-            env={'Path':Path,'db':db,'emit':Mock(),'_resolve_queue_file_path':lambda fn,s:jav/fn.split('/',1)[1]}
+            archive=Mock(side_effect=lambda fn,p,*args: p.unlink() or {'recovery_id':'retained'})
+            env={'_archive_queue_file':archive,'Path':Path,'db':db,'emit':Mock(),'_resolve_queue_file_path':lambda fn,s:jav/fn.split('/',1)[1]}
             delete=load('main.py','_queue_delete_filename_sync',env)
             self.assertFalse(delete('JAV/escape.mp4')['ok']);self.assertTrue(outside.exists())
             self.assertFalse(delete('JAV/../outside.mp4')['ok'])
             self.assertTrue(delete('JAV/clip.mp4')['deleted']);self.assertFalse(video.exists())
-            db.update_movie.assert_called_once_with('jav://clip.mp4',status='removed');db.update_file.assert_not_called()
+            self.assertEqual(archive.call_args.args[3:5], ('processed_movies', 'jav://clip.mp4'))
+            db.update_file.assert_not_called()
             self.assertTrue(delete('JAV/clip.mp4')['already_missing'])
             self.assertFalse(delete('clip.mp4')['ok'])

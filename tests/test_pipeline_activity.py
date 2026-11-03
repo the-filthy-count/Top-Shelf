@@ -18,14 +18,14 @@ class PipelineActivityTests(unittest.IsolatedAsyncioTestCase):
             def resolve(*args,**kwargs):
                 seen.append((threading.get_ident(),state['pipeline_phase']))
                 return video
-            db=SimpleNamespace(get_settings=lambda:{'source_dir':tmp},resolve_source_video_path=resolve,notification_add=Mock())
+            db=SimpleNamespace(get_settings=lambda:{'source_dir':tmp},resolve_source_video_path=resolve,notification_add=Mock(), queue_file_key=lambda p,s:p.name,upsert_file=Mock(),processing_job_enqueue=Mock(),processing_job_start=Mock(return_value="asset"),processing_job_finish=Mock())
             env=dict(PartialDownloadPending=type("PartialDownloadPending", (Exception,), {}),asyncio=asyncio,Path=Path,db=db,VIDEO_EXTENSIONS={'.mp4'})
             exec(compile(ast.Module(body=[method],type_ignores=[]),'pipeline.py','exec'),env)
             async def process(path):
                 self.assertEqual(state['pipeline_total'],1)
                 self.assertEqual(state['current_file'],'clip.mp4')
                 return {'status':'unmatched'}
-            owner=SimpleNamespace(state=state,lock=threading.Lock(),emit=Mock(),flush_emit_buffer=Mock(),process_single=process)
+            owner=SimpleNamespace(job_id=None,set_phase=lambda p:state.update(pipeline_phase=p),state=state,lock=threading.Lock(),emit=Mock(),flush_emit_buffer=Mock(),process_single=process)
             # Simulate queue grouping owning the lock when Run is clicked.
             owner.lock.acquire()
             state['running'] = True

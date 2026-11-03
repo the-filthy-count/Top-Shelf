@@ -43,14 +43,13 @@
   }
 
   function confirmDeleteDisk(ctx) {
-    const label = ctx.kind === 'vice' ? 'vice' : ctx.kind;
     return confirm(
-      `Permanently delete “${ctx.name}” and ALL files inside its folder?\n\n` +
-      `This removes the ${label} from the library AND deletes everything on disk ` +
-      `(videos, posters, NFOs, etc.).\n\n` +
-      `THIS CANNOT BE UNDONE.`
+      `Move “${ctx.name}” and its folder contents to recovery?\n\n` +
+      `Files and records are retained for restoration. Disk space is retained. ` +
+      `Restore or permanently delete it from the queue’s recovery panel.`
     );
   }
+
 
   async function postJson(url, body) {
     const r = await fetch(url, {
@@ -78,8 +77,8 @@
     if (!ctx || !confirmDeleteDisk(ctx)) return false;
     const body = { id: ctx.id };
     if (ctx.viceId) body.vice_id = ctx.viceId;
-    await postJson('/api/library/entity/delete-from-disk', body);
-    toast(`Deleted “${ctx.name}” from disk`, { kind: 'success' });
+    const result = await postJson('/api/library/entity/delete-from-disk', body);
+    toast(result.recoverable ? `Moved “${ctx.name}” to recovery` : `Deleted “${ctx.name}” from disk`, { kind: 'success' });
     refreshBanner();
     return true;
   }
@@ -944,7 +943,7 @@
     }
     items.push(
       { action: 'remove', label: 'Remove from library', icon: 'fa-bookmark' },
-      { action: 'delete', label: 'Delete from disk', icon: 'fa-trash', danger: true },
+      { action: 'delete', label: 'Move to recovery', icon: 'fa-trash', danger: true },
     );
     if (ctx.canChangeDirectory) {
       const insertAt = items.findIndex((it) => it.action === 'delete');

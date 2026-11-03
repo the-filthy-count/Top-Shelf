@@ -32,6 +32,7 @@ import sqlite3
 import asyncio
 from app.core.pipeline import ProcessingPipeline, VIDEO_EXTENSIONS
 from app.utils.fs import safe_move
+from app.core.queue_recovery import archive as _archive_queue_file
 from app.utils.text import (
     UPPERCASE_KEYWORDS,
     apply_caps,
@@ -92,7 +93,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import Body, FastAPI, BackgroundTasks, Request, Query, UploadFile, File, Form
+from fastapi import HTTPException, Body, FastAPI, BackgroundTasks, Request, Query, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
@@ -446,6 +447,8 @@ def _manual_action_enqueue_persistent(
     rehydrate exactly what was left over."""
     if job_type not in _MANUAL_JOB_RUNNERS:
         raise ValueError(f"unknown manual-job type: {job_type}")
+    from app.core.manual_identity import bind_payload
+    payload = bind_payload(payload)
     job_id = db.manual_job_create(job_type, label, display_name, payload)
 
     _manual_action_rehydrate()
@@ -505,17 +508,16 @@ def _manual_action_rehydrate() -> int:
 def _manual_runner_prep_video(payload: dict) -> tuple[str, Path] | None:
     """Return (filename, video) if the source video still exists,
     otherwise log + return None so the caller can bail out cleanly."""
-    filename = (payload.get("filename") or "").strip()
+    from app.core.manual_identity import resolve_payload
+    filename = resolve_payload(payload)
     if not filename:
-        emit("manual job: missing filename in payload")
-        return None
+        raise ValueError("Manual job has no filename")
     settings = db.get_settings()
     video = _resolve_queue_file_path(filename, settings)
     if video is None or not video.exists():
         emit(f"FILE {filename}")
         emit("  ERROR: source file no longer exists — skipping")
-        db.update_file(filename, status="error", error="source missing at run time")
-        return None
+        raise FileNotFoundError("Source file no longer exists; refresh the queue")
     return filename, video
 
 
@@ -543,26 +545,29 @@ def _manual_runner_wrap(payload: dict, log_source: str, run_impl: Callable[[str,
     banner. `run_impl` gets (filename, video) and does the actual
     file_scene_from_match call. Errors are re-raised so the persistent
     enqueue wrapper can flip the row to `failed`."""
-    prep = _manual_runner_prep_video(payload)
-    if prep is None:
-        return
-    filename, video = prep
-    processing_state["running"] = True
-    processing_state["log"] = []
-    processing_state["pipeline_total"] = 1
-    processing_state["pipeline_done"] = 0
-    processing_state["current_file"] = filename
-    try:
-        db.upsert_file(filename)
-        emit(f"FILE {filename}")
-        emit(f"  Source: {log_source}")
-        run_impl(filename, video)
-    finally:
-        processing_state["running"] = False
-        processing_state["current_file"] = None
-        processing_state["pipeline_total"] = 0
+    from app.core.manual_identity import filing_activity
+    # Share the maintenance/pipeline lock before resolving any source path.
+    with _pipeline_lock, filing_activity(payload) as active_filename:
+        prep = _manual_runner_prep_video({**payload, "filename": active_filename})
+        if prep is None:
+            return
+        filename, video = prep
+        processing_state["running"] = True
+        processing_state["log"] = []
+        processing_state["pipeline_total"] = 1
         processing_state["pipeline_done"] = 0
-        emit("---")
+        processing_state["current_file"] = filename
+        try:
+            db.upsert_file(filename)
+            emit(f"FILE {filename}")
+            emit(f"  Source: {log_source}")
+            run_impl(filename, video)
+        finally:
+            processing_state["running"] = False
+            processing_state["current_file"] = None
+            processing_state["pipeline_total"] = 0
+            processing_state["pipeline_done"] = 0
+            emit("---")
 
 
 @_register_manual_job("bulk_folder")
@@ -605,6 +610,8 @@ def _manual_run_bulk_folder(payload: dict) -> None:
         emit(f"  Source: manual bulk → {folder} ({kind})")
         result = file_scene_from_match(video, scene, source="Manual")
         emit(f"  Result: {(result or {}).get('status') or 'unknown'}")
+        if not result or result.get("status") != "filed":
+            raise ValueError((result or {}).get("error") or (result or {}).get("status") or "Filing failed")
 
     _manual_runner_wrap(payload, f"manual bulk → {folder} ({kind})", _run)
 
@@ -621,6 +628,8 @@ def _manual_run_iafd_bulk(payload: dict) -> None:
             scene["performers"] = _iafd_scene_detail_performers(iafd_url)
         result = file_scene_from_match(video, scene, source="Manual")
         emit(f"  Result: {(result or {}).get('status') or 'unknown'}")
+        if not result or result.get("status") != "filed":
+            raise ValueError((result or {}).get("error") or (result or {}).get("status") or "Filing failed")
 
     _manual_runner_wrap(payload, "manual selection (bulk)", _run)
 
@@ -632,6 +641,8 @@ def _manual_run_manual_scene(payload: dict) -> None:
     def _run(filename: str, video: Path):
         result = file_scene_from_match(video, scene, source="Manual")
         emit(f"  Result: {(result or {}).get('status') or 'unknown'}")
+        if not result or result.get("status") != "filed":
+            raise ValueError((result or {}).get("error") or (result or {}).get("status") or "Filing failed")
 
     _manual_runner_wrap(payload, "manual selection", _run)
 
@@ -643,6 +654,8 @@ def _manual_run_manual_metadata(payload: dict) -> None:
     def _run(filename: str, video: Path):
         result = file_scene_from_match(video, scene, source="Manual")
         emit(f"  Result: {(result or {}).get('status') or 'unknown'}")
+        if not result or result.get("status") != "filed":
+            raise ValueError((result or {}).get("error") or (result or {}).get("status") or "Filing failed")
 
     _manual_runner_wrap(payload, "manual metadata", _run)
 
@@ -674,6 +687,8 @@ def _manual_run_vice(payload: dict) -> None:
         emit(f"  Source: manual vice → {vice_name}")
         result = file_scene_from_match(video, scene, source="Manual")
         emit(f"  Result: {(result or {}).get('status') or 'unknown'}")
+        if not result or result.get("status") != "filed":
+            raise ValueError((result or {}).get("error") or (result or {}).get("status") or "Filing failed")
 
     _manual_runner_wrap(payload, f"manual vice → {vice_name}", _run)
 
@@ -786,6 +801,10 @@ class _WarmCache:
         )
         t.start()
         self._thread = t
+
+    def peek(self):
+        """Read only: never build, invalidate or write on behalf of a GET."""
+        return self._snapshot
 
     def get(self):
         """Latest snapshot. Only the very first call before the worker
@@ -2142,6 +2161,14 @@ async def startup():
     claim_sources([source_settings.get(key, "") for key in (
         "source_dir", "movies_source_dir", "download_watch_dir", "movie_download_watch_dir",
         "vice_download_watch_dir", "jav_download_watch_dir", "vice_download_stage_dir", "jav_download_stage_dir")])
+    from app.utils.fs import configure_operation_history
+    configure_operation_history(db.file_operation_connection)
+    from app.core.jobs import recover as recover_processing_jobs
+    with db.get_conn() as conn:
+        recover_processing_jobs(conn)
+        from app.core.recovery import recover_interrupted
+        recover_interrupted(conn)
+        conn.commit()
     _apply_library_ownership_settings()
     _migrate_sidecar_phashes()
     _migrate_performer_images_if_needed()
@@ -2488,48 +2515,14 @@ def search_scenes_on_db(endpoint: str, api_key: str, term: str, limit: int = 25)
 
 
 def search_scenes_with_all_performers(performers: list[str]) -> tuple[list, bool]:
-    """Find joint appearances using unambiguous, source-local performer IDs."""
-    from app.core.matching import _performer_name_tokens_match
+    from app.integrations.scene_search import search_joint_cast
     keys = get_api_keys()
-    results = []
-    complete = True
-    for source, endpoint, key in (
-        ("StashDB", STASHDB_ENDPOINT, keys["stashdb"]),
-        ("TPDB", TPDB_ENDPOINT, keys["tpdb"]),
-        ("FansDB", FANSDB_ENDPOINT, keys["fansdb"]),
-        ("JAVStash", JAVSTASH_ENDPOINT, keys["javstash"]),
-    ):
-        if not key:
-            continue
-        try:
-            ids = []
-            for name in performers:
-                data = _stashbox_post(endpoint, key, SEARCH_PERFORMER_QUERY, {"term": name, "limit": 25})
-                matches = {p["id"] for p in data.get("searchPerformer") or []
-                           if p.get("id") and _performer_name_tokens_match(name, p.get("name", ""))}
-                if len(matches) != 1:
-                    break
-                ids.append(next(iter(matches)))
-            if len(ids) != len(performers) or len(set(ids)) != len(performers):
-                continue
-            if source == "TPDB":
-                from tpdb_joint_scenes import joint_scenes
-                scenes, source_complete = joint_scenes(ids, key, requests.get)
-                results.extend(scenes)
-                complete = complete and source_complete
-                continue
-            data = _stashbox_post(endpoint, key, QUERY_SCENES_QUERY, {"input": {
-                "page": 1, "per_page": 100, "sort": "DATE", "direction": "DESC",
-                "performers": {"value": ids, "modifier": "INCLUDES_ALL"},
-            }})
-            for scene in (data.get("queryScenes") or {}).get("scenes") or []:
-                cast_ids = {(p.get("performer") or {}).get("id") for p in scene.get("performers") or []}
-                if set(ids).issubset(cast_ids):
-                    results.append(dict(scene, _source=source))
-        except Exception as exc:
-            complete = False
-            emit(f"  Joint-performer search failed ({source}): {exc}")
-    return results, complete
+    sources = [("StashDB", STASHDB_ENDPOINT, keys["stashdb"]),
+               ("TPDB", TPDB_ENDPOINT, keys["tpdb"]),
+               ("FansDB", FANSDB_ENDPOINT, keys["fansdb"]),
+               ("JAVStash", JAVSTASH_ENDPOINT, keys["javstash"])]
+    return search_joint_cast(performers, sources, _stashbox_post, SEARCH_PERFORMER_QUERY,
+                             QUERY_SCENES_QUERY, requests.get if keys["tpdb"] else None, emit)
 
 
 def query_scenes_by_date(endpoint: str, api_key: str, term: str,
@@ -3590,36 +3583,10 @@ def _health_unlink_nfo_thumb_sidecars(video_path: Path) -> None:
 
 
 def _duplicate_delete_one_library_video(dest: str) -> int:
-    """Delete video + sidecars, library_files row, linked processed_files row. Returns freed bytes."""
-    raw = (dest or "").strip()
-    if not raw:
-        return 0
-    p = Path(raw)
-    freed = 0
-    if p.is_file():
-        try:
-            freed = int(p.stat().st_size)
-        except OSError:
-            freed = 0
-    row = db.library_file_get_by_destination(raw)
-    # Do not erase history or report reclaimed space until deletion succeeds.
-    _health_delete_video_and_sidecars(p)
-    if row and row.get("source_record_id") is not None:
-        try:
-            db.processed_file_delete_by_id(int(row["source_record_id"]))
-        except Exception:
-            pass
-    db.library_file_delete_by_destination(raw)
-    #: Fallback cleanup: rows filed before source_record_id was added
-    #: (or filed through a path that never set it) won't be caught by
-    #: the id-based delete above. Match on destination path so the
-    #: processed_files table doesn't accumulate orphans the user has
-    #: to hand-resolve after every dup drop.
-    try:
-        db.processed_files_delete_by_destination(raw)
-    except Exception:
-        pass
-    return freed
+    """Retain the removed copy and records in recovery; no bytes are freed yet."""
+    from app.core.video_recovery import archive
+    archive(dest)
+    return 0
 
 
 def _duplicate_resolve_non_keepers(
@@ -3940,6 +3907,8 @@ def _clean_and_rename_on_disk(
     src = root / rel
     if not src.is_file():
         return rel
+    if rekey_fn is None:
+        db.upsert_file(rel)
     dest_rel = (parent / cleaned).as_posix() if str(parent) not in ("", ".") else cleaned
     dest_abs = root / dest_rel
     try:
@@ -4255,14 +4224,9 @@ def _process_download_entry(entry_path: Path, dest_dir: Path) -> list[Path]:
 
 
 def _auto_enqueue_vice_jav_from_snapshot(rel: str, f: Path, scope: str) -> None:
-    """Called by _build_queue_snapshot when it walks a vice / jav file at
-    status='none'. Queues the file's top-level watch-dir entry for
-    processing on the next _check_pending_downloads tick — same code
-    path a fresh inotify event uses, just triggered by the walker so
-    we're not maintaining a second parallel scan.
+    """Queue an unprocessed inbox entry during scheduled maintenance.
 
-    Skips silently when the entry is already pending: fire_at stays
-    where it is, no thrashing during the hold window.
+    Uses the watcher's hold window and avoids resetting an existing timer.
     """
     s = db.get_settings()
     if scope == "vice":
@@ -6618,10 +6582,17 @@ def _performer_objects_in_match_order(performers: list) -> list:
 
 def _performer_crosswalk_ids(pf: dict, source: str) -> tuple[str, str, str, str]:
     """Map scene performer id to favourite_entities columns for the active match source."""
-    pid = str((pf or {}).get("id") or "").strip()
+    s = (source or "").upper()
+    identity = pf or {}
+    if "TPDB" in s or "PORNDB" in s:
+        # TPDB scene credits can have a site-specific ID. Its explicit
+        # parent is the canonical performer saved in the library.
+        parent = identity.get("parent")
+        if isinstance(parent, dict) and (parent.get("id") or parent.get("_id")):
+            identity = parent
+    pid = str(identity.get("id") or identity.get("_id") or "").strip()
     if not pid:
         return "", "", "", ""
-    s = (source or "").upper()
     if "JAVSTASH" in s:
         return "", "", "", pid
     if "STASH" in s:
@@ -7218,22 +7189,22 @@ def _next_free_dest_slot(dst: Path) -> Path:
         n += 1
 
 
-def _quality_gate_move(src: Path, dst: Path, label: str = "Video") -> Path | None:
+def _quality_gate_move(src: Path, dst: Path, label: str = "Video", queue_filename: str | None = None) -> Path | None:
     """Move *src* into the library, returning the path it actually
     landed at (or None if the incoming file was discarded as a duplicate
     of an equal-or-better incumbent).
 
     Three branches:
-      • Destination free → plain `safe_move(src, dst)`, returns *dst*.
+      • Destination free → plain `safe_move(src, dst, replace_existing=False)`, returns *dst*.
       • Destination occupied AND phashes differ beyond
         `_PHASH_SAME_SCENE_BITS` → distinct scene, file alongside at
         the next free `name - N{ext}` slot. Returns the new path.
       • Destination occupied AND phashes match →
         existing quality comparison. Higher quality wins; loser is
-        deleted. Returns *dst* on replace, None on discard.
+        retained in recovery. Returns *dst* on replace, None on discard.
     """
     if not dst.exists() and not dst.is_symlink():
-        safe_move(src, dst)
+        safe_move(src, dst, replace_existing=False)
         return dst
 
     # Only compare quality when fingerprints establish scene identity.
@@ -7248,7 +7219,7 @@ def _quality_gate_move(src: Path, dst: Path, label: str = "Video") -> Path | Non
     if not src_phash or not dst_phash:
         new_dst = _next_free_dest_slot(dst)
         emit(f"  {label}: fingerprint unavailable — preserving both as {new_dst.name}")
-        safe_move(src, new_dst)
+        safe_move(src, new_dst, replace_existing=False)
         return new_dst
 
     if src_phash and dst_phash:
@@ -7268,7 +7239,7 @@ def _quality_gate_move(src: Path, dst: Path, label: str = "Video") -> Path | Non
                 )
             except Exception:
                 pass
-            safe_move(src, new_dst)
+            safe_move(src, new_dst, replace_existing=False)
             return new_dst
         # Same scene (within threshold) — fall through to quality gate.
 
@@ -7289,19 +7260,18 @@ def _quality_gate_move(src: Path, dst: Path, label: str = "Video") -> Path | Non
             db.notification_add("pipeline", f"Upgraded {dst.name}: {_fmt(new_px, new_sz, new_h)} replaces {_fmt(inc_px, inc_sz, inc_h)}", ttl_seconds=120)
         except Exception:
             pass
-        safe_move(src, dst)
+        from app.core.filing_recovery import replace
+        replace(src, dst)
         return dst
     else:
-        emit(f"  {label}: incumbent is equal or better quality ({_fmt(inc_px, inc_sz, inc_h)} >= {_fmt(new_px, new_sz, new_h)}) — discarding incoming file")
+        emit(f"  {label}: incumbent is equal or better quality ({_fmt(inc_px, inc_sz, inc_h)} >= {_fmt(new_px, new_sz, new_h)}) — retaining incoming file in recovery")
         try:
-            db.notification_add("pipeline", f"Kept incumbent {dst.name} ({_fmt(inc_px, inc_sz, inc_h)}), discarded lower quality incoming ({_fmt(new_px, new_sz, new_h)})", ttl_seconds=120)
+            db.notification_add("pipeline", f"Kept incumbent {dst.name} ({_fmt(inc_px, inc_sz, inc_h)}), retained lower quality incoming in recovery ({_fmt(new_px, new_sz, new_h)})", ttl_seconds=120)
         except Exception:
             pass
-        try:
-            src.unlink()
-        except OSError as e:
-            emit(f"  {label}: failed to delete incoming file: {e}")
-            raise
+        from app.core.queue_recovery import archive_pipeline
+        archive_pipeline(src, queue_filename or db.queue_file_key(src, db.get_settings()),
+                         movie=label == "Movie", duplicate_destination=str(dst))
         return None
 
 
@@ -8713,7 +8683,12 @@ def _file_scene_from_match_impl(video: Path, scene: dict, source: str = "") -> d
             performers=", ".join(plan["perf_names"]),
             match_external_id=(scene.get("id") or "") if isinstance(scene, dict) else "",
         )
-        return {"status": "no_dir"}
+        return {
+            "status": "no_dir",
+            "error": "No eligible library destination: link a library performer folder to "
+                     f"the scene's {source} performer ID, or configure a matching studio folder. "
+                     "The destination folder must be available on disk.",
+        }
 
     dest_season = plan["dest_season"]
     base_name = plan["base_name"]
@@ -8753,7 +8728,7 @@ def _file_scene_from_match_impl(video: Path, scene: dict, source: str = "") -> d
     try:
         staged_nfo.write_text(nfo, encoding="utf-8")
         require_complete_queue_video(video, settings)
-        actual_dest = _quality_gate_move(video, scene_dest, label="Video")
+        actual_dest = _quality_gate_move(video, scene_dest, label="Video", queue_filename=filename)
         if actual_dest is None:
             db.update_file(
                 filename,
@@ -8778,13 +8753,17 @@ def _file_scene_from_match_impl(video: Path, scene: dict, source: str = "") -> d
     except Exception as exc:
         if actual_dest is not None and not video.exists() and not video.is_symlink():
             try:
-                safe_move(actual_dest, video)
+                safe_move(actual_dest, video, replace_existing=False)
             except Exception as rollback_error:
                 db.update_file(filename, status="error", destination=str(actual_dest),
                                error=f"{exc}; could not restore inbox: {rollback_error}")
                 raise RuntimeError(f"{exc}; video retained at {actual_dest}; restore failed: {rollback_error}") from exc
+        from app.core.filing_recovery import rollback
+        rollback(scene_dest)
         raise
     finally:
+        from app.core.filing_recovery import finish
+        finish(scene_dest)
         staged_nfo.unlink(missing_ok=True)
     emit("  NFO: saved")
 
@@ -9354,7 +9333,7 @@ def _file_movie_impl(
     try:
         staged_nfo.write_text(nfo, encoding="utf-8")
         require_complete_queue_video(video, guard_settings)
-        actual_movie_dest = _quality_gate_move(video, movie_dest, label="Movie")
+        actual_movie_dest = _quality_gate_move(video, movie_dest, label="Movie", queue_filename=filename)
         if actual_movie_dest is None:
             tid = str(movie.get("id") or "").strip() or None
             db.update_movie(
@@ -9380,13 +9359,17 @@ def _file_movie_impl(
         # video so the existing retry/error flow can still find it.
         if actual_movie_dest is not None and not video.exists() and not video.is_symlink():
             try:
-                safe_move(actual_movie_dest, video)
+                safe_move(actual_movie_dest, video, replace_existing=False)
             except Exception as rollback_error:
                 db.update_movie(filename, status="error", destination=str(actual_movie_dest),
                                 error=f"{exc}; could not restore inbox: {rollback_error}")
                 raise RuntimeError(f"{exc}; video retained at {actual_movie_dest}; restore failed: {rollback_error}") from exc
+        from app.core.filing_recovery import rollback
+        rollback(movie_dest)
         raise
     finally:
+        from app.core.filing_recovery import finish
+        finish(movie_dest)
         staged_nfo.unlink(missing_ok=True)
     emit("  NFO: saved")
 
@@ -9633,7 +9616,12 @@ def _movie_queue_relpaths_after_download(moved: list[Path], dest_queue: Path) ->
     return rels
 
 
-def process_movie_file(
+def process_movie_file(filename: str, src: Path | None = None, dest_kind: str | None = None) -> dict:
+    from app.core.movie_jobs import run
+    return run(filename, src, dest_kind, _process_movie_file_impl)
+
+
+def _process_movie_file_impl(
     filename: str,
     src: Path | None = None,
     dest_kind: str | None = None,
@@ -9776,6 +9764,9 @@ def run_movie_pipeline(filenames: list[str] | None = None) -> None:
         if not filenames:
             emit("MOVIE PIPELINE: nothing to process")
             return
+        for filename in filenames:
+            db.upsert_movie(filename)
+            db.processing_job_enqueue(filename, "processed_movies")
         processing_state["running"] = True
         processing_state["pipeline_total"] = len(filenames)
         processing_state["pipeline_done"] = 0
@@ -18001,7 +17992,7 @@ def _tag_queue_folder_files(root: Path) -> None:
 
 
 def _group_queue_root_files_by_hint(source_dir: Path) -> int:
-    # Snapshot maintenance must not rename files under an active pipeline.
+    # Queue maintenance must not rename files under an active pipeline.
     if not _pipeline_lock.acquire(blocking=False):
         return 0
     try:
@@ -18015,8 +18006,7 @@ def _group_queue_root_files_by_hint(source_dir: Path) -> int:
 def _group_queue_root_files_by_hint_locked(source_dir: Path) -> int:
     """Move root-level queue videos into performer/studio subfolders when
     the processed_files row carries a match or a stored library-index
-    guess. Runs before the snapshot walk so the new rel-path lands in
-    the same cycle's listing. Files that already live in a subfolder
+    guess. Runs in scheduled maintenance independently of page refresh. Files that already live in a subfolder
     (megapacks, prior groupings) are left alone."""
     try:
         if not source_dir.is_dir():
@@ -18070,6 +18060,7 @@ def _group_queue_root_files_by_hint_locked(source_dir: Path) -> int:
         try:
             if dest.exists():
                 continue
+            db.upsert_file(filename)
             dest_dir.mkdir(parents=True, exist_ok=True)
             safe_move(child, dest)
             with _queue_group_seen_lock:
@@ -18079,9 +18070,13 @@ def _group_queue_root_files_by_hint_locked(source_dir: Path) -> int:
             continue
         new_key = f"{safe_group}/{filename}"
         try:
-            db.rename_file(filename, new_key)
+            if not db.rename_file(filename, new_key):
+                raise OSError("queue record could not be renamed")
         except Exception as ex:
+            if dest.is_file() and not child.exists():
+                safe_move(dest, child)
             emit(f"  Auto-group: DB rename failed for {filename}: {ex}")
+            continue
         emit(f"  Auto-group: moved '{filename}' → '{safe_group}/'")
         moved += 1
     return moved
@@ -18122,6 +18117,98 @@ def _sweep_empty_queue_subdirs(root: Path) -> int:
     return removed
 
 
+def _resume_file_jobs() -> None:
+    if processing_state["running"]:
+        return
+    settings = db.get_settings()
+    if settings.get("retry_enabled", "true").lower() != "true":
+        return
+    root = Path(settings.get("source_dir", ""))
+    vice_raw = (settings.get("vice_download_watch_dir") or "").strip()
+    vice_root = Path(vice_raw).expanduser() if vice_raw else None
+    filenames = []
+    for filename in db.processing_jobs_ready():
+        if db.resolve_source_video_path(root, filename, vice_dl_root=vice_root) is not None:
+            filenames.append(filename)
+        else:
+            job_id = db.processing_job_start(filename)
+            if job_id:
+                db.processing_job_finish(job_id, "error", "Source file unavailable")
+    if filenames:
+        run_pipeline(filenames)
+    if processing_state["running"]:
+        return
+    for name in db.processing_jobs_ready(table="processed_movies"):
+        try:
+            if name.startswith("jav://"):
+                raw = (settings.get("jav_download_watch_dir") or "").strip()
+                if raw:
+                    process_movie_file(name[6:], src=Path(raw).expanduser(), dest_kind="jav")
+                else:
+                    job_id = db.processing_job_start(name, "processed_movies")
+                    if job_id:
+                        db.processing_job_finish(job_id, "error", "JAV inbox is not configured")
+            else:
+                raw = (settings.get("movies_source_dir") or "").strip()
+                if raw:
+                    process_movie_file(name)
+                else:
+                    job_id = db.processing_job_start(name, "processed_movies")
+                    if job_id:
+                        db.processing_job_finish(job_id, "error", "Movie inbox is not configured")
+        except Exception as exc:
+            emit(f"Movie retry deferred: {exc}")
+
+
+@app.get("/api/files/{file_id}/history")
+async def file_history(file_id: str, after: int = 0, limit: int = 100):
+    def read():
+        with db.get_conn() as conn:
+            asset = conn.execute("SELECT * FROM file_assets WHERE id=?", (file_id,)).fetchone()
+            if not asset:
+                raise HTTPException(status_code=404, detail="File not found")
+            events = [dict(r) for r in conn.execute("SELECT * FROM file_events WHERE file_id=? AND id>? ORDER BY id LIMIT ?", (file_id, max(0, after), max(1, min(limit, 500))))]
+            job = conn.execute("SELECT * FROM processing_jobs WHERE file_id=?", (file_id,)).fetchone()
+            return {"file": dict(asset), "events": events, "job": dict(job) if job else None}
+    return await run_in_threadpool(read)
+
+
+def _maintain_queue_paths() -> None:
+    settings = db.get_settings()
+    movie_root = (settings.get("movies_source_dir") or "").strip()
+    if movie_root and Path(movie_root).expanduser().is_dir():
+        db.reconcile_movies_source(Path(movie_root).expanduser(), settings.get("jav_download_watch_dir"))
+    if settings.get("folder_watch_enabled", "true").lower() != "true":
+        return
+    root_raw = (settings.get("source_dir") or "").strip()
+    if root_raw and Path(root_raw).is_dir():
+        grouped = _group_queue_root_files_by_hint(Path(root_raw))
+        if grouped:
+            emit(f"queue maintenance: grouped {grouped} file(s)")
+    scene_rows = db.processed_files_map_by_filename(limit=10000)
+    movie_rows = db.get_movie_rows_map()
+    for scope, prefix in (("vice", "Vices"), ("jav", "JAV")):
+        raw = (settings.get(scope + "_download_watch_dir") or "").strip()
+        if not raw:
+            continue
+        inbox = Path(raw).expanduser()
+        if not inbox.is_dir():
+            continue
+        for directory, dirs, names in os.walk(inbox, followlinks=False):
+            folder = Path(directory)
+            dirs[:] = [d for d in dirs if not (folder / d).is_symlink()]
+            for name in names:
+                video = folder / name
+                if video.suffix.lower() not in VIDEO_EXTENSIONS or video.is_symlink():
+                    continue
+                rel = video.relative_to(inbox).as_posix()
+                key = f"{prefix}/{rel}"
+                row = movie_rows.get("jav://" + rel, {}) if scope == "jav" else db.queue_cached_row(scene_rows, key)
+                if row.get("status") in (None, "pending"):
+                    _auto_enqueue_vice_jav_from_snapshot(key, video, scope)
+    _queue_warm.invalidate()
+
+
 def _build_queue_snapshot() -> dict:
     """Compute the full /api/queue payload — filesystem walk of source_dir
     + 10k-row history scan + library match-index build for unfiled files.
@@ -18133,21 +18220,6 @@ def _build_queue_snapshot() -> dict:
     if not source_dir.exists():
         return {"files": [], "source_dir": str(source_dir), "error": f"Source dir not found: {source_dir}"}
 
-    try:
-        grouped = _group_queue_root_files_by_hint(source_dir)
-        if grouped:
-            emit(f"queue: auto-grouped {grouped} root file(s) into subfolders")
-    except Exception as exc:
-        emit(f"queue auto-group sweep failed: {exc}")
-
-    # Do not delete inbox folders from a snapshot refresh. Importers may
-    # have created an empty destination and still be copying into it.
-
-    # NOTE: a separate "mark unfiled rows as `removed` when filename
-    # vanished" loop used to live here. Replaced by the orphan-purge
-    # below which deletes those rows outright — the intermediate
-    # `removed` state added nothing the queue UI consumed.
-
     history = {}
     for r in db.get_history(limit=10000):
         history[r["filename"]] = r
@@ -18157,6 +18229,7 @@ def _build_queue_snapshot() -> dict:
     # rows too (files that haven't cleared the pipeline yet). Keyed by
     # filename so the per-file loop can hand back a stored guess in O(1).
     guess_cache = db.processed_files_map_by_filename(limit=10000)
+    identities = db.file_identity_map()
 
     # JAV rows live in processed_movies, not processed_files (the movie
     # pipeline is the only thing that writes JAV status). Preload the
@@ -18193,8 +18266,7 @@ def _build_queue_snapshot() -> dict:
         return lib_idx
 
     # Snapshot of the video files currently in source_dir (any depth)
-    # — used to drive the per-file loop below and to purge
-    # processed_files rows whose source file has been removed. Each
+    # — used to drive the per-file loop below. Each
     # entry is ``(rel_posix, Path)`` where ``rel_posix`` is the
     # subdirectory-prefixed key stored on the row (``scene.mp4`` for
     # a root file, ``Jane Smith/scene.mp4`` for one nested under a
@@ -18266,54 +18338,6 @@ def _build_queue_snapshot() -> dict:
             if rel in src_rels:
                 continue
             rel_entries.append((rel, f))
-    # Presence set for the orphan sweep. Must include BOTH the rel
-    # path (what nested source_dir rows may be keyed on) AND the bare
-    # basename (what `process_single` / `_process_vice_download_entry`
-    # store via `upsert_file(video.name, …)`). Without the basenames,
-    # every unfiled row for a vice / jav / nested-scene file gets
-    # deleted by the orphan sweep, the walker sees prev_status=None,
-    # the auto-enqueue re-queues, the pipeline re-runs the whole
-    # folder, and the cycle repeats every few minutes — visible in
-    # the log as `queue orphan sweep: removed N stale processed_files
-    # rows` immediately after each `FILE …` batch.
-    present_filenames: set[str] = {rel for rel, _ in rel_entries}
-    for rel, f in rel_entries:
-        present_filenames.add(f.name)
-    # Orphan sweep: delete processed_files rows whose source file is
-    # gone from source_dir. Without this, Errors / No Dir / Unmatched
-    # SQL counters drift above what the queue list can render — a
-    # row that errored last week and was then deleted lingers in
-    # processed_files forever, padding the Errors tile with files the
-    # user can't act on.
-    try:
-        purged = db.processed_files_purge_source_orphans(present_filenames)
-        if purged:
-            emit(f"queue orphan sweep: removed {purged} stale processed_files rows")
-    except Exception as exc:
-        emit(f"queue orphan sweep failed: {exc}")
-    # Discard cached filmstrip JPGs for any cache dir whose source
-    # file has left source_dir. The cache is keyed by sha1(filename)
-    # so we have to walk the cache root and reverse-resolve via the
-    # processed_files row that knows the original filename. Cheap:
-    # one directory listing + one DB read per orphan.
-    try:
-        thumbs_root = _metadata_base_dir() / "queue_thumbs"
-        if thumbs_root.is_dir():
-            present_keys = {
-                hashlib.sha1(fn.encode("utf-8")).hexdigest()
-                for fn in present_filenames
-            }
-            for child in thumbs_root.iterdir():
-                if not child.is_dir():
-                    continue
-                if child.name not in present_keys:
-                    try:
-                        shutil.rmtree(child, ignore_errors=True)
-                    except Exception:
-                        continue
-    except Exception as exc:
-        emit(f"queue thumbs cache sweep failed: {exc}")
-
     files = []
     # Per-file performer names captured during the walk so we can
     # batch-resolve headshots in a single library scan at the end —
@@ -18375,29 +18399,6 @@ def _build_queue_snapshot() -> dict:
             hrow = db.queue_cached_row(history, rel)
             prev_status = hrow.get("status")
             mv_row = {}
-        # Auto-queue a walk of the vice / jav watch dirs: if the
-        # walker sees a file at status='none', it queues the file's
-        # top-level entry for the movie / scene pipeline via the same
-        # code path a fresh inotify event would use. Runs unconditionally
-        # (idempotent — pending_dict guards against thrashing) so we
-        # never need a second parallel scanner just to catch inotify
-        # misses on network mounts.
-        if prev_status is None or prev_status == "pending":
-            if _is_jav_path:
-                try:
-                    _auto_enqueue_vice_jav_from_snapshot(rel, f, "jav")
-                except Exception as exc:
-                    emit(f"jav auto-queue error: {exc}")
-            else:
-                _rel_parts_scope = rel.split("/")
-                if (
-                    len(_rel_parts_scope) >= 2
-                    and _rel_parts_scope[0].lower() == "vices"
-                ):
-                    try:
-                        _auto_enqueue_vice_jav_from_snapshot(rel, f, "vice")
-                    except Exception as exc:
-                        emit(f"vice auto-queue error: {exc}")
         # Skip files the pipeline already marked ``filed``. They're
         # done — no library-guess, no headshot resolve, no thumb
         # prewarm needed. Historical counts (Filed tile in the header)
@@ -18526,7 +18527,10 @@ def _build_queue_snapshot() -> dict:
             if len(rel_parts) >= 2 and rel_parts[0].lower() == "jav":
                 row_scope = "jav"
         _row_phash = db.get_phash(rel) or ""
+        identity_key = 'jav://' + rel[4:] if row_scope == 'jav' and rel.startswith('JAV/') else rel
+        identity = identities.get(('processed_movies' if row_scope == 'jav' else 'processed_files', identity_key))
         files.append({
+            "file_id":          identity['id'] if identity and prev_status != "removed" else None,
             "filename":         rel,
             "display_name":     f_stem,
             "size_mb":          round(f.stat().st_size / 1024 / 1024, 1),
@@ -18778,12 +18782,8 @@ _queue_warm = _WarmCache("queue", _build_queue_snapshot, 300.0)
 
 @app.get("/api/queue")
 async def get_queue():
-    #: `await run_in_threadpool(_queue_warm.get)` is fully sync — on the cold path it grabs
-    #: the warm-cache build lock and runs `_build_queue_snapshot`
-    #: inline (multi-second on big libraries). Calling it directly
-    #: from an async handler blocks the event loop, freezes other
-    #: requests, and makes the UI look hung. Push to the threadpool.
-    return await run_in_threadpool(_queue_warm.get)
+    snapshot = _queue_warm.peek()
+    return snapshot if snapshot is not None else JSONResponse({"files": [], "loading": True}, status_code=202)
 
 
 @app.get("/history")
@@ -20359,26 +20359,55 @@ def _scene_display_name(scene: dict) -> str:
 
 @app.post("/api/queue/delete")
 async def queue_delete_file(payload: dict):
-    """Delete a source video from disk (with its associated sidecars).
-
-    The queue UI exposes this for files the user decides to drop —
-    e.g. corrupt files, unwanted extras bundled in a release, or
-    phash-matched dupes. Scoped strictly to ``source_dir`` so a
-    malformed filename can't escape the download folder. After the
-    unlink we mark the processed_files row as ``removed`` so the row
-    disappears from the queue on the next refresh.
-    """
-    filename = (payload.get("filename") or "").strip()
+    """Remove a queue file to recovery storage, preferring its stable identity."""
+    from app.core.queue_recovery import resolve_target
+    try:
+        filename, queue_kind = await run_in_threadpool(
+            resolve_target, str(payload.get("file_id") or ""),
+            str(payload.get("filename") or "").strip(), str(payload.get("queue_kind") or "scene"))
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
     if not filename:
         return JSONResponse({"error": "filename is required"}, status_code=400)
-    r = await run_in_threadpool(_queue_delete_filename_sync, filename)
-    if not r.get("ok"):
-        return JSONResponse({"error": r.get("error") or "delete failed"}, status_code=400)
-    return {
-        "deleted": bool(r.get("deleted")),
-        "already_missing": bool(r.get("already_missing")),
-        "filename": filename,
-    }
+    result = await run_in_threadpool(_queue_delete_filename_sync, filename, queue_kind, str(payload.get("file_id") or ""))
+    if not result.get("ok"):
+        return JSONResponse({"error": result.get("error") or "Removal failed"}, status_code=400)
+    return result
+
+
+@app.get("/api/queue/recovery")
+async def queue_recovery_list(before: str = ""):
+    from app.core.queue_recovery import store
+    try:
+        files = await run_in_threadpool(store().list, 100, before)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    cursor = files[-1]["created_at"] + "|" + files[-1]["id"] if len(files) == 100 else None
+    return {"files": files, "next_cursor": cursor}
+
+
+@app.post("/api/queue/recovery/{operation_id}/restore")
+async def queue_recovery_restore(operation_id: str):
+    from app.core.queue_recovery import restore
+    try:
+        context = await run_in_threadpool(restore, operation_id)
+    except (ValueError, OSError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+    _queue_warm.invalidate()
+    _movies_queue_warm.invalidate()
+    if context.get("kind") in ("library", "library_video", "vice"):
+        _favourites_warm.invalidate()
+        _favourites_name_index_bump()
+    return {"ok": True, "filename": context["filename"], "file_id": context["file_id"]}
+
+
+@app.post("/api/queue/recovery/{operation_id}/purge")
+async def queue_recovery_purge(operation_id: str):
+    from app.core.queue_recovery import store
+    try:
+        return await run_in_threadpool(store().purge, operation_id)
+    except (ValueError, OSError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
 
 
 # ── Queue thumbnail filmstrip cache ──────────────────────────────────
@@ -20823,6 +20852,13 @@ async def file_manual(payload: dict, background_tasks: BackgroundTasks):
     if not filename or not scene:
         return JSONResponse({"error": "filename and scene are required"}, status_code=400)
 
+    if payload.get("file_id"):
+        from app.core.manual_identity import resolve_payload
+        try:
+            filename = await run_in_threadpool(resolve_payload, payload)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=409)
+
     settings = db.get_settings()
     source_dir = Path(settings.get("source_dir", ""))
     video = _resolve_queue_file_path(filename, settings) or (source_dir / filename)
@@ -20843,6 +20879,7 @@ async def file_manual(payload: dict, background_tasks: BackgroundTasks):
 
     payload_row = {
         "filename":       filename,
+        "file_id":        payload.get("file_id"),
         "scene":          scene,
     }
     display_name = _scene_display_name(scene)
@@ -32901,10 +32938,7 @@ def _library_purge_folder_index(folder: Path) -> int:
     """Remove library_files rows for everything under ``folder``."""
     if not folder:
         return 0
-    try:
-        return db.library_files_delete_under_folder(str(folder))
-    except Exception:
-        return 0
+    return db.library_files_delete_under_folder(str(folder))
 
 
 def _library_remove_favourite_row(row_id: int) -> bool:
@@ -32929,31 +32963,15 @@ def _library_remove_vice(vice_id: str) -> bool:
 
 
 def _library_delete_folder_on_disk(folder: Path) -> None:
-    if not folder:
-        return
-    if folder.is_dir():
-        shutil.rmtree(folder, ignore_errors=True)
-    elif folder.is_file():
-        folder.unlink(missing_ok=True)
+    from app.core.library_deletion import delete_folder
+    delete_folder(folder, _health_library_roots())
 
 
 def _library_delete_favourite_from_disk(row_id: int) -> bool:
-    row = db.favourite_get(row_id)
-    if not row:
+    if not db.favourite_get(row_id):
         return False
-    kind = (row.get("kind") or "").strip()
-    folder_raw = (row.get("path") or "").strip()
-    if folder_raw:
-        roots = _health_library_roots()
-        try:
-            folder = _health_assert_path_under_roots(folder_raw, roots)
-            _library_purge_folder_index(folder)
-            _library_delete_folder_on_disk(folder)
-        except ValueError:
-            # Path outside configured roots — still drop index rows.
-            _library_purge_folder_index(Path(folder_raw))
-    _library_purge_metadata_cache(row_id, kind or "performer")
-    db.favourite_delete(row_id)
+    from app.core.library_recovery import archive
+    archive(row_id)
     return True
 
 
@@ -32962,19 +32980,10 @@ def _library_delete_vice_from_disk(vice_id: str) -> bool:
     if not vice:
         return False
     folder = _library_vice_folder_path(vice)
-    if folder and folder.exists():
-        roots = _health_library_roots()
-        try:
-            checked = _health_assert_path_under_roots(str(folder), roots)
-            _library_purge_folder_index(checked)
-            _library_delete_folder_on_disk(checked)
-        except ValueError:
-            _library_purge_folder_index(folder)
-            _library_delete_folder_on_disk(folder)
-    meta = _vice_metadata_dir(vice)
-    if meta and meta.is_dir():
-        shutil.rmtree(meta, ignore_errors=True)
-    _library_remove_vice(vice_id)
+    if not folder:
+        raise ValueError("Vice has no library folder")
+    from app.core.vice_recovery import archive
+    archive(vice_id, folder)
     return True
 
 
@@ -33007,7 +33016,7 @@ async def api_library_entity_remove_from_library(payload: dict = Body(...)):
 
 @app.post("/api/library/entity/delete-from-disk")
 async def api_library_entity_delete_from_disk(payload: dict = Body(...)):
-    """Delete entity folder (and all files inside) plus remove from the app index."""
+    """Recoverably remove library entities and their files."""
     row_id = int(payload.get("id") or 0)
     vice_id = str(payload.get("vice_id") or "").strip()
     if row_id < 0:
@@ -33016,18 +33025,29 @@ async def api_library_entity_delete_from_disk(payload: dict = Body(...)):
             return JSONResponse({"error": "Vice not found"}, status_code=404)
         vid = str(vice.get("id") or "").strip()
         label = (vice.get("name") or "vice").strip() or "vice"
-        if not _library_delete_vice_from_disk(vid):
+        try:
+            deleted = await run_in_threadpool(_library_delete_vice_from_disk, vid)
+        except (OSError, ValueError, RuntimeError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=409)
+        if not deleted:
             return JSONResponse({"error": "Vice not found"}, status_code=404)
-        db.notification_add("success", f"Deleted “{label}” from disk", ttl_seconds=240)
-        return {"ok": True, "kind": "vice"}
+        _favourites_warm.invalidate()
+        db.notification_add("success", f"Moved “{label}” to recovery", ttl_seconds=240)
+        return {"ok": True, "kind": "vice", "recoverable": True}
     if not row_id:
         return JSONResponse({"error": "id required"}, status_code=400)
     row = db.favourite_get(row_id)
     label = (row.get("folder_name") or row.get("name") or "entry").strip() if row else "entry"
-    if not _library_delete_favourite_from_disk(row_id):
+    try:
+        deleted = await run_in_threadpool(_library_delete_favourite_from_disk, row_id)
+    except (OSError, ValueError, RuntimeError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+    if not deleted:
         return JSONResponse({"error": "Not found"}, status_code=404)
-    db.notification_add("success", f"Deleted “{label}” from disk", ttl_seconds=240)
-    return {"ok": True}
+    _favourites_warm.invalidate()
+    _favourites_name_index_bump()
+    db.notification_add("success", f"Moved “{label}” to recovery", ttl_seconds=240)
+    return {"ok": True, "recoverable": True}
 
 
 @app.get("/api/library/performer-move-targets")
@@ -35214,8 +35234,7 @@ def movies_tpdb_test():
 
 
 def _build_movies_queue_snapshot() -> dict:
-    """Compute the full /api/movies/queue payload — reconcile orphaned
-    rows + DB rows-map + recursive source-dir walk + per-file stat.
+    """Compute the /api/movies/queue payload from DB rows and source files.
     Same shape as `_build_queue_snapshot` for the scene queue; wrapped
     in ``_movies_queue_warm`` so the cost is paid by a background
     worker (filesystem-event-triggered + 60s backstop), not on the
@@ -35237,13 +35256,8 @@ def _build_movies_queue_snapshot() -> dict:
                 "In Settings → Movies, set “Movies — input folder for movie files” to the folder that contains your videos."
             ),
         }
-    # Mirror the scene-side queue path: flip orphaned non-terminal rows
-    # to 'removed' so the stats counter doesn't count them forever.
-    try:
-        db.reconcile_movies_source(source_dir, settings.get("jav_download_watch_dir"))
-    except Exception:
-        pass
     rows = db.get_movie_rows_map()
+    identities = db.file_identity_map()
     files = []
     for rel, f in _movie_source_video_relpaths(source_dir, settings):
         row = rows.get(rel)
@@ -35252,6 +35266,7 @@ def _build_movies_queue_snapshot() -> dict:
             prev_status = None
         disp = f.stem if "/" not in rel and "\\" not in rel else f"{f.parent.name} / {f.stem}"
         files.append({
+            "file_id": (identities.get(("processed_movies", rel)) or {}).get("id") if prev_status != "removed" else None,
             "filename": rel,
             "display_name": disp,
             "size_mb": round(f.stat().st_size / 1024 / 1024, 1),
@@ -35293,7 +35308,8 @@ _movies_queue_warm = _WarmCache("movies_queue", _build_movies_queue_snapshot, 30
 
 @app.get("/api/movies/queue")
 def movies_queue():
-    return _movies_queue_warm.get()
+    snapshot = _movies_queue_warm.peek()
+    return snapshot if snapshot is not None else JSONResponse({"files": [], "loading": True}, status_code=202)
 
 
 @app.get("/api/movies/tmdb-search")
@@ -35314,20 +35330,6 @@ async def movies_history():
 
 @app.get("/api/movies/stats")
 async def movies_stats():
-    # The warm queue cache already reconciles on every rebuild (every
-    # 60s + on filesystem events). When its snapshot is fresh we can
-    # skip the duplicate reconcile here entirely — saves a full source
-    # dir walk on every loadQueueStats() fan-out call. Falls back to
-    # the inline reconcile if the cache is stale or hasn't been built
-    # yet (covers cold-start before the worker first ticks).
-    try:
-        if _movies_queue_warm.age_seconds() > 90.0:
-            settings = db.get_settings()
-            source_dir = Path((settings.get("movies_source_dir") or "").strip()).expanduser()
-            if (settings.get("movies_source_dir") or "").strip() and source_dir.is_dir():
-                db.reconcile_movies_source(source_dir, settings.get("jav_download_watch_dir"))
-    except Exception:
-        pass
     return db.get_movie_stats()
 
 
@@ -35346,6 +35348,15 @@ async def file_movie_endpoint(payload: dict, background_tasks: BackgroundTasks):
             status_code=400,
         )
 
+    if payload.get("file_id"):
+        from app.core.queue_recovery import resolve_target
+        try:
+            filename, kind = await run_in_threadpool(resolve_target, payload["file_id"], filename, "movie")
+            if kind != "movie":
+                raise ValueError("File identity is not a movie queue entry")
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=409)
+
     settings = db.get_settings()
     if not (settings.get("movies_source_dir") or "").strip():
         return JSONResponse({"error": "Movies source directory is not configured"}, status_code=400)
@@ -35356,6 +35367,18 @@ async def file_movie_endpoint(payload: dict, background_tasks: BackgroundTasks):
         return JSONResponse({"error": f"File not found: {filename}"}, status_code=404)
 
     def run():
+        nonlocal filename, video
+        if payload.get("file_id"):
+            from app.core.queue_recovery import resolve_target
+            try:
+                filename, kind = resolve_target(payload["file_id"], filename, "movie")
+                if kind != "movie":
+                    raise ValueError("File identity is not a movie queue entry")
+                video = source_dir / filename
+            except ValueError as exc:
+                emit(f"Movie filing cancelled: {exc}")
+                return
+
         processing_state["running"] = True
         processing_state["log"] = []
         processing_state["pipeline_total"] = 1
@@ -35448,6 +35471,13 @@ async def file_manual_metadata(payload: dict, background_tasks: BackgroundTasks)
     if not all([filename, title, studio, date]):
         return JSONResponse({"error": "filename, title, studio and date are required"}, status_code=400)
 
+    if payload.get("file_id"):
+        from app.core.manual_identity import resolve_payload
+        try:
+            filename = await run_in_threadpool(resolve_payload, payload)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=409)
+
     settings   = db.get_settings()
     source_dir = Path(settings.get("source_dir", ""))
     video      = _resolve_queue_file_path(filename, settings) or (source_dir / filename)
@@ -35478,7 +35508,7 @@ async def file_manual_metadata(payload: dict, background_tasks: BackgroundTasks)
     position = _manual_action_enqueue_persistent(
         job_type="manual_metadata",
         label=filename,
-        payload={"filename": filename, "scene": scene},
+        payload={"filename": filename, "file_id": payload.get("file_id"), "scene": scene},
         display_name=display_name,
     )
     return {
@@ -35569,6 +35599,13 @@ async def file_manual_vice(payload: dict, background_tasks: BackgroundTasks):
             status_code=400,
         )
 
+    if payload.get("file_id"):
+        from app.core.manual_identity import resolve_payload
+        try:
+            filename = await run_in_threadpool(resolve_payload, payload)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=409)
+
     settings = db.get_settings()
     vices_dir_raw = (settings.get("vices_dir") or "").strip()
     if not vices_dir_raw:
@@ -35600,7 +35637,7 @@ async def file_manual_vice(payload: dict, background_tasks: BackgroundTasks):
     position = _manual_action_enqueue_persistent(
         job_type="vice",
         label=filename,
-        payload={"filename": filename, "vice_name": vice_name, "scene": scene},
+        payload={"filename": filename, "file_id": payload.get("file_id"), "vice_name": vice_name, "scene": scene},
         display_name=vice_name,
     )
     return {
@@ -37355,23 +37392,6 @@ def _health_apply_tvshow_nfo_from_index(folder_raw: str, roots: list[dict]) -> d
     return {"ok": True, "path": folder_raw, "nfo": str(target)}
 
 
-def _health_delete_video_and_sidecars(video_path: Path) -> None:
-    if not video_path.is_file():
-        return
-    folder = video_path.parent
-    stem = video_path.stem
-    # Failure to remove the requested video must reach callers.
-    video_path.unlink()
-    for f in sorted(folder.iterdir()):
-        if not f.is_file():
-            continue
-        if f.stem == stem:
-            try:
-                f.unlink()
-            except OSError:
-                pass
-
-
 def _schedule_library_index_retry(roots, attempt):
     # Bounded retries, one scheduler job: never spin or spawn probe threads.
     if attempt >= 3 or _runtime_stop.is_set():
@@ -37897,13 +37917,13 @@ def _queue_source_video_dup_compare_payload(video: Path) -> dict:
 def _queue_discard_source_after_library_phash(
     video: Path, filename: str, phash: str, err: str, *, movie: bool = False
 ) -> dict:
-    """Delete the queue file and mark processed_files / processed_movies removed."""
+    """Retain the inferior queue copy in recovery before marking it removed."""
     try:
-        if video.is_file():
-            video.unlink()
-    except OSError as e:
-        emit(f"  Remove queue file: {e}")
-        message = f"Could not remove duplicate: {e}"
+        from app.core.queue_recovery import archive_pipeline
+        archive_pipeline(video, filename, movie=movie)
+    except (OSError, ValueError) as e:
+        emit(f"  Recover queue duplicate: {e}")
+        message = f"Could not retain duplicate: {e}"
         if movie:
             db.update_movie(filename, status="error", error=message)
         else:
@@ -38191,15 +38211,21 @@ def _queue_duplicate_groups_payload(*, compute_missing_phash: bool = False) -> d
     }
 
 
-def _queue_delete_filename_sync(filename: str) -> dict:
-    """Delete a scene, Vice, or JAV queue file within its configured inbox."""
+def _queue_delete_filename_sync(filename: str, queue_kind: str = "scene", expected_file_id: str = "") -> dict:
+    """Move queue media to recovery storage within its configured inbox."""
+    if expected_file_id:
+        from app.core.queue_recovery import resolve_target
+        try:
+            filename, queue_kind = resolve_target(expected_file_id, filename, queue_kind)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
     fn = (filename or "").strip()
     if not fn:
         return {"ok": False, "error": "filename required"}
     settings = db.get_settings()
     parts = fn.replace("\\", "/").split("/")
-    scope = parts[0].lower() if len(parts) > 1 else ""
-    key = {"jav": "jav_download_watch_dir", "vices": "vice_download_watch_dir"}.get(scope, "source_dir")
+    scope = "movie" if queue_kind == "movie" else (parts[0].lower() if len(parts) > 1 else "")
+    key = {"jav": "jav_download_watch_dir", "vices": "vice_download_watch_dir", "movie": "movies_source_dir"}.get(scope, "source_dir")
     raw_root = (settings.get(key) or "").strip()
     if not raw_root:
         return {"ok": False, "error": f"{key} is not configured"}
@@ -38215,45 +38241,19 @@ def _queue_delete_filename_sync(filename: str) -> dict:
     except (ValueError, OSError):
         return {"ok": False, "error": "filename escapes queue directory"}
 
-    def mark_removed():
-        if scope == "jav":
-            db.update_movie("jav://" + Path(relative).as_posix(), status="removed")
-        else:
-            db.update_file(fn, status="removed")
+    if target.is_symlink() or (root.resolve() / relative).resolve() != root.resolve() / relative:
+        return {"ok": False, "error": "Queue removal does not follow symlinks"}
 
     if not target_resolved.is_file():
-        try:
-            mark_removed()
-        except Exception:
-            pass
         return {"ok": True, "deleted": False, "already_missing": True, "freed_bytes": 0}
-    freed = 0
+    table = "processed_movies" if scope in ("jav", "movie") else "processed_files"
+    queue_key = "jav://" + Path(relative).as_posix() if scope == "jav" else fn
     try:
-        freed = int(target_resolved.stat().st_size)
-    except OSError:
-        pass
-    try:
-        target_resolved.unlink()
-    except OSError as exc:
-        return {"ok": False, "error": f"delete failed: {exc}"}
-    stem = target_resolved.stem
-    parent = target_resolved.parent
-    for sidecar in (
-        parent / f"{stem}.nfo",
-        parent / f"{stem}-thumb.jpg",
-        parent / f"{stem}-poster.jpg",
-    ):
-        try:
-            if sidecar.is_file():
-                sidecar.unlink()
-        except OSError:
-            pass
-    try:
-        mark_removed()
-    except Exception:
-        pass
-    emit(f"Deleted from disk: {fn}")
-    return {"ok": True, "deleted": True, "filename": fn, "freed_bytes": freed}
+        result = _archive_queue_file(fn, target_resolved, root.resolve(), table, queue_key, queue_kind, expected_file_id)
+    except (OSError, ValueError) as exc:
+        return {"ok": False, "error": f"Removal failed: {exc}"}
+    emit(f"Moved to recovery: {fn}")
+    return {"ok": True, "deleted": True, "filename": fn, "freed_bytes": 0, **result}
 
 
 def _exact_queue_file_path(filename: str, settings: dict) -> Path | None:
@@ -38986,6 +38986,12 @@ async def health_delete_nfo(payload: dict = Body(...)):
 @app.post("/api/health/delete-video")
 async def health_delete_video(payload: dict = Body(...)):
     path_raw = (payload.get("path") or "").strip()
+    if payload.get("library_file_id") is not None:
+        from app.core.video_recovery import indexed_path
+        try:
+            path_raw = await run_in_threadpool(indexed_path, payload["library_file_id"])
+        except (ValueError, TypeError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=409)
     if not path_raw:
         return JSONResponse({"error": "path required"}, status_code=400)
     if Path(path_raw).suffix.lower() not in VIDEO_EXTENSIONS:
@@ -38998,30 +39004,13 @@ async def health_delete_video(payload: dict = Body(...)):
     if not p.is_file():
         return JSONResponse({"error": "Not found"}, status_code=404)
     try:
-        try:
-            rp = str(p.resolve())
-        except OSError:
-            rp = str(p)
-        _health_delete_video_and_sidecars(p)
-        lf = _health_library_file_row_for_destination(path_raw)
-        db_key = (lf.get("destination") or "").strip() if lf else rp
-        db.library_file_delete_by_destination(db_key)
-        #: Drop any processed_files row pointing at the same on-disk
-        #: file. Without this, deleting a duplicate leaves the filed
-        #: history row behind — it then surfaces on /health as an
-        #: orphan and the user has to hand-resolve every dup delete.
-        try:
-            pf_removed = db.processed_files_delete_by_destination(db_key)
-            if pf_removed:
-                emit(f"health: deleted {pf_removed} processed_files row(s) for {db_key}")
-        except Exception as exc:
-            emit(f"health: processed_files cleanup failed for {db_key}: {exc}")
-        #: Also strip from the cached scan snapshot so the row doesn't
-        #: reappear under Missing Video Metadata after a page reload.
-        _health_scan_cache_strip("video_no_nfo", path_raw, rp, db_key)
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-    return {"ok": True}
+        from app.core.video_recovery import archive
+        result = await run_in_threadpool(archive, path_raw, library_file_id=payload.get("library_file_id"))
+        _health_scan_cache_strip("video_no_nfo", path_raw, str(p))
+    except (ValueError, OSError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+    return {"ok": True, "recoverable": True, "freed_bytes": 0, **result}
+
 
 
 @app.delete("/api/health/orphaned/{record_id}")
@@ -39970,7 +39959,9 @@ async def api_queue_suggestions():
     def _load_files():
         files = _reviewable_suggestion_files()
         settings = db.get_settings() or {}
+        identities = db.file_identity_map()
         for file in files:
+            file["file_id"] = (identities.get(("processed_files", file["filename"])) or {}).get("id")
             path = _resolve_queue_file_path(file["filename"], settings)
             file["source_path"] = str(path) if path is not None else file["filename"]
         return files
@@ -40090,6 +40081,14 @@ async def api_queue_suggestions_reject(payload: dict = Body(...)):
     source_db, source_id) tuple stays in `queue_suggestion_rejects`
     forever so future name-search passes skip it."""
     filename  = (payload.get("filename") or "").strip()
+    if payload.get("file_id"):
+        from app.core.queue_recovery import resolve_target
+        try:
+            filename, kind = await run_in_threadpool(resolve_target, payload["file_id"], filename)
+            if kind != "scene":
+                raise ValueError("File identity is not a scene queue entry")
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=409)
     source_db = (payload.get("source_db") or "").strip()
     source_id = (payload.get("source_id") or "").strip()
     if not filename or not source_db or not source_id:
@@ -40232,6 +40231,16 @@ async def api_queue_suggestions_accept(payload: dict = Body(...)):
         )
 
     def _accept() -> dict:
+        nonlocal filename
+        if payload.get("file_id"):
+            from app.core.queue_recovery import resolve_target
+            try:
+                filename, kind = resolve_target(payload["file_id"], filename)
+                if kind != "scene":
+                    raise ValueError("File identity is not a scene queue entry")
+            except ValueError as exc:
+                return {"status": "error", "error": str(exc)}
+
         # Pull the cached scene payload — we already have a stash-box
         # shaped dict from the original search call, no need to re-hit
         # the source DB.
@@ -40273,6 +40282,12 @@ async def api_queue_suggestions_accept(payload: dict = Body(...)):
                         if base_title else f"Scene {sn_hint}"
                     ),
                 }
+        if source_db.upper() == "TPDB":
+            from app.core.scene_acceptance import hydrate_tpdb_cast
+            try:
+                scene = hydrate_tpdb_cast(scene, _fetch_grab_scene_for_filing)
+            except ValueError as exc:
+                return {"status": "error", "error": str(exc)}
         settings = db.get_settings()
         video = _resolve_queue_file_path(filename, settings)
         if video is None or not video.is_file():

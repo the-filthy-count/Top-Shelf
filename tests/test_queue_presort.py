@@ -21,7 +21,7 @@ class PresortTests(unittest.TestCase):
         indexes=([],[(tuple(tokenize(name,release=False)),name,i) for i,name in enumerate(names)])
         db=SimpleNamespace(processed_files_map_by_filename=lambda **kw:{},
             _build_library_match_indexes=Mock(return_value=indexes),
-            _library_guess_from_release_name=guess,rename_file=Mock())
+            _library_guess_from_release_name=guess,upsert_file=Mock(),rename_file=Mock(return_value=True))
         env.update(Path=Path,db=db,VIDEO_EXTENSIONS={'.mp4'},emit=Mock(),
             _queue_group_hold_ready=lambda p:True,_sanitize_fs_component=lambda x:x,
             _resolve_library_folder_name=lambda n,k:n if n in names else '',

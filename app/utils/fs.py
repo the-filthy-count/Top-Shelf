@@ -166,7 +166,7 @@ def _shorten_path_basename(p: Path) -> Path:
     return p.with_name(shorten_filename(name, ""))
 
 
-def safe_move(src: Path, dst: Path, emit_cb=None) -> None:
+def _safe_move_impl(src: Path, dst: Path, emit_cb=None) -> None:
     """Move *src* to *dst*; never leave both after a successful import."""
     src = Path(src)
     dst = Path(dst)
@@ -268,3 +268,110 @@ def safe_move(src: Path, dst: Path, emit_cb=None) -> None:
     except Exception as e:
         logger.error(f"safe_move failed: {e}")
         raise
+
+
+_operation_connection = None
+
+def configure_operation_history(connect):
+    """Enabled at application startup; standalone file utilities need no database."""
+    global _operation_connection
+    _operation_connection = connect
+
+
+def safe_move(src: Path, dst: Path, emit_cb=None, *, replace_existing=True) -> None:
+    def perform(source, destination):
+        if replace_existing:
+            return _safe_move_impl(source, destination, emit_cb)
+        move_exclusive(source, destination)
+        _ensure_library_filed_permissions(destination)
+    if _operation_connection is None:
+        return perform(src, dst)
+    from app.core.file_history import record_operation, finish_operation
+    source = Path(src)
+    destination = Path(dst)
+    destination = Path(*( _shorten_path_basename(Path(part)).name
+                          if len(part.encode("utf-8")) > FS_FILENAME_MAX_BYTES else part
+                          for part in destination.parts))
+    st = source.stat()
+    # Journal before touching media. A journal failure prevents the move.
+    operation = record_operation(_operation_connection, source, destination,
+                                 [st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns])
+    try:
+        result = perform(source, destination)
+    except Exception as exc:
+        try:
+            finish_operation(_operation_connection, operation, exc)
+        except Exception:
+            logger.exception("Could not record failed move %s", operation)
+        raise
+    try:
+        finish_operation(_operation_connection, operation)
+    except Exception:
+        # The media has moved. Do not report a failed move and invite a retry;
+        # the prepared journal entry remains available for reconciliation.
+        logger.exception("Move completed but journal confirmation failed: %s", operation)
+    return result
+
+
+def move_exclusive(source: Path, destination: Path, *, expected=None) -> None:
+    """Move a regular file without ever replacing a competing destination.
+
+    Publish with a hard link so a destination created after validation still
+    wins. Cross-device copies stay temporary until complete and durable.
+    """
+    source, destination = Path(source), Path(destination)
+    before = source.lstat()
+    if expected is not None and [before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns] != expected:
+        raise OSError("Source identity changed before move")
+    if not stat.S_ISREG(before.st_mode):
+        raise OSError("Recovery only accepts regular files")
+    signature = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    published = None
+    try:
+        try:
+            os.link(source, destination, follow_symlinks=False)
+            published = destination.lstat()
+        except OSError as exc:
+            if exc.errno != errno.EXDEV:
+                raise
+            if shutil.disk_usage(destination.parent).free < before.st_size + 64 * 1024 * 1024:
+                raise OSError(errno.ENOSPC, "Insufficient space for recovery storage")
+            fd, name = tempfile.mkstemp(prefix='.recovery-', dir=destination.parent)
+            os.close(fd)
+            temporary = Path(name)
+            shutil.copy2(source, temporary)
+            if signature(source.stat()) != signature(before) or temporary.stat().st_size != before.st_size:
+                raise OSError("Source changed while copying to recovery storage")
+            with temporary.open('rb') as handle:
+                os.fsync(handle.fileno())
+            os.link(temporary, destination)
+            published = destination.lstat()
+        # Link creation changes ctime on the same inode; mtime/size must remain stable.
+        after = source.stat()
+        if (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns) != (
+                before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns):
+            raise OSError("Source changed before recovery move completed")
+        _sync_directory(destination.parent)
+        source.unlink()
+        published = None  # The move is complete; later failures must not remove its result.
+        try:
+            _sync_directory(source.parent)
+        except OSError:
+            logger.exception("Recovery move completed but source directory sync failed")
+    except Exception:
+        if published is not None:
+            try:
+                current = destination.lstat()
+                if (current.st_dev, current.st_ino) == (published.st_dev, published.st_ino):
+                    destination.unlink()
+            except OSError:
+                logger.exception("Recovery move could not clean up its destination")
+        raise
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                logger.exception("Could not remove recovery copy temporary file")

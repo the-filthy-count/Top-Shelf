@@ -1213,7 +1213,7 @@
           const freed = Number(res.freed_bytes) || 0;
           _dupFreedBytesTotal += freed;
           if (prog) {
-            prog.innerHTML = '✓ Resolved ' + (res.resolved || 0) + ' groups · freed ' + fmtSize(freed) +
+            prog.innerHTML = '✓ Resolved ' + (res.resolved || 0) + ' groups · removed copies retained in recovery' +
               '<br>⚠ ' + (res.skipped || 0) + ' groups need manual review';
           }
           if (go) go.disabled = false;
@@ -1383,7 +1383,7 @@
           <div class="issue-row">
             <span class="issue-row-path" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0">${recMark}<span style="min-width:0;word-break:break-all">${esc(f.destination)}</span>${diskHint}</span>
             <span class="issue-row-actions">
-              <button type="button" class="btn-icon-danger" data-dup-del="${enc}" title="Delete video" aria-label="Delete video"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+              <button type="button" class="btn-icon-danger" data-dup-del="${enc}" data-library-file-id="${Number(f.id) || 0}" title="Move video to recovery" aria-label="Move video to recovery"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
             </span>
           </div>`;
         }).join('');
@@ -2258,7 +2258,7 @@
       const r = await fetch('/api/health/delete-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: p }),
+        body: JSON.stringify({ path: p, library_file_id: Number(btn.dataset.libraryFileId) || undefined }),
       });
       if (!r.ok) {
         let err = 'Delete failed';
@@ -2293,7 +2293,7 @@
     const m = document.getElementById('dupCompareModal');
     const meta = document.getElementById('dupCompareMeta');
     const progEl = document.getElementById('dupCompareProgress');
-    if (meta) meta.textContent = 'phash: ' + ((group && group.phash) ? group.phash : '—');
+    if (meta) meta.textContent = 'Removed copies remain in recovery until permanently deleted. · phash: ' + ((group && group.phash) ? group.phash : '—');
     if (progEl && _dupCompareReviewMode && (_dupReviewQueue.queue || []).length) {
       progEl.textContent = 'Group ' + (_dupReviewQueue.index + 1) + ' of ' + _dupReviewQueue.queue.length;
     } else if (progEl) progEl.textContent = '';
@@ -2330,7 +2330,7 @@
         <div class="dup-db-block" id="dupDb-${fi}">Loading record…</div>
         <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
           <button type="button" class="btn-tiny" data-dup-rec-meta="${fi}" ${canMeta ? '' : 'disabled'}>Recreate metadata</button>
-          <button type="button" class="btn-dup-row-delete" data-dup-modal-del="${enc}" title="Delete"><i class="fa-solid fa-xmark"></i></button>
+          <button type="button" class="btn-dup-row-delete" data-dup-modal-del="${enc}" data-library-file-id="${Number(f.id) || 0}" title="Move to recovery; disk space is retained"><i class="fa-solid fa-xmark"></i></button>
         </div>
       </div>`;
     }).join('') + '</div>';
@@ -2527,7 +2527,7 @@
       if (p === targetPath) {
         b.className = 'btn-dup-rank-remove';
         b.innerHTML = '<i class="fa-solid fa-thumbs-down" aria-hidden="true"></i>';
-        b.title = 'Removing this file';
+        b.title = 'Moving this file to recovery';
         b.setAttribute('aria-label', 'Remove');
       } else {
         b.className = 'btn-dup-rank-keep';
@@ -2550,15 +2550,15 @@
       group.querySelectorAll('[data-dup-del]').forEach(b => {
         b.className = 'btn-icon-danger';
         b.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
-        b.title = 'Delete video';
-        b.setAttribute('aria-label', 'Delete video');
+        b.title = 'Move video to recovery';
+        b.setAttribute('aria-label', 'Move video to recovery');
       });
     }
     try {
       const r = await fetch('/api/health/delete-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: dest }),
+        body: JSON.stringify({ path: dest, library_file_id: Number(btn.dataset.libraryFileId) || undefined }),
       });
       if (!r.ok) {
         dupRestoreDeleteButtons();

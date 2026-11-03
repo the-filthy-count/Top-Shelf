@@ -16,7 +16,8 @@ class CollisionSafetyTests(unittest.TestCase):
                  '_PHASH_SAME_SCENE_BITS':4,'_video_quality_score':lambda p:(2,3,2) if p==src else (1,3,1),
                  'emit':Mock(),'safe_move':Mock(side_effect=OSError('disk full'))}
             move=load('main.py','_quality_gate_move',env)
-            with self.assertRaises(OSError):move(src,dst)
+            with patch('app.core.filing_recovery.replace', side_effect=OSError('disk full')):
+                with self.assertRaises(OSError):move(src,dst)
             self.assertEqual(dst.read_bytes(),b'original');self.assertTrue(src.exists())
             compute.assert_called_once_with(src);cached.assert_not_called()
 
@@ -37,7 +38,7 @@ class CollisionSafetyTests(unittest.TestCase):
             video=Path(tmp)/'clip.mp4';video.touch()
             db=SimpleNamespace(update_file=Mock(),update_movie=Mock())
             discard=load('main.py','_queue_discard_source_after_library_phash',{'Path':Path,'db':db,'emit':Mock()})
-            with patch.object(Path,'unlink',side_effect=PermissionError('denied')):
+            with patch('app.core.queue_recovery.archive_pipeline',side_effect=PermissionError('denied')):
                 for movie in (False,True):
                     result=discard(video,'clip.mp4','hash','duplicate',movie=movie)
                     self.assertEqual(result['status'],'error')
@@ -62,7 +63,7 @@ class CollisionSafetyTests(unittest.TestCase):
                 env={'Path':Path,'compute_phash':lambda p:source_hash,
                      '_phash_for_library_destination':lambda p:destination_hash,
                      '_next_free_dest_slot':lambda p:alternate,'emit':Mock(),
-                     'safe_move':lambda a,b:a.rename(b)}
+                     'safe_move':lambda a,b,**kw:a.rename(b)}
                 move=load('main.py','_quality_gate_move',env)
                 self.assertEqual(move(src,dst),alternate)
                 self.assertEqual(dst.read_bytes(),b'existing');self.assertEqual(alternate.read_bytes(),b'incoming')
@@ -110,22 +111,13 @@ class CollisionSafetyTests(unittest.TestCase):
                 self.assertEqual(result,{'status':'removed'} if case=='valid' else None)
                 self.assertTrue(incoming.exists())
 
-    def test_library_delete_failure_keeps_all_records(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            video=Path(tmp)/'scene.mp4';video.write_bytes(b'video')
-            sidecar=video.with_suffix('.nfo');sidecar.write_text('metadata')
-            db=SimpleNamespace(library_file_get_by_destination=lambda p:{'source_record_id':1},
-                processed_file_delete_by_id=Mock(),library_file_delete_by_destination=Mock(),processed_files_delete_by_destination=Mock())
-            env={'Path':Path,'db':db}
-            load('main.py','_health_delete_video_and_sidecars',env)
-            delete=load('main.py','_duplicate_delete_one_library_video',env)
-            with patch.object(Path,'unlink',side_effect=PermissionError('denied')):
-                with self.assertRaises(PermissionError):delete(str(video))
-            for method in (db.processed_file_delete_by_id,db.library_file_delete_by_destination,db.processed_files_delete_by_destination):method.assert_not_called()
-            self.assertTrue(video.exists());self.assertTrue(sidecar.exists())
-            self.assertEqual(delete(str(video)),5)
-            self.assertFalse(video.exists());self.assertFalse(sidecar.exists())
-            db.library_file_delete_by_destination.assert_called_once_with(str(video))
+    def test_library_removal_delegates_to_recovery_without_reporting_freed_space(self):
+        delete=load('main.py','_duplicate_delete_one_library_video',{})
+        with patch('app.core.video_recovery.archive',side_effect=PermissionError('denied')):
+            with self.assertRaises(PermissionError):delete('/library/video.mp4')
+        with patch('app.core.video_recovery.archive') as archive:
+            self.assertEqual(delete('/library/video.mp4'),0)
+            archive.assert_called_once_with('/library/video.mp4')
 
     def test_post_filing_cleanup_verifies_both_current_files(self):
         for case in ('valid','old_hash_changed','replacement_hash_changed','old_changed','replacement_changed','replacement_missing'):
