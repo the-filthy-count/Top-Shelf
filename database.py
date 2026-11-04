@@ -3590,22 +3590,18 @@ def favourite_find_performer_folders_by_crosswalk(
     jid = (javstash_id or "").strip()
     if not (tid or sid or fid or jid):
         return []
-    parts: list[str] = []
-    args: list[str] = []
-    if tid:
-        parts.append("trim(COALESCE(match_tpdb_id,'')) = ?")
-        args.append(tid)
-    if sid:
-        parts.append("trim(COALESCE(match_stashdb_id,'')) = ?")
-        args.append(sid)
-    if fid:
-        parts.append("trim(COALESCE(match_fansdb_id,'')) = ?")
-        args.append(fid)
-    if jid:
-        parts.append("trim(COALESCE(match_javstash_id,'')) = ?")
-        args.append(jid)
-    if not parts:
-        return []
+    import re
+    uuid_pattern = re.compile(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
+    sources = (
+        ("tpdb", "match_tpdb_id", tid), ("stashdb", "match_stashdb_id", sid),
+        ("fansdb", "match_fansdb_id", fid), ("javstash", "match_javstash_id", jid),
+    )
+    parts, args = [], []
+    for _, column, identity in sources:
+        if identity:
+            collation = " COLLATE NOCASE" if uuid_pattern.fullmatch(identity) else ""
+            parts.append(f"trim(COALESCE({column},'')){collation} = ?")
+            args.append(identity)
     where = " OR ".join(parts)
     with get_conn() as conn:
         # Pull the weighting + is_group flag alongside path/folder_name so
@@ -3631,16 +3627,16 @@ def favourite_find_performer_folders_by_crosswalk(
                 continue
             if not isinstance(data, dict):
                 continue
-            tpdb_list = [str(x).strip() for x in (data.get("tpdb") or []) if str(x).strip()]
-            stash_list = [str(x).strip() for x in (data.get("stashdb") or []) if str(x).strip()]
-            fans_list = [str(x).strip() for x in (data.get("fansdb") or []) if str(x).strip()]
-            jav_list = [str(x).strip() for x in (data.get("javstash") or []) if str(x).strip()]
-            if (
-                (tid and tid in tpdb_list)
-                or (sid and sid in stash_list)
-                or (fid and fid in fans_list)
-                or (jid and jid in jav_list)
-            ):
+            def matches(source, identity):
+                entries = data.get(source)
+                if not identity or not isinstance(entries, list):
+                    return False
+                linked_ids = (_entry_id(entry) for entry in entries)
+                if uuid_pattern.fullmatch(identity):
+                    return any(link.lower() == identity.lower() for link in linked_ids)
+                return identity in linked_ids
+
+            if any(matches(source, identity) for source, _, identity in sources):
                 result[gr["id"]] = {
                     "id": gr["id"],
                     "path": gr["path"],

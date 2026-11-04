@@ -77,9 +77,18 @@ class FilingIdentityTests(unittest.TestCase):
         conn.execute("INSERT INTO favourite_entities VALUES (3, 'performer', 'group', 'Group', 0, 8, 1, ?, '', '', '', '')", (json.dumps({'tpdb':['pid']}),))
         tree = ast.parse((ROOT/'database.py').read_text())
         fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'favourite_find_performer_folders_by_crosswalk')
-        env = {'get_conn':lambda:conn,'json':json}
+        from database import _entry_id
+        env = {'get_conn':lambda:conn,'json':json,'_entry_id':_entry_id}
         exec(compile(ast.Module(body=[fn], type_ignores=[]), 'database.py', 'exec'), env)
         self.assertEqual([r['id'] for r in env[fn.name]('pid','','')], [1,2,3])
+        uid = 'f59bb1f1-abcd-4567-89ab-0123456789ab'
+        conn.execute('UPDATE favourite_entities SET match_stashdb_id=? WHERE id=1', (uid.upper(),))
+        conn.execute('UPDATE favourite_entities SET group_ids_json=? WHERE id=3',
+                     (json.dumps({'stashdb':[{'id':uid.upper(),'name':'Ryden Armani'}]}),))
+        self.assertEqual([r['id'] for r in env[fn.name]('',uid,'')], [1,3])
+        self.assertEqual(env[fn.name](uid,'',''), [])
+        self.assertEqual(env[fn.name]('','Ryden Armani',''), [])
+
 
     def test_manual_exact_directory_match(self):
         fn = next(n for n in self.tree.body if isinstance(n, ast.FunctionDef) and n.name == 'find_performer_dir')
