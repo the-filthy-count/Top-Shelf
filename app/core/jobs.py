@@ -5,6 +5,8 @@ MAX_ATTEMPTS = 3
 
 
 def install(conn):
+    from app.core.queue_changes import install as install_changes
+    install_changes(conn)
     conn.execute('''CREATE TABLE IF NOT EXISTS processing_jobs (
         file_id TEXT PRIMARY KEY, state TEXT NOT NULL, phase TEXT NOT NULL,
         attempts INTEGER NOT NULL DEFAULT 0, available_at REAL NOT NULL DEFAULT 0,
@@ -13,12 +15,19 @@ def install(conn):
     for table in ('processed_files', 'processed_movies'):
         if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
             continue
-        conn.execute(f"""CREATE TRIGGER IF NOT EXISTS jobs_{table}_removed
+        conn.execute(f"DROP TRIGGER IF EXISTS jobs_{table}_removed")
+        conn.execute(f"""CREATE TRIGGER jobs_{table}_removed
             AFTER DELETE ON {table} BEGIN
               UPDATE processing_jobs SET state='cancelled',phase='Queue record removed',
                 updated_at=CAST(strftime('%s', 'now') AS REAL)
               WHERE file_id IN (SELECT id FROM file_assets WHERE queue_table='{table}' AND queue_id=OLD.id)
                 AND state IN ('pending', 'running');
+              UPDATE queue_change_history SET state='cancelled',error='Queue record removed'
+              WHERE file_id IN (SELECT id FROM file_assets WHERE queue_table='{table}' AND queue_id=OLD.id)
+                AND state IN ('pending','running','draft');
+              UPDATE queue_changes SET state='cancelled',running_revision=NULL,error='Queue record removed'
+              WHERE file_id IN (SELECT id FROM file_assets WHERE queue_table='{table}' AND queue_id=OLD.id)
+                AND state IN ('pending','running','draft');
             END""")
 
 
@@ -28,7 +37,7 @@ def enqueue(conn, file_id):
         VALUES(?,'pending','Queued',?) ON CONFLICT(file_id) DO UPDATE SET
         state='pending',phase='Queued',attempts=0,available_at=0,
         updated_at=excluded.updated_at,error=NULL
-        WHERE processing_jobs.state IN ('complete','failed')''',
+        WHERE processing_jobs.state IN ('complete','failed','cancelled')''',
         (file_id, time.time()))
 
 
@@ -70,3 +79,6 @@ def recover(conn):
     conn.execute('''UPDATE processing_jobs SET state=CASE WHEN attempts<? THEN 'pending' ELSE 'failed' END,
         phase='Interrupted by restart',error='Previous worker stopped before completion',
         available_at=?,updated_at=? WHERE state='running' ''', (MAX_ATTEMPTS, now + 60, now))
+
+    from app.core.queue_changes import recover as recover_changes
+    recover_changes(conn)

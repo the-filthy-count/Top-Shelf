@@ -33,6 +33,7 @@ import asyncio
 from app.core.pipeline import ProcessingPipeline, VIDEO_EXTENSIONS
 from app.utils.fs import safe_move
 from app.core.queue_recovery import archive as _archive_queue_file
+from app.core.queue_changes import relocate as _apply_queue_relocation
 from app.utils.text import (
     UPPERCASE_KEYWORDS,
     apply_caps,
@@ -448,7 +449,12 @@ def _manual_action_enqueue_persistent(
     if job_type not in _MANUAL_JOB_RUNNERS:
         raise ValueError(f"unknown manual-job type: {job_type}")
     from app.core.manual_identity import bind_payload
-    payload = bind_payload(payload)
+    if job_type in ('desired_recovery','desired_process','desired_movie','desired_movie_snapshot') and payload.get('file_id'):
+        from app.core.queue_recovery import resolve_target
+        filename, kind = resolve_target(payload['file_id'],payload.get('filename',''),payload.get('queue_kind','scene'))
+        payload = {**payload,'filename':filename,'queue_kind':kind}
+    else:
+        payload = bind_payload(payload)
     job_id = db.manual_job_create(job_type, label, display_name, payload)
 
     _manual_action_rehydrate()
@@ -473,8 +479,15 @@ def _manual_action_rehydrate() -> int:
             _manual_enqueued_ids.add(job_id)
             def run(row=row, job_id=job_id, job_type=job_type):
                 try:
-                    db.manual_job_mark_started(job_id)
-                    _MANUAL_JOB_RUNNERS[job_type](json.loads(row["payload_json"] or "{}"))
+                    command = db.manual_job_claim(job_id)
+                    if command is None:
+                        return
+                    from app.core.queue_changes import owner
+                    payload = command['payload']
+                    from app.core.queue_changes import assert_actionable
+                    assert_actionable(payload.get('file_id'))
+                    with owner(payload.get('file_id'), payload.get('_change_revision')):
+                        _MANUAL_JOB_RUNNERS[command['action']](payload)
                     db.manual_job_delete(job_id)
                 except Exception as exc:
                     db.manual_job_mark_failed(job_id, str(exc))
@@ -1320,6 +1333,8 @@ def _restart_watcher():
     if observer:
         observer.stop()
         observer = None
+    from app.core.action_commands import drain as resume_saved_actions
+    _boot_maintenance.submit(resume_saved_actions)
     _start_watcher()
     _start_movie_watcher()
 
@@ -2277,6 +2292,8 @@ async def startup():
 async def shutdown():
     global observer, download_observer, movie_observer
     _runtime_stop.set()
+    from app.core.action_commands import shutdown as stop_saved_actions
+    stop_saved_actions()
     from media_budget import shutdown as stop_media
     stop_media()
     if observer:
@@ -7962,11 +7979,10 @@ def _group_video_into_hint_subfolder(
         if dest.exists() and dest.resolve() != video.resolve():
             emit(f"  Group: '{safe_group}/{video.name}' already exists — leaving in root")
             return video, filename
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        safe_move(video, dest)
+        _apply_queue_relocation(filename,f"{safe_group}/{video.name}",[(video,dest)])
         with _queue_group_seen_lock:
             _queue_group_seen.pop(str(video.resolve()), None)
-    except OSError as ex:
+    except (OSError,ValueError) as ex:
         emit(f"  Group: move failed ({ex}) — leaving in root")
         return video, filename
     new_filename = f"{safe_group}/{video.name}"
@@ -7976,10 +7992,6 @@ def _group_video_into_hint_subfolder(
         emit(f"Group: could not carry filmstrip cache: {exc}")
 
     emit(f"  Group: moved into '{safe_group}/'")
-    try:
-        db.rename_file(filename, new_filename)
-    except Exception as ex:
-        emit(f"  Group: DB rename failed ({ex})")
     return dest, new_filename
 
 
@@ -8265,6 +8277,10 @@ def write_library_scene_nfo_and_thumb(video: Path, scene: dict, source: str) -> 
     """
     settings = db.get_settings()
     plan = _scene_filing_plan(scene, settings, source, video.suffix)
+    from app.core.queue_changes import annotate_current
+    destination = str(plan['dest_season'] / (plan['base_name'] + video.suffix)) if plan.get('dest_season') and plan.get('base_name') else None
+    annotate_current(destination=destination, scene=scene, source=source)
+
     if plan.get("status") == "error":
         return {"status": "error", "error": plan.get("error", "error")}
     if plan.get("status") == "no_dir":
@@ -8362,9 +8378,32 @@ def file_scene_from_match(video: Path, scene: dict, source: str = "") -> dict:
     filename = db.queue_file_key(video, db.get_settings())
     with _track_filing_in_progress(filename):
         phash = db.get_phash(filename)
-        result = _file_scene_from_match_impl(video, scene, source)
-        _cleanup_superseded_library_copies(result, phash)
+        from app.core.manual_identity import bind_payload
+        from app.core.queue_changes import execute, _current_owner
+        asset = bind_payload({'filename': filename})
+        result = execute(asset['file_id'], 'file_scene', {'scene': scene, 'source': source},
+                         lambda: _file_scene_from_match_impl(video, scene, source))
+        active = _current_owner()
+        if active and active[0] == asset['file_id']:
+            _cleanup_superseded_library_copies(result, phash)
         return result
+
+
+def _dispatch_saved_scene(file_id, payload):
+    from app.core.queue_recovery import resolve_target
+    filename, kind = resolve_target(file_id, '')
+    if kind != 'scene':
+        raise ValueError('Scene command refers to a movie')
+    video = _resolve_queue_file_path(filename)
+    if video is None or not video.is_file():
+        raise ValueError('Source file is missing')
+    result = _file_scene_from_match_impl(video,payload['scene'],payload.get('source',''))
+    _cleanup_superseded_library_copies(result,db.get_phash(filename))
+    return result
+
+
+from app.core.queue_changes import register as _register_queue_change
+_register_queue_change('file_scene',_dispatch_saved_scene)
 
 
 # ── Phash submission back to source DBs ────────────────────────────────
@@ -8583,6 +8622,10 @@ def _file_scene_from_match_impl(video: Path, scene: dict, source: str = "") -> d
         except Exception:
             scene["_scope"] = ""
     plan = _scene_filing_plan(scene, settings, source, video.suffix)
+    from app.core.queue_changes import annotate_current
+    destination = str(plan['dest_season'] / (plan['base_name'] + video.suffix)) if plan.get('dest_season') and plan.get('base_name') else None
+    annotate_current(destination=destination, scene=scene, source=source)
+
 
     if plan.get("status") == "error":
         err = plan.get("error", "error")
@@ -9164,6 +9207,8 @@ def file_movie(
     the match came from TMDB or TPDB, since the file is a JAV release
     by virtue of its inbox.
     """
+    from app.core.queue_changes import annotate_current
+    annotate_current(movie=movie,source=match_source,operation='file_movie',tpdb_id=tpdb_id,javstash_id=javstash_id,dest_kind=dest_kind)
     with _track_filing_in_progress(video.name):
         return _file_movie_impl(
             video, movie,
@@ -9263,6 +9308,8 @@ def _file_movie_impl(
     try:
         staged_nfo.write_text(nfo, encoding="utf-8")
         require_complete_queue_video(video, guard_settings)
+        from app.core.queue_changes import annotate_current
+        annotate_current(destination=str(movie_dest),operation='file_movie')
         actual_movie_dest = _quality_gate_move(video, movie_dest, label="Movie", queue_filename=filename)
         if actual_movie_dest is None:
             tid = str(movie.get("id") or "").strip() or None
@@ -17912,17 +17959,9 @@ def _tag_queue_folder_files(root: Path) -> None:
                 continue
             old_key = video.relative_to(root).as_posix()
             new_key = target.relative_to(root).as_posix()
-            completed = []
             try:
-                db.upsert_file(old_key)
-                for src, dst in moves:
-                    safe_move(src, dst)
-                    completed.append((src, dst))
-                if not db.rename_file(old_key, new_key):
-                    raise OSError("queue record could not be renamed")
+                _apply_queue_relocation(old_key,new_key,moves)
             except Exception as exc:
-                for src, dst in reversed(completed):
-                    safe_move(dst, src)
                 emit(f"  Folder tag deferred for {name}: {exc}")
                 continue
             try:
@@ -18001,22 +18040,11 @@ def _group_queue_root_files_by_hint_locked(source_dir: Path) -> int:
         try:
             if dest.exists():
                 continue
-            db.upsert_file(filename)
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            safe_move(child, dest)
+            _apply_queue_relocation(filename,f"{safe_group}/{filename}",[(child,dest)])
             with _queue_group_seen_lock:
                 _queue_group_seen.pop(str(child.resolve()), None)
-        except OSError as ex:
-            emit(f"  Auto-group: move failed for {filename}: {ex}")
-            continue
-        new_key = f"{safe_group}/{filename}"
-        try:
-            if not db.rename_file(filename, new_key):
-                raise OSError("queue record could not be renamed")
-        except Exception as ex:
-            if dest.is_file() and not child.exists():
-                safe_move(dest, child)
-            emit(f"  Auto-group: DB rename failed for {filename}: {ex}")
+        except (OSError,ValueError) as ex:
+            emit(f"  Auto-group: move deferred for {filename}: {ex}")
             continue
         emit(f"  Auto-group: moved '{filename}' → '{safe_group}/'")
         moved += 1
@@ -18107,7 +18135,16 @@ async def file_history(file_id: str, after: int = 0, limit: int = 100):
         with db.get_conn() as conn:
             asset = conn.execute("SELECT * FROM file_assets WHERE id=?", (file_id,)).fetchone()
             if not asset:
-                raise HTTPException(status_code=404, detail="File not found")
+                subject=conn.execute('SELECT * FROM command_subjects WHERE id=?',(file_id,)).fetchone()
+                if not subject:
+                    raise HTTPException(status_code=404, detail="File not found")
+                history=conn.execute('SELECT * FROM queue_change_history WHERE file_id=? AND revision>? ORDER BY revision LIMIT ?',
+                                    (file_id,max(0,after),max(1,min(limit,500)))).fetchall()
+                return {'file':{'id':file_id,'current_path':subject['label'],'original_path':subject['label']},
+                        'events':[{'id':r['revision'],'kind':'change.'+r['state'],'created_at':datetime.fromtimestamp(r['updated_at']).isoformat(),
+                                   'new_path':r['action']+(' · '+r['error'] if r['error'] else ''),
+                                   'detail':json.dumps({'action':r['action'],'desired':json.loads(r['desired_json']),'error':r['error']})} for r in history],
+                        'job':None}
             events = [dict(r) for r in conn.execute("SELECT * FROM file_events WHERE file_id=? AND id>? ORDER BY id LIMIT ?", (file_id, max(0, after), max(1, min(limit, 500))))]
             job = conn.execute("SELECT * FROM processing_jobs WHERE file_id=?", (file_id,)).fetchone()
             return {"file": dict(asset), "events": events, "job": dict(job) if job else None}
@@ -19939,23 +19976,8 @@ async def run_all(background_tasks: BackgroundTasks):
 
 @app.post("/api/run/file/{filename:path}")
 async def run_file(filename: str, background_tasks: BackgroundTasks):
-    # If the pipeline is idle, kick straight into ``run_pipeline`` via
-    # a background task (matches the original fast path). Otherwise
-    # queue the file for the manual-action worker to pick up when the
-    # pipeline settles.
-    if not processing_state["running"]:
-        # Flip running=True synchronously so the next /api/status poll
-        # cannot race ahead of run_pipeline and miss the running→idle
-        # transition that triggers the queue refresh in the UI.
-        processing_state["pipeline_phase"] = "Waiting to start"
-        processing_state["running"] = True
-        processing_state["pipeline_total"] = 1
-        processing_state["pipeline_done"] = 0
-        processing_state["current_file"] = filename
-        background_tasks.add_task(run_pipeline, [filename])
-        return {"started": True, "filename": filename, "queued_position": 0}
-    position = _manual_action_enqueue(filename, lambda: run_pipeline([filename]))
-    return {"started": True, "queued": True, "filename": filename, "queued_position": position}
+    position = _manual_action_enqueue_persistent('desired_process',filename,{'filename':filename})
+    return {"started":True,"queued":True,"filename":filename,"queued_position":position}
 
 
 @app.post("/api/search")
@@ -20337,6 +20359,151 @@ def _scene_display_name(scene: dict) -> str:
     return ""
 
 
+@app.get("/api/queue/changes")
+async def queue_changes_list(offset: int = 0):
+    from app.core.queue_changes import list_changes
+    return {"changes": await run_in_threadpool(list_changes, 100, offset)}
+
+
+@app.post("/api/queue/changes/{file_id}/retry")
+async def queue_change_retry(file_id: str, payload: dict):
+    if file_id.startswith('action:'):
+        from app.core.action_commands import retry
+        try:
+            return retry(file_id,payload.get('revision'))
+        except ValueError as exc:
+            return JSONResponse({'error':str(exc)},status_code=409)
+    with db.get_conn() as conn:
+        row = conn.execute('SELECT * FROM queue_changes WHERE file_id=?',(file_id,)).fetchone()
+    if not row or row['revision'] != payload.get('revision'):
+        return JSONResponse({"error":"Changes have moved on; refresh first"},status_code=409)
+    if row['state'] not in ('failed','blocked','draft'):
+        return JSONResponse({"error":"This change cannot be retried"},status_code=409)
+    desired = json.loads(row['desired_json'])
+    desired.pop('_change_revision',None)
+    desired['file_id'] = file_id
+    with db.get_conn() as conn:
+        asset = conn.execute('SELECT queue_table,current_path FROM file_assets WHERE id=?',(file_id,)).fetchone()
+    if asset and asset['queue_table'] == 'processed_movies' and not str(asset['current_path']).startswith('jav://'):
+        desired['queue_kind'] = 'movie'
+    desired['_expected_change_revision'] = row['revision']
+    action = row['action']
+    if action == 'process' and desired.get('scene'):
+        action = 'file_scene'
+    elif action == 'process' and desired.get('movie'):
+        action = 'desired_movie_snapshot'
+    action = {'file_scene':'desired_scene','recover':'desired_recovery','process':'desired_process','relocate':'desired_relocate'}.get(action,action)
+    if action not in _MANUAL_JOB_RUNNERS:
+        return JSONResponse({"error":"Reopen this file to review its action"},status_code=409)
+    try:
+        position = _manual_action_enqueue_persistent(action, file_id, desired)
+    except ValueError as exc:
+        return JSONResponse({"error":str(exc)},status_code=409)
+    return {"queued":True,"position":position}
+
+
+@app.post("/api/queue/changes/{file_id}/cancel")
+async def queue_change_cancel(file_id: str, payload: dict):
+    with db.get_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        row = conn.execute('SELECT revision,state,running_revision FROM queue_changes WHERE file_id=?',(file_id,)).fetchone()
+        if not row or row[0] != payload.get('revision') or row[2] is not None or row[1] not in ('pending','draft','blocked','failed'):
+            return JSONResponse({"error":"Change is running or has changed; refresh first"},status_code=409)
+        conn.execute("UPDATE queue_changes SET state='cancelled' WHERE file_id=?",(file_id,))
+        from app.core.queue_changes import _event
+        _event(conn,(file_id,'change.cancelled',json.dumps({'revision':row[0]})))
+        conn.execute("UPDATE queue_change_history SET state='cancelled' WHERE file_id=? AND revision=?",(file_id,row[0]))
+        conn.execute("UPDATE processing_jobs SET state='cancelled' WHERE file_id=? AND state='pending'",(file_id,))
+        for job in conn.execute("SELECT id,payload_json FROM manual_queue_jobs WHERE status='pending'").fetchall():
+            data = json.loads(job['payload_json'])
+            if data.get('file_id') == file_id:
+                conn.execute("UPDATE manual_queue_jobs SET status='cancelled' WHERE id=?",(job['id'],))
+    return {"ok":True}
+
+
+@_register_manual_job("file_scene")
+@_register_manual_job("relocate")
+@_register_manual_job("recover")
+def _manual_run_saved_effect(payload):
+    from app.core.queue_changes import run_claimed
+    with _pipeline_lock:
+        result = run_claimed(payload['file_id'],payload['_change_revision']) or {}
+    if result.get('ok') is False or result.get('status') in ('error','no_dir'):
+        raise ValueError(result.get('error') or result.get('status') or 'Saved action failed')
+
+
+@_register_manual_job("desired_scene")
+def _manual_run_desired_scene(payload):
+    def apply(filename, video):
+        result = file_scene_from_match(video, payload['scene'], payload.get('source','Manual'))
+        if result.get('status') != 'filed':
+            raise ValueError(result.get('error') or result.get('status'))
+    _manual_runner_wrap(payload,'Saved change',apply)
+
+
+@_register_manual_job("desired_recovery")
+def _manual_run_desired_recovery(payload):
+    from app.core.queue_recovery import resolve_target
+    filename, kind = resolve_target(payload['file_id'],payload.get('filename',''),payload.get('queue_kind','scene'))
+    with _pipeline_lock:
+        result = _queue_delete_filename_sync(filename,kind,payload['file_id'])
+        if not result.get('ok'):
+            raise ValueError(result.get('error','Removal failed'))
+
+
+@_register_manual_job("desired_relocate")
+def _manual_run_desired_relocate(payload):
+    from app.core.queue_recovery import resolve_target
+    filename,kind=resolve_target(payload['file_id'],payload.get('filename',''))
+    if kind != 'scene':
+        raise ValueError('Queue relocation requires a scene file')
+    root=Path(db.get_settings()['source_dir']).expanduser().resolve()
+    moves=[(Path(a),Path(b)) for a,b in payload['moves']]
+    if not moves or moves[0][0].resolve() != (root/filename).resolve():
+        raise ValueError('Source changed; refresh before relocating')
+    for src,dst in moves:
+        src.resolve().relative_to(root)
+        dst.resolve().relative_to(root)
+    if moves[0][1].resolve() != (root/payload['new_filename']).resolve():
+        raise ValueError('Destination changed; refresh before relocating')
+    with _pipeline_lock:
+        _apply_queue_relocation(filename,payload['new_filename'],moves)
+
+
+@_register_manual_job("desired_movie_snapshot")
+def _manual_run_desired_movie_snapshot(payload):
+    from app.core.queue_recovery import resolve_target
+    filename,kind=resolve_target(payload['file_id'],payload.get('filename',''),payload.get('queue_kind','scene'))
+    settings=db.get_settings()
+    jav=filename.startswith('JAV/')
+    if kind != 'movie' and not jav:
+        raise ValueError('Saved movie change refers to a scene file')
+    root=Path(settings['jav_download_watch_dir' if jav else 'movies_source_dir']).expanduser()
+    relative=filename[4:] if jav else filename
+    history_filename='jav://'+relative if jav else filename
+    with _pipeline_lock:
+        result=file_movie(root/relative,payload['movie'],tpdb_id=payload.get('tpdb_id'),
+            javstash_id=payload.get('javstash_id'),match_source=payload.get('source','tmdb'),
+            dest_kind=payload.get('dest_kind'),history_filename=history_filename)
+        if result.get('status') != 'filed':
+            raise ValueError(result.get('error') or result.get('status') or 'Movie filing failed')
+
+
+@_register_manual_job("desired_process")
+def _manual_run_desired_process(payload):
+    # The processing worker owns its own job claim; release only this request's
+    # ledger claim while handing off, preserving the saved record in history.
+    from app.core.queue_changes import finish
+    with db.get_conn() as conn:
+        finish(conn,payload['file_id'],payload['_change_revision'],'completed',{'handoff':'processing'})
+    if payload.get('queue_kind') == 'movie':
+        process_movie_file(payload['filename'])
+    elif payload['filename'].startswith('JAV/'):
+        process_movie_file(payload['filename'][4:],src=Path(db.get_settings()['jav_download_watch_dir']),dest_kind='jav')
+    else:
+        run_pipeline([payload['filename']])
+
+
 @app.post("/api/queue/delete")
 async def queue_delete_file(payload: dict):
     """Remove a queue file to recovery storage, preferring its stable identity."""
@@ -20383,9 +20550,9 @@ async def queue_recovery_restore(operation_id: str):
 
 @app.post("/api/queue/recovery/{operation_id}/purge")
 async def queue_recovery_purge(operation_id: str):
-    from app.core.queue_recovery import store
+    from app.core.queue_recovery import purge
     try:
-        return await run_in_threadpool(store().purge, operation_id)
+        return await run_in_threadpool(purge, operation_id)
     except (ValueError, OSError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=409)
 
@@ -33069,6 +33236,10 @@ async def api_library_performer_move_targets(row_id: int):
 
 @app.post("/api/library/entity/change-directory")
 async def api_library_entity_change_directory(payload: dict = Body(...)):
+    return await run_in_threadpool(_library_change_directory, payload)
+
+
+def _library_change_directory(payload: dict):
     """Move a performer folder (and all files) to another configured performer root."""
     row_id = int(payload.get("id") or 0)
     target_directory_id = payload.get("target_directory_id")
@@ -35346,8 +35517,22 @@ async def file_movie_endpoint(payload: dict, background_tasks: BackgroundTasks):
     if not video.exists():
         return JSONResponse({"error": f"File not found: {filename}"}, status_code=404)
 
-    def run():
-        nonlocal filename, video
+    db.upsert_movie(filename)
+    asset = db.file_identity(filename,'processed_movies')
+    position = _manual_action_enqueue_persistent('desired_movie',filename,
+        {**payload,'filename':filename,'file_id':asset['id'],'queue_kind':'movie'})
+    return {"started":True,"queued":True,"filename":filename,"queued_position":position}
+
+
+@_register_manual_job("desired_movie")
+def _manual_run_desired_movie(payload):
+    filename=payload['filename']
+    tmdb_id=payload.get('tmdb_id','')
+    tpdb_id=payload.get('tpdb_id','')
+    javstash_id=payload.get('javstash_id','')
+    source_dir=Path(db.get_settings()['movies_source_dir']).expanduser()
+    video=source_dir / filename
+    with _pipeline_lock:
         if payload.get("file_id"):
             from app.core.queue_recovery import resolve_target
             try:
@@ -35357,7 +35542,7 @@ async def file_movie_endpoint(payload: dict, background_tasks: BackgroundTasks):
                 video = source_dir / filename
             except ValueError as exc:
                 emit(f"Movie filing cancelled: {exc}")
-                return
+                raise
 
         processing_state["running"] = True
         processing_state["log"] = []
@@ -35369,7 +35554,7 @@ async def file_movie_endpoint(payload: dict, background_tasks: BackgroundTasks):
             if tmdb_id:
                 emit(f"  Fetching TMDB details for ID {tmdb_id}...")
                 movie = get_tmdb_movie(tmdb_id)
-                file_movie(video, movie, match_source="tmdb", history_filename=filename)
+                result = file_movie(video, movie, match_source="tmdb", history_filename=filename)
             elif tpdb_id:
                 emit(f"  Fetching TPDB movie {tpdb_id}...")
                 detail = _fetch_tpdb_movie_detail(tpdb_id)
@@ -35377,7 +35562,7 @@ async def file_movie_endpoint(payload: dict, background_tasks: BackgroundTasks):
                     raise RuntimeError("TPDB movie not found")
                 md = _tpdb_detail_as_movie_filing_dict(detail)
                 tid = md.pop("_tpdb_id", None) or tpdb_id
-                file_movie(video, md, tpdb_id=str(tid), match_source="tpdb", history_filename=filename)
+                result = file_movie(video, md, tpdb_id=str(tid), match_source="tpdb", history_filename=filename)
             else:
                 emit(f"  Fetching JAVStash scene {javstash_id}...")
                 jscene = _fetch_javstash_scene_for_filing(javstash_id)
@@ -35385,10 +35570,13 @@ async def file_movie_endpoint(payload: dict, background_tasks: BackgroundTasks):
                     raise RuntimeError("JAVStash scene not found")
                 md = _javstash_scene_as_movie_filing_dict(jscene)
                 jid = md.pop("_javstash_id", None) or javstash_id
-                file_movie(video, md, javstash_id=str(jid), match_source="javstash", history_filename=filename)
+                result = file_movie(video, md, javstash_id=str(jid), match_source="javstash", history_filename=filename)
+            if result.get('status') != 'filed':
+                raise ValueError(result.get('error') or result.get('status') or 'Movie filing failed')
         except Exception as e:
             emit(f"  ERROR: {e}")
             db.update_movie(filename, status="error", error=str(e))
+            raise
         finally:
             processing_state["running"] = False
             processing_state["current_file"] = None
@@ -35396,11 +35584,6 @@ async def file_movie_endpoint(payload: dict, background_tasks: BackgroundTasks):
             processing_state["pipeline_done"] = 0
             emit("---")
 
-    if not processing_state["running"]:
-        background_tasks.add_task(run)
-        return {"started": True, "filename": filename, "queued_position": 0}
-    position = _manual_action_enqueue(filename, run)
-    return {"started": True, "queued": True, "filename": filename, "queued_position": position}
 
 
 @app.post("/api/movies/run/all")
@@ -35417,14 +35600,11 @@ async def movies_run_all(background_tasks: BackgroundTasks):
 
 @app.post("/api/movies/run/file/{filename:path}")
 async def movies_run_file(filename: str, background_tasks: BackgroundTasks):
-    def run():
-        run_movie_pipeline([filename])
-
-    if not processing_state["running"]:
-        background_tasks.add_task(run)
-        return {"started": True, "filename": filename, "queued_position": 0}
-    position = _manual_action_enqueue(filename, run)
-    return {"started": True, "queued": True, "filename": filename, "queued_position": position}
+    db.upsert_movie(filename)
+    asset = db.file_identity(filename,'processed_movies')
+    position = _manual_action_enqueue_persistent('desired_process',filename,
+        {'filename':filename,'file_id':asset['id'],'queue_kind':'movie'})
+    return {"started":True,"queued":True,"filename":filename,"queued_position":position}
 
 
 @app.post("/api/file/manual/metadata")
@@ -39361,6 +39541,10 @@ async def health_clean_preview():
 
 @app.post("/api/health/clean-library")
 async def health_clean_library(payload: dict = Body(...)):
+    return await run_in_threadpool(_library_clean_removed, payload)
+
+
+def _library_clean_removed(payload: dict):
     purge = bool(payload.get("purge_history", False))
     result = db.library_files_clean_removed(purge_linked_processed_files=purge)
     return result
@@ -51277,3 +51461,32 @@ _refresh_hourly_content_cache = _singleflight(_refresh_hourly_content_cache)
 _refresh_rss_cache = _singleflight(_refresh_rss_cache)
 _refresh_news_rss_cache = _singleflight(_refresh_news_rss_cache)
 _refresh_tag_scene_pools = _singleflight(_refresh_tag_scene_pools)
+
+
+# All entry points (HTTP, watcher, scheduler and boot) resolve these same
+# service functions. Each submits a named durable command before any effects.
+from app.core.action_commands import command as _durable_command
+for _action_name in (
+    '_download_remove_by_id', '_download_retry_by_id', '_retry_download_cleanup',
+    '_process_download_entry', '_process_stage_entry_to_queue',
+    '_process_vice_download_entry', '_process_jav_download_entry',
+    '_process_vice_stage_entry', '_process_jav_stage_entry',
+    '_sync_vice_download_folders',
+    '_reshelve_performer_root', '_backfill_studio_posters',
+    '_library_change_directory', '_library_clean_removed',
+    'write_library_scene_nfo_and_thumb', '_write_minimal_nfo_from_filename',
+    '_health_apply_tvshow_nfo_from_index', '_background_library_image_mirror_sweep',
+    '_remove_client_jobs_matching_watch_folder', '_remove_client_jobs_after_import',
+    '_background_performer_poster_gap_fill', '_sync_entity_library_images',
+    '_recoverable_performer_merge',
+    '_maintain_queue_paths', '_sync_vice_folders',
+    '_library_delete_folder_on_disk', '_library_delete_favourite_from_disk',
+    '_library_delete_vice_from_disk', '_library_remove_favourite_row',
+    '_library_remove_vice', 'run_library_index_job', 'run_phash3_rescan_job',
+    '_duplicate_apply_metadata_sync', '_health_delete_nfo_one',
+    '_restore_performer_from_library_mirrors', '_restore_studio_from_library_mirrors',
+):
+    globals()[_action_name] = _durable_command('service.'+_action_name)(globals()[_action_name])
+# Load recovery handlers before startup replay, including commands whose
+# original HTTP caller no longer exists.
+from app.core import library_recovery, vice_recovery, video_recovery

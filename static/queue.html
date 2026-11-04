@@ -3537,7 +3537,7 @@
     border-radius: 12px;
   }
   .queue-section .q-panel-body .queue-item.queue-item-folder > .qi-cell-folder-name-row { top: 32px !important; }
-  .queue-section .q-panel-body .queue-item.queue-item-folder > .qi-cell-folder-icon { top: 72px !important; }
+  .queue-section .q-panel-body .queue-item.queue-item-folder > .qi-cell-folder-icon { top: 54px !important; }
 
   /* File tiles: a stable header, artwork well, metadata and action row. */
   .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) {
@@ -3612,6 +3612,7 @@
   .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) .qi-actions > .qi-edit-details {
     order: -1; color: var(--accent);
   }
+  .queue-section:has(#queueChanges:not([hidden])) :is(#queueList,#queuePager) { display:none !important; }
   .q-details-bar { display: flex; align-items: end; gap: 14px; margin-top: 12px; }
   .q-search-date-scene { display: grid; grid-template-columns: minmax(0, 1fr) minmax(100px, 120px); gap: 12px; align-items: end; min-width: 0; }
   .q-search-date-scene .field-row { min-width: 0; }
@@ -3745,9 +3746,19 @@
             <button id="btnQueueSuggestions" class="btn-secondary queue-matched-toggle" onclick="openSuggestionsModal()" title="Review suggestions"><i class="fa-solid fa-brain"></i></button>
             <button id="btnQueueDuplicates" class="btn-secondary queue-matched-toggle" onclick="openQueueDuplicatesModal()" title="Queue duplicates (same phash)"><i class="fa-solid fa-clone"></i></button>
             <button class="btn-secondary queue-matched-toggle" onclick="QueueDetails.recovery()" title="Recover removed files" aria-label="Recover removed files"><i class="fa-solid fa-trash-arrow-up"></i></button>
+            <button class="btn-secondary queue-matched-toggle" onclick="QueueChanges.toggle()" title="Saved changes" aria-label="Saved changes"><i class="fa-solid fa-list-check"></i></button>
             <button id="btnRunAll" class="btn-secondary queue-matched-toggle" onclick="runAll()" title="Run All"><i class="fa-solid fa-play"></i></button>
           </div>
         </div>
+        <section id="queueChanges" hidden style="padding:16px;overflow:auto">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><strong>File changes</strong>
+            <button class="btn-secondary" onclick="QueueChanges.refresh()">Refresh</button>
+            <button class="btn-secondary" onclick="QueueChanges.page(-1)">Previous</button>
+            <button class="btn-secondary" onclick="QueueChanges.page(1)">Next</button>
+            <button class="btn-secondary" onclick="QueueChanges.toggle()">Tiles</button>
+          </div>
+          <div id="queueChangesBody" aria-live="polite"></div>
+        </section>
         <div class="q-panel-body" id="queueList"><div class="empty">Loading…</div></div>
         <div class="q-pager" id="queuePager" style="display:none">
           <button type="button" class="q-pager-btn" id="queuePagerFirst" onclick="queuePagerGoto(0)" title="First page"><i class="fa-solid fa-angles-left"></i></button>
@@ -4203,6 +4214,7 @@
 
 <link rel="stylesheet" href="/static/queue-history.css?v=20261103">
 <script defer src="/static/queue-history.js?v=20261103"></script>
+<script defer src="/static/queue-changes.js?v=1"></script>
 <script defer src="/static/queue.js?v=20261104-queue-layout-8"></script>
 
 <!-- Queue duplicates modal — same phash grouping / keeper rules as Library Health. -->

@@ -1,3 +1,4 @@
+from queue_relocation_fixture import relocation_for
 import os
 import re
 import tempfile
@@ -11,7 +12,7 @@ from download_safety import require_complete_download, PartialDownloadPending
 class FolderTagTests(unittest.TestCase):
     def test_tags_once_preserves_partials_and_sidecars(self):
         db=SimpleNamespace(upsert_file=Mock(),rename_file=Mock(return_value=True))
-        env=dict(Path=Path,os=os,re=re,db=db,VIDEO_EXTENSIONS={'.mp4'},
+        env=dict(_apply_queue_relocation=relocation_for(db),Path=Path,os=os,re=re,db=db,VIDEO_EXTENSIONS={'.mp4'},
                  require_complete_download=require_complete_download,PartialDownloadPending=PartialDownloadPending,
                  _queue_group_hold_ready=lambda p:True,safe_move=lambda a,b:a.rename(b),
                  _carry_queue_thumbs=Mock(),emit=Mock())

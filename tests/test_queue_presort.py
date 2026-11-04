@@ -1,3 +1,4 @@
+from queue_relocation_fixture import relocation_for
 import re
 import tempfile
 import threading
@@ -22,7 +23,7 @@ class PresortTests(unittest.TestCase):
         db=SimpleNamespace(processed_files_map_by_filename=lambda **kw:{},
             _build_library_match_indexes=Mock(return_value=indexes),
             _library_guess_from_release_name=guess,upsert_file=Mock(),rename_file=Mock(return_value=True))
-        env.update(Path=Path,db=db,VIDEO_EXTENSIONS={'.mp4'},emit=Mock(),
+        env.update(_apply_queue_relocation=relocation_for(db),Path=Path,db=db,VIDEO_EXTENSIONS={'.mp4'},emit=Mock(),
             _queue_group_hold_ready=lambda p:True,_sanitize_fs_component=lambda x:x,
             _resolve_library_folder_name=lambda n,k:n if n in names else '',
             safe_move=lambda a,b:a.rename(b),_queue_group_seen_lock=threading.Lock(),

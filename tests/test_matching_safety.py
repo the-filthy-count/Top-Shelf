@@ -7,7 +7,7 @@ import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from download_safety import require_complete_queue_video, PartialDownloadPending
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -64,7 +64,8 @@ class MatchingSafetyTests(unittest.TestCase):
                      processing_job_start=Mock(return_value='asset'),processing_job_finish=Mock()),'VIDEO_EXTENSIONS':{'.mp4'}}
             exec(compile(ast.Module(body=[fn],type_ignores=[]),'pipeline','exec'),env)
             owner=SimpleNamespace(job_id=None,set_phase=Mock(),state={},lock=threading.Lock(),emit=Mock(),flush_emit_buffer=Mock(),process_single=process)
-            asyncio.run(env['run_pipeline'](owner))
+            with patch('app.core.queue_changes.adopt_processing'), patch('app.core.queue_changes.release_processing'):
+                asyncio.run(env['run_pipeline'](owner))
             self.assertEqual(seen,['a.mp4','b.mp4','c.mp4'])
             self.assertFalse(owner.state['running']);self.assertFalse(owner.lock.locked())
             self.assertIn('1 waiting for download',notify.call_args.args[1])

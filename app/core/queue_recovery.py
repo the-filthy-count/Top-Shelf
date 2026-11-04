@@ -112,7 +112,11 @@ def archive(filename, video, root, table, queue_key, queue_kind="scene", expecte
 
     with db.file_operation_connection() as conn:
         _check_context(conn, context)
-    return recovery.archive(paths, asset['id'], context, commit, _check_context)
+    from app.core.queue_changes import execute
+    return execute(asset['id'], 'recover', {'filename': filename, 'queue_kind': queue_kind,
+                   'video':str(video),'root':str(root),'table':table,'queue_key':queue_key,
+                   'allow_running':allow_running,'duplicate_destination':duplicate_destination},
+                   lambda: recovery.archive(paths, asset['id'], context, commit, _check_context))
 
 
 def restore(operation_id):
@@ -177,3 +181,23 @@ def archive_pipeline(video, filename, *, movie=False, duplicate_destination=None
     table = 'processed_movies' if movie or name.startswith('JAV/') else 'processed_files'
     key = 'jav://' + name[4:] if name.startswith('JAV/') else filename
     return archive(name, video, _root(name, db.get_settings(), kind), table, key, kind, allow_running=True, duplicate_destination=duplicate_destination)
+
+
+def _dispatch_archive(file_id, payload):
+    return archive(payload['filename'],payload['video'],payload['root'],payload['table'],
+                   payload['queue_key'],payload.get('queue_kind','scene'),file_id,
+                   allow_running=payload.get('allow_running',False),
+                   duplicate_destination=payload.get('duplicate_destination'))
+
+
+from app.core.queue_changes import register as _register_change
+_register_change('recover',_dispatch_archive)
+
+
+from app.core.action_commands import command as _durable_command
+
+def purge(operation_id):
+    return store().purge(operation_id)
+
+purge = _durable_command('recovery.purge')(purge)
+restore = _durable_command('recovery.restore')(restore)

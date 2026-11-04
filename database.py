@@ -1467,6 +1467,8 @@ def init_db() -> None:
         install_file_history(conn)
         from app.core.queue_records import install as install_queue_records
         install_queue_records(conn)
+        from app.core.queue_changes import install as install_queue_changes
+        install_queue_changes(conn)
         from app.core.recovery import install as install_recovery
         install_recovery(conn)
         from app.core.jobs import install as install_jobs
@@ -7589,6 +7591,11 @@ def library_match_scenes(items: list) -> dict[str, dict]:
 def manual_job_create(job_type: str, label: str, display_name: str, payload: dict) -> int:
     """Insert a pending job row and return its id."""
     with get_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        payload = dict(payload or {})
+        if payload.get('file_id'):
+            from app.core.queue_changes import request
+            payload['_change_revision'] = request(conn, payload['file_id'], job_type, payload, expected_revision=payload.pop('_expected_change_revision',None))
         cur = conn.execute(
             "INSERT INTO manual_queue_jobs "
             "(job_type, label, display_name, payload_json, status, created_at) "
@@ -7606,14 +7613,33 @@ def manual_job_create(job_type: str, label: str, display_name: str, payload: dic
         return int(cur.lastrowid)
 
 
-def manual_job_mark_started(job_id: int) -> None:
+def manual_job_claim(job_id: int):
+    """Claim and load the canonical command atomically; job rows are projections."""
+    from app.core.queue_changes import claim
     with get_conn() as conn:
-        conn.execute(
-            "UPDATE manual_queue_jobs SET status = ?, started_at = ?, error = NULL "
-            "WHERE id = ?",
-            ("running", datetime.utcnow().isoformat(), int(job_id)),
-        )
-        conn.commit()
+        conn.execute('BEGIN IMMEDIATE')
+        row = conn.execute('SELECT payload_json FROM manual_queue_jobs WHERE id=?', (int(job_id),)).fetchone()
+        if not row:
+            return None
+        reference = json.loads(row[0])
+        file_id, revision = reference.get('file_id'), reference.get('_change_revision')
+        if not file_id or not revision:
+            raise ValueError('Legacy job has no canonical command; restart to migrate it')
+        command = conn.execute('SELECT * FROM queue_changes WHERE file_id=? AND revision=?',
+                               (file_id, revision)).fetchone()
+        if not command or not claim(conn, file_id, revision):
+            if not command:
+                conn.execute("UPDATE manual_queue_jobs SET status='superseded' WHERE id=?", (job_id,))
+            return None
+        payload = json.loads(command['desired_json'])
+        payload.update(file_id=file_id, _change_revision=revision)
+        conn.execute("UPDATE manual_queue_jobs SET status='running',started_at=?,error=NULL WHERE id=?",
+                     (datetime.utcnow().isoformat(), int(job_id)))
+        return {'action': command['action'], 'payload': payload}
+
+
+def manual_job_mark_started(job_id: int) -> bool:
+    return manual_job_claim(job_id) is not None
 
 
 def manual_job_mark_pending(job_id: int) -> None:
@@ -7627,16 +7653,26 @@ def manual_job_mark_pending(job_id: int) -> None:
         conn.commit()
 
 
+def _manual_change_finish(conn, job_id, state, error=None):
+    row = conn.execute('SELECT payload_json FROM manual_queue_jobs WHERE id=?',(int(job_id),)).fetchone()
+    if row:
+        payload = json.loads(row[0])
+        if payload.get('_change_revision'):
+            from app.core.queue_changes import finish
+            finish(conn,payload['file_id'],payload['_change_revision'],state,error=error)
+
+
 def manual_job_delete(job_id: int) -> None:
-    """Success path — the worker filed the item, no reason to keep
-    the row around."""
+    """Retain completed jobs and their desired state for review."""
     with get_conn() as conn:
-        conn.execute("DELETE FROM manual_queue_jobs WHERE id = ?", (int(job_id),))
-        conn.commit()
+        _manual_change_finish(conn,job_id,'completed')
+        conn.execute("UPDATE manual_queue_jobs SET status='completed',completed_at=? WHERE id=?",
+                     (datetime.utcnow().isoformat(),int(job_id)))
 
 
 def manual_job_mark_failed(job_id: int, error: str) -> None:
     with get_conn() as conn:
+        _manual_change_finish(conn,job_id,'failed',error)
         conn.execute(
             "UPDATE manual_queue_jobs "
             "SET status = ?, error = ?, completed_at = ? WHERE id = ?",
@@ -7646,15 +7682,26 @@ def manual_job_mark_failed(job_id: int, error: str) -> None:
 
 
 def manual_job_list_active(limit: int = 64) -> list[dict]:
-    """Every pending + running row in insertion order — used at
-    startup to rehydrate the in-memory queue."""
+    """Read readiness from canonical commands, never the legacy status column."""
     with get_conn() as conn:
-        cur = conn.execute(
-            "SELECT * FROM manual_queue_jobs "
-            "WHERE status IN (?, ?) ORDER BY id ASC LIMIT ?",
-            ("pending", "running", limit),
-        )
-        return [dict(r) for r in cur.fetchall()]
+        conn.execute('BEGIN IMMEDIATE')
+        # Rebuild disposable worker projections from pending commands after a
+        # restart, including a crash between submission and worker admission.
+        conn.execute("""INSERT INTO manual_queue_jobs(job_type,label,display_name,payload_json,status,created_at)
+            SELECT c.action,a.current_path,'',
+                   json_set(c.desired_json,'$.file_id',c.file_id,'$._change_revision',c.revision),
+                   'pending',datetime('now') FROM queue_changes c
+            JOIN file_assets a ON a.id=c.file_id
+            WHERE c.action!='process' AND c.state='pending' AND c.running_revision IS NULL
+              AND NOT EXISTS(SELECT 1 FROM manual_queue_jobs m
+                WHERE json_extract(m.payload_json,'$.file_id')=c.file_id
+                  AND json_extract(m.payload_json,'$._change_revision')=c.revision)""")
+        return [dict(row) for row in conn.execute("""
+            SELECT m.* FROM queue_changes c JOIN manual_queue_jobs m
+              ON json_extract(m.payload_json, '$.file_id')=c.file_id
+             AND json_extract(m.payload_json, '$._change_revision')=c.revision
+            WHERE c.state='pending' AND c.running_revision IS NULL
+            ORDER BY c.updated_at,m.id LIMIT ?""", (max(1, min(int(limit), 128)),))]
 
 
 def manual_job_list_failed(limit: int = 50) -> list[dict]:
@@ -7815,7 +7862,9 @@ def processing_job_enqueue(filename: str, table: str = "processed_files"):
     asset = file_identity(filename, table)
     if asset:
         with get_conn() as conn:
-            enqueue(conn, asset['id'])
+            from app.core.queue_changes import schedule_processing
+            if schedule_processing(conn, asset['id']):
+                enqueue(conn, asset['id'])
             conn.commit()
 
 
@@ -7828,14 +7877,19 @@ def file_identity_map():
 
 def processing_job_start(filename: str, table: str = "processed_files") -> str | None:
     from app.core import jobs
+    from app.core.queue_changes import start_processing
     asset = file_identity(filename, table)
     if not asset:
         return None
     with get_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        if not start_processing(conn, asset['id']):
+            return None
         jobs.enqueue(conn, asset['id'])
-        claimed = jobs.claim(conn, asset['id'])
-        conn.commit()
-    return asset['id'] if claimed else None
+        conn.execute("""UPDATE processing_jobs SET state='running',phase='Reading media',
+            attempts=(SELECT attempts FROM queue_changes WHERE file_id=?),updated_at=? WHERE file_id=?""",
+            (asset['id'],time.time(),asset['id']))
+    return asset['id']
 
 
 def processing_job_checkpoint(file_id: str, phase: str):
@@ -7849,6 +7903,8 @@ def processing_job_finish(file_id: str, outcome: str, error=None):
     from app.core.jobs import finish
     with get_conn() as conn:
         finish(conn, file_id, outcome, error)
+        from app.core.queue_changes import finish_processing
+        finish_processing(conn,file_id,outcome,error)
         conn.commit()
 
 
@@ -7856,10 +7912,11 @@ def processing_jobs_ready(limit=20, table="processed_files"):
     if table not in ('processed_files', 'processed_movies'):
         raise ValueError('Unknown processing queue')
     with get_conn() as conn:
-        return [r[0] for r in conn.execute(f"""SELECT p.filename FROM processing_jobs j
+        return [r[0] for r in conn.execute(f"""SELECT p.filename FROM queue_changes j
             JOIN file_assets a ON a.id=j.file_id AND a.queue_table=?
             JOIN {table} p ON p.id=a.queue_id
-            WHERE j.state='pending' AND j.available_at<=? ORDER BY j.updated_at LIMIT ?""",
+            WHERE j.action='process' AND j.state='pending' AND j.running_revision IS NULL
+            AND j.available_at<=? AND p.status NOT IN ('filed','removed') ORDER BY j.updated_at LIMIT ?""",
             (table, time.time(), max(1, min(int(limit), 100))))]
 
 

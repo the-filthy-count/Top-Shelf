@@ -136,6 +136,7 @@ class StabilityTests(unittest.TestCase):
         db = Mock()
         db.manual_job_list_active.side_effect = lambda limit: list(rows.values())[:limit]
         db.manual_job_delete.side_effect = lambda ident: rows.pop(ident)
+        db.manual_job_claim.side_effect = lambda ident: {'action':'test','payload':{'id':ident}}
         ns = dict(queue=queue, json=json, db=db, _log=logging.getLogger(),
             _manual_rehydrate_lock=threading.Lock(), _manual_action_state_lock=threading.Lock(),
             _manual_action_queue=queue.Queue(maxsize=128), _manual_action_pending=[],

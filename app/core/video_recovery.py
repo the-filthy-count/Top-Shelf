@@ -119,3 +119,8 @@ def restore(operation_id):
                 conn.execute("""UPDATE processing_jobs SET state='complete',phase='Restored library video'
                     WHERE file_id IN (SELECT id FROM file_assets WHERE queue_table=? AND queue_id=?)""", (table, row['id']))
     return store().restore(operation_id, validate, commit)
+
+
+from app.core.action_commands import command as _durable_command
+archive = _durable_command('video_recovery.archive')(archive)
+restore = _durable_command('video_recovery.restore')(restore)

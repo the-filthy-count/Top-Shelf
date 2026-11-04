@@ -154,3 +154,8 @@ def restore(operation_id):
         raise
     finally:
         _invalidate()
+
+
+from app.core.action_commands import command as _durable_command
+archive = _durable_command('vice_recovery.archive')(archive)
+restore = _durable_command('vice_recovery.restore')(restore)

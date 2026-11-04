@@ -35,12 +35,12 @@ class MovieJobsTests(unittest.TestCase):
         job_id = db.processing_job_start('movie.mp4', 'processed_movies')
         self.assertTrue(job_id)
         with db.get_conn() as conn:
-            recover_interrupted(conn); conn.execute('UPDATE processing_jobs SET available_at=0'); conn.commit()
+            recover_interrupted(conn); conn.execute('UPDATE queue_changes SET available_at=0'); conn.commit()
         def failed(*a, **kw): raise OSError('offline')
         for _ in range(2):
             with self.assertRaises(OSError): run('movie.mp4', None, None, failed)
             with db.get_conn() as conn:
-                conn.execute('UPDATE processing_jobs SET available_at=0'); conn.commit()
+                conn.execute('UPDATE queue_changes SET available_at=0'); conn.commit()
         self.assertEqual(self.job()['attempts'], 3); self.assertEqual(self.job()['state'], 'failed')
         self.assertEqual(db.processing_jobs_ready(table='processed_movies'), [])
 

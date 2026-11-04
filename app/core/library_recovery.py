@@ -152,3 +152,8 @@ def restore(operation_id):
                     except OSError:
                         pass
         raise
+
+
+from app.core.action_commands import command as _durable_command
+archive = _durable_command('library_recovery.archive')(archive)
+restore = _durable_command('library_recovery.restore')(restore)

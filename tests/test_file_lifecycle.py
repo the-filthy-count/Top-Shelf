@@ -38,7 +38,7 @@ class FileLifecycleTests(unittest.TestCase):
         self.assertTrue(db.rename_file(src.name, 'Performer/arrival.mp4'))
         with db.get_conn() as conn:
             jobs.recover(conn)
-            conn.execute('UPDATE processing_jobs SET available_at=0')
+            conn.execute('UPDATE queue_changes SET available_at=0')
             conn.commit()
         self.assertEqual(db.processing_jobs_ready(), ['Performer/arrival.mp4'])
         self.assertEqual(db.processing_job_start('Performer/arrival.mp4'), asset['id'])

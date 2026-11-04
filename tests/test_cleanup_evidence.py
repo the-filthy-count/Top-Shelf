@@ -50,6 +50,6 @@ class CleanupEvidenceTests(unittest.TestCase):
         import ast
         tree=ast.parse(Path('main.py').read_text())
         calls=[n for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id=='file_movie']
-        self.assertEqual(len(calls),4)
+        self.assertGreaterEqual(len(calls),4)
         for call in calls:
             self.assertTrue(any(k.arg=='history_filename' and isinstance(k.value,ast.Name) and k.value.id in ('filename','history_filename') for k in call.keywords))

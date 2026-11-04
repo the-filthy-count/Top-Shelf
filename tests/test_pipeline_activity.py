@@ -5,10 +5,12 @@ import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 class PipelineActivityTests(unittest.IsolatedAsyncioTestCase):
     async def test_scan_runs_off_loop_and_progress_clears(self):
+        self.enterContext(patch('app.core.queue_changes.adopt_processing'))
+        self.enterContext(patch('app.core.queue_changes.release_processing'))
         tree=ast.parse((Path(__file__).resolve().parents[1]/'app/core/pipeline.py').read_text())
         cls=next(n for n in tree.body if isinstance(n,ast.ClassDef))
         method=next(n for n in cls.body if isinstance(n,ast.AsyncFunctionDef) and n.name=='run_pipeline')
@@ -21,7 +23,9 @@ class PipelineActivityTests(unittest.IsolatedAsyncioTestCase):
             db=SimpleNamespace(get_settings=lambda:{'source_dir':tmp},resolve_source_video_path=resolve,notification_add=Mock(), queue_file_key=lambda p,s:p.name,upsert_file=Mock(),processing_job_enqueue=Mock(),processing_job_start=Mock(return_value="asset"),processing_job_finish=Mock())
             env=dict(PartialDownloadPending=type("PartialDownloadPending", (Exception,), {}),asyncio=asyncio,Path=Path,db=db,VIDEO_EXTENSIONS={'.mp4'})
             exec(compile(ast.Module(body=[method],type_ignores=[]),'pipeline.py','exec'),env)
+            processed=[]
             async def process(path):
+                processed.append(path)
                 self.assertEqual(state['pipeline_total'],1)
                 self.assertEqual(state['current_file'],'clip.mp4')
                 return {'status':'unmatched'}
@@ -34,6 +38,7 @@ class PipelineActivityTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(task.done(), 'Run must not be silently discarded')
             owner.lock.release()
             await asyncio.wait_for(task, 2)
+            self.assertEqual(processed,[video])
             self.assertNotEqual(seen[0][0],loop_thread)
             self.assertEqual(seen[0][1],'Scanning files')
             self.assertFalse(state['running']);self.assertIsNone(state['pipeline_phase'])

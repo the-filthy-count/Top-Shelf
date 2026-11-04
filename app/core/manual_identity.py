@@ -1,7 +1,9 @@
 """Keep queued manual filing attached to the selected file across renames."""
 import database as db
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
+from contextvars import ContextVar
+_active_filing = ContextVar("active_manual_filing", default=None)
 from app.core.queue_recovery import resolve_target
 
 
@@ -34,7 +36,8 @@ def bind_payload(payload):
 def filing_activity(payload):
     """Claim the file atomically against recovery and automatic workers."""
     from app.core.recovery import _lock
-    from app.core import jobs
+    from app.core import jobs, queue_changes as changes
+    own_revision = None
     with _lock:
         bound = bind_payload(payload)
         with db.get_conn() as conn:
@@ -53,22 +56,36 @@ def filing_activity(payload):
                 if not filename.startswith('jav://'):
                     raise ValueError('Manual scene action refers to a movie queue entry')
                 filename = 'JAV/' + filename[6:]
-            jobs.enqueue(conn, file_id)
-            # An explicit selection may supersede an automatic retry's delay.
-            conn.execute("UPDATE processing_jobs SET available_at=0 WHERE file_id=? AND state='pending'", (file_id,))
-            if not jobs.claim(conn, file_id):
-                conn.rollback()
+            if _active_filing.get() == (file_id,str(db.DB_PATH)):
                 raise ValueError('This file is already being processed; retry when it finishes')
-            jobs.checkpoint(conn, file_id, 'Manual filing')
+            active = changes._current_owner()
+            current = conn.execute('SELECT revision,running_revision FROM queue_changes WHERE file_id=?',(file_id,)).fetchone()
+            if active and active[0] == file_id:
+                if not current or current[1] != active[1]:
+                    raise ValueError('Manual filing no longer owns this command')
+            else:
+                if current and current[1] is not None:
+                    raise ValueError('This file is already being processed; retry when it finishes')
+                own_revision = changes.request(conn,file_id,'manual_activity',bound)
+                if not changes.claim(conn,file_id,own_revision):
+                    raise ValueError('This file is already being processed; retry when it finishes')
+            jobs.enqueue(conn, file_id)
+            conn.execute("UPDATE processing_jobs SET state='running',phase='Manual filing',updated_at=? WHERE file_id=?",
+                         (time.time(),file_id))
             conn.commit()
     outcome, error = 'complete', None
+    token = _active_filing.set((file_id,str(db.DB_PATH)))
     try:
-        yield filename
+        with changes.owner(file_id,own_revision) if own_revision else nullcontext():
+            yield filename
     except BaseException as exc:
         outcome, error = 'failed', str(exc) or 'Manual filing interrupted'
         raise
     finally:
+        _active_filing.reset(token)
         with db.get_conn() as conn:
+            if own_revision:
+                changes.finish(conn,file_id,own_revision,'failed' if error else 'completed',error=error)
             # Failed manual jobs retain their chosen metadata in manual_queue_jobs.
             # Do not turn them into automatic fingerprint retries.
             conn.execute("""UPDATE processing_jobs SET state=?,phase=?,error=?,updated_at=?

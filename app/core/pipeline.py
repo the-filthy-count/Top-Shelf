@@ -270,6 +270,8 @@ class ProcessingPipeline:
                 if not self.job_id:
                     self.state["pipeline_done"] = i + 1
                     continue
+                from app.core.queue_changes import adopt_processing, release_processing
+                adopt_processing(self.job_id)
                 try:
                     result = await self.process_single(video)
                 except PartialDownloadPending as exc:
@@ -280,6 +282,7 @@ class ProcessingPipeline:
                     result = {"status": "error", "error": str(exc)}
                 st = (result or {}).get("status", "error")
                 await asyncio.to_thread(db.processing_job_finish, self.job_id, st, (result or {}).get("error"))
+                release_processing()
                 self.job_id = None
                 if st in outcomes:
                     outcomes[st] += 1
@@ -339,6 +342,8 @@ class ProcessingPipeline:
                 except Exception as exc:
                     self.emit(f"Could not persist interrupted job: {exc}")
                 finally:
+                    from app.core.queue_changes import release_processing
+                    release_processing()
                     self.job_id = None
             self.state["pipeline_phase"] = None
             self.state["running"] = False
