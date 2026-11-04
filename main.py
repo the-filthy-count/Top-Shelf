@@ -38313,10 +38313,10 @@ def _queue_duplicate_resolve_one_sync(keep_filename: str, delete_filenames: list
         if target is not None and target.resolve() == keeper:
             continue
         if not keeper.is_file() or db.media_file_signature(keeper) != keeper_signature:
-            return {"ok": False, "error": "Keeper changed during cleanup", "freed_bytes": freed}
+            return {"ok": False, "error": "Keeper changed during cleanup", "freed_bytes": freed, "deleted": deleted}
         r = _queue_delete_filename_sync(fn)
         if not r.get("ok"):
-            return {"ok": False, "error": r.get("error") or "delete failed", "freed_bytes": freed}
+            return {"ok": False, "error": r.get("error") or "delete failed", "freed_bytes": freed, "deleted": deleted}
         freed += int(r.get("freed_bytes") or 0)
         if r.get("deleted"):
             deleted += 1

@@ -862,11 +862,12 @@
       </div>
       <div class="qi-cell qi-cell-headshots">${headshotSlot}</div>
       <div class="qi-cell"><span class="badge-size">${f.size_mb} MB</span></div>
-      <div class="qi-cell">${f.has_phash ? `<button type="button" class="badge-cached qi-phash-btn" title="Click to view phash — matches Stash's fingerprint format" data-phash="${esc(f.phash || '')}" data-filename="${esc(f.filename || '')}" onclick="showQueuePhashPopup(event, this)"><i class="fa-solid fa-fingerprint queue-phash-fa"></i></button>` : ''}${f.in_duplicate_group ? `<span class="q-dup-badge" title="Duplicate — ${esc(String(f.duplicate_group_size || 2))} files share the same phash"><i class="fa-solid fa-clone"></i><span>${esc(String(f.duplicate_group_size || 2))}</span></span>` : ''}${_queueHistoryButton(f)}</div>
+      <div class="qi-cell">${f.in_duplicate_group ? `<span class="q-dup-badge" title="Duplicate — ${esc(String(f.duplicate_group_size || 2))} files share the same phash"><i class="fa-solid fa-clone"></i><span>${esc(String(f.duplicate_group_size || 2))}</span></span>` : ''}</div>
       <div class="qi-cell qi-actions">
+        ${f.has_phash ? `<button type="button" class="badge-cached qi-phash-btn" title="Click to view phash — matches Stash's fingerprint format" data-phash="${esc(f.phash || '')}" data-filename="${esc(f.filename || '')}" onclick="showQueuePhashPopup(event, this)"><i class="fa-solid fa-fingerprint queue-phash-fa"></i></button>` : ''}${_queueHistoryButton(f)}
         ${profileButton}
         <button type="button" class="btn-icon" onclick="_qCall('openQueueFilmstrip', this)" title="Filmstrip"><i class="fa-solid fa-photo-film"></i></button>
-        <button type="button" class="btn-icon qi-filing-btn qi-edit-details ${_viceMatchesFilename(f.filename) ? 'is-vice-match' : ''}" onclick="_qCall('openQueueSearchDetails', this)" title="Edit saved search details" aria-label="Edit saved search details"><span style="display:inline-block;width:1.1em;height:1.1em;background-color:currentColor;-webkit-mask:url(/static/icons/search.svg) center/contain no-repeat;mask:url(/static/icons/search.svg) center/contain no-repeat;vertical-align:middle"></span><span>Edit details</span></button>
+        <button type="button" class="btn-icon qi-filing-btn qi-edit-details ${_viceMatchesFilename(f.filename) ? 'is-vice-match' : ''}" onclick="_qCall('openQueueSearchDetails', this)" title="Edit saved search details" aria-label="Edit saved search details"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
         <button type="button" class="btn-icon qi-delete-btn" onclick="_qCall('confirmDeleteQueueFile', this)" title="Move to recovery"><i class="fa-solid fa-trash"></i></button>
         <button type="button" class="btn-run-file" onclick="_qCall('runQueueFile', this)" title="Run"><i class="fa-solid fa-play"></i></button>
       </div>
@@ -6575,7 +6576,7 @@
     }
     body.innerHTML = groups.map((g, gi) => {
       const isIg = !!g.ignored;
-      const conf = (g.recommendation && g.recommendation.confidence) || 'high';
+      const conf = (g.recommendation && g.recommendation.confidence) || 'low';
       const needRev = !isIg && conf === 'low';
       const keepFn = (g.recommendation && g.recommendation.keeper_filename) || '';
       const gClass = 'queue-dup-group' + (isIg ? ' queue-dup-group--ignored' : needRev ? ' queue-dup-group--review' : '');
@@ -6589,16 +6590,16 @@
         const fn = f.current_filename || '';
         const isKeep = !needRev && keepFn && fn === keepFn;
         const res = (f.media_width && f.media_height) ? `${f.media_width}×${f.media_height}` : '—';
-        const fnAttr = fn.replace(/'/g, "\\'");
         const fnB64 = encodeURIComponent(fn);
         const placeholders = Array.from({ length: 5 }, () =>
           '<div class="qd-thumb" style="aspect-ratio:16/9;min-height:54px;background:rgba(0,0,0,0.55);border:1px solid rgba(192,132,252,0.18);border-radius:3px;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:zoom-in"><span class="loader loader--btn loader--muted" role="status" aria-label="Generating"></span></div>'
         ).join('');
         const deleteBtn = !isKeep
-          ? `<button type="button" class="qd-action qd-action--del" onclick="queueDupDeleteOne('${fnAttr}', ${gi})" title="Delete from queue" style="background:linear-gradient(160deg,rgba(244,114,182,0.22) 0%,rgba(244,114,182,0.08) 100%);border:1px solid rgba(244,114,182,0.45);border-radius:8px;color:#f472b6;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:var(--text-body);flex-shrink:0"><i class="fa-solid fa-trash"></i></button>`
+          ? `<button type="button" class="qd-action qd-action--del" data-filename="${esc(fn)}" onclick="queueDupDeleteOne(this.dataset.filename, ${gi})" title="Delete from queue" style="background:linear-gradient(160deg,rgba(244,114,182,0.22) 0%,rgba(244,114,182,0.08) 100%);border:1px solid rgba(244,114,182,0.45);border-radius:8px;color:#f472b6;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:var(--text-body);flex-shrink:0"><i class="fa-solid fa-trash"></i></button>`
           : '<span style="display:inline-block;width:32px;flex-shrink:0"></span>';
         return `<div class="queue-dup-row${isKeep ? ' is-keeper' : ''}" style="display:flex;flex-direction:row;align-items:center;gap:14px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:var(--text-small)">
-          <div style="min-width:0;flex:0 0 360px">
+          <input type="checkbox" aria-label="Select ${esc(fn)} for removal" data-qd-select="${esc(fn)}" onchange="queueDupSelectionChanged()" ${isKeep || isIg ? 'disabled' : ''}>
+          <div style="min-width:0;flex:0 1 360px">
             <div class="queue-dup-row-name" style="word-break:break-word;font-family:var(--secs);font-size:var(--text-body);color:var(--text)">${esc(fn)}${isKeep ? ' <span style="color:#86efac;font-size:var(--text-small)">(keeper)</span>' : ''}</div>
             <div class="queue-dup-row-meta" style="font-size:var(--text-small);color:var(--dim);margin-top:3px">${_fmtQueueDupSize(f.size_bytes)} · ${esc(res)}</div>
           </div>
@@ -6698,8 +6699,10 @@
     try {
       const r = await window.tsModalFetch('queueDupOverlay', '/api/queue/duplicates', { credentials: 'same-origin' });
       const d = await r.json();
+      if (!r.ok || d.error) throw new Error(d.error || 'Unable to load duplicates');
       _queueDupGroups = d.groups || [];
       _renderQueueDupModal(d);
+      queueDupSelectionChanged();
       _updateQueueDupButton({ groups: d.group_count, files: d.file_count });
     } catch (e) { if (e?.name === 'AbortError') return;
       if (body) body.innerHTML = `<div class="empty" style="padding:24px;color:var(--red)">Failed to load duplicates: ${esc(e.message || e)}</div>`;
@@ -6710,12 +6713,14 @@
     const btn = document.getElementById('queueDupComputeBtn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loader loader--btn"></span>'; }
     try {
-      await fetch('/api/queue/duplicates/compute-phash', { method: 'POST', credentials: 'same-origin' });
+      const response = await fetch('/api/queue/duplicates/compute-phash', { method: 'POST', credentials: 'same-origin' });
+      const result = await response.json();
+      if (!response.ok || result.ok === false) throw new Error(result.error || 'Fingerprint computation failed');
       await refreshQueueDuplicatesModal();
       if (typeof loadQueue === 'function') loadQueue({ preserveView: true, force: true });
       if (typeof loadQueueStats === 'function') loadQueueStats();
     } catch (e) {
-      _toastBelow('Phash compute failed: ' + (e.message || e));
+      queueDupStatus('Phash compute failed: ' + (e.message || e));
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-fingerprint"></i> Compute phash'; }
     }
@@ -6738,50 +6743,75 @@
     }
   }
 
-  async function queueDupKeepRecommended(gi) {
-    const g = _queueDupGroups[gi];
-    if (!g || !g.recommendation) return;
-    const keepFn = (g.recommendation.keeper_filename || '').trim();
-    if (!keepFn) { _toastBelow('No recommended keeper for this group'); return; }
-    const deleteFns = (g.files || []).map(f => f.current_filename).filter(fn => fn && fn !== keepFn);
-    if (!deleteFns.length) return;
-    if (!confirm(`Keep “${keepFn}” and move ${deleteFns.length} other duplicate(s) to recovery? Their disk space will remain in use.`)) return;
-    try {
-      const r = await fetch('/api/queue/duplicates/resolve-one', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ keep_filename: keepFn, delete_filenames: deleteFns }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Resolve failed');
-      _toastBelow(`Removed ${d.deleted || 0} duplicate(s)`);
-      await refreshQueueDuplicatesModal();
-      if (typeof loadQueue === 'function') loadQueue({ preserveView: true, force: true });
-      if (typeof loadQueueStats === 'function') loadQueueStats();
-    } catch (e) {
-      _toastBelow('Resolve failed: ' + (e.message || e));
-    }
+  let _queueDupRemoving = false;
+  function queueDupStatus(message) {
+    const el = document.getElementById('queueDupStatus');
+    if (el) el.textContent = message;
   }
-
-  async function queueDupDeleteOne(fn, gi) {
-    if (!fn) return;
-    if (!confirm(`Move “${fn}” to recovery? Its disk space will remain in use.`)) return;
+  function queueDupSelectionChanged() {
+    const n = document.querySelectorAll('[data-qd-select]:checked').length;
+    document.getElementById('queueDupSelectionCount').textContent = `${n} selected`;
+    document.getElementById('queueDupRemoveSelected').disabled = !n || _queueDupRemoving;
+  }
+  function queueDupClearSelection() {
+    document.querySelectorAll('[data-qd-select]').forEach(el => { el.checked = false; });
+    queueDupSelectionChanged();
+  }
+  function queueDupSelectRecommended() {
+    const names = new Set(_queueDupGroups.filter(g => !g.ignored && g.recommendation?.confidence === 'high')
+      .flatMap(g => (g.files || []).map(f => f.current_filename).filter(fn => fn !== g.recommendation.keeper_filename)));
+    document.querySelectorAll('[data-qd-select]').forEach(el => { el.checked = !el.disabled && names.has(el.dataset.qdSelect); });
+    queueDupSelectionChanged();
+  }
+  function queueDupRemoveSelected() {
+    queueDupRemoveNames(new Set(Array.from(document.querySelectorAll('[data-qd-select]:checked'), el => el.dataset.qdSelect)));
+  }
+  function queueDupAutoRemove() {
+    queueDupSelectRecommended();
+    queueDupRemoveSelected();
+  }
+  function queueDupKeepRecommended(gi) {
+    const g = _queueDupGroups[gi];
+    if (!g || g.ignored || g.recommendation?.confidence !== 'high') return;
+    queueDupRemoveNames(new Set(g.files.map(f => f.current_filename).filter(fn => fn !== g.recommendation.keeper_filename)));
+  }
+  function queueDupDeleteOne(fn) { queueDupRemoveNames(new Set([fn])); }
+  async function queueDupRemoveNames(names) {
+    if (_queueDupRemoving) return;
+    const plans = [];
+    for (const g of _queueDupGroups) {
+      if (g.ignored) continue;
+      const files = (g.files || []).map(f => f.current_filename);
+      const remove = files.filter(fn => names.has(fn));
+      if (!remove.length) continue;
+      const keeper = files.find(fn => !names.has(fn));
+      if (!keeper) { queueDupStatus('Keep at least one file in each group. Uncheck a copy before removing.'); return; }
+      plans.push({ keep_filename: keeper, delete_filenames: remove });
+    }
+    const count = plans.reduce((n, p) => n + p.delete_filenames.length, 0);
+    if (!count) { queueDupStatus('No eligible duplicates selected. Groups needing review require manual selection.'); return; }
+    if (!confirm(`Move ${count} duplicate(s) to recovery, keeping one copy per group? Disk space remains in use until recovery is emptied.`)) return;
+    _queueDupRemoving = true;
+    queueDupSelectionChanged();
+    let removed = 0;
+    const errors = [];
     try {
-      const r = await fetch('/api/queue/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ filename: fn }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Delete failed');
+      for (let i = 0; i < plans.length; i++) {
+        queueDupStatus(`Removing duplicates… group ${i + 1} of ${plans.length}`);
+        try {
+          const r = await fetch('/api/queue/duplicates/resolve-one', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(plans[i]),
+          });
+          const d = await r.json();
+          removed += Number(d.deleted || 0);
+          if (!r.ok || d.ok === false) throw new Error(d.error || 'Removal failed');
+        } catch (e) { errors.push(String(e.message || e)); }
+      }
       await refreshQueueDuplicatesModal();
+      queueDupStatus(`Moved ${removed} duplicate(s) to recovery.` + (errors.length ? `\n${errors.length} group(s) failed: ${errors.join('; ')}` : ''));
       if (typeof loadQueue === 'function') loadQueue({ preserveView: true, force: true });
       if (typeof loadQueueStats === 'function') loadQueueStats();
-    } catch (e) {
-      _toastBelow('Delete failed: ' + (e.message || e));
-    }
+    } finally { _queueDupRemoving = false; queueDupSelectionChanged(); }
   }
 
   // ── Suggestions modal logic ──────────────────────────────────────

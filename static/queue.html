@@ -3524,69 +3524,85 @@
   .queue-stats-bar { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 }
 
+  /* Folder silhouette: raised tab, sloping shoulder and a framed body. */
+  .queue-section .q-panel-body .queue-item.queue-item-folder {
+    height: 290px !important; min-height: 290px !important; box-sizing: border-box; border: 0 !important; border-radius: 12px !important;
+    clip-path: polygon(0 0, 38% 0, 45% 22px, 100% 22px, 100% 100%, 0 100%);
+  }
+  .queue-section .q-panel-body .queue-item.queue-item-folder::after {
+    content: ""; position: absolute; inset: 0; z-index: 6; pointer-events: none;
+    background: linear-gradient(rgba(var(--brand-accent-rgb),.5),rgba(var(--brand-accent-rgb),.12)) top left / 45% 22px no-repeat;
+    box-shadow: inset 0 0 0 1px rgba(var(--brand-accent-rgb),.4);
+    border-radius: 12px;
+  }
+  .queue-section .q-panel-body .queue-item.queue-item-folder > .qi-cell-folder-name-row { top: 32px !important; }
+  .queue-section .q-panel-body .queue-item.queue-item-folder > .qi-cell-folder-icon { top: 72px !important; }
+
   /* File tiles: a stable header, artwork well, metadata and action row. */
-  .queue-section .q-panel-body .queue-item.queue-file-tile {
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) {
     display: grid; grid-template-columns: 1fr auto;
-    grid-template-rows: 100px 150px 36px auto;
-    min-height: 350px; padding: 12px; gap: 8px;
+    grid-template-rows: 64px minmax(0, 1fr) 18px 41px;
+    height: 290px; min-height: 290px; box-sizing: border-box; padding: 12px; gap: 8px;
     background: linear-gradient(150deg, rgba(var(--panel-hi-rgb),.96), rgba(var(--panel-lo-rgb),.98)) !important;
     border-radius: 14px; overflow: hidden;
   }
-  .queue-section .q-panel-body .queue-item.queue-file-tile > * {
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) > * {
     position: relative !important; inset: auto !important; transform: none !important;
-    min-width: 0; width: auto; height: auto;
+    min-width: 0; width: auto; height: auto; z-index: 3;
   }
-  .queue-section .q-panel-body .queue-item.queue-file-tile::before { display: none; }
-  .queue-section .q-panel-body .queue-item.queue-file-tile::after {
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder)::before { display: none; }
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder)::after {
     top: 44px; left: 15px; width: 26px; height: 32px;
   }
-  .queue-section .q-panel-body .queue-item.queue-file-tile > :nth-child(1) {
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) > :nth-child(1) {
     position: absolute !important; top: 16px !important; left: 18px !important;
   }
-  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-status-led { width: 14px; height: 14px; }
-  .queue-section .q-panel-body .queue-item.queue-file-tile > .qi-cell-name {
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) .qi-status-led { width: 14px; height: 14px; }
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) > .qi-cell-name {
     grid-area: 1 / 1 / 2 / 3; padding-left: 40px !important; overflow: hidden;
     align-self: start !important; gap: 6px;
   }
-  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-title-row { justify-content: flex-start; }
-  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-title {
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) .qi-title-row { justify-content: flex-start; }
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) .qi-title {
     text-align: left; font-size: var(--text-body); line-height: 1.45;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
     overflow: hidden; text-shadow: none;
   }
-  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-meta { text-align: left; }
-  .queue-section .q-panel-body .queue-item.queue-file-tile > :nth-child(4) {
-    grid-area: 2 / 1 / 3 / 3; border-radius: 9px; background: rgba(0,0,0,.18);
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) .qi-meta { text-align: left; }
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) > :nth-child(4) {
+    position: absolute !important; inset: 0 !important; grid-area: auto !important;
+    width: 100% !important; height: 100% !important; border-radius: inherit; background: transparent; z-index: 0;
   }
-  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-headshots {
-    inset: 0; max-width: 100%; width: 100%; justify-content: center;
-    mask-image: linear-gradient(#000 35%,transparent); -webkit-mask-image: linear-gradient(#000 35%,transparent);
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) .qi-headshots {
+    inset: 0; max-width: 100%; width: 100%; height: 100%; justify-content: flex-end;
+    mask-image: linear-gradient(to right, transparent, #000 45%), linear-gradient(to bottom, #000 45%, transparent 100%); -webkit-mask-image: linear-gradient(to right, transparent, #000 45%), linear-gradient(to bottom, #000 45%, transparent 100%);
+    mask-composite: intersect; -webkit-mask-composite: source-in;
   }
-  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-headshot {
-    object-fit: contain; max-width: 100%; height: 150px;
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) .qi-headshot {
+    width: auto; max-width: none; height: 100%; aspect-ratio: auto; object-fit: contain; object-position: right center;
   }
-  .queue-section .q-panel-body .queue-item.queue-file-tile > :nth-child(2) {
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) > :nth-child(2) {
     grid-area: 2 / 1 / 3 / 3; justify-content: flex-end; padding: 12px;
     z-index: 2; gap: 8px; pointer-events: none;
   }
-  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-studio-logo { max-height: 55px; max-width: 85%; }
-  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-performer-label { font-size: var(--text-body); }
-  .queue-section .q-panel-body .queue-item.queue-file-tile > :nth-child(5) {
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) .qi-studio-logo { width: auto; height: auto; max-height: 60px; max-width: 45%; align-self: flex-start; object-fit: contain; }
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) .qi-performer-label { font-size: var(--text-body); }
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) > :nth-child(5) {
     grid-area: 3 / 1; justify-content: flex-start; align-items: center;
   }
-  .queue-section .q-panel-body .queue-item.queue-file-tile > :nth-child(6) {
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) > :nth-child(6) {
     grid-area: 3 / 2; justify-content: flex-end; align-items: center; gap: 5px;
   }
-  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-actions {
-    grid-area: 4 / 1 / 5 / 3; flex-direction: row; flex-wrap: wrap;
-    justify-content: flex-start; gap: 6px; border-top: 1px solid rgba(var(--brand-accent-rgb),.15); padding-top: 8px;
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) .qi-actions {
+    grid-area: 4 / 1 / 5 / 3; flex-direction: row; flex-wrap: nowrap;
+    justify-content: space-between; gap: 4px; border-top: 1px solid rgba(var(--brand-accent-rgb),.15); padding-top: 8px;
   }
-  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-actions > button {
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) .qi-actions > button {
     border-radius: 8px !important; width: 32px !important; height: 32px !important;
+    min-width: 32px; min-height: 32px; flex: 0 0 32px; padding: 0 !important;
   }
-  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-actions > .qi-edit-details {
-    order: -1; width: auto !important; flex: 1 0 118px; gap: 6px; padding: 0 10px !important;
-    color: var(--accent); white-space: nowrap;
+  .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) .qi-actions > .qi-edit-details {
+    order: -1; color: var(--accent);
   }
   .q-details-bar { display: flex; align-items: end; gap: 14px; margin-top: 12px; }
   .q-details-bar > label { flex: 0 0 120px; }
@@ -3595,7 +3611,6 @@
   .q-details-note summary { cursor: pointer; color: var(--accent); }
   #qDetailsTechnical { overflow-wrap: anywhere; }
   @media (max-width: 600px) {
-    .queue-section .q-panel-body .queue-item.queue-file-tile .qi-actions > button { min-width: 44px; min-height: 44px; }
     .q-details-bar { align-items: start; flex-wrap: wrap; }
   }
 
@@ -3610,7 +3625,14 @@
   #qSearchOverlay.q-details-edit #qSearchManualFileBtn,
   #qSearchOverlay.q-details-edit .qs-source-toggle { display: none !important; }
   #qSearchOverlay.q-details-edit #qSearchLeftCol { width: 100%; flex: 1 1 auto !important; }
-  #qSearchOverlay.q-details-edit #searchFrameStrip { max-height: 105px; overflow: hidden; }
+  #qSearchOverlay.q-details-edit #searchFrameStrip {
+    max-height: none; width: calc(100% - 36px) !important; min-width: 0; box-sizing: border-box;
+    padding: 22px 8px !important; gap: 4px;
+  }
+  #qSearchOverlay.q-details-edit #searchFrameStrip > div {
+    flex: 1 1 0; min-width: 0; height: auto; aspect-ratio: 16 / 9;
+  }
+  #qSearchOverlay.q-details-edit #searchFrameStrip > div > img { object-fit: contain !important; }
   @media(max-width:600px) {
     #qSearchOverlay.q-details-edit { padding: 8px; }
     #qSearchOverlay.q-details-edit .q-search-shell { height: 94vh; }
@@ -4171,7 +4193,7 @@
 
 <link rel="stylesheet" href="/static/queue-history.css?v=20261103">
 <script defer src="/static/queue-history.js?v=20261103"></script>
-<script defer src="/static/queue.js?v=20261104-queue-loading-2"></script>
+<script defer src="/static/queue.js?v=20261104-queue-layout-7"></script>
 
 <!-- Queue duplicates modal — same phash grouping / keeper rules as Library Health. -->
 <div id="queueDupOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);z-index:9998;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeQueueDuplicatesModal()">
@@ -4186,6 +4208,14 @@
       <button type="button" onclick="refreshQueueDuplicatesModal()" title="Refresh" style="background:rgba(255,255,255,0.04);border:1px solid rgba(var(--brand-purple-rgb),0.30);border-radius:8px;color:var(--text);padding:7px 12px;cursor:pointer;font-size:var(--text-body)"><i class="fa-solid fa-arrows-rotate"></i></button>
       <button type="button" onclick="closeQueueDuplicatesModal()" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:var(--dim);font-size:var(--text-body);cursor:pointer;width:34px;height:34px">&times;</button>
     </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 20px">
+      <button class="btn-secondary" onclick="queueDupSelectRecommended()">Select recommended</button>
+      <button class="btn-secondary" onclick="queueDupClearSelection()">Clear</button>
+      <button class="btn-secondary" id="queueDupRemoveSelected" onclick="queueDupRemoveSelected()" disabled><i class="fa-solid fa-trash"></i> Remove selected</button>
+      <button class="btn-secondary" onclick="queueDupAutoRemove()" title="Keep the recommended copy in each confident group; skip ignored groups and groups needing review"><i class="fa-solid fa-brain"></i> Auto remove</button>
+      <span id="queueDupSelectionCount">0 selected</span>
+    </div>
+    <div id="queueDupStatus" role="status" aria-live="polite" style="padding:0 20px 12px;white-space:pre-wrap"></div>
     <div id="queueDupBody" style="flex:1;min-height:0;overflow-y:auto;padding:16px 20px 20px"></div>
   </div>
 </div>
