@@ -439,7 +439,7 @@
     }
     const fn = window[fnName];
     if (typeof fn !== 'function') return;
-    if (fnName === 'confirmDeleteQueueFile' || ['openMovieManualSearch', 'openManualSearch', 'openManual', 'openVice'].includes(fnName)) fn(filename, {file_id:fileId, queue_kind:queueMode === 'movies' ? 'movie' : 'scene'});
+    if (fnName === 'confirmDeleteQueueFile' || ['openMovieManualSearch', 'openManualSearch', 'openQueueSearchDetails', 'openManual', 'openVice'].includes(fnName)) fn(filename, {file_id:fileId, queue_kind:queueMode === 'movies' ? 'movie' : 'scene'});
     else if (arguments.length > 2) fn(filename, extra);
     else fn(filename);
   }
@@ -831,7 +831,7 @@
     // used by the search results. Lets the user spot at a glance
     // which performer / studio / vice each row corresponds to
     // without scanning the full filename.
-    const _titleText = spaceifyReleaseName(f.display_name || f.filename);
+    const _titleText = f.search_details?.fields?.title || spaceifyReleaseName(f.display_name || f.filename);
     // Per-row tokens come from THIS file's matched performers + studio
     // (filtered to library studios only). Vices and other library
     // entities arrive via `_libraryAndTokenHighlight`, which paints
@@ -845,7 +845,7 @@
     const _titleHtml = (typeof _libraryAndTokenHighlight === 'function')
       ? _libraryAndTokenHighlight(_titleText, _hl)
       : esc(_titleText);
-    return `<div class="queue-item" id="qi-${i}" data-filename="${esc(f.filename)}" data-file-id="${esc(f.file_id || '')}" tabindex="0" onclick="queueTileSearch(event,this,'openManualSearch')" onkeydown="queueTileSearch(event,this,'openManualSearch')">
+    return `<div class="queue-item queue-file-tile" id="qi-${i}" data-filename="${esc(f.filename)}" data-file-id="${esc(f.file_id || '')}" tabindex="0" onclick="queueTileSearch(event,this,'openManualSearch')" onkeydown="queueTileSearch(event,this,'openManualSearch')">
       <div class="qi-cell">${statusEl}</div>
       <div class="qi-cell">${studioLogo}${displayPerfs.length ? `<div class="qi-performer-label">${esc(displayPerfs.join(', '))}</div>` : ''}</div>
       <div class="qi-cell-name" title="${esc(f.filename)}">
@@ -863,7 +863,7 @@
       <div class="qi-cell qi-actions">
         ${profileButton}
         <button type="button" class="btn-icon" onclick="_qCall('openQueueFilmstrip', this)" title="Filmstrip"><i class="fa-solid fa-photo-film"></i></button>
-        <button type="button" class="btn-icon qi-filing-btn ${_viceMatchesFilename(f.filename) ? 'is-vice-match' : ''}" onclick="_qCall('openManualSearch', this)" title="Search / manual (includes suggested matches + Vice)"><span style="display:inline-block;width:1.1em;height:1.1em;background-color:currentColor;-webkit-mask:url(/static/icons/search.svg) center/contain no-repeat;mask:url(/static/icons/search.svg) center/contain no-repeat;vertical-align:middle"></span></button>
+        <button type="button" class="btn-icon qi-filing-btn qi-edit-details ${_viceMatchesFilename(f.filename) ? 'is-vice-match' : ''}" onclick="_qCall('openQueueSearchDetails', this)" title="Edit saved search details" aria-label="Edit saved search details"><span style="display:inline-block;width:1.1em;height:1.1em;background-color:currentColor;-webkit-mask:url(/static/icons/search.svg) center/contain no-repeat;mask:url(/static/icons/search.svg) center/contain no-repeat;vertical-align:middle"></span><span>Edit details</span></button>
         <button type="button" class="btn-icon qi-delete-btn" onclick="_qCall('confirmDeleteQueueFile', this)" title="Move to recovery"><i class="fa-solid fa-trash"></i></button>
         <button type="button" class="btn-run-file" onclick="_qCall('runQueueFile', this)" title="Run"><i class="fa-solid fa-play"></i></button>
       </div>
@@ -3453,8 +3453,11 @@
     if (dateEl && !dateEl.value.trim()) {
       if (parsed.date) dateEl.value = parsed.date;
     }
-    if (!libStudio && parsed.site && studEl && !studEl.value.trim()) studEl.value = parsed.site;
+    if (parsed.parser_version >= 3 && studEl && (!studEl.value.trim() || studEl.value === libStudio)) {
+      studEl.value = parsed.site || '';
+    } else if (!libStudio && parsed.site && studEl && !studEl.value.trim()) studEl.value = parsed.site;
     if (!libPerfs.length && parsed.performers && perfEl && !perfEl.value.trim()) perfEl.value = parsed.performers;
+    if (parsed.parser_version >= 3) return; // Already cleaned by the shared parser.
     // Strip auto-populated performer + studio names from the title so a
     // "Brazzers - Asa Akira - Whatever" filename doesn't have all three
     // tokens jammed into the search title.
@@ -3499,11 +3502,104 @@
     fit();
   }
 
+  let _qSearchRecord = null;
+  let _qDetailsLoading = false;
+  let _qDetailsSaving = false;
+  function _qDetailsStatus(text, error = false) {
+    const el = document.getElementById('qDetailsStatus');
+    if (el) { el.textContent = text; el.dataset.error = error ? 'true' : 'false'; }
+  }
+  function _qSearchFields() {
+    const typed = document.getElementById('srchPerformer').value.trim();
+    const names = [_perfPillsValue(), typed].filter(Boolean).join(',');
+    return {
+      title: document.getElementById('srchTitle').value.trim(),
+      performers: [...new Set(names.split(',').map(n => n.trim()).filter(Boolean))],
+      studio: document.getElementById('srchStudio').value.trim(),
+      date: document.getElementById('srchDate').value.trim(),
+      scene_number: document.getElementById('srchSceneNumber').value || null,
+      term: document.getElementById('srchTerm').value.trim(),
+      description: document.getElementById('mPlot').value.trim(),
+      tags: [...new Set([_tagPillsValue(), document.getElementById('srchTag').value].filter(Boolean).join(',').split(',').map(n => n.trim()).filter(Boolean))],
+      extra_kind: document.getElementById('srchExtraKind').value,
+    };
+  }
+  function _qApplySearchRecord(record) {
+    _qSearchRecord = record;
+    _qManualFileId = record.file_id;
+    _qSelectedFile = record.filename;
+    _qManualFile = record.filename;
+    const f = record.fields;
+    for (const [id, key] of [['srchTitle','title'],['srchStudio','studio'],['srchDate','date'],['srchTerm','term'],['srchSceneNumber','scene_number']]) {
+      document.getElementById(id).value = f[key] ?? '';
+    }
+    document.getElementById('mPlot').value = f.description || '';
+    document.getElementById('srchExtraKind').value = f.extra_kind ?? '__auto__';
+    _tagPillsSet(f.tags || []);
+    document.getElementById('srchTag').value = '';
+    _perfPillsSet(f.performers || []);
+    document.getElementById('srchPerformer').value = '';
+    _qDetailsStatus(record.edited ? 'Saved corrections · reused by future searches' : 'Parsed from filename · ready to edit');
+    const t = record.technical || {};
+    const info = document.getElementById('qDetailsTechnical');
+    if (info) {
+      const items = [
+        t.media_size_bytes ? (t.media_size_bytes / 1048576).toFixed(1) + ' MB' : '',
+        t.media_width && t.media_height ? t.media_width + '×' + t.media_height : '',
+        t.media_codec || '',
+        t.media_duration ? Math.round(t.media_duration) + ' seconds' : '',
+        t.phash ? 'pHash: ' + t.phash : 'pHash not yet calculated',
+      ].filter(Boolean);
+      info.textContent = items.join(' · ');
+    }
+  }
+  async function saveQueueSearchDetails(reset = false) {
+    if (_qDetailsLoading || _qDetailsSaving || !_qSearchRecord) return false;
+    const sequence = _qOpenSearchSeq;
+    const record = _qSearchRecord;
+    const fields = _qSearchFields();
+    // Merely opening/searching a file must not pin parser defaults as manual corrections.
+    const normalized = value => JSON.stringify(Object.keys(fields).sort().map(key =>
+      [key, key === 'scene_number' ? (value[key] ? Number(value[key]) : null) : value[key]]));
+    if (!reset && normalized(fields) === normalized(record.fields)) return true;
+    _qDetailsSaving = true;
+    _qDetailsStatus(reset ? 'Resetting to filename…' : 'Saving search details…');
+    try {
+      const response = await window.tsModalFetch('qSearchOverlay', '/api/queue/search-details', {
+        method:'PUT', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({file_id:record.file_id, filename:record.filename, revision:record.revision, fields, reset}),
+      });
+      const saved = await response.json();
+      if (sequence !== _qOpenSearchSeq) return false;
+      if (!response.ok) throw new Error(saved.error || 'Could not save search details');
+      // Retain input typed while saving; only replace fields on explicit reset.
+      if (reset) _qApplySearchRecord(saved);
+      else {
+        _qSearchRecord = saved;
+        if (normalized(_qSearchFields()) !== normalized(fields)) {
+          _qDetailsStatus('Earlier changes saved · save your latest edits before searching');
+          return false;
+        }
+        _qDetailsStatus('Saved · future searches will use these details');
+      }
+      return true;
+    } catch (error) {
+      if (sequence === _qOpenSearchSeq) _qDetailsStatus(error.message || 'Could not save search details', true);
+      return false;
+    } finally { _qDetailsSaving = false; }
+  }
+  function openQueueSearchDetails(filename, action = {}) {
+    return openManualSearch(filename, {...action, edit_details:true});
+  }
+
   async function openManualSearch(filename, action = {}) {
     _qManualFileId = action.file_id || (window._queueFiles || []).find(f => f.filename === filename)?.file_id || null;
     const mySeq = ++_qOpenSearchSeq;
+    document.getElementById('qSearchOverlay').classList.toggle('q-details-edit', !!action.edit_details);
+    const heading = document.querySelector('#qSearchPanel .ts-page-title__text');
+    if (heading) heading.textContent = action.edit_details ? 'File details' : 'Scene Search';
     _qSelectedFile = filename;
-    document.getElementById('searchFileLabel').textContent = `Filing: ${filename}`;
+    document.getElementById('searchFileLabel').textContent = `File: ${filename}`;
     document.getElementById('searchFileLabel').style.display = 'inline-block';
     // Show the modal IMMEDIATELY before any awaits — the user clicked
     // a button, they should see the modal frame within a frame or two.
@@ -3592,62 +3688,25 @@
       mfBtn.disabled = false;
       mfBtn.innerHTML = '<i class="fa-solid fa-pen"></i><span class="btn-label" style="margin-left:6px">Submit</span>';
     }
-    // Start with the library-guess match we've already computed for
-    // this queue row: studio + performers vetted against the user's
-    // actual favourites / studio_logos table. These beat the generic
-    // filename parser because they're grounded in local library data,
-    // so we fall back to the parser only when the guess didn't fire.
     const queueFile = (window._queueFiles || []).find(f => f.filename === filename) || {};
-    const _libStudioRaw = (queueFile.match_studio || '').trim();
-    const libPerfs = (queueFile.performers || '')
-      .replace(/\|/g, ',')
-      .replace(/ \/ /g, ',')
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
-    // Drop the auto-populated studio when it collides (case-insensitive)
-    // with a matched performer name. Some studios share names with
-    // performers (e.g. "Sasha Grey", "Stoya") and history can match
-    // either — having the same string in both fields just doubles the
-    // search noise.
-    const _perfsLc = new Set(libPerfs.map(p => p.toLowerCase()));
-    const libStudio = (_libStudioRaw && _perfsLc.has(_libStudioRaw.toLowerCase())) ? '' : _libStudioRaw;
-
-    if (libStudio)     document.getElementById('srchStudio').value = libStudio;
-    if (libPerfs.length) {
-      const inp = document.getElementById('srchPerformer');
-      if (inp) inp.value = '';
-      if (typeof _perfPillsSet === 'function') _perfPillsSet(libPerfs);
-    }
-
-    // ── Filename parse: served from the queue payload when present
-    // (filled by the server's queue-snapshot builder, zero round-trip)
-    // and falls back to /api/parse/filename for older payloads.
-    let parsed = (queueFile && queueFile.parsed && typeof queueFile.parsed === 'object')
-      ? queueFile.parsed
-      : null;
-    if (parsed) {
-      _qApplyParseToManualSearch(parsed, libStudio, libPerfs);
-    } else {
-      try {
-        const r = await window.tsModalFetch('qSearchOverlay', `/api/parse/filename?filename=${encodeURIComponent(filename)}`);
-        if (mySeq !== _qOpenSearchSeq) return;
-        parsed = await r.json();
-        if (mySeq !== _qOpenSearchSeq) return;
-        _qApplyParseToManualSearch(parsed, libStudio, libPerfs);
-      } catch {
-        if (mySeq !== _qOpenSearchSeq) return;
-      }
-    }
-    // Fallback: parser produced nothing AND the library guess didn't
-    // fire either — drop the cleaned-up filename into the broad
-    // "term" field so the user has something to search on.
-    {
-      const d = parsed || {};
-      const anyField = libStudio || libPerfs.length || d.title || d.site || d.performers;
-      if (!anyField) {
-        document.getElementById('srchTerm').value = filename.replace(/\.[^.]+$/, '').replace(/[._]/g, ' ');
-      }
+    _qSearchRecord = null;
+    _qDetailsLoading = true;
+    document.getElementById('qSearchLeftCol').inert = true;
+    _qDetailsStatus('Loading saved file details…');
+    try {
+      const params = new URLSearchParams({filename});
+      if (_qManualFileId) params.set('file_id', _qManualFileId);
+      const response = await window.tsModalFetch('qSearchOverlay', '/api/queue/search-details?' + params);
+      const record = await response.json();
+      if (mySeq !== _qOpenSearchSeq) return;
+      if (!response.ok) throw new Error(record.error || 'Could not load file details');
+      _qApplySearchRecord(record);
+    } catch (error) {
+      if (mySeq !== _qOpenSearchSeq) return;
+      _qDetailsStatus(error.message || 'Could not load file details', true);
+      return;
+    } finally {
+      if (mySeq === _qOpenSearchSeq) { _qDetailsLoading = false; document.getElementById('qSearchLeftCol').inert = false; }
     }
     if (mySeq !== _qOpenSearchSeq) return;
     // If the queue row carries a stored DB match, fold its plot +
@@ -3665,24 +3724,11 @@
           const d = await r.json();
           if (matchSeq !== _qOpenSearchSeq) return;
           if (d.found) {
-            if (d.description) document.getElementById('mPlot').value = d.description;
+            if (d.description && !_qSearchRecord?.edited && !document.getElementById('mPlot').value) document.getElementById('mPlot').value = d.description;
             if (d.image_url) {
               document.getElementById('mImageUrl').value = d.image_url;
               mThumbMode = 'url';
               mThumbPreview(d.image_url);
-            }
-            // Pre-fill the search form from the stored match so the user
-            // sees the actual matched scene's metadata, not the filename
-            // parser's best guess. Overwrites the library/parser fills
-            // because the match is more authoritative when present.
-            const titleEl = document.getElementById('srchTitle');
-            const dateEl  = document.getElementById('srchDate');
-            const studEl  = document.getElementById('srchStudio');
-            if (d.title && titleEl) titleEl.value = d.title;
-            if (d.date && dateEl) dateEl.value = d.date;
-            if (d.studio && studEl) studEl.value = d.studio;
-            if (Array.isArray(d.performers) && d.performers.length && typeof _perfPillsSet === 'function') {
-              _perfPillsSet(d.performers);
             }
             // Stash the stored match so the search-results renderer can
             // pin it at the top of the list — one click to accept the
@@ -3713,7 +3759,7 @@
     }
     // Modal frame was opened up-top before any awaits. Kick off the
     // search now that the form fields are filled.
-    runQueueSearch();
+    if (!action.edit_details) runQueueSearch();
   }
 
   //: Parent node the qSearchPanel was created in — restored on
@@ -3742,6 +3788,7 @@
   }
 
   function clearSelectedFile() {
+    _qSearchRecord = null;
     _qSelectedFile = null;
     const lbl = document.getElementById('searchFileLabel');
     if (lbl) lbl.style.display = 'none';
@@ -4600,6 +4647,10 @@
   _qsApplySourcesToUI();
 
   async function runQueueSearch() {
+    if (_qDetailsLoading || (_qSelectedFile && !await saveQueueSearchDetails())) return;
+    document.getElementById('qSearchOverlay').classList.remove('q-details-edit');
+    const heading = document.querySelector('#qSearchPanel .ts-page-title__text');
+    if (heading) heading.textContent = 'Scene Search';
     const mySeq = ++_qRunSearchSeq;
     const title     = document.getElementById('srchTitle').value.trim();
     //: Join the locked-pill names + whatever's currently being typed
@@ -4639,6 +4690,7 @@
       }
     }
     const payload = { term, title, performer, studio, sources, date_from: dateFrom, date_to: dateTo };
+    if (_qSearchRecord) payload.file_id = _qSearchRecord.file_id;
     // Consume IAFD opt-in for this request only, even if the request fails.
     document.querySelectorAll('.qs-source-pill[data-source="IAFD"]').forEach(p => {
       p.classList.remove('is-on');
@@ -4785,6 +4837,7 @@
   }
 
   function clearSearch() {
+    _qSearchRecord = null;
     window.tsCancelModalLoads?.('qSearchOverlay');
     // Bump the open-seq so any in-flight openManualSearch continuations
     // (filename parse, match-scene seed, settings probe) bail before
@@ -5504,6 +5557,7 @@
   async function submitManual() {
     if (_mSubmitInFlight) return;
     if (!_qManualFile) { window.toast('No file selected for filing'); return; }
+    if (_qSearchRecord && !await saveQueueSearchDetails()) return;
     const btn = document.getElementById('qSearchManualFileBtn');
     //: Always use the canonical idle HTML as the restore target so a
     //: stuck "Filing…" from a prior session doesn't persist through

@@ -15,7 +15,7 @@ class GrabRelocatedSourceTests(unittest.TestCase):
                     if fail:raise OSError('filing failed')
                     return {'status':'no_dir'}
                 query=Mock(side_effect=AssertionError('must not fall back'))
-                db=SimpleNamespace(get_settings=lambda:{},queue_file_key=lambda *a:'clip.mp4',upsert_file=Mock(),validate_media_cache=lambda *a:'sig',get_directories=lambda *a:[],get_media_duration=lambda *a:60,get_phash=lambda *a:'hash',media_file_signature=lambda *a:'sig',update_file=Mock(),lookup_scene_grab_for_filename=lambda *a:{'id':1,'source_id':'scene','source_title':'Title','source_db':'StashDB'},mark_scene_grab_consumed=Mock())
+                db=SimpleNamespace(queue_search_record=Mock(),queue_observe_media=Mock(),get_settings=lambda:{},queue_file_key=lambda *a:'clip.mp4',upsert_file=Mock(),validate_media_cache=lambda *a:'sig',get_directories=lambda *a:[],get_media_duration=lambda *a:60,get_phash=lambda *a:'hash',media_file_signature=lambda *a:'sig',update_file=Mock(),lookup_scene_grab_for_filename=lambda *a:{'id':1,'source_id':'scene','source_title':'Title','source_db':'StashDB'},mark_scene_grab_consumed=Mock())
                 env={'Path':Path,'db':db,'emit':Mock(),'require_complete_queue_video':lambda *a:None,'_queue_resolve_phash_vs_indexed_library':lambda *a:None,'_strip_ts_uid':lambda n:(n,''),'_stashbox_normalize_match_source':lambda s:s,'_fetch_grab_scene_for_filing':lambda g:{'id':'scene'},'file_scene_from_match':file,'query_with_fallback':query}
                 process=load('main.py','process_single',env)
                 if fail:

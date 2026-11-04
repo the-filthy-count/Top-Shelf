@@ -9,7 +9,7 @@ from test_duplicate_filing_safety import load
 class SuggestionRecoveryTests(unittest.TestCase):
     def connection(self):
         conn=sqlite3.connect(':memory:');conn.row_factory=sqlite3.Row
-        conn.executescript('CREATE TABLE processed_files(filename TEXT,status TEXT,processed_at TEXT,media_duration INTEGER); CREATE TABLE queue_suggestions(filename TEXT); CREATE TABLE queue_suggestion_attempts(filename TEXT PRIMARY KEY,attempted_at REAL NOT NULL);')
+        conn.executescript('CREATE TABLE processed_files(filename TEXT,status TEXT,processed_at TEXT,media_duration INTEGER); CREATE TABLE queue_suggestions(filename TEXT); CREATE TABLE queue_suggestion_attempts(filename TEXT PRIMARY KEY,attempted_at REAL NOT NULL,rules_version INTEGER NOT NULL DEFAULT 0,failure_count INTEGER NOT NULL DEFAULT 0,next_retry REAL,outcome TEXT);')
         self.addCleanup(conn.close)
         return conn
 

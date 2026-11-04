@@ -3523,6 +3523,102 @@
   .queue-stats-bar > .stat-card:not(#statCardTotal):not(#statCardSuggested) { display: none !important; }
   .queue-stats-bar { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 }
+
+  /* File tiles: a stable header, artwork well, metadata and action row. */
+  .queue-section .q-panel-body .queue-item.queue-file-tile {
+    display: grid; grid-template-columns: 1fr auto;
+    grid-template-rows: 100px 150px 36px auto;
+    min-height: 350px; padding: 12px; gap: 8px;
+    background: linear-gradient(150deg, rgba(var(--panel-hi-rgb),.96), rgba(var(--panel-lo-rgb),.98)) !important;
+    border-radius: 14px; overflow: hidden;
+  }
+  .queue-section .q-panel-body .queue-item.queue-file-tile > * {
+    position: relative !important; inset: auto !important; transform: none !important;
+    min-width: 0; width: auto; height: auto;
+  }
+  .queue-section .q-panel-body .queue-item.queue-file-tile::before { display: none; }
+  .queue-section .q-panel-body .queue-item.queue-file-tile::after {
+    top: 44px; left: 15px; width: 26px; height: 32px;
+  }
+  .queue-section .q-panel-body .queue-item.queue-file-tile > :nth-child(1) {
+    position: absolute !important; top: 16px !important; left: 18px !important;
+  }
+  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-status-led { width: 14px; height: 14px; }
+  .queue-section .q-panel-body .queue-item.queue-file-tile > .qi-cell-name {
+    grid-area: 1 / 1 / 2 / 3; padding-left: 40px !important; overflow: hidden;
+    align-self: start !important; gap: 6px;
+  }
+  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-title-row { justify-content: flex-start; }
+  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-title {
+    text-align: left; font-size: var(--text-body); line-height: 1.45;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow: hidden; text-shadow: none;
+  }
+  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-meta { text-align: left; }
+  .queue-section .q-panel-body .queue-item.queue-file-tile > :nth-child(4) {
+    grid-area: 2 / 1 / 3 / 3; border-radius: 9px; background: rgba(0,0,0,.18);
+  }
+  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-headshots {
+    inset: 0; max-width: 100%; width: 100%; justify-content: center;
+    mask-image: linear-gradient(#000 35%,transparent); -webkit-mask-image: linear-gradient(#000 35%,transparent);
+  }
+  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-headshot {
+    object-fit: contain; max-width: 100%; height: 150px;
+  }
+  .queue-section .q-panel-body .queue-item.queue-file-tile > :nth-child(2) {
+    grid-area: 2 / 1 / 3 / 3; justify-content: flex-end; padding: 12px;
+    z-index: 2; gap: 8px; pointer-events: none;
+  }
+  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-studio-logo { max-height: 55px; max-width: 85%; }
+  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-performer-label { font-size: var(--text-body); }
+  .queue-section .q-panel-body .queue-item.queue-file-tile > :nth-child(5) {
+    grid-area: 3 / 1; justify-content: flex-start; align-items: center;
+  }
+  .queue-section .q-panel-body .queue-item.queue-file-tile > :nth-child(6) {
+    grid-area: 3 / 2; justify-content: flex-end; align-items: center; gap: 5px;
+  }
+  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-actions {
+    grid-area: 4 / 1 / 5 / 3; flex-direction: row; flex-wrap: wrap;
+    justify-content: flex-start; gap: 6px; border-top: 1px solid rgba(var(--brand-accent-rgb),.15); padding-top: 8px;
+  }
+  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-actions > button {
+    border-radius: 8px !important; width: 32px !important; height: 32px !important;
+  }
+  .queue-section .q-panel-body .queue-item.queue-file-tile .qi-actions > .qi-edit-details {
+    order: -1; width: auto !important; flex: 1 0 118px; gap: 6px; padding: 0 10px !important;
+    color: var(--accent); white-space: nowrap;
+  }
+  .q-details-bar { display: flex; align-items: end; gap: 14px; margin-top: 12px; }
+  .q-details-bar > label { flex: 0 0 120px; }
+  .q-details-note { min-width: 0; color: var(--dim); font-size: var(--text-small); line-height: 1.6; }
+  .q-details-note [data-error="true"] { color: #fb9b9b; }
+  .q-details-note summary { cursor: pointer; color: var(--accent); }
+  #qDetailsTechnical { overflow-wrap: anywhere; }
+  @media (max-width: 600px) {
+    .queue-section .q-panel-body .queue-item.queue-file-tile .qi-actions > button { min-width: 44px; min-height: 44px; }
+    .q-details-bar { align-items: start; flex-wrap: wrap; }
+  }
+
+  #qSearchOverlay.q-details-edit { padding: 24px; align-items: center; justify-content: center; }
+  #qSearchOverlay.q-details-edit .q-search-shell {
+    flex: 0 1 auto !important; width: min(900px,100%); height: min(820px,90vh);
+    border: 1px solid rgba(var(--brand-accent-rgb),.3) !important; border-radius: 14px !important;
+  }
+  #qSearchOverlay.q-details-edit #qSearchTopRow { max-height: none !important; flex: 1 1 auto !important; }
+  #qSearchOverlay.q-details-edit #qSearchRightCol,
+  #qSearchOverlay.q-details-edit #qSearchResultsWrap,
+  #qSearchOverlay.q-details-edit #qSearchManualFileBtn,
+  #qSearchOverlay.q-details-edit .qs-source-toggle { display: none !important; }
+  #qSearchOverlay.q-details-edit #qSearchLeftCol { width: 100%; flex: 1 1 auto !important; }
+  #qSearchOverlay.q-details-edit #searchFrameStrip { max-height: 105px; overflow: hidden; }
+  @media(max-width:600px) {
+    #qSearchOverlay.q-details-edit { padding: 8px; }
+    #qSearchOverlay.q-details-edit .q-search-shell { height: 94vh; }
+  }
+  #qSearchOverlay.q-details-edit .q-details-actions {
+    position: sticky; bottom: 0; z-index: 4; padding: 10px 0;
+    background: rgb(var(--panel-lo-rgb)); border-top: 1px solid rgba(var(--brand-accent-rgb),.25);
+  }
 </style>
 <link rel="stylesheet" href="/static/mobile.css?v=20260930-desktop-scale">
 <link rel="stylesheet" href="/static/design-system.css?v=20261011-toggle-layer-fix">
@@ -3705,6 +3801,14 @@
               <input class="field-input" id="srchDate" type="text" placeholder="YYYY-MM-DD" onkeydown="if(event.key==='Enter')runQueueSearch()">
             </div>
           </div>
+          <div class="q-details-bar">
+            <label class="field-row" for="srchSceneNumber"><span class="field-label">Scene number</span>
+              <input class="field-input" id="srchSceneNumber" type="number" min="1" max="9999" placeholder="Unknown" onkeydown="if(event.key==='Enter')runQueueSearch()">
+            </label>
+            <div class="q-details-note"><span id="qDetailsStatus" role="status" aria-live="polite"></span>
+              <details><summary>File information</summary><div id="qDetailsTechnical"></div></details>
+            </div>
+          </div>
           <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
             <div class="field-row">
               <label class="field-label">Plot / Description</label>
@@ -3718,7 +3822,7 @@
               </div>
             </div>
           </div>
-          <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:12px">
+          <div class="q-details-actions" style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px">
             <!-- Special-feature marker (BTS / Bloopers / Outtakes / …).
                  Auto-populated from the filename on popup open; the
                  user can override before filing. ``Normal scene``
@@ -3739,7 +3843,9 @@
               <option value="Commentary">Commentary</option>
               <option value="Extras">Extras</option>
             </select>
-            <button class="btn-primary" onclick="runQueueSearch()" title="Search" style="flex-shrink:0"><i class="fa-solid fa-magnifying-glass"></i><span class="btn-label" style="margin-left:6px">Search</span></button>
+            <button type="button" class="btn-secondary" onclick="saveQueueSearchDetails(true)" title="Discard corrections and parse the filename again">Reset</button>
+            <button type="button" class="btn-secondary" onclick="saveQueueSearchDetails()">Save</button>
+            <button class="btn-primary" onclick="runQueueSearch()" title="Save details and search" style="flex-shrink:0"><i class="fa-solid fa-magnifying-glass"></i><span class="btn-label" style="margin-left:6px">Save &amp; search</span></button>
           </div>
         </div>
         <!-- (Scene-pick "Filing from" panel removed — title/studio/date
@@ -4065,7 +4171,7 @@
 
 <link rel="stylesheet" href="/static/queue-history.css?v=20261103">
 <script defer src="/static/queue-history.js?v=20261103"></script>
-<script defer src="/static/queue.js?v=20261103-recovery"></script>
+<script defer src="/static/queue.js?v=20261104-queue-records"></script>
 
 <!-- Queue duplicates modal — same phash grouping / keeper rules as Library Health. -->
 <div id="queueDupOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);z-index:9998;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeQueueDuplicatesModal()">

@@ -26,8 +26,8 @@ class MatchingSafetyTests(unittest.TestCase):
     def test_cache_invalidates_replaced_file(self):
         tree=ast.parse((ROOT/'database.py').read_text())
         conn=sqlite3.connect(':memory:');self.addCleanup(conn.close)
-        conn.execute('CREATE TABLE processed_files(filename TEXT, phash TEXT, media_duration INTEGER, media_signature TEXT)')
-        conn.execute("INSERT INTO processed_files VALUES ('clip.mp4','stale',60,NULL)")
+        conn.execute('CREATE TABLE processed_files(filename TEXT, phash TEXT, media_duration INTEGER, media_signature TEXT, media_size_bytes INTEGER, media_codec TEXT, media_width INTEGER, media_height INTEGER)')
+        conn.execute("INSERT INTO processed_files(filename,phash,media_duration,media_signature) VALUES ('clip.mp4','stale',60,NULL)")
         env={'Path':Path,'json':json,'get_conn':lambda:conn}
         for name in ('media_file_signature','validate_media_cache'):
             fn=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name==name)

@@ -17,7 +17,7 @@ class GrabFlowTests(unittest.IsolatedAsyncioTestCase):
         scene={'id':'scene-id','performers':[{'performer':{'id':'correct-id','name':'Person'}}]}
         with tempfile.TemporaryDirectory() as tmp:
             video=Path(tmp)/'video.mp4';video.touch()
-            db=SimpleNamespace(queue_file_key=lambda p,s:p.name,get_settings=lambda:{'source_dir':tmp},upsert_file=Mock(),
+            db=SimpleNamespace(queue_search_record=Mock(),queue_observe_media=Mock(),queue_file_key=lambda p,s:p.name,get_settings=lambda:{'source_dir':tmp},upsert_file=Mock(),
                 validate_media_cache=lambda *a:'signature', media_file_signature=lambda *a:'signature', get_media_duration=lambda _:60, get_phash=lambda _:'cached',update_file=Mock(),
                 lookup_scene_grab_by_ts_uid=lambda _:None,
                 lookup_scene_grab_for_filename=lambda _:{'id':10,'kind':'scene','source_id':'scene-id','source_title':'Title','source_db':'StashDB'},

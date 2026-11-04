@@ -51,6 +51,8 @@ class ProcessingPipeline:
         await asyncio.to_thread(require_complete_queue_video, video, settings)
         db.upsert_file(filename)
         signature = await asyncio.to_thread(db.validate_media_cache, filename, video)
+        await asyncio.to_thread(db.queue_search_record, filename)
+        await asyncio.to_thread(db.queue_observe_media, filename, video)
         self.emit(f"FILE {filename}")
         api_keys = {
             "stashdb": settings.get("api_key_stashdb", ""),

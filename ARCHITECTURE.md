@@ -160,3 +160,45 @@ Recovery tests also exercise scene/movie/JAV restoration, occupied destinations,
 partial downloads, database failures, cross-device moves, cursor stability,
 permanent deletion and stale filename requests through the actual HTTP handlers.
 The browser preview uses synthetic data and does not run application watchers.
+
+## Shared suggestion discovery
+
+`app/core/filename_parser.py` supplies the same configured filename parsing to
+manual search and automatic suggestions. Performer-folder tags are distinguished
+from studio release tags. Parser-version changes refresh older cached parses.
+
+Filmography fallback uses saved library IDs in the relevant source namespace
+before trying an unambiguous exact-name lookup. Conflicting saved IDs are not
+resolved by guessing. Every returned scene must contain the requested IDs;
+source-specific cast names can differ from the local library name.
+
+Suggestion attempts store the rules version, completion state, failure count and
+next retry time. Complete misses retain the daily cooldown. Incomplete searches
+retry after 5 minutes, 15 minutes and 1 hour, then daily; success resets the failure
+count. The existing bounded scheduler processes eligible work. Saved suggestions
+and explicit rejections survive rule-version changes.
+
+### Queue-owned file details
+
+Each scene queue entry has one durable `file_assets.id`. Parsed search fields and
+manual overrides live in `queue_search_details`, keyed by that identity, while
+fingerprints, media measurements and match/processing state remain on its linked
+processed-file row. Renames retain the identity and corrections. Parser or
+library changes refresh only inferred defaults; a manually blank field remains
+blank. File history and recovery retain their existing identity links.
+
+Queue discovery and fingerprint workers initialize the record. Manual scene
+search, automatic suggestions, periodic retries and suggestion review consume
+its effective fields. The popup saves corrections before searching or manual
+submission. Title, performer/studio identity links, date, scene number, free text,
+description, tags and extra kind are durable. Probe observations (size, codec,
+resolution, duration) are saved beside the existing pHash; the editor does not
+write fingerprints or technical measurements.
+
+Updates use a revision check. Editing invalidates old suggestion attempts/results
+but preserves explicit rejections. Searches pass the captured file identity and
+revision into the atomic suggestion save so results from an older edit, renamed
+path or filed record cannot replace current results. Partial searches merge;
+complete searches replace atomically and recheck rejections while holding the
+write transaction. A per-file guard is shared by manual suggestion rescans,
+scheduled retries and post-fingerprint suggestion searches.

@@ -33,12 +33,19 @@ class SuggestionTests(unittest.TestCase):
         node=next(n for n in ast.parse((ROOT/'main.py').read_text()).body if isinstance(n,ast.FunctionDef) and n.name=='_run_name_search_for_file')
         for batch in (Results(),Results(warnings=['TPDB: timed out'])):
             db=Mock()
+            db.queue_search_record.return_value = None
+            db.suggestion_performer_ids.return_value = {}
             ns=dict(db=db,_NAME_SEARCH_NON_IAFD_SOURCES={'StashDB','TPDB','FansDB','JAVStash'},_split_query_for_search=lambda _:('Fixture 3','Fixture 3','Fixture Person','',['Fixture Person']),
                     _suggestion_performer_names=lambda names,primary:names,
+                    search_scenes_with_all_performers=lambda names:([],True),
                     _build_file_meta=lambda _:{},search_all_databases=lambda **_:batch,emit=lambda _:None)
             exec(compile(ast.Module(body=[node],type_ignores=[]),'main.py','exec'),ns)
             self.assertEqual(ns['_run_name_search_for_file']('Fixture 3.mp4'),0)
-            self.assertEqual(db.queue_suggestions_clear.call_count,0 if batch.warnings else 1)
+            db.queue_suggestions_clear.assert_not_called()
+            if batch.warnings:
+                db.queue_suggestions_add.assert_not_called()
+            else:
+                db.queue_suggestions_add.assert_called_once_with('Fixture 3.mp4', [], replace=True, expected_record=None)
 
 class FilenameIdentityTests(unittest.TestCase):
     def helpers(self):

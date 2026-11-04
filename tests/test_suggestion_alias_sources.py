@@ -19,7 +19,7 @@ class SuggestionAliasSourceTests(unittest.TestCase):
     def test_manual_includes_iafd_background_excludes_it(self):
         search=Mock(return_value=[])
         sources={'StashDB','TPDB','FansDB','JAVStash'}
-        env={'db':SimpleNamespace(queue_suggestion_mark_attempt=Mock(),queue_suggestions_clear=Mock()),
+        env={'emit':Mock(),'db':SimpleNamespace(queue_search_record=lambda _:None,suggestion_performer_ids=lambda _: {},queue_suggestion_mark_attempt=Mock(),queue_suggestion_finish_attempt=Mock(),queue_suggestions_clear=Mock(),queue_suggestions_add=Mock(return_value=0),queue_suggestion_rejects_for_file=lambda _:set()),
              '_split_query_for_search':lambda f:('Studio POV','POV','','Studio',[]),
              '_suggestion_performer_names':lambda *a:[], '_build_file_meta':lambda f:{},
              '_NAME_SEARCH_NON_IAFD_SOURCES':sources, 'search_all_databases':search}

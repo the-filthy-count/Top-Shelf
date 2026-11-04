@@ -17,10 +17,11 @@ class LowercaseTitleQueryTests(unittest.TestCase):
         for correct in (True,False):
             scene={'id':'one','_source':'TPDB','title':'Naughty Therapy','performers':[{'name':'Alecia Fox' if correct else 'Other Person'}]}
             search=Mock(side_effect=lambda **kw:[scene] if kw['title']=='naughty therapy' else [])
-            db=SimpleNamespace(queue_suggestion_mark_attempt=Mock(),queue_suggestions_clear=Mock(),queue_suggestions_add=Mock(),queue_suggestion_rejects_for_file=lambda f:set())
+            db=SimpleNamespace(queue_search_record=lambda _:None,suggestion_performer_ids=lambda _: {},queue_suggestion_mark_attempt=Mock(),queue_suggestion_finish_attempt=Mock(),queue_suggestions_clear=Mock(),queue_suggestions_add=Mock(side_effect=lambda filename, rows, **kwargs: len(rows)),queue_suggestion_rejects_for_file=lambda f:set())
             env={'db':db,'_split_query_for_search':lambda f:('Alecia Fox naughtytherapy','naughtytherapy','Alecia Fox','',['Alecia Fox']),
                  '_suggestion_performer_names':m._suggestion_performer_names,'_build_file_meta':lambda f:{},
                  '_NAME_SEARCH_NON_IAFD_SOURCES':{'TPDB'},'search_all_databases':search,
+                 'search_scenes_with_all_performers':Mock(return_value=([],True)),
                  '_suggestion_identity_matches':m._suggestion_identity_matches,'_scene_passes_settings_filters':lambda s:True,
                  '_normalize_suggestion':lambda s,f:{'source_db':'TPDB','source_id':'one','payload':s},
                  '_score_name_match':m._score_name_match,'_SUGGESTION_MIN_SCORE':.5,
@@ -29,4 +30,4 @@ class LowercaseTitleQueryTests(unittest.TestCase):
             run=load('main.py','_run_name_search_for_file',env)
             self.assertEqual(run('file.mp4'),int(correct))
             self.assertEqual([c.kwargs['title'] for c in search.call_args_list],['naughtytherapy','naughty therapy'])
-            self.assertEqual(db.queue_suggestions_add.call_count,int(correct))
+            self.assertEqual(len(db.queue_suggestions_add.call_args.args[1]), int(correct))

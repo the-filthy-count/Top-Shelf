@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock
 from app.core import matching as m
 from test_duplicate_filing_safety import load
@@ -27,7 +28,7 @@ class JointCastTests(unittest.TestCase):
                 {'id': 'both', 'performers': [{'performer': {'id': n}} for n in ['Alecia Fox', 'Kira Kyox']]},
                 {'id': 'one', 'performers': [{'performer': {'id': 'Alecia Fox'}}]},
             ]}}
-        env = dict(get_api_keys=lambda:dict(stashdb='key',tpdb='',fansdb='',javstash=''),
+        env = dict(db=SimpleNamespace(queue_search_record=lambda _:None,suggestion_performer_ids=lambda _:{}),get_api_keys=lambda:dict(stashdb='key',tpdb='',fansdb='',javstash=''),
                    STASHDB_ENDPOINT='stash',TPDB_ENDPOINT='tpdb',FANSDB_ENDPOINT='fans',JAVSTASH_ENDPOINT='jav',
                    SEARCH_PERFORMER_QUERY='performers',QUERY_SCENES_QUERY='scenes',_stashbox_post=post,emit=Mock())
         search = load('main.py', 'search_scenes_with_all_performers', env)
@@ -45,8 +46,8 @@ class JointCastTests(unittest.TestCase):
         scene = {'id':'both','_source':'TPDB','title':'Unknown Title',
                  'performers':[{'performer':{'name':n}} for n in names]}
         partial = dict(scene, id='partial', performers=scene['performers'][:1])
-        db = SimpleNamespace(queue_suggestion_mark_attempt=Mock(), queue_suggestions_clear=Mock(),
-                             queue_suggestions_add=Mock(), queue_suggestion_rejects_for_file=lambda f:set())
+        db = SimpleNamespace(queue_search_record=lambda _:None,suggestion_performer_ids=lambda _: {},queue_suggestion_mark_attempt=Mock(),queue_suggestion_finish_attempt=Mock(), queue_suggestions_clear=Mock(),
+                             queue_suggestions_add=Mock(side_effect=lambda filename, rows, **kwargs: len(rows)), queue_suggestion_rejects_for_file=lambda f:set())
         env = dict(db=db, _split_query_for_search=lambda f:(' '.join(names),'','Alecia Fox','',names),
                    _suggestion_performer_names=m._suggestion_performer_names, _build_file_meta=lambda f:{},
                    _NAME_SEARCH_NON_IAFD_SOURCES={'TPDB'}, search_all_databases=Mock(return_value=[]),
@@ -65,7 +66,7 @@ class JointCastTests(unittest.TestCase):
         from types import SimpleNamespace
         from unittest.mock import patch
         post=Mock(side_effect=lambda endpoint,key,query,v:{'searchPerformer':[{'id':v['term'],'name':v['term']}]})
-        env=dict(get_api_keys=lambda:dict(stashdb='',tpdb='key',fansdb='',javstash=''),
+        env=dict(db=SimpleNamespace(queue_search_record=lambda _:None,suggestion_performer_ids=lambda _:{}),get_api_keys=lambda:dict(stashdb='',tpdb='key',fansdb='',javstash=''),
                  STASHDB_ENDPOINT='stash',TPDB_ENDPOINT='tpdb',FANSDB_ENDPOINT='fans',JAVSTASH_ENDPOINT='jav',
                  SEARCH_PERFORMER_QUERY='performers',QUERY_SCENES_QUERY='scenes',_stashbox_post=post,
                  requests=SimpleNamespace(get=Mock()),emit=Mock())

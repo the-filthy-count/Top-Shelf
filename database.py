@@ -1294,6 +1294,13 @@ def init_db() -> None:
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_qsugg_filename ON queue_suggestions(filename)")
         conn.execute("CREATE TABLE IF NOT EXISTS queue_suggestion_attempts (filename TEXT PRIMARY KEY, attempted_at REAL NOT NULL)")
+        if 'rules_version' not in {row[1] for row in conn.execute('PRAGMA table_info(queue_suggestion_attempts)')}:
+            conn.execute('ALTER TABLE queue_suggestion_attempts ADD COLUMN rules_version INTEGER NOT NULL DEFAULT 0')
+        attempt_columns = {row[1] for row in conn.execute('PRAGMA table_info(queue_suggestion_attempts)')}
+        for column, definition in (('failure_count', 'INTEGER NOT NULL DEFAULT 0'),
+                                   ('next_retry', 'REAL'), ('outcome', "TEXT NOT NULL DEFAULT 'complete'")):
+            if column not in attempt_columns:
+                conn.execute(f'ALTER TABLE queue_suggestion_attempts ADD COLUMN {column} {definition}')
         # Per (file, source_id) rejection log — once the user dismisses a
         # candidate, we never resurface it for that file (even on a fresh
         # name-search pass). A different scene from the same source can
@@ -1456,6 +1463,8 @@ def init_db() -> None:
         # code shipped will still resume on next start.)
         from app.core.file_history import install as install_file_history
         install_file_history(conn)
+        from app.core.queue_records import install as install_queue_records
+        install_queue_records(conn)
         from app.core.recovery import install as install_recovery
         install_recovery(conn)
         from app.core.jobs import install as install_jobs
@@ -2437,23 +2446,69 @@ def wanted_reconcile_with_library(
     return {"checked": checked, "cleared": cleared}
 
 
+def suggestion_performer_ids(names):
+    """Use canonical local folder identities, never a global alias lookup."""
+    compact = lambda value: re.sub(r"[^a-z0-9]+", "", (value or "").casefold())
+    fields = {'TPDB':'match_tpdb_id', 'StashDB':'match_stashdb_id',
+              'FansDB':'match_fansdb_id', 'JAVStash':'match_javstash_id'}
+    with get_conn() as conn:
+        rows = [dict(row) for row in conn.execute(
+            "SELECT folder_name,match_tpdb_id,match_stashdb_id,match_fansdb_id,match_javstash_id "
+            "FROM favourite_entities WHERE kind='performer' AND COALESCE(is_group,0)=0")]
+    result = {}
+    for name in names:
+        matches = [row for row in rows if compact(row['folder_name']) == compact(name)]
+        result[name] = {}
+        for source, field in fields.items():
+            ids = {str(row[field]).strip() for row in matches if row[field] and str(row[field]).strip()}
+            if ids:
+                # Conflicting saved identities are explicitly ambiguous; do not
+                # replace them with a name-search result from another person.
+                result[name][source] = ids
+    return result
+
+
 def queue_suggestion_mark_attempt(filename: str) -> None:
     import time
     with get_conn() as conn:
-        conn.execute("INSERT OR REPLACE INTO queue_suggestion_attempts VALUES (?, ?)", (filename, time.time()))
+        from app.core.suggestion_rules import RULES_VERSION
+        now = time.time()
+        conn.execute("""INSERT INTO queue_suggestion_attempts
+            (filename,attempted_at,rules_version,outcome,next_retry) VALUES (?,?,?,'running',?)
+            ON CONFLICT(filename) DO UPDATE SET attempted_at=excluded.attempted_at,
+            failure_count=CASE WHEN rules_version!=excluded.rules_version THEN 0 ELSE failure_count END,
+            rules_version=excluded.rules_version,outcome='running',next_retry=excluded.next_retry""",
+            (filename, now, RULES_VERSION, now + 3600))
+        conn.commit()
+
+
+def queue_suggestion_finish_attempt(filename, complete):
+    """Transient failures retry after 5m, 15m and 1h, then daily."""
+    with get_conn() as conn:
+        row = conn.execute('SELECT failure_count FROM queue_suggestion_attempts WHERE filename=?', (filename,)).fetchone()
+        if row is None:
+            return
+        failures = 0 if complete else min(int(row[0]) + 1, 4)
+        retry = None if complete else time.time() + (300, 900, 3600, 86400)[failures - 1]
+        conn.execute('UPDATE queue_suggestion_attempts SET failure_count=?,next_retry=?,outcome=? WHERE filename=?',
+                     (failures, retry, 'complete' if complete else 'incomplete', filename))
         conn.commit()
 
 
 def queue_suggestion_pending(limit: int = 5, cooldown_seconds: int = 86400) -> list[str]:
     import time
+    from app.core.suggestion_rules import RULES_VERSION
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT pf.filename FROM processed_files pf "
             "LEFT JOIN queue_suggestion_attempts a ON a.filename=pf.filename "
-            "WHERE pf.status='unmatched' AND (a.attempted_at IS NULL OR a.attempted_at < ?) "
-            "AND NOT EXISTS (SELECT 1 FROM queue_suggestions qs WHERE qs.filename=pf.filename) "
+            "WHERE pf.status='unmatched' AND (a.attempted_at IS NULL OR a.rules_version != ? "
+            "OR (a.next_retry IS NOT NULL AND a.next_retry<=?) "
+            "OR (a.next_retry IS NULL AND a.attempted_at < ?)) "
+            "AND (NOT EXISTS (SELECT 1 FROM queue_suggestions qs WHERE qs.filename=pf.filename) "
+            "OR a.outcome IN ('incomplete','running')) "
             "ORDER BY a.attempted_at ASC, pf.processed_at ASC, pf.filename ASC LIMIT ?",
-            (time.time()-cooldown_seconds, limit),
+            (RULES_VERSION, time.time(), time.time()-cooldown_seconds, limit),
         ).fetchall()
         return [row["filename"] for row in rows]
 
@@ -2478,12 +2533,12 @@ def queue_suggestions_clear(filename: str) -> int:
         return cur.rowcount or 0
 
 
-def queue_suggestions_add(filename: str, suggestions: list[dict]) -> int:
+def queue_suggestions_add(filename: str, suggestions: list[dict], *, replace: bool = False, expected_record=None) -> int:
     """Bulk-insert (or refresh) candidates for one file. Existing rows
     with the same (filename, source_db, source_id) primary key are
     overwritten via INSERT OR REPLACE so re-running the search just
     bumps scores instead of accumulating duplicates."""
-    if not suggestions:
+    if not suggestions and not replace:
         return 0
     rows = []
     for s in suggestions:
@@ -2500,13 +2555,29 @@ def queue_suggestions_add(filename: str, suggestions: list[dict]) -> int:
             json.dumps(s.get("payload") or {}),
         ))
     with get_conn() as conn:
+        # Serialize against rejection writes before checking their current state.
+        conn.execute("BEGIN IMMEDIATE")
+        if expected_record:
+            current = conn.execute("SELECT revision FROM queue_search_details WHERE file_id=?",
+                                   (expected_record['file_id'],)).fetchone()
+            asset = conn.execute("""SELECT p.filename,p.status FROM file_assets a
+                JOIN processed_files p ON a.queue_id=p.id
+                WHERE a.id=? AND a.queue_table='processed_files'""", (expected_record['file_id'],)).fetchone()
+            if (not current or current[0] != expected_record['revision'] or not asset
+                    or asset[0] != filename or asset[1] not in ('unmatched', 'pending')):
+                return 0
+        rejected = {(r[0], r[1]) for r in conn.execute(
+            "SELECT source_db, source_id FROM queue_suggestion_rejects WHERE filename=?",
+            (filename,))}
+        rows = [row for row in rows if (row[1], row[2]) not in rejected]
+        if replace:
+            conn.execute("DELETE FROM queue_suggestions WHERE filename=?", (filename,))
         conn.executemany(
             "INSERT OR REPLACE INTO queue_suggestions "
             "(filename, source_db, source_id, score, title, studio, date, performers, thumb_url, payload_json, searched_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
             rows,
         )
-        conn.commit()
     return len(rows)
 
 
@@ -3932,7 +4003,7 @@ def validate_media_cache(filename: str, video: Path) -> str:
     signature = media_file_signature(video)
     with get_conn() as conn:
         conn.execute(
-            "UPDATE processed_files SET phash=NULL, media_duration=NULL, media_signature=? "
+            "UPDATE processed_files SET phash=NULL, media_duration=NULL, media_size_bytes=NULL, media_codec=NULL, media_width=NULL, media_height=NULL, media_signature=? "
             "WHERE filename=? AND (media_signature IS NULL OR media_signature != ?)",
             (signature, filename, signature),
         )
@@ -7787,3 +7858,13 @@ def processing_jobs_ready(limit=20, table="processed_files"):
             JOIN {table} p ON p.id=a.queue_id
             WHERE j.state='pending' AND j.available_at<=? ORDER BY j.updated_at LIMIT ?""",
             (table, time.time(), max(1, min(int(limit), 100))))]
+
+
+def queue_search_record(filename):
+    from app.core.queue_records import read
+    return read(filename)
+
+
+def queue_observe_media(filename, video):
+    from app.core.queue_records import observe_media
+    return observe_media(filename, video)

@@ -108,6 +108,10 @@ def _suggestion_identity_matches(performers: list[str], studio: str, scene: dict
     if not wanted:
         return False
     source = scene.get("studio") or {}
+    proof = scene.get('_search_studio_id') or {}
+    if (proof.get('source') == scene.get('_source') and normalize(proof.get('name', '')) == wanted
+            and isinstance(source, dict) and str(source.get('id') or '') == proof.get('id')):
+        return True
     if isinstance(source, str):
         names = [source]
     else:
@@ -159,7 +163,7 @@ def _name_match_tokenize(s: str) -> set[str]:
     return {w for w in words if w and w not in _NAME_SEARCH_NOISE_TOKENS and len(w) > 1}
 
 
-def _split_query_for_search(filename: str) -> tuple[str, str, str, str, list[str]]:
+def _split_query_from_library(filename: str) -> tuple[str, str, str, str, list[str]]:
     """Split a cleaned filename into (full_query, title_only, performer, studio, performers).
 
     Consults the library's performer-folder index for cast names and the
@@ -186,6 +190,12 @@ def _split_query_for_search(filename: str) -> tuple[str, str, str, str, list[str
         studio = (guess.get("studio") or "").strip()
     except Exception:
         pass
+    # Performer folder tags also occur in the studio-logo index (creator sites).
+    # Do not let that duplicate identity hide a real studio in the filename.
+    compact = lambda value: re.sub(r"[^a-z0-9]+", "", value.casefold())
+    performer_keys = {compact(name) for name in performers}
+    if compact(studio) in performer_keys:
+        studio = ""
     studio_spelling = ""
     if not studio:
         try:
@@ -194,6 +204,8 @@ def _split_query_for_search(filename: str) -> tuple[str, str, str, str, list[str
             for row in db.studio_logo_list_all():
                 slug_key = re.sub(r"[^a-z0-9]+", "", (row.get("slug") or "").lower())
                 display = row.get("name") or row.get("slug") or ""
+                if compact(display) in performer_keys or slug_key in performer_keys:
+                    continue
                 if not slug_key or not display or len(slug_key) < 4:
                     continue
                 if slug_key in release_key and len(slug_key) > best_len:
@@ -232,6 +244,14 @@ def _split_query_for_search(filename: str) -> tuple[str, str, str, str, list[str
     return (full, title_only, performer, studio, performers)
 
 
+def _split_query_for_search(filename: str):
+    from app.core.filename_parser import parse_filename
+    settings = db.get_settings() if Path(db.DB_PATH).is_file() else db.DEFAULTS
+    parsed = parse_filename(filename, settings)
+    cast = parsed['performer_names']
+    return (parsed['full_query'], parsed['title'], cast[0] if cast else '', parsed['site'], cast)
+
+
 def _candidate_performer_names(candidate: dict) -> list[str]:
     names: list[str] = []
     for p in (candidate.get("performers") or []):
@@ -257,16 +277,29 @@ def _required_performers_in_cast(query_performers: list[str], candidate: dict) -
     needed = [p.strip() for p in (query_performers or []) if p and p.strip()]
     if not needed:
         return True
+    proof = candidate.get('_search_performer_ids') or {}
+    linked = proof.get('ids') or {}
+    if proof.get('source') == candidate.get('_source') and all(name in linked for name in needed):
+        actual = {str((entry.get('performer') or entry).get('id') or '')
+                  for entry in candidate.get('performers') or [] if isinstance(entry, dict)}
+        wanted = {str(linked[name]) for name in needed}
+        return len(wanted) == len(needed) and wanted.issubset(actual)
     cast = _candidate_performer_names(candidate)
     if not cast:
         return False
     used: set[int] = set()
     for qp in needed:
         hit = False
-        for i, cn in enumerate(cast):
+        for i, raw in enumerate(candidate.get('performers') or []):
+            entry = (raw.get('performer') or raw) if isinstance(raw, dict) else {}
+            cn = entry.get('name') or (raw if isinstance(raw, str) else '')
             if i in used:
                 continue
-            if _performer_name_tokens_match(qp, cn):
+            if proof.get('source') == candidate.get('_source') and qp in linked:
+                same = str(entry.get('id') or '') == str(linked[qp])
+            else:
+                same = _performer_name_tokens_match(qp, cn)
+            if same:
                 used.add(i)
                 hit = True
                 break
@@ -310,6 +343,7 @@ def _build_file_meta(filename: str) -> dict:
         stem = Path(filename).stem
         parsed_date, _ = extract_filename_date(stem)
         if parsed_date:
+            meta["date"] = parsed_date
             meta["year"] = int(parsed_date[:4])
         next_year = datetime.now().year + 1
         for m in re.finditer(r"(?<!\d)(19[7-9]\d|20\d{2})(?!\d)", stem):
@@ -377,7 +411,7 @@ def _score_name_match(query: str, candidate: dict, *,
 
     if reasons is not None and performers:
         for p in performers:
-            hit = any(_performer_name_tokens_match(p, c) for c in perf_names)
+            hit = _required_performers_in_cast([p], candidate)
             reasons.append({
                 "kind": "performer",
                 "label": p,

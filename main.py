@@ -2514,7 +2514,7 @@ def search_scenes_on_db(endpoint: str, api_key: str, term: str, limit: int = 25)
     return list(by_id.values())
 
 
-def search_scenes_with_all_performers(performers: list[str]) -> tuple[list, bool]:
+def search_scenes_with_all_performers(performers: list[str], *, saved_ids=None) -> tuple[list, bool]:
     from app.integrations.scene_search import search_joint_cast
     keys = get_api_keys()
     sources = [("StashDB", STASHDB_ENDPOINT, keys["stashdb"]),
@@ -2522,7 +2522,8 @@ def search_scenes_with_all_performers(performers: list[str]) -> tuple[list, bool
                ("FansDB", FANSDB_ENDPOINT, keys["fansdb"]),
                ("JAVStash", JAVSTASH_ENDPOINT, keys["javstash"])]
     return search_joint_cast(performers, sources, _stashbox_post, SEARCH_PERFORMER_QUERY,
-                             QUERY_SCENES_QUERY, requests.get if keys["tpdb"] else None, emit)
+                             QUERY_SCENES_QUERY, requests.get if keys["tpdb"] else None, emit,
+                             saved_ids=saved_ids if saved_ids is not None else db.suggestion_performer_ids(performers))
 
 
 def query_scenes_by_date(endpoint: str, api_key: str, term: str,
@@ -2874,123 +2875,164 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
     sources. The automatic callers (post-phash unmatched hook, scheduled
     suggestions trickle) opt out so a 403 streak from IAFD doesn't
     leak into the background pipeline."""
-    db.queue_suggestion_mark_attempt(filename)
-    cleaned, title_only, performer, studio, performers = _split_query_for_search(filename)
-    perf_names = _suggestion_performer_names(performers, performer)
-    if not cleaned or not (perf_names or studio):
-        db.queue_suggestions_clear(filename)
+    from app.core import suggestion_guard
+    record = db.queue_search_record(filename)
+    guard_key = record['file_id'] if record else filename
+    if not suggestion_guard.claim(guard_key):
         return 0
-    # File-side signals (duration, year, cast count, scene index) shape
-    # the score downstream. Built once per call so the FFmpeg probe and
-    # the library-aware splitter only run a single time, regardless of
-    # how many candidates come back.
-    file_meta = _build_file_meta(filename)
-    # Bare trailing numbers identify volumes; only explicit Scene N is a scene hint.
-    from title_search_queries import title_search_queries
-    search_queries = [(query, "") for query in title_search_queries(title_only)] if title_only else [("", cleaned)]
-    search_complete = True
-    results: list = []
-    seen_ids: set[tuple[str, str]] = set()
-    search_sources = _NAME_SEARCH_NON_IAFD_SOURCES | {"IAFD"} if include_iafd else _NAME_SEARCH_NON_IAFD_SOURCES
-    for title_q, term_q in search_queries:
-        try:
-            batch = search_all_databases(
-                title=title_q or None,
-                performer=performer or None,
-                studio=studio or None,
-                term=term_q or None,
-                sources=search_sources, title_first=True,
-            )
-        except Exception as e:
-            search_complete = False
-            emit(f"  Name-search FAILED for {filename!r}: {e}")
-            continue
-        if getattr(batch, "warnings", []):
-            search_complete = False
-        for scene in (batch or []):
-            sid = (scene.get("id") or "").strip()
-            src = (scene.get("_source") or "").strip().lower()
-            if not sid:
+    search_complete = False
+    try:
+        db.queue_suggestion_mark_attempt(filename)
+        cleaned, title_only, performer, studio, performers = _split_query_for_search(filename)
+        if record:
+            fields = record['fields']
+            title_only, studio = fields['title'] or '', fields['studio'] or ''
+            performers = fields['performers'] or []
+            performer = performers[0] if performers else ''
+            cleaned = ' '.join(filter(None, [*performers, studio, title_only, fields['term']]))
+            if fields['scene_number']:
+                title_only = (title_only + ' Scene ' + str(fields['scene_number'])).strip()
+        perf_names = _suggestion_performer_names(performers, performer)
+        if not cleaned or not (perf_names or studio):
+            search_complete = True
+            db.queue_suggestions_clear(filename)
+            return 0
+        # File-side signals (duration, year, cast count, scene index) shape
+        # the score downstream. Built once per call so the FFmpeg probe and
+        # the library-aware splitter only run a single time, regardless of
+        # how many candidates come back.
+        file_meta = _build_file_meta(filename)
+        if record:
+            file_meta.update(date=fields['date'] or '', year=int(fields['date'][:4]) if fields['date'] else 0,
+                             scene_index=fields['scene_number'], cast_hint=len(performers))
+        saved_ids = db.suggestion_performer_ids(perf_names)
+        if record:
+            from app.core.queue_records import saved_ids as record_ids
+            saved_ids.update(record_ids(record))
+        # Bare trailing numbers identify volumes; only explicit Scene N is a scene hint.
+        from title_search_queries import title_search_queries
+        search_queries = [(query, "") for query in title_search_queries(title_only)] if title_only else [("", cleaned)]
+        search_complete = True
+        results: list = []
+        seen_ids: set[tuple[str, str]] = set()
+        search_sources = _NAME_SEARCH_NON_IAFD_SOURCES | {"IAFD"} if include_iafd else _NAME_SEARCH_NON_IAFD_SOURCES
+        for title_q, term_q in search_queries:
+            try:
+                batch = search_all_databases(
+                    title=title_q or None,
+                    performer=performer or None,
+                    studio=studio or None,
+                    term=term_q or None,
+                    sources=search_sources, title_first=True,
+                )
+            except Exception as e:
+                search_complete = False
+                emit(f"  Name-search FAILED for {filename!r}: {e}")
                 continue
-            key = (src, sid)
-            if key in seen_ids:
-                continue
-            seen_ids.add(key)
-            results.append(scene)
-    if len(perf_names) > 1:
-        cast_results, cast_complete = search_scenes_with_all_performers(perf_names)
-        search_complete = search_complete and cast_complete
-        for scene in cast_results:
-            key = (scene.get("_source", "").lower(), scene.get("id"))
-            if key[1] and key not in seen_ids:
+            if getattr(batch, "warnings", []):
+                search_complete = False
+            for scene in (batch or []):
+                sid = (scene.get("id") or "").strip()
+                src = (scene.get("_source") or "").strip().lower()
+                if not sid:
+                    continue
+                key = (src, sid)
+                if key in seen_ids:
+                    continue
                 seen_ids.add(key)
                 results.append(scene)
-    if not results:
-        if search_complete:
-            db.queue_suggestions_clear(filename)
-        return 0
-    rejects = db.queue_suggestion_rejects_for_file(filename)
-    perf_names = _suggestion_performer_names(performers, performer)
-    strict_pool: list[dict] = []
-    for scene in results:
-        if len(perf_names) > 1 and not _required_performers_in_cast(perf_names, scene):
-            continue
-        if not _suggestion_identity_matches(perf_names, studio, scene):
-            continue
-        if not _scene_passes_settings_filters(scene):
-            continue
-        sug = _normalize_suggestion(scene, filename)
-        if not sug:
-            continue
-        if (sug["source_db"], sug["source_id"]) in rejects:
-            continue
-        score_loose = _score_name_match(
-            cleaned, scene,
-            query_performer=performer,
-            query_title=title_only or cleaned,
-            query_performers=performers,
-            require_performers_in_cast=False,
-            allow_joint_cast=len(perf_names) > 1,
-            file_meta=file_meta,
-        )
-        if score_loose < _SUGGESTION_MIN_SCORE:
-            continue
-        is_strict_perf = bool(perf_names and _required_performers_in_cast(perf_names, scene))
-        # Reasons are collected only on the pool the candidate actually
-        # ends up in — strict if the performer matches, loose otherwise
-        # — so the pills the UI shows match the score that's persisted.
-        if is_strict_perf or _suggestion_identity_matches([], studio, scene):
-            strict_reasons: list[dict] = []
-            score_strict = _score_name_match(
-                cleaned, scene,
-                query_performer=performer,
-                query_title=title_only or cleaned,
-                query_performers=performers,
-                require_performers_in_cast=is_strict_perf,
-                allow_joint_cast=len(perf_names) > 1,
-                file_meta=file_meta,
-                reasons=strict_reasons,
-            )
-            if score_strict >= _SUGGESTION_MIN_SCORE:
-                sug_strict = dict(sug)
-                sug_strict["score"] = score_strict
-                sug_strict["payload"] = dict(sug.get("payload") or {})
-                sug_strict["payload"]["_reasons"] = strict_reasons
-                strict_pool.append(sug_strict)
-    strict_pool.sort(key=lambda candidate: candidate["score"], reverse=True)
-    top = strict_pool[:limit]
-    emit(f"  Name-search {filename!r}: {len(top)} performer/studio match(es)")
-    if not top and not search_complete:
-        return 0
-    db.queue_suggestions_clear(filename)
-    if not top:
-        return 0
-    db.queue_suggestions_add(filename, top)
-    # Pre-warm the breakdown caches in the background so when the user
-    # eventually clicks Accept on an IAFD or TPDB candidate, the
-    # scene-picker round trip is a memory read instead of two HTTP hops.
-    _prefetch_suggestion_breakdowns_async(filename, top)
-    return len(top)
+        if len(perf_names) > 1:
+            cast_results, cast_complete = search_scenes_with_all_performers(perf_names, **({"saved_ids": saved_ids} if record else {}))
+            search_complete = search_complete and cast_complete
+            for scene in cast_results:
+                key = (scene.get("_source", "").lower(), scene.get("id"))
+                if key[1] and key not in seen_ids:
+                    seen_ids.add(key)
+                    results.append(scene)
+        rejects = db.queue_suggestion_rejects_for_file(filename)
+        perf_names = _suggestion_performer_names(performers, performer)
+        def rank_candidates(candidates):
+            strict_pool: list[dict] = []
+            for scene in candidates:
+                scene = suggestion_guard.bind_saved_identities(scene, perf_names, saved_ids, record.get('studio_link') if record else None)
+                if scene is None:
+                    continue
+                if len(perf_names) > 1 and not _required_performers_in_cast(perf_names, scene):
+                    continue
+                if not _suggestion_identity_matches(perf_names, studio, scene):
+                    continue
+                if not _scene_passes_settings_filters(scene):
+                    continue
+                sug = _normalize_suggestion(scene, filename)
+                if not sug:
+                    continue
+                if (sug["source_db"], sug["source_id"]) in rejects:
+                    continue
+                score_loose = _score_name_match(
+                    cleaned, scene,
+                    query_performer=performer,
+                    query_title=title_only or cleaned,
+                    query_performers=performers,
+                    require_performers_in_cast=False,
+                    allow_joint_cast=len(perf_names) > 1,
+                    file_meta=file_meta,
+                )
+                if score_loose < _SUGGESTION_MIN_SCORE:
+                    continue
+                is_strict_perf = bool(perf_names and _required_performers_in_cast(perf_names, scene))
+                # Reasons are collected only on the pool the candidate actually
+                # ends up in — strict if the performer matches, loose otherwise
+                # — so the pills the UI shows match the score that's persisted.
+                if is_strict_perf or _suggestion_identity_matches([], studio, scene):
+                    strict_reasons: list[dict] = []
+                    score_strict = _score_name_match(
+                        cleaned, scene,
+                        query_performer=performer,
+                        query_title=title_only or cleaned,
+                        query_performers=performers,
+                        require_performers_in_cast=is_strict_perf,
+                        allow_joint_cast=len(perf_names) > 1,
+                        file_meta=file_meta,
+                        reasons=strict_reasons,
+                    )
+                    if score_strict >= _SUGGESTION_MIN_SCORE:
+                        sug_strict = dict(sug)
+                        sug_strict["score"] = score_strict
+                        sug_strict["payload"] = dict(sug.get("payload") or {})
+                        sug_strict["payload"]["_reasons"] = strict_reasons
+                        strict_pool.append(sug_strict)
+            return strict_pool
+
+        strict_pool = rank_candidates(results)
+        if not strict_pool and len(perf_names) == 1:
+            # A bad text query must not hide a good scene in a known performer's
+            # filmography. Returned casts still require the source-local ID.
+            cast_results, cast_complete = search_scenes_with_all_performers(perf_names, **({"saved_ids": saved_ids} if record else {}))
+            search_complete = search_complete and cast_complete
+            from app.core.suggestion_rules import date_proximity
+            strict_pool = sorted(rank_candidates(cast_results), key=lambda candidate: date_proximity(
+                (candidate.get("payload") or {}).get("release_date"), file_meta.get("date")), reverse=True)
+        strict_pool.sort(key=lambda candidate: candidate["score"], reverse=True)
+        top = strict_pool[:limit]
+        emit(f"  Name-search {filename!r}: {len(top)} performer/studio match(es)")
+        if not top and not search_complete:
+            return 0
+        saved_count = db.queue_suggestions_add(filename, top, replace=search_complete, expected_record=record)
+        if not top:
+            return 0
+        # Pre-warm the breakdown caches in the background so when the user
+        # eventually clicks Accept on an IAFD or TPDB candidate, the
+        # scene-picker round trip is a memory read instead of two HTTP hops.
+        _prefetch_suggestion_breakdowns_async(filename, top)
+        return saved_count
+    except Exception:
+        search_complete = False
+        raise
+    finally:
+        try:
+            db.queue_suggestion_finish_attempt(filename, complete=search_complete)
+        finally:
+            suggestion_guard.release(guard_key)
 
 
 def _prefetch_suggestion_breakdowns_async(filename: str, candidates: list[dict]) -> None:
@@ -3071,8 +3113,9 @@ def _suggestions_trickle_job() -> None:
     source-DB rate limits aren't burned through on a thousand-file
     backlog. The 5-minute scheduler tick combined with the per-tick
     cap visits never-searched files first, then the oldest attempts.
-    Empty results and failed searches wait 24 hours before another attempt,
-    so they cannot monopolize the batch."""
+    Complete empty results wait 24 hours. Temporary failures retry after
+    5 minutes, 15 minutes and 1 hour, then daily. Rule-version changes make
+    old empty results eligible again without discarding explicit rejections."""
     try:
         names = db.queue_suggestion_pending(limit=int(_SUGGESTIONS_TRICKLE_BATCH))
     except Exception as e:
@@ -5756,155 +5799,22 @@ def stashdb_search_performer(name: str, api_key: str) -> list[dict]:
 #: behind ("Title - " → "Title"). The regex is anchored to the end so
 #: we don't accidentally chop "Scene" out of titles like
 #: "Behind The Scene". Returns the cleaned title.
-_TITLE_NOISE_RE = re.compile(
-    r"""
-    (?:^|[\s._\-–—]+)          # separator before the token
-    (?:
-        scene \s* [#]? \s* \d+           # Scene 2, Scene #2
-      | part  \s*       \d+              # Part 3
-      | pt    \.? \s*   \d+              # Pt 3, Pt. 3
-      | episode \s*     \d+              # Episode 4
-      | ep    \s*       \d+              # Ep 4
-      | cd              \s* \d+          # CD1, CD 1
-      | disc  \s*       \d+              # Disc 1
-    )
-    \s* $                                # anchored to end
-    """,
-    re.IGNORECASE | re.VERBOSE,
-)
+from app.core.filename_parser import _TITLE_NOISE_RE
 
 
 def _strip_title_noise(title: str) -> str:
-    if not title:
-        return title
-    out = _strip_release_noise(title)
-    #: Loop because multiple noise tokens can stack ("Title Scene 2 Part 1").
-    for _ in range(3):
-        new = _TITLE_NOISE_RE.sub("", out).strip()
-        new = re.sub(r"[\s._\-–—]+$", "", new).strip()
-        if new == out:
-            break
-        out = new
-    return out
+    from app.core.filename_parser import _strip_title_noise as strip_noise
+    return strip_noise(title)
 
 
 def parse_filename(filename: str, settings: dict) -> dict:
-    from filename_dates import extract_filename_date
-    result = _parse_filename_parts(filename, settings)
-    parsed, token = extract_filename_date(Path(filename).stem)
-    if parsed:
-        result["date"] = parsed
-        # The fallback title includes the original date; remove it after parsing.
-        for variant in (token, token.replace(".", " ").replace("_", " ")):
-            result["title"] = result["title"].replace(variant, " ")
-        result["title"] = re.sub(r"\s+", " ", result["title"]).strip(" -_.")
-    elif result.get("date"):
-        raw = result["date"]
-        try:
-            datetime.strptime(raw, "%Y" if len(raw) == 4 else "%Y-%m-%d")
-        except ValueError:
-            result["date"] = ""
-    return result
+    from app.core.filename_parser import parse_filename as shared_parse
+    return shared_parse(filename, settings)
 
 
 def _parse_filename_parts(filename: str, settings: dict) -> dict:
-    """
-    Attempt to extract site, date, performers, and title from a filename.
-    Returns a dict with keys: site, date, performers, title (all may be empty).
-    Tries patterns in order based on settings["filename_patterns"].
-    """
-    import json as _json
-
-    stem = Path(filename).stem
-
-    # Strip gubbins words from stem first
-    strip_words = [w.strip().lower() for w in settings.get("filename_strip_words", "").split(",") if w.strip()]
-    for word in strip_words:
-        stem = re.sub(re.escape(word), "", stem, flags=re.IGNORECASE).strip(".-_ ")
-
-    # Load site abbreviations and expand them
-    try:
-        abbrevs = _json.loads(settings.get("site_abbreviations", "{}"))
-    except Exception:
-        abbrevs = {}
-
-    try:
-        rename_map = _json.loads(settings.get("site_rename_map", "{}"))
-    except Exception:
-        rename_map = {}
-
-    def expand_abbrev(text: str) -> str:
-        # First try rename map (exact match)
-        for old_name, new_name in rename_map.items():
-            if text.strip().lower() == old_name.strip().lower():
-                return new_name
-        # Then try abbreviations
-        low = text.lower()
-        for abbr, full in abbrevs.items():
-            if low == abbr.lower():
-                return full
-        return text
-
-    def clean(text: str) -> str:
-        return re.sub(r"\s+", " ", text.replace(".", " ").replace("_", " ")).strip()
-
-    result = {"site": "", "date": "", "performers": "", "title": ""}
-
-    patterns = settings.get("filename_patterns", "pipe|dot_date").split("|")
-
-    for pattern in patterns:
-        pattern = pattern.strip()
-
-        # Pipe-separated namer format: site|date|performers|title|network|parent
-        if pattern == "pipe":
-            parts = stem.split("|")
-            if len(parts) >= 4:
-                result["site"]       = expand_abbrev(parts[0].strip())
-                result["date"]       = parts[1].strip()
-                result["performers"] = parts[2].strip()
-                result["title"]      = _strip_title_noise(parts[3].strip())
-                return result
-
-        # site.YYYY.MM.DD.title (dot separated, full year)
-        elif pattern == "dot_date":
-            m = re.match(r'^(.+?)\.(20\d{2}|19\d{2})\.(\d{2})\.(\d{2})\.(.+)$', stem)
-            if m:
-                result["site"]  = expand_abbrev(clean(m.group(1)))
-                result["date"]  = f"{m.group(2)}-{m.group(3)}-{m.group(4)}"
-                result["title"] = _strip_title_noise(clean(m.group(5)))
-                return result
-
-        # site.YY.MM.DD.title (dot separated, short year)
-        elif pattern == "dot_date_short":
-            m = re.match(r'^(.+?)\.(\d{2})\.(\d{2})\.(\d{2})\.(.+)$', stem)
-            if m:
-                result["site"]  = expand_abbrev(clean(m.group(1)))
-                result["date"]  = f"20{m.group(2)}-{m.group(3)}-{m.group(4)}"
-                result["title"] = _strip_title_noise(clean(m.group(5)))
-                return result
-
-        # [Site] Title - Performer (YYYY)
-        elif pattern == "bracket_site":
-            m = re.match(r'^\[(.+?)\]\s*(.+?)(?:\s*-\s*(.+?))?\s*(?:\((\d{4})\))?$', stem)
-            if m:
-                result["site"]       = expand_abbrev(m.group(1).strip())
-                result["title"]      = _strip_title_noise((m.group(2) or "").strip())
-                result["performers"] = (m.group(3) or "").strip()
-                result["date"]       = m.group(4) or ""
-                return result
-
-        # site - YYYY-MM-DD - title
-        elif pattern == "dash_date":
-            m = re.match(r'^(.+?)\s*[-–]\s*((?:20\d{2}|19\d{2})-\d{2}-\d{2})\s*[-–]\s*(.+)$', stem)
-            if m:
-                result["site"]  = expand_abbrev(m.group(1).strip())
-                result["date"]  = m.group(2).strip()
-                result["title"] = _strip_title_noise(m.group(3).strip())
-                return result
-
-    # Fallback: return cleaned stem as title
-    result["title"] = _strip_title_noise(clean(stem))
-    return result
+    from app.core.filename_parser import _parse_filename_parts as parse_parts
+    return parse_parts(filename, settings)
 
 
 def apply_rename_map(name: str, settings: dict) -> str:
@@ -8876,6 +8786,8 @@ def process_single(video: Path) -> dict:
     filename = db.queue_file_key(video, settings)
     db.upsert_file(filename)
     signature = db.validate_media_cache(filename, video)
+    db.queue_search_record(filename)
+    db.queue_observe_media(filename, video)
     emit(f"FILE {filename}")
 
     settings = db.get_settings()
@@ -10521,8 +10433,12 @@ def _filter_suggestion_file_list(files: list[dict]) -> list[dict]:
     """Drop candidates (and files with none left) that fail content filters."""
     out: list[dict] = []
     for f in files or []:
-        _, _, performer, studio, performers = _split_query_for_search(f.get("filename") or "")
-        required = _suggestion_performer_names(performers, performer)
+        record = db.queue_search_record(f.get("filename") or "")
+        studio = record['fields']['studio'] or ''
+        required = record['fields']['performers'] or []
+        from app.core.queue_records import saved_ids
+        from app.core.suggestion_guard import bind_saved_identities
+        linked = saved_ids(record)
         if not (required or studio):
             continue
         kept = []
@@ -10531,6 +10447,10 @@ def _filter_suggestion_file_list(files: list[dict]) -> list[dict]:
             if not scene.get("performers"):
                 scene["performers"] = [name.strip() for name in (candidate.get("performers") or "").split(",") if name.strip()]
             scene.setdefault("studio", {"name": candidate.get("studio") or ""})
+            scene.setdefault("_source", candidate.get("source_db") or "")
+            scene = bind_saved_identities(scene, required, linked, record.get('studio_link'))
+            if scene is None:
+                continue
             if _suggestion_identity_matches(required, studio, scene) and _suggestion_candidate_passes_filters(candidate):
                 kept.append(candidate)
         if not kept:
@@ -18480,8 +18400,18 @@ def _build_queue_snapshot() -> dict:
         #: queue render and stashed on the processed_files row, so
         #: the manual-search modal can pre-fill its inputs without
         #: a per-click /api/parse/filename round-trip.
+        search_record = None
         try:
-            parsed = _ensure_parsed_filename(rel, settings, source_dir)
+            from app.core.queue_records import read as read_queue_record, observe_media
+            search_record = read_queue_record(rel)
+            observe_media(rel, f)
+            sf = search_record['fields']
+            if search_record['edited']:
+                performers = ', '.join(sf['performers'])
+                match_studio = sf['studio'] or ''
+                file_perf_names[-1] = list(sf['performers'])
+            parsed = dict(title=sf['title'], site=sf['studio'], performers=', '.join(sf['performers']),
+                          date=sf['date'], parser_version=3)
         except Exception as exc:
             emit(f"parsed-meta build failed for {rel}: {exc}")
             parsed = {}
@@ -18530,7 +18460,7 @@ def _build_queue_snapshot() -> dict:
         identity_key = 'jav://' + rel[4:] if row_scope == 'jav' and rel.startswith('JAV/') else rel
         identity = identities.get(('processed_movies' if row_scope == 'jav' else 'processed_files', identity_key))
         files.append({
-            "file_id":          identity['id'] if identity and prev_status != "removed" else None,
+            "file_id":          search_record["file_id"] if search_record else (identity['id'] if identity and prev_status != "removed" else None),
             "filename":         rel,
             "display_name":     f_stem,
             "size_mb":          round(f.stat().st_size / 1024 / 1024, 1),
@@ -18559,6 +18489,7 @@ def _build_queue_snapshot() -> dict:
             #: Filename parser blob. Shape: ``{title, date, site,
             #: performers, file_mtime, parsed_at}``.
             "parsed": parsed,
+            "search_details": ({"fields": search_record["fields"], "edited": search_record["edited"]} if search_record else None),
         })
     _annotate_queue_files_duplicate_flags(files)
     # Resolve performers → headshot URLs server-side so the frontend
@@ -20010,6 +19941,24 @@ def search_scenes(payload: dict):
     sources (optional list — `["StashDB","TPDB","FansDB","IAFD"]`). When
     `sources` is provided only those listed are queried; omitted = all.
     """
+    queue_record = None
+    if payload.get('file_id'):
+        from app.core.queue_records import read
+        try:
+            queue_record = read(file_id=payload['file_id'])
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=409)
+        fields = queue_record['fields']
+        from datetime import date, timedelta
+        date_from = date_to = ''
+        if fields['date'] and len(fields['date']) == 10:
+            day = date.fromisoformat(fields['date'])
+            date_from, date_to = (day - timedelta(days=7)).isoformat(), (day + timedelta(days=7)).isoformat()
+        search_title = fields['title'] or ''
+        if fields['scene_number']:
+            search_title += ' Scene ' + str(fields['scene_number'])
+        payload = dict(payload, title=search_title, performer=', '.join(fields['performers']),
+                       studio=fields['studio'], term=fields['term'], date_from=date_from, date_to=date_to)
     term      = payload.get("term", "").strip() or None
     title     = payload.get("title", "").strip() or None
     performer = payload.get("performer", "").strip() or None
@@ -20045,6 +19994,12 @@ def search_scenes(payload: dict):
         if title or term:
             from scene_relevance import rank_manual_results
             results = rank_manual_results(results, title or term, performer or "")
+        if queue_record:
+            from app.core.queue_records import saved_ids
+            from app.core.suggestion_guard import bind_saved_identities
+            linked = saved_ids(queue_record)
+            results = [bound for scene in results
+                       if (bound := bind_saved_identities(scene, queue_record['fields']['performers'], linked, queue_record.get('studio_link'))) is not None]
         if performer or studio:
             required = [name.strip() for name in (performer or "").split(",") if name.strip()]
             results = [scene for scene in results if _suggestion_identity_matches(required, studio or "", scene)]
@@ -35563,6 +35518,8 @@ async def queue_file_probe(filename: str):
     except Exception:
         pass
 
+    from app.core.queue_records import observe_media
+    await run_in_threadpool(observe_media, filename, video, codec, width, height, duration_s)
     return {
         "filename": filename,
         "codec":    codec,
@@ -35954,11 +35911,16 @@ def _ensure_parsed_filename(
     """
     if not filename:
         return {}
+    from app.core.filename_parser import cache_signature
+    signature = cache_signature(settings)
     if not force:
         cached = db.get_parsed_meta(filename)
-        if cached is not None:
+        if (cached is not None and cached.get("parser_version") == 3
+                and cached.get("parser_signature") == signature):
             return cached
     result = parse_filename(filename, settings)
+    result["parser_version"] = 3
+    result["parser_signature"] = signature
     try:
         src = _resolve_queue_file_path(filename, settings) or (source_dir / filename)
         if src.is_file():
@@ -35976,6 +35938,26 @@ def _ensure_parsed_filename(
     return result
 
 
+@app.get("/api/queue/search-details")
+def queue_search_details(filename: str = "", file_id: str = ""):
+    from app.core.queue_records import read
+    try:
+        return read(filename, file_id or None)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+
+
+@app.put("/api/queue/search-details")
+def queue_save_search_details(payload: dict):
+    from app.core.queue_records import save
+    try:
+        return save(payload.get('filename', ''), payload.get('file_id'),
+                    payload.get('fields', {}), payload.get('revision'),
+                    reset=payload.get('reset') is True)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+
+
 @app.get("/api/parse/filename")
 async def parse_filename_endpoint(filename: str, refresh: int = 0):
     """Parse a filename and return extracted metadata fields.
@@ -35988,6 +35970,18 @@ async def parse_filename_endpoint(filename: str, refresh: int = 0):
     Pass ``?refresh=1`` to bypass the cache after editing parser
     patterns or rename-map settings.
     """
+    from app.core.queue_records import read as read_queue_record
+    key = 'jav://' + filename[4:] if filename.startswith('JAV/') else filename
+    table = 'processed_movies' if filename.startswith('JAV/') else 'processed_files'
+    if db.file_identity(key, table):
+        try:
+            record = read_queue_record(filename)
+            fields = record['fields']
+            return dict(title=fields['title'], site=fields['studio'], date=fields['date'],
+                        performers=', '.join(fields['performers']), performer_names=fields['performers'],
+                        parser_version=3, file_id=record['file_id'])
+        except ValueError:
+            pass
     settings = db.get_settings()
     source_dir = Path(settings.get("source_dir", ""))
     return _ensure_parsed_filename(
@@ -40031,11 +40025,13 @@ async def api_queue_suggestions_source_meta(filename: str):
         video = db.resolve_source_video_path(source_dir, fn)
         if video is None or not video.is_file():
             return {"width": None, "height": None, "duration_sec": None}
-        _, w, h = probe_video_stream_meta(video)
+        codec, w, h = probe_video_stream_meta(video)
         try:
             dur = get_video_duration(video) or 0
         except Exception:
             dur = 0
+        from app.core.queue_records import observe_media
+        observe_media(fn, video, codec, w, h, dur or None)
         return {
             "width": int(w) if w else None,
             "height": int(h) if h else None,
@@ -40055,6 +40051,14 @@ async def api_queue_suggestions_run(payload: dict = Body(default={})):
     """Manual re-run of the name search for one file (or every
     unmatched file when ``filename`` is omitted)."""
     filename = (payload or {}).get("filename") or ""
+    if payload.get("file_id"):
+        from app.core.queue_recovery import resolve_target
+        try:
+            filename, kind = await run_in_threadpool(resolve_target, payload["file_id"], filename)
+            if kind != "scene":
+                raise ValueError("Suggestion search requires a scene file")
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=409)
     if filename:
         n = await run_in_threadpool(_run_name_search_for_file, filename)
         return {"ok": True, "filename": filename, "added": int(n)}

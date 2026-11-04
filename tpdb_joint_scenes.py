@@ -4,7 +4,7 @@ from urllib.parse import quote
 
 def joint_scenes(performer_ids, api_key, get, max_pages=20):
     wanted = set(performer_ids)
-    if len(wanted) < 2:
+    if not wanted:
         return [], True
     url = 'https://api.theporndb.net/performers/' + quote(performer_ids[0], safe='') + '/scenes'
     out, seen = [], set()
