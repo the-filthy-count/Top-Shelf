@@ -3576,11 +3576,15 @@
   }
   .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) .qi-headshots {
     inset: 0; max-width: 100%; width: 100%; height: 100%; justify-content: flex-end;
-    mask-image: linear-gradient(to right, transparent, #000 45%), linear-gradient(to bottom, #000 45%, transparent 100%); -webkit-mask-image: linear-gradient(to right, transparent, #000 45%), linear-gradient(to bottom, #000 45%, transparent 100%);
-    mask-composite: intersect; -webkit-mask-composite: source-in;
+    mask-image: none; -webkit-mask-image: none;
   }
   .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) .qi-headshot {
     width: auto; max-width: none; height: 100%; aspect-ratio: auto; object-fit: contain; object-position: right center;
+    /* Fade the portrait itself, not the empty space to its left. */
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 55%), linear-gradient(to bottom, #000 55%, transparent 100%);
+    -webkit-mask-composite: source-in;
+    mask-image: linear-gradient(to right, transparent, #000 55%), linear-gradient(to bottom, #000 55%, transparent 100%);
+    mask-composite: intersect;
   }
   .queue-section .q-panel-body .queue-item.queue-file-tile:not(.queue-item-folder) > :nth-child(2) {
     grid-area: 2 / 1 / 3 / 3; justify-content: flex-end; padding: 12px;
