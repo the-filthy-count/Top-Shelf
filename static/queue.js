@@ -6563,14 +6563,14 @@
     if (sub) {
       sub.textContent = activeN
         ? `${activeN} duplicate group${activeN === 1 ? '' : 's'} in the download folder`
-        : 'No duplicate groups (files need a cached phash — run the pipeline or Compute phash)';
-      if (noPh > 0) sub.textContent += ` · ${noPh} file${noPh === 1 ? '' : 's'} without phash`;
+        : 'No duplicates found';
+      if (noPh > 0) sub.textContent += ` · ${noPh} file${noPh === 1 ? '' : 's'} awaiting fingerprints`;
     }
     if (computeBtn) computeBtn.style.display = noPh > 0 ? '' : 'none';
     if (!groups.length) {
       body.innerHTML = `<div class="empty" style="padding:28px;text-align:center;color:var(--dim);font-size:var(--text-body);line-height:1.5">
-        No duplicate groups. Duplicates are detected when two or more queue files share the same perceptual hash.
-        ${noPh ? '<br><br>Some files have no phash yet — click <strong>Compute phash</strong> above, or run them through the pipeline.' : ''}
+        No duplicates found.
+        ${noPh ? '<br><br>Compute fingerprints to check the remaining files.' : ''}
       </div>`;
       return;
     }
