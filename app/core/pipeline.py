@@ -236,11 +236,11 @@ class ProcessingPipeline:
                     collected: list[Path] = []
                     if source_dir.exists() and source_dir.is_dir():
                         for p in source_dir.rglob("*"):
-                            if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS:
+                            if not any(part.startswith(".") for part in p.relative_to(source_dir).parts) and p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS:
                                 collected.append(p)
                     if vdl_root and vdl_root.exists() and vdl_root.is_dir():
                         for p in vdl_root.rglob("*"):
-                            if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS:
+                            if not any(part.startswith(".") for part in p.relative_to(vdl_root).parts) and p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS:
                                 if "sample" in p.name.lower():
                                     continue
                                 collected.append(p)

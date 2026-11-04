@@ -79,3 +79,16 @@ class LibraryCacheTests(unittest.TestCase):
         self.assertTrue(cache._dirty.is_set())
 
 if __name__=='__main__':unittest.main()
+
+class QueueCacheWorkerTests(unittest.TestCase):
+    def test_background_worker_publishes_first_scan_despite_invalidation(self):
+        ns,*_=load()
+        stop=threading.Event();ns['_runtime_stop']=stop
+        def build():
+            cache.invalidate()
+            stop.set()
+            return {'files':['ready.mp4']}
+        cache=ns['_WarmCache']('queue',build,60)
+        cache._loop()
+        self.assertEqual(cache.peek(),{'files':['ready.mp4']})
+        self.assertTrue(cache._dirty.is_set())

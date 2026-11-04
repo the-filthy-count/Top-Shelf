@@ -76,6 +76,8 @@ def require_complete_queue_video(video, settings):
             relative = video.relative_to(root)
         except ValueError:
             continue
+        if any(part.startswith(".") for part in relative.parts):
+            raise PartialDownloadPending("Hidden queue paths are excluded from processing")
         if len(relative.parts) == 1:
             require_complete_download(video, shared_root=True)
         else:

@@ -530,6 +530,8 @@ def resolve_source_video_path(
     ``<source_dir>/Vices/<Vice>/…`` for legacy placements. Same for
     ``jav_dl_root`` with the ``JAV/…`` prefix."""
     rel_str = str(db_filename or "").strip()
+    if any(part.startswith(".") for part in Path(rel_str.replace("\\", "/")).parts):
+        return None
     # Vice-scope preference: `Vices/<Vice>/<basename>` maps to the vice
     # download inbox, not source_dir.
     if vice_dl_root is not None and rel_str.startswith("Vices/"):
@@ -2502,7 +2504,8 @@ def queue_suggestion_pending(limit: int = 5, cooldown_seconds: int = 86400) -> l
         rows = conn.execute(
             "SELECT pf.filename FROM processed_files pf "
             "LEFT JOIN queue_suggestion_attempts a ON a.filename=pf.filename "
-            "WHERE pf.status='unmatched' AND (a.attempted_at IS NULL OR a.rules_version != ? "
+            "WHERE pf.status='unmatched' AND pf.filename NOT LIKE '.%' AND pf.filename NOT LIKE '%/.%' "
+            "AND (a.attempted_at IS NULL OR a.rules_version != ? "
             "OR (a.next_retry IS NOT NULL AND a.next_retry<=?) "
             "OR (a.next_retry IS NULL AND a.attempted_at < ?)) "
             "AND (NOT EXISTS (SELECT 1 FROM queue_suggestions qs WHERE qs.filename=pf.filename) "

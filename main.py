@@ -170,10 +170,10 @@ def _movie_source_video_relpaths_impl(
     for dirpath, dirnames, filenames in os.walk(
         root_res, topdown=True, onerror=lambda exc: (_ for _ in ()).throw(exc)
     ):
-        dirnames[:] = [d for d in dirnames if d.lower() not in prune]
+        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d.lower() not in prune]
         base = Path(dirpath)
         for fn in filenames:
-            if not _is_video_filename(fn):
+            if fn.startswith(".") or not _is_video_filename(fn):
                 continue
             full = base / fn
             try:
@@ -867,7 +867,10 @@ class _WarmCache:
             self._dirty.clear()
             self._last_attempt = time.monotonic()
             with self._build_lock:
-                self._rebuild_locked()
+                # Read-only queue GETs use peek(); publish the first completed
+                # build even when watcher events arrived while scanning. The
+                # dirty flag still schedules a refresh with those changes.
+                self._rebuild_locked(publish_if_cold=True)
 
 
 def _favourites_progress_start(phase: str, total: int) -> None:
@@ -1049,7 +1052,9 @@ class NewVideoHandler(FileSystemEventHandler):
         s = db.get_settings()
         if s.get("folder_watch_enabled", "true").lower() != "true":
             return
-        rel = self._rel_under_source_root(path) or path.name
+        rel = self._rel_under_source_root(path)
+        if not rel or any(part.startswith(".") for part in Path(rel).parts):
+            return
         hold = int(s.get("folder_watch_hold_secs", "60"))
         with _pending_lock:
             if rel not in _pending_files:
@@ -1085,7 +1090,9 @@ class NewVideoHandler(FileSystemEventHandler):
         s = db.get_settings()
         if s.get("folder_watch_enabled", "true").lower() != "true":
             return
-        rel = self._rel_under_source_root(path) or path.name
+        rel = self._rel_under_source_root(path)
+        if not rel or any(part.startswith(".") for part in Path(rel).parts):
+            return
         hold = int(s.get("folder_watch_hold_secs", "60"))
         with _pending_lock:
             if rel not in _pending_files:
@@ -1121,7 +1128,7 @@ class NewMovieVideoHandler(FileSystemEventHandler):
         if s.get("folder_watch_enabled", "true").lower() != "true":
             return
         rel = self._rel_under_movies_root(path)
-        if not rel or not path.is_file():
+        if not rel or any(part.startswith(".") for part in Path(rel).parts) or not path.is_file():
             return
         hold = int(s.get("folder_watch_hold_secs", "60"))
         with _pending_lock:
@@ -1157,7 +1164,7 @@ class NewMovieVideoHandler(FileSystemEventHandler):
         if s.get("folder_watch_enabled", "true").lower() != "true":
             return
         rel = self._rel_under_movies_root(path)
-        if not rel or not path.is_file():
+        if not rel or any(part.startswith(".") for part in Path(rel).parts) or not path.is_file():
             return
         hold = int(s.get("folder_watch_hold_secs", "60"))
         with _pending_lock:
@@ -1211,7 +1218,8 @@ def _check_pending_files():
     with _pending_lock:
         for fname, fire_at in list(_pending_files.items()):
             if now >= fire_at:
-                ready.append(fname)
+                if not any(part.startswith(".") for part in Path(fname).parts):
+                    ready.append(fname)
                 del _pending_files[fname]
     if ready:
         # Release-junk cleanup: rename the on-disk file (and rekey its
@@ -1256,7 +1264,8 @@ def _check_pending_movies():
     with _pending_lock:
         for fname, fire_at in list(_pending_movie_files.items()):
             if now >= fire_at:
-                ready.append(fname)
+                if not any(part.startswith(".") for part in Path(fname).parts):
+                    ready.append(fname)
                 del _pending_movie_files[fname]
     if ready:
         md_res = movie_dir.resolve()
@@ -2876,6 +2885,9 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
     suggestions trickle) opt out so a 403 streak from IAFD doesn't
     leak into the background pipeline."""
     from app.core import suggestion_guard
+    from pathlib import Path
+    if any(part.startswith(".") for part in Path(filename).parts):
+        return 0
     record = db.queue_search_record(filename)
     guard_key = record['file_id'] if record else filename
     if not suggestion_guard.claim(guard_key):
@@ -3932,7 +3944,7 @@ def _clean_and_rename_on_disk(
     ``Vices/Painal/`` yields ``Vices/Painal/foo.mkv`` (not a root-
     level move)."""
     rel = str(rel_or_name or "")
-    if not rel:
+    if not rel or any(part.startswith(".") for part in Path(rel).parts):
         return rel
     p = Path(rel)
     parent = p.parent  # PosixPath("") if root-level
@@ -4888,6 +4900,9 @@ def _process_vice_download_entry(entry: Path, scene_source_dir: Path, s: dict, *
     used.
     """
     watch_root = (s.get("vice_download_watch_dir") or "").strip()
+    relative = entry.relative_to(Path(watch_root).expanduser()) if watch_root else Path(entry.name)
+    if any(part.startswith(".") for part in relative.parts):
+        return
     shared_root = bool(watch_root) and entry.is_file() and entry.parent.resolve() == Path(watch_root).expanduser().resolve()
     require_complete_download(entry, shared_root=shared_root)
     _ = scene_source_dir
@@ -4897,7 +4912,7 @@ def _process_vice_download_entry(entry: Path, scene_source_dir: Path, s: dict, *
             videos.append(entry)
     elif entry.is_dir():
         for f in entry.rglob("*"):
-            if not f.is_file():
+            if any(part.startswith(".") for part in f.relative_to(entry).parts) or not f.is_file():
                 continue
             if f.suffix.lower() not in VIDEO_EXTENSIONS:
                 continue
@@ -5041,6 +5056,9 @@ def _process_jav_download_entry(entry: Path, s: dict, *, startup_only=False) -> 
     JAVStash) is queried, and any match routes to ``jav_dir`` because
     the file's inbox membership defines it as JAV."""
     watch_root = (s.get("jav_download_watch_dir") or "").strip()
+    relative = entry.relative_to(Path(watch_root).expanduser()) if watch_root else Path(entry.name)
+    if any(part.startswith(".") for part in relative.parts):
+        return
     shared_root = bool(watch_root) and entry.is_file() and entry.parent.resolve() == Path(watch_root).expanduser().resolve()
     require_complete_download(entry, shared_root=shared_root)
     videos: list[Path] = []
@@ -5049,7 +5067,7 @@ def _process_jav_download_entry(entry: Path, s: dict, *, startup_only=False) -> 
             videos.append(entry)
     elif entry.is_dir():
         for f in entry.rglob("*"):
-            if not f.is_file():
+            if any(part.startswith(".") for part in f.relative_to(entry).parts) or not f.is_file():
                 continue
             if f.suffix.lower() not in VIDEO_EXTENSIONS:
                 continue
@@ -10431,8 +10449,11 @@ def _suggestion_candidate_passes_filters(candidate: dict) -> bool:
 
 def _filter_suggestion_file_list(files: list[dict]) -> list[dict]:
     """Drop candidates (and files with none left) that fail content filters."""
+    from pathlib import Path
     out: list[dict] = []
     for f in files or []:
+        if any(part.startswith(".") for part in Path(f.get("filename") or "").parts):
+            continue
         record = db.queue_search_record(f.get("filename") or "")
         studio = record['fields']['studio'] or ''
         required = record['fields']['performers'] or []
@@ -17853,7 +17874,7 @@ def _tag_queue_folder_files(root: Path) -> None:
     root = root.resolve()
     for directory, dirs, files in os.walk(root, followlinks=False):
         folder = Path(directory)
-        dirs[:] = [d for d in dirs if not (folder / d).is_symlink()]
+        dirs[:] = [d for d in dirs if not d.startswith(".") and not (folder / d).is_symlink()]
         if folder == root:
             continue
         try:
@@ -17864,7 +17885,7 @@ def _tag_queue_folder_files(root: Path) -> None:
         prefix = f"[{folder.name}] "
         for name in files:
             video = folder / name
-            if video.suffix.lower() not in VIDEO_EXTENSIONS or video.is_symlink():
+            if video.name.startswith(".") or video.suffix.lower() not in VIDEO_EXTENSIONS or video.is_symlink():
                 continue
             if not _queue_group_hold_ready(video):
                 continue
@@ -17945,7 +17966,7 @@ def _group_queue_root_files_by_hint_locked(source_dir: Path) -> int:
     library_indexes = None
     for child in source_dir.iterdir():
         try:
-            if not child.is_file():
+            if child.name.startswith(".") or not child.is_file():
                 continue
             if child.suffix.lower() not in VIDEO_EXTENSIONS:
                 continue
@@ -18018,7 +18039,7 @@ def _sweep_empty_queue_subdirs(root: Path) -> int:
         root_res = root
     for dirpath, _dirnames, _filenames in os.walk(root_res, topdown=False):
         p = Path(dirpath)
-        if p == root_res:
+        if p == root_res or any(part.startswith(".") for part in p.relative_to(root_res).parts):
             continue
         try:
             p.relative_to(root_res)
@@ -18116,10 +18137,10 @@ def _maintain_queue_paths() -> None:
             continue
         for directory, dirs, names in os.walk(inbox, followlinks=False):
             folder = Path(directory)
-            dirs[:] = [d for d in dirs if not (folder / d).is_symlink()]
+            dirs[:] = [d for d in dirs if not d.startswith(".") and not (folder / d).is_symlink()]
             for name in names:
                 video = folder / name
-                if video.suffix.lower() not in VIDEO_EXTENSIONS or video.is_symlink():
+                if video.name.startswith(".") or video.suffix.lower() not in VIDEO_EXTENSIONS or video.is_symlink():
                     continue
                 rel = video.relative_to(inbox).as_posix()
                 key = f"{prefix}/{rel}"
@@ -18273,7 +18294,11 @@ def _build_queue_snapshot() -> dict:
     _prewarm_skip_inflight = 0
     _prewarm_skip_backoff = 0
     filed_skipped = 0
+    from app.core.filename_parser import cache_signature
+    parser_signature = cache_signature(settings)
     for rel, f in rel_entries:
+        if any(part.startswith(".") for part in Path(rel).parts):
+            continue
         f_stem = Path(rel).stem
         # Parent names contribute independently; never join name words across paths.
         guess_release_name = _release_name_with_folders(rel)
@@ -18403,7 +18428,7 @@ def _build_queue_snapshot() -> dict:
         search_record = None
         try:
             from app.core.queue_records import read as read_queue_record, observe_media
-            search_record = read_queue_record(rel)
+            search_record = read_queue_record(rel, settings=settings, parser_signature=parser_signature)
             observe_media(rel, f)
             sf = search_record['fields']
             if search_record['edited']:

@@ -5,6 +5,8 @@ from download_safety import PartialDownloadPending
 
 
 def run(filename, src, dest_kind, process):
+    if any(part.startswith(".") for part in Path(filename).parts):
+        return {"status": "skipped", "reason": "Hidden queue path"}
     settings = db.get_settings()
     if src is None:
         raw = (settings.get('movies_source_dir') or '').strip()

@@ -48,3 +48,9 @@ class SuggestionRuleVersionTests(unittest.TestCase):
         with patch('time.time', return_value=1300):
             self.assertIn('partial.mp4', db.queue_suggestion_pending())
         self.assertEqual(len(db.queue_suggestions_for_file('partial.mp4')), 1)
+
+    def test_hidden_files_do_not_consume_suggestion_batch_slots(self):
+        for name in ['.hidden.mp4', 'Actor/.cache/file.mp4', 'visible.mp4']:
+            db.upsert_file(name)
+            db.update_file(name, status='unmatched')
+        self.assertEqual(db.queue_suggestion_pending(limit=1), ['visible.mp4'])

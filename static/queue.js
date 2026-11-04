@@ -318,15 +318,18 @@
     const existing = _queuePayloadReads.get(url);
     if (existing) return existing.promise;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    let timeout;
     const read = { controller };
     read.promise = (async () => {
       try {
         for (;;) {
           controller.signal.throwIfAborted();
+          // Bound each request, not the full background snapshot build.
+          timeout = setTimeout(() => controller.abort(), 30000);
           const response = await fetch(url, { signal: controller.signal });
           if (!response.ok) throw new Error('Queue request failed: ' + response.status);
           const payload = await response.json();
+          clearTimeout(timeout);
           controller.signal.throwIfAborted();
           if (!payload.loading) return payload;
           await new Promise(resolve => setTimeout(resolve, 500));
@@ -1744,7 +1747,8 @@
       if (mountGen !== _queueLoadGen) return;
       _movieQueuePayload = d;
       _applyMovieQueuePayload(d, preserveView);
-    } catch {
+    } catch (error) {
+      console.error("Queue load failed", error);
       if (mountGen !== _queueLoadGen) return;
       if (_movieQueuePayload) {
         window.showToast?.('Could not refresh the queue. Showing previous results.');
@@ -2811,7 +2815,8 @@
       if (mountGen !== _queueLoadGen) return;
       _sceneQueuePayload = d;
       _applySceneQueuePayload(d, preserveView);
-    } catch {
+    } catch (error) {
+      console.error("Queue load failed", error);
       if (mountGen !== _queueLoadGen) return;
       if (_sceneQueuePayload) {
         window.showToast?.('Could not refresh the queue. Showing previous results.');

@@ -48,3 +48,24 @@ for(const [name,payload] of [['loadQueue','_sceneQueuePayload'],['loadMovieQueue
     await ctx[name]({force:true,preserveView:true});assert.equal(notices,1);
   });
 }
+
+test('successful loading polls renew the request deadline instead of timing out the build',async()=>{
+  let elapsed=0, nextId=0, calls=0;
+  const timers=new Map();
+  const ctx=setup(async()=>{
+    elapsed+=10000;
+    for(const [id,timer] of [...timers]) {
+      if(timer.at<=elapsed){ timers.delete(id);timer.fn(); }
+    }
+    calls++;
+    return {ok:true,json:async()=>calls<5?{loading:true}:{files:['ready']}};
+  });
+  ctx.setTimeout=(fn,delay)=>{
+    if(delay===500){fn();return 0;}
+    const id=++nextId;timers.set(id,{fn,at:elapsed+delay});return id;
+  };
+  ctx.clearTimeout=id=>timers.delete(id);
+  assert.deepEqual((await ctx._readQueuePayload('/api/queue')).files,['ready']);
+  assert.equal(calls,5);
+  assert.equal(timers.size,0);
+});

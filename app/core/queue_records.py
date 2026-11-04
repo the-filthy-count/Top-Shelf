@@ -64,12 +64,12 @@ def _links(names, kind):
     return result
 
 
-def read(filename='', file_id=None):
+def read(filename='', file_id=None, *, settings=None, parser_signature=None):
     from app.core.filename_parser import parse_filename, cache_signature
     from app.core.matching import _extract_scene_number_from_filename
     filename, asset, technical = _asset(filename, file_id)
-    settings = db.get_settings()
-    signature = cache_signature(settings) + ':' + filename
+    settings = db.get_settings() if settings is None else settings
+    signature = (cache_signature(settings) if parser_signature is None else parser_signature) + ':' + filename
     with db.get_conn() as conn:
         stored = conn.execute('SELECT * FROM queue_search_details WHERE file_id=?', (asset['id'],)).fetchone()
     if not stored or stored['signature'] != signature:
@@ -154,8 +154,12 @@ def saved_ids(record):
 
 def observe_media(filename, video, codec=None, width=None, height=None, duration=None):
     """Save probe observations beside the fingerprint, without touching corrections."""
-    _, asset, _ = _asset(filename)
+    _, asset, stored = _asset(filename)
     size = video.stat().st_size
+    values = {'media_size_bytes': size, 'media_codec': codec, 'media_width': width,
+              'media_height': height, 'media_duration': duration}
+    if all(value is None or stored.get(key) == value for key, value in values.items()):
+        return
     with db.get_conn() as conn:
         conn.execute(f"""UPDATE {asset['queue_table']} SET media_size_bytes=?,
             media_codec=COALESCE(?,media_codec),media_width=COALESCE(?,media_width),
