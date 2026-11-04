@@ -3613,7 +3613,9 @@
     order: -1; color: var(--accent);
   }
   .q-details-bar { display: flex; align-items: end; gap: 14px; margin-top: 12px; }
-  .q-details-bar > label { flex: 0 0 120px; }
+  .q-search-date-scene { display: grid; grid-template-columns: minmax(0, 1fr) minmax(100px, 120px); gap: 12px; align-items: end; min-width: 0; }
+  .q-search-date-scene .field-row { min-width: 0; }
+  .q-search-date-scene .field-input { width: 100%; box-sizing: border-box; }
   .q-details-note { min-width: 0; color: var(--dim); font-size: var(--text-small); line-height: 1.6; }
   .q-details-note [data-error="true"] { color: #fb9b9b; }
   .q-details-note summary { cursor: pointer; color: var(--accent); }
@@ -3826,17 +3828,14 @@
               <label class="field-label">Studio</label>
               <input class="field-input" id="srchStudio" type="text" placeholder="Studio name" onkeydown="if(event.key==='Enter')runQueueSearch()">
             </div>
+            <div class="q-search-date-scene">
             <div class="field-row">
               <label class="field-label">Date</label>
               <input class="field-input" id="srchDate" type="text" placeholder="YYYY-MM-DD" onkeydown="if(event.key==='Enter')runQueueSearch()">
             </div>
-          </div>
-          <div class="q-details-bar">
             <label class="field-row" for="srchSceneNumber"><span class="field-label">Scene number</span>
               <input class="field-input" id="srchSceneNumber" type="number" min="1" max="9999" placeholder="Unknown" onkeydown="if(event.key==='Enter')runQueueSearch()">
             </label>
-            <div class="q-details-note"><span id="qDetailsStatus" role="status" aria-live="polite"></span>
-              <details><summary>File information</summary><div id="qDetailsTechnical"></div></details>
             </div>
           </div>
           <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
@@ -3853,13 +3852,16 @@
             </div>
           </div>
           <div class="q-details-actions" style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px">
+            <div class="q-details-note" style="flex:1 1 240px;margin-right:auto"><span id="qDetailsStatus" role="status" aria-live="polite"></span>
+              <details><summary>File information</summary><div id="qDetailsTechnical"></div></details>
+            </div>
             <!-- Special-feature marker (BTS / Bloopers / Outtakes / …).
                  Auto-populated from the filename on popup open; the
                  user can override before filing. ``Normal scene``
                  means "no marker"; ``Auto-detect`` defers to the
                  server-side filename scan. -->
-            <label for="srchExtraKind" style="font-family:var(--secs);font-size:var(--text-small);letter-spacing:0.06em;text-transform:uppercase;color:var(--dim);flex-shrink:0">Kind</label>
-            <select id="srchExtraKind" class="field-input" style="width:auto;min-width:160px;flex-shrink:0;padding:6px 10px;font-size:var(--text-section)" title="Special-feature marker — appended as [Kind] to the filed name + NFO tag">
+            <label for="srchExtraKind" style="font-family:var(--secs);font-size:var(--text-small);letter-spacing:0.06em;text-transform:uppercase;color:var(--dim);flex-shrink:0">Type</label>
+            <select id="srchExtraKind" class="field-input" style="width:auto;min-width:160px;flex-shrink:0;padding:6px 10px;font-size:var(--text-section)" title="Special-feature marker — appended as [Type] to the filed name + NFO tag">
               <option value="__auto__">Auto-detect</option>
               <option value="">Normal scene</option>
               <option value="BTS">BTS</option>
@@ -3873,8 +3875,8 @@
               <option value="Commentary">Commentary</option>
               <option value="Extras">Extras</option>
             </select>
-            <button type="button" class="btn-secondary" onclick="saveQueueSearchDetails(true)" title="Discard corrections and parse the filename again">Reset</button>
-            <button type="button" class="btn-secondary" onclick="saveQueueSearchDetails()">Save</button>
+            <button type="button" class="btn-secondary" onclick="saveQueueSearchDetails(true)" title="Discard corrections and parse the filename again" aria-label="Reset details" style="width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i></button>
+            <button type="button" class="btn-secondary" onclick="saveQueueSearchDetails()" title="Save details" aria-label="Save details" style="width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i></button>
             <button class="btn-primary" onclick="runQueueSearch()" title="Save details and search" style="flex-shrink:0"><i class="fa-solid fa-magnifying-glass"></i><span class="btn-label" style="margin-left:6px">Save &amp; search</span></button>
           </div>
         </div>
