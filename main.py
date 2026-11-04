@@ -2618,6 +2618,8 @@ def search_all_databases(term: str = None, title: str = None, performer: str = N
     # Apply per-search filter (UI source toggle in the Scene Search
     # modal). Case-insensitive comparison so the frontend can send
     # any casing.
+    from app.integrations import review_sources
+    review_names = [n for n in review_sources.HOSTS if sources and n.upper() in {s.upper() for s in sources}]
     if sources is not None:
         wanted = {s.upper() for s in sources}
         sources = [t for t in all_sources if t[0].upper() in wanted]
@@ -2763,6 +2765,8 @@ def search_all_databases(term: str = None, title: str = None, performer: str = N
 
     from scene_search_runtime import run_sources, Results
     jobs = [(n, lambda n=n, e=e, k=k: _search_source(n, e, k)) for n, e, k in active_sources]
+    for name in review_names:
+        jobs.append((name, lambda name=name: review_sources.search(name, performer, title or term)))
     if iafd_enabled:
         jobs.append(("IAFD", _search_iafd))
     completed = run_sources(jobs, cache_key=(term, title, performer, studio, date_from, date_to, title_first))
@@ -2888,7 +2892,7 @@ def _normalize_suggestion(scene: dict, filename: str) -> dict | None:
 #: benefit of routine IAFD coverage is small versus the cost of the
 #: cooldown blocking manual searches. Manual paths (Scene Search popup,
 #: ``/api/queue/suggestions/run``, performer popup) still include IAFD.
-_NAME_SEARCH_NON_IAFD_SOURCES = {"StashDB", "TPDB", "FansDB", "JAVStash"}
+_NAME_SEARCH_NON_IAFD_SOURCES = {"StashDB", "TPDB", "FansDB", "JAVStash", "AFDB", "Data18", "EuroPornstar"}
 
 
 def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bool = True) -> int:
@@ -20058,7 +20062,7 @@ def search_scenes(payload: dict):
             # IAFD rows carry their own detail URL — ship it to the
             # frontend so the "View ↗" link points at the IAFD page
             # instead of the stash-box fallback URL.
-            view_url = scene.get("_iafd_url") if src == "IAFD" else None
+            view_url = scene.get("_iafd_url") if src == "IAFD" else scene.get("_review_url")
             #: Duration is seconds on stash-box sources; IAFD doesn't
             #: expose it so ``scene.get('duration')`` is None there.
             dur_raw = scene.get("duration")
@@ -40255,6 +40259,18 @@ async def api_queue_suggestions_source_meta(filename: str):
     return meta
 
 
+@app.post("/api/queue/suggestions/data18-profile")
+async def import_data18_profile(file: UploadFile = File(...)):
+    from app.integrations.review_sources import MAX_BYTES, import_data18
+    from scene_search_runtime import SourceSearchError
+    from lxml.etree import ParserError
+    raw = await file.read(MAX_BYTES + 1)
+    try:
+        return await run_in_threadpool(import_data18, raw)
+    except (ValueError, ParserError, SourceSearchError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @app.post("/api/queue/suggestions/run")
 async def api_queue_suggestions_run(payload: dict = Body(default={})):
     """Manual re-run of the name search for one file (or every
@@ -40437,6 +40453,8 @@ async def api_queue_suggestions_accept(payload: dict = Body(...)):
     filename  = (payload.get("filename") or "").strip()
     source_db = (payload.get("source_db") or "").strip()
     source_id = (payload.get("source_id") or "").strip()
+    if source_db == "EuroPornstar":
+        return JSONResponse({"error":"This result is a gallery reference"},status_code=400)
     scene_override = payload.get("scene_override")
     if not filename or not source_db or not source_id:
         return JSONResponse(

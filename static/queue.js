@@ -4504,11 +4504,14 @@
 
   /* Per-search source toggle. Selection persists in localStorage so it
    * survives reloads. Default is all-on. */
-  const _QS_SOURCE_KEY = 'ts_qsearch_sources';
+  const _QS_SOURCE_KEY = 'ts_qsearch_sources_v2';
   function _qsLoadSources() {
     try {
       const raw = localStorage.getItem(_QS_SOURCE_KEY);
-      if (!raw) return null;
+      if (!raw) {
+        const prior = JSON.parse(localStorage.getItem('ts_qsearch_sources') || 'null');
+        return Array.isArray(prior) ? [...prior, 'AFDB', 'Data18', 'EuroPornstar'] : null;
+      }
       const arr = JSON.parse(raw);
       return Array.isArray(arr) ? arr : null;
     } catch (_) { return null; }
@@ -4522,7 +4525,7 @@
   // we treat "absent and not in this known set" as "new pill → default
   // on". Existing toggles still apply (anything in this set that's
   // missing from saved was explicitly turned off).
-  const _QS_KNOWN_PILLS = ['StashDB', 'TPDB', 'FansDB', 'IAFD'];
+  const _QS_KNOWN_PILLS = ['StashDB', 'TPDB', 'FansDB', 'IAFD', 'AFDB', 'Data18', 'EuroPornstar'];
   function _qsApplySourcesToUI() {
     const saved = _qsLoadSources();
     document.querySelectorAll('.qs-source-pill').forEach(p => {
@@ -7093,7 +7096,8 @@
     const sidAttr = (c.source_id || '').replace(/'/g, "\\'");
     const dbAttr = (c.source_db || '').replace(/'/g, "\\'");
     const titleAttr = (c.title || '').replace(/"/g, '&quot;');
-    const sceneUrl = _scenePublicUrl(c.source_db, c.source_id);
+    const reviewUrl = c.payload?._review_url || '';
+    const sceneUrl = /^https:\/\/www\.(adultfilmdatabase|data18|europornstar)\.com\//.test(reviewUrl) ? reviewUrl : _scenePublicUrl(c.source_db, c.source_id);
     const scoreNum = Math.min(100, Math.round((c.score || 0) * 100));
     // Pull the scene's runtime out of the cached source-DB payload —
     // stash-box `searchScene` returns it as an integer in seconds, so
@@ -7161,7 +7165,7 @@
         </div>
         <!-- Action row -->
         <div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid rgba(var(--brand-purple-rgb),0.14);background:rgba(0,0,0,0.30)">
-          <button class="sg-accept-btn" title="File this match" style="flex:1;background:linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.30) 0%, rgba(var(--brand-accent-rgb), 0.18) 100%);border:1px solid rgba(var(--brand-accent-rgb), 0.55);border-radius:8px;color:#fce7f3;padding:9px 12px;cursor:pointer;font-size:var(--text-body);font-weight:600;letter-spacing:0.04em;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:6px;transition:background 0.15s, border-color 0.15s" onmouseenter="this.style.background='linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.45) 0%, rgba(var(--brand-accent-rgb), 0.28) 100%)';this.style.borderColor='rgba(var(--brand-accent-rgb), 0.85)'" onmouseleave="this.style.background='linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.30) 0%, rgba(var(--brand-accent-rgb), 0.18) 100%)';this.style.borderColor='rgba(var(--brand-accent-rgb), 0.55)'"><i class="fa-solid fa-check"></i> Accept</button>
+          <button class="sg-accept-btn" ${c.source_db === 'EuroPornstar' ? 'hidden disabled' : ''} title="File this match" style="flex:1;background:linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.30) 0%, rgba(var(--brand-accent-rgb), 0.18) 100%);border:1px solid rgba(var(--brand-accent-rgb), 0.55);border-radius:8px;color:#fce7f3;padding:9px 12px;cursor:pointer;font-size:var(--text-body);font-weight:600;letter-spacing:0.04em;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:6px;transition:background 0.15s, border-color 0.15s" onmouseenter="this.style.background='linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.45) 0%, rgba(var(--brand-accent-rgb), 0.28) 100%)';this.style.borderColor='rgba(var(--brand-accent-rgb), 0.85)'" onmouseleave="this.style.background='linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.30) 0%, rgba(var(--brand-accent-rgb), 0.18) 100%)';this.style.borderColor='rgba(var(--brand-accent-rgb), 0.55)'"><i class="fa-solid fa-check"></i> Accept</button>
           <button class="sg-reject-btn" title="Dismiss" style="flex:0 0 auto;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.10);border-radius:8px;color:var(--dim);padding:9px 14px;cursor:pointer;font-size:var(--text-body);display:flex;align-items:center;justify-content:center;gap:6px;transition:border-color 0.15s, color 0.15s" onmouseenter="this.style.borderColor='rgba(239,68,68,0.55)';this.style.color='#fca5a5'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.10)';this.style.color='var(--dim)'"><i class="fa-solid fa-xmark"></i> Reject</button>
         </div>
       </div>`;
@@ -8022,3 +8026,18 @@
     }
     await _hydratePerfPiles(document);
   });
+
+window.importData18Profile = async input => {
+  const file = input.files[0];
+  if (!file) return;
+  try {
+    const body = new FormData();
+    body.append('file', file);
+    const response = await fetch('/api/queue/suggestions/data18-profile', {method:'POST', body});
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || 'Import failed');
+    window.toast(result.performer + ' · ' + result.scenes + ' scene credits imported');
+    await window.runQueueSearch();
+  } catch (error) { window.toast(error.message, {kind:'error'}); }
+  finally { input.value = ''; }
+};

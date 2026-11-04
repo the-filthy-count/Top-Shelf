@@ -35,6 +35,14 @@ class Results(list):
         super().__init__(rows)
         self.warnings = list(warnings)
 
+def invalidate_source(source):
+    """Discard cached search responses after importing new source credits."""
+    with _CACHE_LOCK:
+        for key in list(_CACHE):
+            if key[1] == source:
+                del _CACHE[key]
+
+
 def run_sources(jobs, timeout=12, cache_key=None):
     futures = {}
     warnings = []
