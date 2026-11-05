@@ -20969,6 +20969,36 @@ async def api_queue_thumbs_retry(payload: dict):
     return {"filename": filename, "cleared": cleared, "generating": True}
 
 
+@app.get("/api/queue/preview")
+def queue_tile_preview(filename: str, kind: str = "scene"):
+    """Share the filmstrip's penultimate JPEG; a cold tile needs only one seek."""
+    relative = Path(filename.replace("\\", "/"))
+    if (kind not in ("scene", "movie") or relative.is_absolute() or not relative.parts
+            or any(part.startswith(".") for part in relative.parts)):
+        raise HTTPException(400, "Invalid queue path")
+    settings = db.get_settings()
+    root_keys = ("movies_source_dir",) if kind == "movie" else (
+        "source_dir", "vice_download_watch_dir", "jav_download_watch_dir")
+    roots = [Path(settings[key]).expanduser().resolve() for key in root_keys if settings.get(key)]
+    if not roots:
+        raise HTTPException(404, "Inbox unavailable")
+    video = roots[0] / relative if kind == "movie" else _resolve_queue_file_path(filename, settings)
+    if (video is None or not video.is_file() or video.suffix.lower() not in VIDEO_EXTENSIONS
+            or not any(video.resolve().is_relative_to(root) for root in roots)):
+        raise HTTPException(404, "Video unavailable")
+    cache_key = "movie://" + filename if kind == "movie" else filename
+    index = len(QUEUE_THUMB_PERCENTS) - 2
+    frame = _queue_thumb_path(cache_key, index)
+    if not frame.is_file() or not frame.stat().st_size:
+        duration = get_video_duration(video)
+        if not duration or duration <= 0:
+            raise HTTPException(404, "Preview unavailable")
+        frame.parent.mkdir(parents=True, exist_ok=True)
+        if not _generate_queue_thumb(video, frame, duration * QUEUE_THUMB_PERCENTS[index] / 100):
+            raise HTTPException(404, "Preview unavailable")
+    return FileResponse(frame, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
+
+
 @app.get("/api/queue/thumb")
 async def api_queue_thumb(filename: str, i: int, v: int = 0):
     """Serve a single cached frame from the filmstrip. Caller passes

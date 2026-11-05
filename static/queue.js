@@ -849,20 +849,14 @@
       ? _libraryAndTokenHighlight(_titleText, _hl)
       : esc(_titleText);
     return `<div class="queue-item queue-file-tile" id="qi-${i}" data-filename="${esc(f.filename)}" data-file-id="${esc(f.file_id || '')}" tabindex="0" onclick="queueTileSearch(event,this,'openManualSearch')" onkeydown="queueTileSearch(event,this,'openManualSearch')">
-      <div class="qi-cell">${statusEl}</div>
-      <div class="qi-cell">${studioLogo}${displayPerfs.length ? `<div class="qi-performer-label">${esc(displayPerfs.join(', '))}</div>` : ''}</div>
-      <div class="qi-cell-name" title="${esc(f.filename)}">
-        <div class="qi-title-row">
-          <span class="qi-title status-${statusKey}">${errorText ? `<span tabindex="0" role="img" aria-label="File processing failed" title="${esc(errorText)}" style="color:#fbbf24;margin-right:6px"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></span>` : ''}${_titleHtml}</span>
-          ${matchLinkEl}
-          ${noDirChip}
-          ${errorChip}
+      ${_queueCrtScreen(f, statusEl, studioLogo, displayPerfs, headshotSlot)}
+      <div class="qi-crt-tab">
+        <div class="qi-crt-title" title="${esc(f.filename)}">${_titleHtml}</div>
+        <div class="qi-crt-info">
+          <span class="badge-size">${esc(String(f.size_mb))} MB</span>${matchLinkEl}${noDirChip}${errorChip}
+          ${f.in_duplicate_group ? `<span class="q-dup-badge" title="Duplicate files"><i class="fa-solid fa-clone"></i> ${esc(String(f.duplicate_group_size || 2))}</span>` : ''}
+          ${metaText && metaClass !== 'qi-meta qi-meta-guess' ? `<span class="qi-crt-meta" title="${esc(f.match_title || '')}">${metaText}</span>` : ''}
         </div>
-        ${metaText && metaClass !== 'qi-meta qi-meta-guess' ? `<div class="${metaClass}">${metaText}</div>` : ''}
-      </div>
-      <div class="qi-cell qi-cell-headshots">${headshotSlot}</div>
-      <div class="qi-cell"><span class="badge-size">${f.size_mb} MB</span></div>
-      <div class="qi-cell">${f.in_duplicate_group ? `<span class="q-dup-badge" title="Duplicate — ${esc(String(f.duplicate_group_size || 2))} files share the same phash"><i class="fa-solid fa-clone"></i><span>${esc(String(f.duplicate_group_size || 2))}</span></span>` : ''}</div>
       <div class="qi-cell qi-actions">
         ${f.has_phash ? `<button type="button" class="badge-cached qi-phash-btn" title="Click to view phash — matches Stash's fingerprint format" data-phash="${esc(f.phash || '')}" data-filename="${esc(f.filename || '')}" onclick="showQueuePhashPopup(event, this)"><i class="fa-solid fa-fingerprint queue-phash-fa"></i></button>` : ''}${_queueHistoryButton(f)}
         ${profileButton}
@@ -870,7 +864,17 @@
         <button type="button" class="btn-icon qi-filing-btn qi-edit-details ${_viceMatchesFilename(f.filename) ? 'is-vice-match' : ''}" onclick="_qCall('openQueueSearchDetails', this)" title="Edit saved search details" aria-label="Edit saved search details"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
         <button type="button" class="btn-icon qi-delete-btn" onclick="_qCall('confirmDeleteQueueFile', this)" title="Move to recovery"><i class="fa-solid fa-trash"></i></button>
         <button type="button" class="btn-run-file" onclick="_qCall('runQueueFile', this)" title="Run"><i class="fa-solid fa-play"></i></button>
-      </div>
+      </div></div>
+    </div>`;
+  }
+
+  function _queueCrtScreen(file, status, logo, performers = [], headshots = '', movie = false) {
+    const preview = '/api/queue/preview?filename=' + encodeURIComponent(file.filename) + (movie ? '&kind=movie' : '');
+    return `<div class="qi-crt-screen">
+      <img class="qi-crt-frame" loading="lazy" decoding="async" src="${preview}" alt="" onerror="this.hidden=true">
+      <div class="qi-crt-status">${status}<i class="fa-solid fa-file-video" aria-hidden="true"></i></div>
+      <div class="qi-crt-logo">${logo}</div>
+      <div class="qi-crt-cast">${headshots}<span>${esc(performers.join(', '))}</span></div>
     </div>`;
   }
 
@@ -939,21 +943,15 @@
     // rows show the studio logo — is otherwise empty. Fill it with the
     // Movies dir icon so the row visually reads as a movie release and
     // matches the Vices / JAV tab's folder-tile aesthetic.
-    return `<div class="queue-item" id="qi-${i}" data-filename="${esc(f.filename)}" data-file-id="${esc(f.file_id || '')}" tabindex="0" onclick="queueTileSearch(event,this,'openMovieManualSearch')" onkeydown="queueTileSearch(event,this,'openMovieManualSearch')">
-      <div class="qi-cell">${statusEl}</div>
-      <div class="qi-cell"><img class="qi-studio-logo" data-logo-fallback="${_queueFileLogoFallback()}" ${f.match_studio ? `data-logo-src="/api/studio-logo?name=${encodeURIComponent(f.match_studio)}"` : `src="${_queueFileLogoFallback()}"`} alt="Studio" onerror="this.onerror=null; this.src=this.dataset.logoFallback"></div>
-      <div class="qi-cell-name" title="${esc(f.filename)}">
-        <div class="qi-title status-${statusKey}">${esc(spaceifyReleaseName(f.display_name || f.filename))}</div>
-        ${metaText ? `<div class="qi-meta">${metaText}</div>` : ''}
-      </div>
-      <div class="qi-cell"></div>
-      <div class="qi-cell"><span class="badge-size">${f.size_mb} MB</span></div>
-      <div class="qi-cell">${_queueHistoryButton(f)}</div>
-      <div class="qi-cell qi-actions">
+    return `<div class="queue-item queue-file-tile" id="qi-${i}" data-filename="${esc(f.filename)}" data-file-id="${esc(f.file_id || '')}" tabindex="0" onclick="queueTileSearch(event,this,'openMovieManualSearch')" onkeydown="queueTileSearch(event,this,'openMovieManualSearch')">
+      ${_queueCrtScreen(f, statusEl, `<img class="qi-studio-logo" data-logo-fallback="${_queueFileLogoFallback()}" ${f.match_studio ? `data-logo-src="/api/studio-logo?name=${encodeURIComponent(f.match_studio)}"` : `src="${_queueFileLogoFallback()}"`} alt="Studio" onerror="this.onerror=null; this.src=this.dataset.logoFallback">`, [], '', true)}
+      <div class="qi-crt-tab"><div class="qi-crt-title" title="${esc(f.filename)}">${esc(spaceifyReleaseName(f.display_name || f.filename))}</div>
+      <div class="qi-crt-info"><span class="badge-size">${esc(String(f.size_mb))} MB</span><span class="qi-crt-meta">${metaText}</span></div>
+      <div class="qi-cell qi-actions">${_queueHistoryButton(f)}
         <button type="button" class="btn-icon" onclick="_qCall('openMovieManualSearch', this)" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
         <button type="button" class="btn-icon qi-delete-btn" onclick="_qCall('confirmDeleteQueueFile', this)" title="Move to recovery"><i class="fa-solid fa-trash"></i></button>
         <button type="button" class="btn-run-file" onclick="_qCall('runQueueFile', this)" title="Auto-match"><i class="fa-solid fa-play"></i></button>
-      </div>
+      </div></div>
     </div>`;
   }
 
@@ -2908,7 +2906,7 @@
   // Decorative copy stays outside the foreground crop and its fade.
   function _syncQueueHeadshotBackdrop(slot) {
     const cell = slot.matches('.qi-headshots') ? slot.parentElement : slot;
-    if (!cell) return;
+    if (!cell || cell.closest('.queue-file-tile')) return;
     const source = cell.querySelector('.qi-headshot');
     const sourceUrl = source ? source.getAttribute('src') : '/static/img/missing.webp';
     let backdrop = cell.querySelector('.qi-headshot-backdrop');
