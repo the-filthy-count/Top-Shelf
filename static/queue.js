@@ -826,8 +826,9 @@
     //: `max-width:0;flex:1 1 auto` stops a long message from forcing
     //: the title to ellipsise — truncates on the error itself instead.
     const errorText = ((f.prev_status === 'error' || f.status === 'error') && f.error) ? String(f.error).trim() : '';
+    const errorLabel = /\bffmpeg\b/i.test(errorText) ? 'video error' : errorText;
     const errorChip = errorText
-      ? `<span class="qi-error-chip" title="${esc(errorText)}"><i class="fa-solid fa-triangle-exclamation"></i><span class="qi-error-chip-msg">${esc(errorText)}</span></span>`
+      ? `<span class="qi-error-chip" title="${esc(errorText)}"><i class="fa-solid fa-triangle-exclamation"></i><span class="qi-error-chip-msg">${esc(errorLabel)}</span></span>`
       : '';
     // Colour the matched performers' / studio's / configured vices'
     // words inside the filename title — same `.qs-match` highlight

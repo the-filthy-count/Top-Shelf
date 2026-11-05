@@ -3578,8 +3578,10 @@
     padding: 7px 10px; background: linear-gradient(#293233,#181a1d 60%); }
   .qi-crt-title,.qi-crt-meta { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .qi-crt-title { text-align: center; font-size: var(--text-body); }
-  .qi-crt-info { display: flex; align-items: center; justify-content: center; gap: 5px; flex-wrap: wrap;
+  .qi-crt-info { display: flex; align-items: center; justify-content: center; gap: 5px; flex-wrap: nowrap;
+    height: 24px; flex: none; white-space: nowrap; overflow: hidden;
     font-size: var(--text-small); }
+  .qi-crt-info .qi-error-chip { margin-left: 0; }
   .qi-crt-meta { min-width: 0; max-width: 100%; color: var(--dim); }
   #queueList .qi-crt-tab .qi-actions { position: static; transform: none; display: flex; width: 100%;
     justify-content: space-evenly; flex-flow: row nowrap; gap: 3px; padding: 3px 0 0; }
