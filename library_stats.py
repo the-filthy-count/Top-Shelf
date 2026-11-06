@@ -1,5 +1,5 @@
 """Read-only library statistics. No media/filesystem scans or remote requests."""
-from country_names import normalise_country
+from app.utils.country_names import normalise_country
 from collections import Counter, defaultdict
 from datetime import date, datetime, timezone
 import json

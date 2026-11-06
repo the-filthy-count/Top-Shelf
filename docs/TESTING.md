@@ -4,7 +4,7 @@ Use an isolated environment to keep FastAPI, Pydantic and pydantic-core compatib
 
 ```sh
 python3 -m venv /tmp/top-shelf-tests
-/tmp/top-shelf-tests/bin/python -m pip install -r requirements-test.txt
+/tmp/top-shelf-tests/bin/python -m pip install -r requirements/test.txt
 /tmp/top-shelf-tests/bin/python -m pip check
 /tmp/top-shelf-tests/bin/python -m unittest discover -s tests -v
 ```

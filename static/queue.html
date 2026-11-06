@@ -3637,12 +3637,10 @@
   #qsFileFrame[hidden] {display:none}
   .qs-frame-pick,.qs-frame-pick img {display:block;width:100%;height:100%;object-fit:cover;padding:0;border:0;cursor:pointer}
   #searchFrameStrip .is-picked {outline:2px solid var(--accent);outline-offset:-2px}
-  #qsFields > summary,.qs-more > summary,.qs-sources > summary {cursor:pointer;color:var(--accent);padding:8px}
-  #qsFields > summary {display:none}
-  .qs-more {margin-top:8px}
-  .qs-advanced {display:grid;gap:8px}
+  .qs-sources > summary {cursor:pointer;color:var(--accent);padding:8px}
+  .qs-advanced {display:grid;gap:8px;margin-top:8px}
   .qs-sources {position:relative}
-  .qs-sources .qs-source-toggle {position:absolute;right:0;top:100%;z-index:9;width:min(350px,80vw);padding:10px;background:var(--bg,#191b1d);border:1px solid var(--dim);border-radius:6px}
+  .qs-sources .qs-source-toggle {position:absolute;right:0;top:100%;z-index:9;display:grid;grid-template-columns:minmax(0,1fr);gap:6px;width:min(148px,72vw);max-height:70vh;overflow-y:auto;padding:10px;background:var(--bg,#191b1d);border:1px solid var(--dim);border-radius:6px}
   #qSearchOverlay.q-details-edit .qs-sources {display:none}
   .qs-evidence strong {color:#f6bf85}
   .qs-candidate.is-selected {outline:2px solid var(--accent);flex-wrap:wrap}
@@ -3652,7 +3650,6 @@
   @media(max-width:760px){
     #qSearchOverlay:not(.q-details-edit) #qSearchBody {display:block !important;overflow:auto !important}
     #qSearchOverlay #qSearchTopRow,#qSearchOverlay #qSearchLeftCol,#qSearchOverlay #qSearchResultsWrap,#qSearchOverlay #qSearchResults {overflow:visible !important}
-    #qsFields > summary {display:list-item}
     #qSearchOverlay .qs-candidate {flex-wrap:wrap}
     #qSearchOverlay .qs-candidate > img:first-child {max-width:100%}
   }
@@ -3805,8 +3802,7 @@
            focused on the user's typed input. Previously below the Plot
            field; moved here so the chips read as a popup-wide control
            rather than form furniture. -->
-      <details class="qs-sources"><summary>Sources <span id="qsSourceCount"></span></summary><div class="qs-source-toggle qs-source-toggle--header" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0">
-        <span style="font-family:var(--secs);font-size:var(--text-small);letter-spacing:0.06em;text-transform:uppercase;color:var(--dim);margin-right:4px">Sources</span>
+      <details class="qs-sources" ontoggle="if(this.open) refreshData18Imports()"><summary>Sources <span id="qsSourceCount"></span></summary><div class="qs-source-toggle qs-source-toggle--header">
         <button type="button" class="qs-source-pill is-on" data-source="StashDB" onclick="toggleQSearchSource(this)" title="StashDB"><img src="/static/logos/stashdb.webp" alt="StashDB"></button>
         <button type="button" class="qs-source-pill is-on" data-source="TPDB" onclick="toggleQSearchSource(this)" title="ThePornDB"><img src="/static/logos/tpdb.webp" alt="TPDB"></button>
         <button type="button" class="qs-source-pill is-on" data-source="FansDB" onclick="toggleQSearchSource(this)" title="FansDB"><img src="/static/logos/fansdb.webp" alt="FansDB"></button>
@@ -3814,8 +3810,11 @@
         <button type="button" class="qs-source-pill is-on" data-source="AFDB" aria-pressed="true" onclick="toggleQSearchSource(this)" title="Adult Film Database"><img src="/static/logos/afdb.webp" alt="AFDB" onerror="this.replaceWith(document.createTextNode(this.alt))"></button>
         <button type="button" class="qs-source-pill is-on" data-source="Data18" aria-pressed="true" onclick="toggleQSearchSource(this)" title="Data18 scene credits"><img src="/static/logos/data18.webp" alt="Data18" onerror="this.replaceWith(document.createTextNode(this.alt))"></button>
         <button type="button" class="qs-source-pill is-on" data-source="EuroPornstar" aria-pressed="true" onclick="toggleQSearchSource(this)" title="EuroPornstar gallery references"><img src="/static/logos/europeanpornstars.webp" alt="EuroPornstar" onerror="this.replaceWith(document.createTextNode(this.alt))"></button>
-        <label class="btn-secondary" title="Import saved Data18 performer page"><i class="fa-solid fa-file-import"></i><input type="file" accept=".html,.htm,text/html" aria-label="Import saved Data18 performer page" onchange="importData18Profile(this)" style="width:1px;opacity:0"></label>
+
         <button type="button" class="qs-source-pill" aria-pressed="false" data-source="IAFD" onclick="toggleQSearchSource(this)" title="Include IAFD for the next search only"><img src="/static/logos/iafd.webp" alt="IAFD"></button>
+        <label class="btn-secondary" title="Choose a Data18 performer HTML file"><i class="fa-solid fa-file-import"></i> Import Data18 HTML<input type="file" accept=".html,.htm,text/html" aria-label="Choose a Data18 performer HTML file" onchange="importData18Profile(this)" style="width:1px;opacity:0"></label>
+        <small id="data18ImportStatus" role="status" aria-live="polite"></small>
+        <div id="data18SavedProfiles" style="font-size:var(--text-small);overflow-wrap:anywhere"></div>
       </div>
       </details><button onclick="clearSearch()" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:var(--dim);font-size:var(--text-body);cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0" title="Close (Esc)">&times;</button>
     </div>
@@ -3826,7 +3825,7 @@
              column can split into Search results + Brain matches. -->
         <div id="searchFrameStrip" class="film-strip film-strip--suggestions" style="display:none;justify-content:center;gap:4px;overflow:hidden;margin:12px 18px 0;flex-shrink:0"></div>
         <img id="qsFileFrame" alt="Selected frame from the queue file" hidden>
-        <details id="qsFields" open><summary>Search fields</summary><div class="search-panel-filters q-search-modal-filters" style="flex-shrink:0;padding:14px 24px;border-bottom:1px solid rgba(var(--brand-purple-rgb),0.14);background:rgba(0,0,0,0.18)">
+        <div class="search-panel-filters q-search-modal-filters" style="flex-shrink:0;padding:14px 24px;border-bottom:1px solid rgba(var(--brand-purple-rgb),0.14);background:rgba(0,0,0,0.18)">
           <div class="field-row" style="margin-bottom:10px">
             <label class="field-label">Title</label>
             <input class="field-input" id="srchTitle" type="text" placeholder="Scene title" oninput="if(_qConfirmScene)_qConfirmTitleEdited=true" onkeydown="if(event.key==='Enter')runQueueSearch()">
@@ -3854,7 +3853,8 @@
             </label>
             </div>
           </div>
-          <details class="qs-more"><summary>More details</summary><div class="qs-advanced">            <div class="field-row">
+          <div class="qs-advanced">
+            <div class="field-row">
               <label class="field-label">Free text</label>
               <input class="field-input" id="srchTerm" type="text" placeholder="Any term..." onkeydown="if(event.key==='Enter')runQueueSearch()">
             </div>
@@ -3900,7 +3900,6 @@
           </div>
         </div>
       </div>
-</details>
           <div class="q-details-actions" style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px">
             <div class="q-details-note" style="flex:1 1 240px;margin-right:auto"><span id="qDetailsStatus" role="status" aria-live="polite"></span>
 
@@ -3930,7 +3929,6 @@
             <button class="btn-primary" onclick="runQueueSearch()" title="Save details and search" style="flex-shrink:0"><i class="fa-solid fa-magnifying-glass"></i><span class="btn-label" style="margin-left:6px">Save &amp; search</span></button>
           </div>
         </div>
-        </details>
         <!-- (Scene-pick "Filing from" panel removed — title/studio/date
              populate directly into the form fields on row click, cast
              goes into the Stars pill input, and the right-column STASH

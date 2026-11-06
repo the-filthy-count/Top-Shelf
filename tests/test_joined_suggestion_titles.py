@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 from app.core import matching as m
-from scene_relevance import rank_manual_results
+from app.core.scene_relevance import rank_manual_results
 
 class JoinedTitleTests(unittest.TestCase):
     def test_reported_filename_searches_spaced_title(self):

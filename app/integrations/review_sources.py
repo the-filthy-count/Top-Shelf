@@ -104,6 +104,18 @@ def data18_profile(tree):
     return name, list(rows.values())
 
 
+def imported_data18_profiles():
+    """Read the same saved credits that Data18 suggestion searches use."""
+    prefix = 'review:Data18:import:'
+    with db.get_conn() as conn:
+        rows = conn.execute("""
+            SELECT json_extract(payload_json, '$[0].performers[0].performer.name') AS performer,
+                   json_array_length(payload_json) AS scenes
+            FROM app_json_cache WHERE cache_key GLOB ? ORDER BY updated_at DESC
+        """, (prefix + '*',)).fetchall()
+    return [dict(row) for row in rows if row['performer'] and row['scenes']]
+
+
 def import_data18(raw):
     if len(raw) > MAX_BYTES:
         raise ValueError('HTML file too large')
@@ -116,7 +128,7 @@ def import_data18(raw):
     db.app_json_cache_put(key,list(merged.values()))
     from scene_search_runtime import invalidate_source
     invalidate_source('Data18')
-    return {'performer':name,'scenes':len(rows)}
+    return {'performer':name,'scenes':len(rows), 'total':len(merged)}
 
 
 def _filmography(source, name):

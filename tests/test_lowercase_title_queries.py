@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock
-from title_search_queries import title_search_queries
+from app.core.title_search_queries import title_search_queries
 from app.core import matching as m
 from test_duplicate_filing_safety import load
 

@@ -1,5 +1,5 @@
 import unittest
-from scene_relevance import rank_manual_results, title_query
+from app.core.scene_relevance import rank_manual_results, title_query
 
 class RelevanceTests(unittest.TestCase):
     def test_reported_irrelevant_results_are_rejected(self):

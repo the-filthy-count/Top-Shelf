@@ -3574,8 +3574,6 @@
     const heading = document.querySelector('#qSearchPanel .ts-page-title__text');
     if (heading) heading.textContent = action.edit_details ? 'File details' : 'Scene Search';
     _qSelectedFile = filename;
-    document.getElementById("qsFields").open = true;
-    document.querySelector(".qs-more").open = false;
     document.querySelector(".qs-sources").open = false;
     document.getElementById('searchFileLabel').textContent = `File: ${filename}`;
     document.getElementById('searchFileLabel').style.display = 'inline-block';
@@ -4591,9 +4589,6 @@
   // Render the stored-match row HTML — same shape as runQueueSearch's
   // own row template, with an extra "Stored match" badge so the user
   // can tell it apart from fresh search results.
-  matchMedia('(max-width:760px)').addEventListener('change', e => {
-    if (!e.matches) document.getElementById('qsFields').open = true;
-  });
   function inspectQueueCandidate(index) {
     document.querySelectorAll('#qSearchResults .qs-candidate').forEach(card => {
       const selected = Number(card.dataset.index) === index;
@@ -4859,7 +4854,6 @@
         </div>`;
       }).join('');
       resultsEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${rowsHtml}</div>`;
-      if (matchMedia('(max-width:760px)').matches) document.getElementById('qsFields').open = false;
       _hydratePerfPiles(resultsEl);
       if (typeof enrichPerformerNames === 'function') enrichPerformerNames(resultsEl);
     } catch(e) { if (e?.name === 'AbortError') return;
@@ -8043,17 +8037,37 @@
     await _hydratePerfPiles(document);
   });
 
+window.refreshData18Imports = async () => {
+  const list = document.getElementById('data18SavedProfiles');
+  try {
+    const response = await fetch('/api/queue/suggestions/data18-profile', {cache:'no-store'});
+    if (!response.ok) throw new Error();
+    const {profiles} = await response.json();
+    list.replaceChildren();
+    if (!profiles.length) list.textContent = 'No Data18 profiles saved.';
+    for (const profile of profiles) {
+      const line = document.createElement('div');
+      line.textContent = profile.performer + ' · ' + profile.scenes + ' saved credits';
+      list.append(line);
+    }
+  } catch { list.textContent = 'Could not load saved profiles.'; }
+};
+
 window.importData18Profile = async input => {
   const file = input.files[0];
   if (!file) return;
+  const status = document.getElementById('data18ImportStatus');
+  input.disabled = true;
+  status.textContent = 'Importing…';
   try {
     const body = new FormData();
     body.append('file', file);
     const response = await fetch('/api/queue/suggestions/data18-profile', {method:'POST', body});
     const result = await response.json();
     if (!response.ok) throw new Error(result.detail || 'Import failed');
-    window.toast(result.performer + ' · ' + result.scenes + ' scene credits imported');
+    status.textContent = 'Imported ' + result.performer + '. Search for this performer to see matching credits.';
+    await refreshData18Imports();
     await window.runQueueSearch();
-  } catch (error) { window.toast(error.message, {kind:'error'}); }
-  finally { input.value = ''; }
+  } catch (error) { status.textContent = error.message; }
+  finally { input.value = ''; input.disabled = false; }
 };

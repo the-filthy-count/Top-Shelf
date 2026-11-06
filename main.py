@@ -2638,7 +2638,7 @@ def search_all_databases(term: str = None, title: str = None, performer: str = N
     )
 
     if title_first and (title or term):
-        from scene_relevance import title_query
+        from app.core.scene_relevance import title_query
         cleaned_title = title_query(title or term, performer or "")
         combined = cleaned_title or combined
         if title:
@@ -2945,7 +2945,7 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
             from app.core.queue_records import saved_ids as record_ids
             saved_ids.update(record_ids(record))
         # Bare trailing numbers identify volumes; only explicit Scene N is a scene hint.
-        from title_search_queries import title_search_queries
+        from app.core.title_search_queries import title_search_queries
         search_queries = [(query, "") for query in title_search_queries(title_only)] if title_only else [("", cleaned)]
         search_complete = True
         results: list = []
@@ -20045,7 +20045,7 @@ def search_scenes(payload: dict):
         # Only manual title queries use this gate; performer-only searches stay broad.
         warnings = getattr(results, "warnings", [])
         if title or term:
-            from scene_relevance import rank_manual_results
+            from app.core.scene_relevance import rank_manual_results
             results = rank_manual_results(results, title or term, performer or "")
         if queue_record:
             from app.core.queue_records import saved_ids
@@ -25005,7 +25005,7 @@ def _iafd_bulk_scan_for_performer(
             except Exception: pass
         return {"groups": [], "unmatched": list(filenames), "filmography": [], "perf_url": perf_url}
 
-    from iafd_matching import choose_film, choose_scene, film_suggestions
+    from app.integrations.iafd_matching import choose_film, choose_scene, film_suggestions
     review = {}
 
     for idx, fname in enumerate(filenames):
@@ -40300,6 +40300,12 @@ async def api_queue_suggestions_source_meta(filename: str):
     return meta
 
 
+@app.get("/api/queue/suggestions/data18-profile")
+def saved_data18_profiles():
+    from app.integrations.review_sources import imported_data18_profiles
+    return {"profiles": imported_data18_profiles()}
+
+
 @app.post("/api/queue/suggestions/data18-profile")
 async def import_data18_profile(file: UploadFile = File(...)):
     from app.integrations.review_sources import MAX_BYTES, import_data18
@@ -48562,7 +48568,7 @@ def _spotlight_in_library(name: str, s: dict, lookup: dict | None = None) -> boo
     return norm in lookup["names"]
 
 
-from country_names import normalise_country as _normalise_country
+from app.utils.country_names import normalise_country as _normalise_country
 
 
 def _spotlight_infer_career_start(p: dict, age: int | None) -> int | None:

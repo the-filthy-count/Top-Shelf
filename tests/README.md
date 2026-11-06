@@ -4,19 +4,19 @@ Run from the project root in an isolated environment:
 
 ```sh
 python3.12 -m venv /tmp/top-shelf-tests
-/tmp/top-shelf-tests/bin/pip install -c requirements-production-lock.txt -r requirements.txt
+/tmp/top-shelf-tests/bin/pip install -c requirements/production-lock.txt -r requirements.txt
 /tmp/top-shelf-tests/bin/pip check
 /tmp/top-shelf-tests/bin/python -m unittest discover -s tests -v
 ```
 
-`requirements-production-lock.txt` is the dependency set verified on Python 3.12,
+`requirements/production-lock.txt` is the dependency set verified on Python 3.12,
 which Docker now installs using constraints. Update the lock deliberately and
 rerun the suite before rebuilding production.
 
 ## Browser workflows
 
 ```sh
-/tmp/top-shelf-tests/bin/pip install -r requirements-browser.txt
+/tmp/top-shelf-tests/bin/pip install -r requirements/browser.txt
 /tmp/top-shelf-tests/bin/python -m playwright install chromium
 /tmp/top-shelf-tests/bin/python tests/browser/smoke.py
 ```
@@ -110,7 +110,7 @@ skins across pages, checks dark/light/glass, and verifies a destructive dialog i
 all supported themes. `TS_BROWSER=webkit` runs the same checks in WebKit. Theme
 comparisons disable transitions so assertions inspect settled colors.
 
-See `DESIGN_SYSTEM.md` for typography tokens, control variants, ownership, and
+See [the design system](../docs/DESIGN_SYSTEM.md) for typography tokens, control variants, ownership, and
 exceptions for image tiles and fitted counters.
 
 Mobile density tests now use a populated home fixture, assert three cards per row,

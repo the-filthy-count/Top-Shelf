@@ -2,7 +2,7 @@
 import re
 from pathlib import Path
 from datetime import datetime
-from filename_dates import extract_filename_date
+from app.core.filename_dates import extract_filename_date
 from app.core.matching import _strip_release_noise
 
 
@@ -156,7 +156,7 @@ def _parse_filename_parts(filename: str, settings: dict) -> dict:
 
 def parse_filename(filename, settings):
     from app.core.matching import _split_query_from_library, _clean_filename_for_search
-    from scene_relevance import split_title_words
+    from app.core.scene_relevance import split_title_words
     path = Path(filename)
     tag = re.match(r"^\[([^\]]+)\]\s*", path.name)
     folder_tag = bool(tag and tag.group(1).casefold() == path.parent.name.casefold())

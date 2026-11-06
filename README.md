@@ -363,3 +363,5 @@ old destination mappings. Expired/revoked tokens must be replaced. Collection
 is cached for 20 seconds with bounded requests; errors retain the last known
 Magpie rows with a warning while other clients remain usable. If a submission
 times out, refresh the list before trying again.
+
+[Architecture](docs/ARCHITECTURE.md) · [Design system](docs/DESIGN_SYSTEM.md) · [Testing](docs/TESTING.md)

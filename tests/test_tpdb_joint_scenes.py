@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import Mock
-from tpdb_joint_scenes import joint_scenes
+from app.integrations.tpdb_joint_scenes import joint_scenes
 
 class TPDBJointScenesTests(unittest.TestCase):
     def test_pages_and_canonical_parent_ids(self):

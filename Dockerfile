@@ -20,8 +20,9 @@ RUN for pol in /etc/ImageMagick-6/policy.xml /etc/ImageMagick-7/policy.xml; do \
 
 WORKDIR /app
 
-COPY requirements.txt requirements-production-lock.txt ./
-RUN pip install --no-cache-dir -c requirements-production-lock.txt -r requirements.txt
+COPY requirements.txt ./
+COPY requirements/production-lock.txt requirements/production-lock.txt
+RUN pip install --no-cache-dir -c requirements/production-lock.txt -r requirements.txt
 
 COPY . .
 

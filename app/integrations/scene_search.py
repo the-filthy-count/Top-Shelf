@@ -23,7 +23,7 @@ def search_joint_cast(performers, sources, post, performer_query, scene_query, r
             if len(ids) != len(performers) or len(set(ids)) != len(performers):
                 continue
             if source == "TPDB":
-                from tpdb_joint_scenes import joint_scenes
+                from app.integrations.tpdb_joint_scenes import joint_scenes
                 scenes, source_complete = joint_scenes(ids, key, rest_get)
                 results.extend(dict(scene, _search_performer_ids={"source": source, "ids": dict(zip(performers, ids))}) for scene in scenes)
                 complete = complete and source_complete

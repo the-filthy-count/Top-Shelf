@@ -1,5 +1,5 @@
 import unittest
-from filename_dates import extract_filename_date
+from app.core.filename_dates import extract_filename_date
 
 class FilenameDateTests(unittest.TestCase):
     def test_formats(self):

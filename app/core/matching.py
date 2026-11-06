@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 
 import database as db
-from filename_dates import extract_filename_date
+from app.core.filename_dates import extract_filename_date
 
 _NAME_SEARCH_NOISE_TOKENS = {
     "xxx", "1080p", "720p", "2160p", "4k", "uhd", "hdr",
@@ -243,7 +243,7 @@ def _split_query_from_library(filename: str) -> tuple[str, str, str, str, list[s
         title_parts = [re.sub(pattern, " ", part, flags=re.IGNORECASE) for part in title_parts]
     # The cleaner expects a filename; attach a dummy extension to retain the
     # final title token even when the original name contained dots.
-    from scene_relevance import split_title_words
+    from app.core.scene_relevance import split_title_words
     title_only = split_title_words(_clean_filename_for_search("/".join(title_parts) + ".mp4"))
     return (full, title_only, performer, studio, performers)
 
@@ -391,7 +391,7 @@ def _score_name_match(query: str, candidate: dict, *,
     if require_performers_in_cast and performers and not _required_performers_in_cast(performers, candidate):
         return 0.0
 
-    from scene_relevance import rank_manual_results, title_query, _score
+    from app.core.scene_relevance import rank_manual_results, title_query, _score
     title = title_query(query if query_title is None else query_title, ", ".join(performers))
     title = _SCENE_NUMBER_RE.sub(" ", title).strip()
     joint_cast = allow_joint_cast and len(performers) > 1 and _required_performers_in_cast(performers, candidate)

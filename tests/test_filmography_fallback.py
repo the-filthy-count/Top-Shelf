@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 from app.core import matching as m
 from app.integrations.scene_search import search_joint_cast
-from tpdb_joint_scenes import joint_scenes
+from app.integrations.tpdb_joint_scenes import joint_scenes
 from test_duplicate_filing_safety import load
 
 class FilmographyFallbackTests(unittest.TestCase):

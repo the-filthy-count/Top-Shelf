@@ -71,7 +71,7 @@ class JointCastTests(unittest.TestCase):
                  SEARCH_PERFORMER_QUERY='performers',QUERY_SCENES_QUERY='scenes',_stashbox_post=post,
                  requests=SimpleNamespace(get=Mock()),emit=Mock())
         search=load('main.py','search_scenes_with_all_performers',env)
-        with patch('tpdb_joint_scenes.joint_scenes',return_value=([{'id':'both','_source':'TPDB'}],False)) as rest:
+        with patch('app.integrations.tpdb_joint_scenes.joint_scenes',return_value=([{'id':'both','_source':'TPDB'}],False)) as rest:
             rows,complete=search(['Alecia Fox','Kira Kyox'])
             self.assertFalse(complete);self.assertEqual(rows[0]['id'],'both')
             rest.assert_called_once_with(['Alecia Fox','Kira Kyox'],'key',env['requests'].get)

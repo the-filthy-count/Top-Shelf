@@ -1,5 +1,5 @@
 import unittest
-from iafd_matching import choose_film, choose_scene
+from app.integrations.iafd_matching import choose_film, choose_scene
 
 def film(title, year='2005', studio='', url=None):
     return dict(title=title,year=year,studio=studio,url=url or title+year)
@@ -61,7 +61,7 @@ class IafdMatchingTests(unittest.TestCase):
         self.assertEqual(result['groups'][0]['files'][0]['scene_idx'],-1)
 
     def test_review_candidates_leave_ambiguous_match_unselected(self):
-        from iafd_matching import film_suggestions
+        from app.integrations.iafd_matching import film_suggestions
         films=[film('Great Adventure','2005'),film('Great Adventure','2015')]
         suggestions=film_suggestions(films,{},'Great Adventure.mp4','Fixture')
         self.assertEqual(len(suggestions),2)
