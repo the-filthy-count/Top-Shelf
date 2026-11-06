@@ -3,7 +3,7 @@
 Old empty results become eligible for the existing bounded background scanner.
 Saved suggestions and explicit rejections are retained.
 """
-RULES_VERSION = 3
+RULES_VERSION = 4
 
 
 def date_proximity(scene_date, file_date):

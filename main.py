@@ -2601,7 +2601,7 @@ def search_all_databases(term: str = None, title: str = None, performer: str = N
                          studio: str = None, date_from: str = None,
                          date_to: str = None,
                          sources: set[str] | None = None,
-                         title_first: bool = False) -> list:
+                         title_first: bool = False, require_studio: bool = True) -> list:
     """
     Search the configured databases, merge and deduplicate results.
 
@@ -2821,7 +2821,7 @@ def search_all_databases(term: str = None, title: str = None, performer: str = N
     # break it). Drop unknown-studio scenes when studio is set — same
     # reasoning as the date gate.
     studio_q = (studio or "").strip()
-    if studio_q:
+    if studio_q and require_studio:
         def _studio_norm(s: str) -> str:
             return re.sub(r"[^a-z0-9]+", "", (s or "").lower())
         sq = _studio_norm(studio_q)
@@ -2903,7 +2903,7 @@ def _normalize_suggestion(scene: dict, filename: str) -> dict | None:
 _NAME_SEARCH_NON_IAFD_SOURCES = {"StashDB", "TPDB", "FansDB", "JAVStash", "AFDB", "Data18", "EuroPornstar"}
 
 
-def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bool = True) -> int:
+def _run_name_search_for_file(filename: str, *, limit: int = 6, include_iafd: bool = True) -> int:
     """Run a name-based search for one unmatched file and persist the
     top `limit` un-rejected candidates. Returns the number of
     suggestions written. Safe to call repeatedly — each pass overwrites
@@ -2949,7 +2949,8 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
         saved_ids = db.suggestion_performer_ids(perf_names)
         if record:
             from app.core.queue_records import saved_ids as record_ids
-            saved_ids.update(record_ids(record))
+            for name, source_ids in record_ids(record).items():
+                saved_ids.setdefault(name, {}).update(source_ids)
         # Bare trailing numbers identify volumes; only explicit Scene N is a scene hint.
         from app.core.title_search_queries import title_search_queries
         search_queries = [(query, "") for query in title_search_queries(title_only)] if title_only else [("", cleaned)]
@@ -2964,7 +2965,7 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
                     performer=performer or None,
                     studio=studio or None,
                     term=term_q or None,
-                    sources=search_sources, title_first=True,
+                    sources=search_sources, title_first=True, require_studio=not bool(perf_names),
                 )
             except Exception as e:
                 search_complete = False
@@ -2985,11 +2986,9 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
         if len(perf_names) > 1:
             cast_results, cast_complete = search_scenes_with_all_performers(perf_names, **({"saved_ids": saved_ids} if record else {}))
             search_complete = search_complete and cast_complete
-            for scene in cast_results:
-                key = (scene.get("_source", "").lower(), scene.get("id"))
-                if key[1] and key not in seen_ids:
-                    seen_ids.add(key)
-                    results.append(scene)
+            # A filmography row may carry ID proof missing from the same text hit.
+            # Rank both versions and keep the strongest surviving source record.
+            results.extend(cast_results)
         rejects = db.queue_suggestion_rejects_for_file(filename)
         perf_names = _suggestion_performer_names(performers, performer)
         def rank_candidates(candidates):
@@ -3008,17 +3007,6 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
                 if not sug:
                     continue
                 if (sug["source_db"], sug["source_id"]) in rejects:
-                    continue
-                score_loose = _score_name_match(
-                    cleaned, scene,
-                    query_performer=performer,
-                    query_title=title_only or cleaned,
-                    query_performers=performers,
-                    require_performers_in_cast=False,
-                    allow_joint_cast=len(perf_names) > 1,
-                    file_meta=file_meta,
-                )
-                if score_loose < _SUGGESTION_MIN_SCORE:
                     continue
                 is_strict_perf = bool(perf_names and _required_performers_in_cast(perf_names, scene))
                 # Reasons are collected only on the pool the candidate actually
@@ -3045,15 +3033,19 @@ def _run_name_search_for_file(filename: str, *, limit: int = 3, include_iafd: bo
             return strict_pool
 
         strict_pool = rank_candidates(results)
-        if not strict_pool and len(perf_names) == 1:
-            # A bad text query must not hide a good scene in a known performer's
-            # filmography. Returned casts still require the source-local ID.
+        if len(perf_names) == 1 and not any(row["score"] >= 0.8 for row in strict_pool):
+            # Weak title hits should not prevent a stronger filmography hit.
             cast_results, cast_complete = search_scenes_with_all_performers(perf_names, **({"saved_ids": saved_ids} if record else {}))
             search_complete = search_complete and cast_complete
-            from app.core.suggestion_rules import date_proximity
-            strict_pool = sorted(rank_candidates(cast_results), key=lambda candidate: date_proximity(
-                (candidate.get("payload") or {}).get("release_date"), file_meta.get("date")), reverse=True)
-        strict_pool.sort(key=lambda candidate: candidate["score"], reverse=True)
+            strict_pool.extend(rank_candidates(cast_results))
+        from app.core.suggestion_rules import date_proximity
+        strict_pool.sort(key=lambda candidate: (
+            candidate['score'], date_proximity((candidate.get('payload') or {}).get('release_date'), file_meta.get('date'))
+        ), reverse=True)
+        unique = {}
+        for candidate in strict_pool:
+            unique.setdefault((candidate['source_db'], candidate['source_id']), candidate)
+        strict_pool = list(unique.values())
         top = strict_pool[:limit]
         emit(f"  Name-search {filename!r}: {len(top)} performer/studio match(es)")
         if not top and not search_complete:

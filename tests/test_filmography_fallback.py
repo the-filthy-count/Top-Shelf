@@ -99,6 +99,19 @@ class FilmographyFallbackTests(unittest.TestCase):
         self.assertTrue(suggestion_guard.claim('file.mp4'))
         suggestion_guard.release('file.mp4')
 
+    def test_weak_title_hit_does_not_hide_better_filmography_match(self):
+        weak = self.scene('weak',duration=600)
+        run,env = self.runner([weak], [weak,self.scene('right')])
+        self.assertEqual(run('file.mp4'),2)
+        rows = env['db'].queue_suggestions_add.call_args.args[1]
+        self.assertEqual([row['source_id'] for row in rows],['right','weak'])
+
+    def test_review_list_can_include_six_eligible_candidates(self):
+        hits = [self.scene(str(i)) for i in range(8)]
+        run,env = self.runner(hits,[])
+        self.assertEqual(run('file.mp4'),6)
+        self.assertFalse(env['search_all_databases'].call_args.kwargs['require_studio'])
+
     def test_saved_queue_fields_drive_search_instead_of_filename_guesses(self):
         run, env = self.runner([self.scene(title='Corrected title')], [])
         record = dict(file_id='stable-id', revision=2,
