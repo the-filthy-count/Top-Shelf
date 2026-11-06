@@ -203,7 +203,7 @@
   // Legacy name kept because the icon's inline onclick calls it.
   window.showQueuePhashPopup = function (ev, btn) {
     if (typeof window.tsShowPhashPopup === 'function') {
-      window.tsShowPhashPopup(ev, btn);
+      window.tsShowPhashPopup(ev, btn, true);
     }
   };
 
@@ -859,7 +859,7 @@
           ${metaText && metaClass !== 'qi-meta qi-meta-guess' ? `<span class="qi-crt-meta" title="${esc(f.match_title || '')}">${metaText}</span>` : ''}
         </div>
       <div class="qi-cell qi-actions">
-        ${f.has_phash ? `<button type="button" class="badge-cached qi-phash-btn" title="Click to view phash — matches Stash's fingerprint format" data-phash="${esc(f.phash || '')}" data-filename="${esc(f.filename || '')}" onclick="showQueuePhashPopup(event, this)"><i class="fa-solid fa-fingerprint queue-phash-fa"></i></button>` : ''}${_queueHistoryButton(f)}
+        ${f.has_phash ? `<button type="button" class="badge-cached qi-phash-btn" title="Find exact and near fingerprint matches" data-phash="${esc(f.phash || '')}" data-filename="${esc(f.filename || '')}" onclick="showQueuePhashPopup(event, this)"><i class="fa-solid fa-fingerprint queue-phash-fa"></i></button>` : ''}${_queueHistoryButton(f)}
         ${profileButton}
         <button type="button" class="btn-icon" onclick="_qCall('openQueueFilmstrip', this)" title="Filmstrip"><i class="fa-solid fa-photo-film"></i></button>
         <button type="button" class="btn-icon qi-filing-btn qi-edit-details ${_viceMatchesFilename(f.filename) ? 'is-vice-match' : ''}" onclick="_qCall('openQueueSearchDetails', this)" title="Edit saved search details" aria-label="Edit saved search details"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>

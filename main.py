@@ -20969,6 +20969,15 @@ async def api_queue_thumbs_retry(payload: dict):
     return {"filename": filename, "cleared": cleared, "generating": True}
 
 
+@app.get("/api/queue/phash-matches")
+def queue_phash_matches(phash: str, filename: str):
+    try:
+        return {"matches": db.nearby_phashes(phash, filename, _PHASH_SAME_SCENE_BITS),
+                "max_bits": _PHASH_SAME_SCENE_BITS}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @app.get("/api/queue/preview")
 def queue_tile_preview(filename: str, kind: str = "scene"):
     """Share the filmstrip's penultimate JPEG; a cold tile needs only one seek."""

@@ -12968,3 +12968,11 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
 .pp-release-tools .pp-release-clear:disabled { visibility:hidden; }
 .pp-release-tools .pp-release-clear:hover { background:rgba(255,255,255,.08); }
 .pp-release-tools .pp-release-clear:focus-visible { outline:2px solid var(--brand-purple,#087f83); outline-offset:-2px; }
+
+.ts-phash-results {
+  width: min(280px, 66vw); height: min(150px, 24vh); overflow: auto;
+  margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--dim);
+  font-size: var(--text-small); overflow-wrap: anywhere;
+}
+.ts-phash-results > div { padding: 5px 0; }
+.ts-phash-results small { display: block; color: var(--dim); }

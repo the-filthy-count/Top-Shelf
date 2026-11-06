@@ -7252,6 +7252,45 @@ def scene_fingerprints_upsert(source: str, scene_id: str, fingerprints: list[dic
     return inserted
 
 
+def nearby_phashes(phash, filename, max_bits=12):
+    """Rank cached PHASH values only. Collapse alternate hashes for one result."""
+    import re
+    valid = re.compile(r'[0-9a-fA-F]{16}').fullmatch
+    if not isinstance(phash, str) or not valid(phash):
+        raise ValueError('Expected a 16-digit hexadecimal pHash')
+    target = int(phash, 16)
+
+    def distance(value):
+        if isinstance(value, str) and valid(value):
+            return (int(value, 16) ^ target).bit_count()
+        return 65
+
+    with get_conn() as conn:
+        conn.create_function('review_phash_distance', 1, distance, deterministic=True)
+        try:
+            rows = conn.execute("""
+                SELECT * FROM (
+                    SELECT source,scene_id AS identity,scene_id AS label,
+                           MIN(review_phash_distance(phash)) AS bits
+                    FROM scene_fingerprints WHERE UPPER(algorithm)='PHASH'
+                    GROUP BY source,scene_id
+                    UNION ALL
+                    SELECT 'Library',destination,current_filename,
+                           MIN(review_phash_distance(phash_1),review_phash_distance(phash_2),
+                               review_phash_distance(phash_3))
+                    FROM library_files WHERE is_removed=0
+                    UNION ALL
+                    SELECT 'Queue',filename,filename,review_phash_distance(phash)
+                    FROM processed_files WHERE filename<>? AND phash IS NOT NULL
+                      AND status NOT IN ('filed','removed')
+                      AND filename NOT LIKE '.%' AND filename NOT LIKE '%/.%'
+                ) WHERE bits<=? ORDER BY bits,source,label,identity LIMIT 20
+            """, (filename,max_bits)).fetchall()
+        finally:
+            conn.create_function('review_phash_distance', 1, None)
+    return [dict(row) for row in rows]
+
+
 def scene_fingerprints_match_phashes(phashes: list[str]) -> dict[str, list[dict]]:
     """For each input phash (case-insensitive), return matching
     `{source, scene_id}` entries from scene_fingerprints. Used by the

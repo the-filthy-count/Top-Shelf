@@ -3115,7 +3115,7 @@ window.tsConfirm = function (message, opts) {
       _closer = null;
     }
   }
-  function tsShowPhashPopup(ev, btn) {
+  function tsShowPhashPopup(ev, btn, searchNearby = false) {
     if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
     if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
     _close();
@@ -3136,6 +3136,39 @@ window.tsConfirm = function (message, opts) {
       '</div>';
     document.body.appendChild(pop);
     _el = pop;
+    if (searchNearby) {
+      const results = document.createElement('section');
+      results.className = 'ts-phash-results';
+      results.setAttribute('aria-live', 'polite');
+      results.textContent = 'Searching cached fingerprints…';
+      pop.appendChild(results);
+      const query = new URLSearchParams({phash, filename:btn.dataset.filename || ''});
+      fetch('/api/queue/phash-matches?' + query).then(async response => {
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        if (_el !== pop) return;
+        results.textContent = data.matches.length
+          ? 'Closest cached fingerprints'
+          : 'No cached matches within ' + data.max_bits + ' bits.';
+        for (const hit of data.matches) {
+          const row = document.createElement('div');
+          const sites = {stashdb:'https://stashdb.org', fansdb:'https://fansdb.cc', tpdb:'https://theporndb.net', javstash:'https://javstash.org'};
+          const site = Object.hasOwn(sites, hit.source) && sites[hit.source];
+          const label = document.createElement(site ? 'a' : 'span');
+          label.textContent = hit.source + ' · ' + hit.label;
+          label.title = hit.identity;
+          if (site) {
+            label.href = site + '/scenes/' + encodeURIComponent(hit.identity);
+            label.target = '_blank';
+            label.rel = 'noopener noreferrer';
+          }
+          const score = document.createElement('small');
+          score.textContent = hit.bits === 0 ? 'Exact fingerprint' : hit.bits + ' of 64 bits differ';
+          row.append(label, score);
+          results.appendChild(row);
+        }
+      }).catch(() => { if (_el === pop) results.textContent = 'Fingerprint search unavailable.'; });
+    }
     const r = btn.getBoundingClientRect();
     const popH = pop.offsetHeight || 96;
     const popW = pop.offsetWidth  || 240;
@@ -3161,7 +3194,7 @@ window.tsConfirm = function (message, opts) {
     if (closeBtn) closeBtn.addEventListener('click', _close);
     _closer = (e) => {
       if (e && e.type === 'keydown' && e.key !== 'Escape') return;
-      if (e && e.type === 'mousedown' && pop.contains(e.target)) return;
+      if (e && (e.type === 'mousedown' || e.type === 'scroll') && e.target instanceof Node && pop.contains(e.target)) return;
       _close();
     };
     setTimeout(() => {
