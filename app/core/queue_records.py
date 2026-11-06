@@ -6,6 +6,7 @@ search fields separately from explicit user corrections, never filenames.
 import json
 from datetime import date
 import database as db
+from app.core.matching import studio_search_name
 
 FIELDS = ('title', 'performers', 'studio', 'date', 'scene_number', 'term', 'description', 'tags', 'extra_kind')
 SOURCE_FIELDS = {'TPDB':'match_tpdb_id','StashDB':'match_stashdb_id',
@@ -87,6 +88,7 @@ def read(filename='', file_id=None, *, settings=None, parser_signature=None):
     effective = dict(description='', tags=[], extra_kind='__auto__')
     effective.update(parsed)
     effective.update(overrides)
+    effective["studio"] = studio_search_name(effective.get("studio"))
     # Resolve against the library now, retaining links saved with manual edits.
     links = effective.get('performer_links') or _links(effective.get('performers', []), 'performer')
     studio_links = effective.get('studio_link') or (_links([effective['studio']], 'studio')[0] if effective.get('studio') else None)

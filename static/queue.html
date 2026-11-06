@@ -3628,6 +3628,34 @@
     position: sticky; bottom: 0; z-index: 4; padding: 10px 0;
     background: rgb(var(--panel-lo-rgb)); border-top: 1px solid rgba(var(--brand-accent-rgb),.25);
   }
+
+  #qSearchOverlay:not(.q-details-edit) #qSearchBody {display:grid !important;grid-template-columns:minmax(0,45fr) minmax(0,55fr)}
+  #qSearchOverlay #qSearchTopRow {max-height:none !important}
+  #qSearchOverlay #qSearchResultsWrap {border-top:0 !important}
+  #qSearchOverlay #qSearchResults > div:has(.qs-candidate) {grid-template-columns:minmax(0,1fr) !important}
+  #qsFileFrame {display:block;width:calc(100% - 36px);height:clamp(140px,30vh,340px);flex:none;object-fit:contain;margin:8px 18px;background:#111;border-radius:6px}
+  #qsFileFrame[hidden] {display:none}
+  .qs-frame-pick,.qs-frame-pick img {display:block;width:100%;height:100%;object-fit:cover;padding:0;border:0;cursor:pointer}
+  #searchFrameStrip .is-picked {outline:2px solid var(--accent);outline-offset:-2px}
+  #qsFields > summary,.qs-more > summary,.qs-sources > summary {cursor:pointer;color:var(--accent);padding:8px}
+  #qsFields > summary {display:none}
+  .qs-more {margin-top:8px}
+  .qs-advanced {display:grid;gap:8px}
+  .qs-sources {position:relative}
+  .qs-sources .qs-source-toggle {position:absolute;right:0;top:100%;z-index:9;width:min(350px,80vw);padding:10px;background:var(--bg,#191b1d);border:1px solid var(--dim);border-radius:6px}
+  #qSearchOverlay.q-details-edit .qs-sources {display:none}
+  .qs-evidence strong {color:#f6bf85}
+  .qs-candidate.is-selected {outline:2px solid var(--accent);flex-wrap:wrap}
+  .qs-candidate.is-selected > img:first-child {width:100% !important;height:clamp(140px,30vh,340px) !important;object-fit:contain !important;background:#111}
+  .qs-candidate:not(.is-selected) .qs-use,.qs-candidate.is-selected .qs-inspect {display:none}
+  .qs-evidence {font-size:var(--text-small);color:var(--text);line-height:1.45}
+  @media(max-width:760px){
+    #qSearchOverlay:not(.q-details-edit) #qSearchBody {display:block !important;overflow:auto !important}
+    #qSearchOverlay #qSearchTopRow,#qSearchOverlay #qSearchLeftCol,#qSearchOverlay #qSearchResultsWrap,#qSearchOverlay #qSearchResults {overflow:visible !important}
+    #qsFields > summary {display:list-item}
+    #qSearchOverlay .qs-candidate {flex-wrap:wrap}
+    #qSearchOverlay .qs-candidate > img:first-child {max-width:100%}
+  }
 </style>
 <link rel="stylesheet" href="/static/mobile.css?v=20260930-desktop-scale">
 <link rel="stylesheet" href="/static/design-system.css?v=20261011-toggle-layer-fix">
@@ -3777,19 +3805,19 @@
            focused on the user's typed input. Previously below the Plot
            field; moved here so the chips read as a popup-wide control
            rather than form furniture. -->
-      <div class="qs-source-toggle qs-source-toggle--header" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0">
+      <details class="qs-sources"><summary>Sources <span id="qsSourceCount"></span></summary><div class="qs-source-toggle qs-source-toggle--header" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-width:0">
         <span style="font-family:var(--secs);font-size:var(--text-small);letter-spacing:0.06em;text-transform:uppercase;color:var(--dim);margin-right:4px">Sources</span>
         <button type="button" class="qs-source-pill is-on" data-source="StashDB" onclick="toggleQSearchSource(this)" title="StashDB"><img src="/static/logos/stashdb.webp" alt="StashDB"></button>
         <button type="button" class="qs-source-pill is-on" data-source="TPDB" onclick="toggleQSearchSource(this)" title="ThePornDB"><img src="/static/logos/tpdb.webp" alt="TPDB"></button>
         <button type="button" class="qs-source-pill is-on" data-source="FansDB" onclick="toggleQSearchSource(this)" title="FansDB"><img src="/static/logos/fansdb.webp" alt="FansDB"></button>
         <button type="button" class="qs-source-pill is-on" data-source="JAVStash" onclick="toggleQSearchSource(this)" title="JAVStash"><img src="/static/logos/javstash.webp" alt="JAVStash"></button>
-        <button type="button" class="qs-source-pill is-on" data-source="AFDB" aria-pressed="true" onclick="toggleQSearchSource(this)" title="Adult Film Database">AFDB</button>
-        <button type="button" class="qs-source-pill is-on" data-source="Data18" aria-pressed="true" onclick="toggleQSearchSource(this)" title="Data18 scene credits">Data18</button>
-        <button type="button" class="qs-source-pill is-on" data-source="EuroPornstar" aria-pressed="true" onclick="toggleQSearchSource(this)" title="EuroPornstar gallery references">EuroPornstar</button>
+        <button type="button" class="qs-source-pill is-on" data-source="AFDB" aria-pressed="true" onclick="toggleQSearchSource(this)" title="Adult Film Database"><img src="/static/logos/afdb.webp" alt="AFDB" onerror="this.replaceWith(document.createTextNode(this.alt))"></button>
+        <button type="button" class="qs-source-pill is-on" data-source="Data18" aria-pressed="true" onclick="toggleQSearchSource(this)" title="Data18 scene credits"><img src="/static/logos/data18.webp" alt="Data18" onerror="this.replaceWith(document.createTextNode(this.alt))"></button>
+        <button type="button" class="qs-source-pill is-on" data-source="EuroPornstar" aria-pressed="true" onclick="toggleQSearchSource(this)" title="EuroPornstar gallery references"><img src="/static/logos/europeanpornstars.webp" alt="EuroPornstar" onerror="this.replaceWith(document.createTextNode(this.alt))"></button>
         <label class="btn-secondary" title="Import saved Data18 performer page"><i class="fa-solid fa-file-import"></i><input type="file" accept=".html,.htm,text/html" aria-label="Import saved Data18 performer page" onchange="importData18Profile(this)" style="width:1px;opacity:0"></label>
         <button type="button" class="qs-source-pill" aria-pressed="false" data-source="IAFD" onclick="toggleQSearchSource(this)" title="Include IAFD for the next search only"><img src="/static/logos/iafd.webp" alt="IAFD"></button>
       </div>
-      <button onclick="clearSearch()" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:var(--dim);font-size:var(--text-body);cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0" title="Close (Esc)">&times;</button>
+      </details><button onclick="clearSearch()" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:var(--dim);font-size:var(--text-body);cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0" title="Close (Esc)">&times;</button>
     </div>
     <div id="qSearchBody" style="flex:1 1 0;min-height:0;display:flex;flex-direction:column;overflow:hidden">
      <div id="qSearchTopRow" style="flex:0 1 auto;min-height:0;display:flex;flex-direction:row;overflow:hidden;max-height:55vh">
@@ -3797,16 +3825,13 @@
         <!-- Filmstrip — pulled into the left column now so the right
              column can split into Search results + Brain matches. -->
         <div id="searchFrameStrip" class="film-strip film-strip--suggestions" style="display:none;justify-content:center;gap:4px;overflow:hidden;margin:12px 18px 0;flex-shrink:0"></div>
-        <div class="search-panel-filters q-search-modal-filters" style="flex-shrink:0;padding:14px 24px;border-bottom:1px solid rgba(var(--brand-purple-rgb),0.14);background:rgba(0,0,0,0.18)">
+        <img id="qsFileFrame" alt="Selected frame from the queue file" hidden>
+        <details id="qsFields" open><summary>Search fields</summary><div class="search-panel-filters q-search-modal-filters" style="flex-shrink:0;padding:14px 24px;border-bottom:1px solid rgba(var(--brand-purple-rgb),0.14);background:rgba(0,0,0,0.18)">
           <div class="field-row" style="margin-bottom:10px">
             <label class="field-label">Title</label>
             <input class="field-input" id="srchTitle" type="text" placeholder="Scene title" oninput="if(_qConfirmScene)_qConfirmTitleEdited=true" onkeydown="if(event.key==='Enter')runQueueSearch()">
           </div>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:end">
-            <div class="field-row">
-              <label class="field-label">Free text</label>
-              <input class="field-input" id="srchTerm" type="text" placeholder="Any term..." onkeydown="if(event.key==='Enter')runQueueSearch()">
-            </div>
             <div class="field-row manual-perf-wrap">
               <label class="field-label">Stars</label>
               <div class="field-input qs-pill-input" id="srchPerformerPills" style="display:flex;flex-wrap:wrap;gap:6px;min-height:34px;align-items:center;padding:4px 8px;cursor:text" onclick="document.getElementById('srchPerformer').focus()">
@@ -3829,7 +3854,11 @@
             </label>
             </div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
+          <details class="qs-more"><summary>More details</summary><div class="qs-advanced">            <div class="field-row">
+              <label class="field-label">Free text</label>
+              <input class="field-input" id="srchTerm" type="text" placeholder="Any term..." onkeydown="if(event.key==='Enter')runQueueSearch()">
+            </div>
+
             <div class="field-row">
               <label class="field-label">Plot / Description</label>
               <textarea class="field-input" id="mPlot" rows="4" placeholder="Optional description..." style="resize:none;width:100%;box-sizing:border-box"></textarea>
@@ -3842,41 +3871,7 @@
               </div>
             </div>
           </div>
-          <div class="q-details-actions" style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px">
-            <div class="q-details-note" style="flex:1 1 240px;margin-right:auto"><span id="qDetailsStatus" role="status" aria-live="polite"></span>
-              <details><summary>File information</summary><div id="qDetailsTechnical"></div></details>
-            </div>
-            <!-- Special-feature marker (BTS / Bloopers / Outtakes / …).
-                 Auto-populated from the filename on popup open; the
-                 user can override before filing. ``Normal scene``
-                 means "no marker"; ``Auto-detect`` defers to the
-                 server-side filename scan. -->
-            <label for="srchExtraKind" style="font-family:var(--secs);font-size:var(--text-small);letter-spacing:0.06em;text-transform:uppercase;color:var(--dim);flex-shrink:0">Type</label>
-            <select id="srchExtraKind" class="field-input" style="width:auto;min-width:160px;flex-shrink:0;padding:6px 10px;font-size:var(--text-section)" title="Special-feature marker — appended as [Type] to the filed name + NFO tag">
-              <option value="__auto__">Auto-detect</option>
-              <option value="">Normal scene</option>
-              <option value="BTS">BTS</option>
-              <option value="Bloopers">Bloopers</option>
-              <option value="Outtakes">Outtakes</option>
-              <option value="Making Of">Making Of</option>
-              <option value="Interview">Interview</option>
-              <option value="Trailer">Trailer</option>
-              <option value="Deleted Scenes">Deleted Scenes</option>
-              <option value="Photoshoot">Photoshoot</option>
-              <option value="Commentary">Commentary</option>
-              <option value="Extras">Extras</option>
-            </select>
-            <button type="button" class="btn-secondary" onclick="saveQueueSearchDetails(true)" title="Discard corrections and parse the filename again" aria-label="Reset details" style="width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i></button>
-            <button type="button" class="btn-secondary" onclick="saveQueueSearchDetails()" title="Save details" aria-label="Save details" style="width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i></button>
-            <button class="btn-primary" onclick="runQueueSearch()" title="Save details and search" style="flex-shrink:0"><i class="fa-solid fa-magnifying-glass"></i><span class="btn-label" style="margin-left:6px">Save &amp; search</span></button>
-          </div>
-        </div>
-        <!-- (Scene-pick "Filing from" panel removed — title/studio/date
-             populate directly into the form fields on row click, cast
-             goes into the Stars pill input, and the right-column STASH
-             toggle is the single submit-to-DB control.) -->
-      </div>
-      <!-- Right column: Manual entry extras (only). -->
+          <div id="qDetailsTechnical"></div>      <!-- Right column: Manual entry extras (only). -->
       <div id="qSearchRightCol" style="flex:1 1 0;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden">
         <div id="qManualExtras" style="flex:1 1 0;min-height:0;background:rgba(0,0,0,0.22);display:flex;flex-direction:column;overflow:hidden">
           <button type="button" id="qManualExtrasToggle" onclick="toggleManualExtras()" style="flex-shrink:0;display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;padding:10px 24px;color:var(--dim);cursor:pointer;font-family:var(--secs);font-size:var(--text-body);letter-spacing:0.06em;text-transform:uppercase">
@@ -3904,6 +3899,42 @@
             </div>
           </div>
         </div>
+      </div>
+</details>
+          <div class="q-details-actions" style="display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px">
+            <div class="q-details-note" style="flex:1 1 240px;margin-right:auto"><span id="qDetailsStatus" role="status" aria-live="polite"></span>
+
+            </div>
+            <!-- Special-feature marker (BTS / Bloopers / Outtakes / …).
+                 Auto-populated from the filename on popup open; the
+                 user can override before filing. ``Normal scene``
+                 means "no marker"; ``Auto-detect`` defers to the
+                 server-side filename scan. -->
+            <label for="srchExtraKind" style="font-family:var(--secs);font-size:var(--text-small);letter-spacing:0.06em;text-transform:uppercase;color:var(--dim);flex-shrink:0">Type</label>
+            <select id="srchExtraKind" class="field-input" style="width:auto;min-width:160px;flex-shrink:0;padding:6px 10px;font-size:var(--text-section)" title="Special-feature marker — appended as [Type] to the filed name + NFO tag">
+              <option value="__auto__">Auto-detect</option>
+              <option value="">Normal scene</option>
+              <option value="BTS">BTS</option>
+              <option value="Bloopers">Bloopers</option>
+              <option value="Outtakes">Outtakes</option>
+              <option value="Making Of">Making Of</option>
+              <option value="Interview">Interview</option>
+              <option value="Trailer">Trailer</option>
+              <option value="Deleted Scenes">Deleted Scenes</option>
+              <option value="Photoshoot">Photoshoot</option>
+              <option value="Commentary">Commentary</option>
+              <option value="Extras">Extras</option>
+            </select>
+            <button type="button" class="btn-secondary" onclick="saveQueueSearchDetails(true)" title="Discard corrections and parse the filename again" aria-label="Reset details" style="width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center"><i class="fa-solid fa-arrow-rotate-left" aria-hidden="true"></i></button>
+            <button type="button" class="btn-secondary" onclick="saveQueueSearchDetails()" title="Save details" aria-label="Save details" style="width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i></button>
+            <button class="btn-primary" onclick="runQueueSearch()" title="Save details and search" style="flex-shrink:0"><i class="fa-solid fa-magnifying-glass"></i><span class="btn-label" style="margin-left:6px">Save &amp; search</span></button>
+          </div>
+        </div>
+        </details>
+        <!-- (Scene-pick "Filing from" panel removed — title/studio/date
+             populate directly into the form fields on row click, cast
+             goes into the Stars pill input, and the right-column STASH
+             toggle is the single submit-to-DB control.) -->
       </div>
      </div>
      <!-- Full-width search results — spans both columns under the

@@ -184,7 +184,8 @@ def parse_filename(filename, settings):
             date = parsed['date']
         except ValueError:
             pass
-    result = dict(site=studio, date=date, performers=', '.join(performers), title=title,
+    from app.core.matching import studio_search_name
+    result = dict(site=studio_search_name(studio), date=date, performers=', '.join(performers), title=title,
                   full_query=full, performer_names=performers, parser_version=3)
     if folder_tag:
         result['folder_tag'] = True

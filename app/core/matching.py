@@ -99,11 +99,15 @@ def _release_name_with_folders(filename: str) -> str:
 
 
 
+def studio_search_name(value):
+    return ' '.join((value or '').replace('_', ' ').split())
+
+
 def _suggestion_identity_matches(performers: list[str], studio: str, scene: dict) -> bool:
     """Require a cast match or an exact normalized studio/alias match."""
     if performers and _required_performers_in_cast(performers, scene):
         return True
-    normalize = lambda value: re.sub(r"[^\w]", "", str(value).casefold())
+    normalize = lambda value: re.sub(r"[\W_]", "", str(value).casefold())
     wanted = normalize(studio)
     if not wanted:
         return False

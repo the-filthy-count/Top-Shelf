@@ -16,6 +16,13 @@ class QueueDetailsTests(unittest.TestCase):
             conn.execute("INSERT INTO favourite_entities(kind,folder_name,path,match_stashdb_id) VALUES('performer','Jane Doe','/library/Jane Doe','person-id')")
         return records.read('Jane Doe Private Lesson.mp4')
 
+    def test_saved_studio_slug_searches_with_spaces(self):
+        original = self.create()
+        with db.get_conn() as conn:
+            conn.execute("UPDATE queue_search_details SET overrides_json=? WHERE file_id=?",
+                         ('{"studio":"Braless_Forever"}', original['file_id']))
+        self.assertEqual(records.read(file_id=original['file_id'])['fields']['studio'], 'Braless Forever')
+
     def test_corrections_survive_rename_reparse_and_preserve_fingerprint(self):
         original = self.create()
         fields = dict(original['fields'], title='Correct title', date='', scene_number=2, performers=['Jane Doe'], studio='')

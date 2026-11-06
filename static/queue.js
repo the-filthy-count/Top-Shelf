@@ -3477,36 +3477,6 @@
     }
   }
 
-  let _manualPreviewObserver;
-  function _fitManualPreview() {
-    const body = document.getElementById('qManualExtrasBody');
-    const frame = document.getElementById('mThumbFrame');
-    if (!body || !frame) return;
-    const column = frame.parentElement;
-    const fit = () => {
-      if (!body.clientHeight || !body.clientWidth) return;
-      const style = getComputedStyle(body);
-      const width = body.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-      let used = 0;
-      for (const child of column.children) {
-        if (child === frame) continue;
-        const css = getComputedStyle(child);
-        if (css.display === 'none') continue;
-        used += child.getBoundingClientRect().height + (parseFloat(css.marginTop) || 0) + (parseFloat(css.marginBottom) || 0);
-      }
-      const height = Math.max(0, body.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) - used - 2);
-      const size = Math.max(0, Math.min(width, height * 16 / 9));
-      frame.style.width = `${size}px`;
-      frame.style.height = `${size * 9 / 16}px`;
-    };
-    if (!_manualPreviewObserver) {
-      _manualPreviewObserver = new ResizeObserver(fit);
-      _manualPreviewObserver.observe(body);
-      for (const child of column.children) if (child !== frame) _manualPreviewObserver.observe(child);
-    }
-    fit();
-  }
-
   let _qSearchRecord = null;
   let _qDetailsLoading = false;
   let _qDetailsSaving = false;
@@ -3604,6 +3574,9 @@
     const heading = document.querySelector('#qSearchPanel .ts-page-title__text');
     if (heading) heading.textContent = action.edit_details ? 'File details' : 'Scene Search';
     _qSelectedFile = filename;
+    document.getElementById("qsFields").open = true;
+    document.querySelector(".qs-more").open = false;
+    document.querySelector(".qs-sources").open = false;
     document.getElementById('searchFileLabel').textContent = `File: ${filename}`;
     document.getElementById('searchFileLabel').style.display = 'inline-block';
     // Show the modal IMMEDIATELY before any awaits — the user clicked
@@ -3623,7 +3596,7 @@
     _loadSearchFrames(filename);
     requestAnimationFrame(() => {
       if (mySeq !== _qOpenSearchSeq) return;
-      _fitManualPreview();
+
       _loadSearchFileMeta(filename, mySeq);
     });
     document.querySelectorAll('.queue-section .queue-item').forEach(el => el.classList.remove('active'));
@@ -3824,7 +3797,18 @@
   //: Drives the overlay prev/next navigation (keyboard + side buttons).
   let _searchFrameSources = [];
   let _searchFrameIndex = 0;
+  let _qsPickedFrame = null;
+  function _showFileFrame(index) {
+    const preview = document.getElementById('qsFileFrame');
+    const src = _searchFrameSources[index];
+    preview.hidden = !src;
+    if (src) preview.src = src;
+    else preview.removeAttribute('src');
+    document.querySelectorAll('#searchFrameStrip > div').forEach((slot,i) => slot.classList.toggle('is-picked', i === index && !!src));
+  }
   function _clearSearchFrames() {
+    _qsPickedFrame = null;
+    _showFileFrame(-1);
     const strip = document.getElementById('searchFrameStrip');
     if (!strip) return;
     strip.innerHTML = '';
@@ -3841,6 +3825,8 @@
   function _pickFrameAsThumb(i) {
     const src = _searchFrameSources[i];
     if (!src) return;
+    _qsPickedFrame = i;
+    _showFileFrame(i);
     const pct = (_searchFramePercents && _searchFramePercents[i]);
     mThumbDataUrl = src;
     mThumbMode = 'generated';
@@ -3875,6 +3861,8 @@
     // Bump the token so an in-flight load for a previous filename
     // can't paint into the current strip.
     const myToken = ++_searchFrameToken;
+    _qsPickedFrame = null;
+    _showFileFrame(-1);
     strip.innerHTML = '';
     strip.style.display = 'flex';
     _searchFrameSources = [];
@@ -3930,7 +3918,7 @@
           _searchFrameSources[i] = src;
           _searchFramePercents[i] = pct;
           if (src) {
-            slot.innerHTML = `<img src="${src}" alt="Frame ${pct != null ? pct + '%' : ''}" data-frame-index="${i}" style="width:100%;height:100%;object-fit:cover;display:block;cursor:pointer" onclick="_pickFrameAsThumb(${i})" title="Use this frame as the thumbnail" loading="lazy">`;
+            slot.innerHTML = `<button type="button" class="qs-frame-pick" onclick="_pickFrameAsThumb(${i})" aria-label="Select frame ${i+1}" title="Use this frame as the thumbnail"><img src="${esc(src)}" alt="Frame ${pct != null ? pct + '%' : ''}" data-frame-index="${i}" loading="lazy"></button>`;
           } else {
             slot.innerHTML = '<i class="fa-solid fa-image" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--dim);font-size:12px;opacity:0.4"></i>';
           }
@@ -3943,6 +3931,7 @@
         }
         strip.appendChild(slot);
       }
+      _showFileFrame(_qsPickedFrame ?? (_searchFrameSources[total-2] ? total-2 : _searchFrameSources.findIndex(Boolean)));
       // Bind retry buttons to a single delegated click that clears the
       // backoff entry server-side and restarts polling.
       strip.querySelectorAll('.searchFrameRetryBtn').forEach(btn => {
@@ -4199,7 +4188,7 @@
     const plotEl    = document.getElementById('mPlot');
     if (titleEl)     titleEl.value     = _qConfirmBaseTitle;
     const studioName = (scene.studio && scene.studio.name) || scene.studio || '';
-    if (studioEl)    studioEl.value    = studioName;
+    if (studioEl)    studioEl.value    = studioName.replace(/[_\s]+/g, ' ').trim();
     if (dateEl)      dateEl.value      = (scene.release_date || scene.date || '');
     if (performerEl) performerEl.value = '';
     if (typeof _perfPillsSet === 'function') {
@@ -4602,16 +4591,50 @@
   // Render the stored-match row HTML — same shape as runQueueSearch's
   // own row template, with an extra "Stored match" badge so the user
   // can tell it apart from fresh search results.
+  matchMedia('(max-width:760px)').addEventListener('change', e => {
+    if (!e.matches) document.getElementById('qsFields').open = true;
+  });
+  function inspectQueueCandidate(index) {
+    document.querySelectorAll('#qSearchResults .qs-candidate').forEach(card => {
+      const selected = Number(card.dataset.index) === index;
+      card.classList.toggle('is-selected', selected);
+      if (selected) card.querySelector('.qs-use button')?.focus({preventScroll:true});
+    });
+  }
+  function matchEvidence(row) {
+    const clues = [];
+    const names = value => String(value || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    const wanted = names(_perfPillsValue() + ',' + document.getElementById('srchPerformer').value);
+    const cast = names(row.performers);
+    if (wanted.length && cast.length) {
+      const count = wanted.filter(name => cast.includes(name)).length;
+      clues.push(count === wanted.length ? (count === 1 ? 'Performer matches' : 'All performers match') : count + '/' + wanted.length + ' performer names match');
+    }
+    const date = document.getElementById('srchDate').value.trim();
+    if (date && row.date) clues.push(date === row.date ? 'Same release date' : 'Different release date');
+    const runtime = Number(_qSearchRecord?.technical?.media_duration);
+    if (runtime > 0 && row.duration > 0) {
+      const delta = Math.round(row.duration - runtime);
+      clues.push(delta ? 'Runtime ' + Math.abs(delta) + 's ' + (delta > 0 ? 'longer' : 'shorter') : 'Same runtime');
+    }
+    return clues.length ? '<div class="qs-evidence">' + clues.map(clue =>
+      /Different|longer|shorter|\//.test(clue) ? '<strong>' + esc(clue) + '</strong>' : esc(clue)
+    ).join(' · ') + '</div>' : '';
+  }
+  function queueSourceLogo(source) {
+    const file = new Map([
+      ['stashdb','stashdb'], ['tpdb','tpdb'], ['theporndb','tpdb'], ['fansdb','fansdb'],
+      ['javstash','javstash'], ['iafd','iafd'], ['afdb','afdb'], ['data18','data18'],
+      ['europornstar','europeanpornstars'],
+    ]).get(String(source || '').toLowerCase());
+    return file ? '/static/logos/' + file + '.webp' : '';
+  }
   function _qsRenderStoredMatchRow(idx) {
     const m = _qStoredMatchScene || {};
     const thumbSrc = m.image || '/static/img/missing.webp';
     const thumb = `<img src="${thumbSrc}" onclick="event.stopPropagation();openQueueImageOverlay(this.src)" style="width:140px;height:80px;object-fit:cover;border-radius:6px;cursor:zoom-in;display:block;flex-shrink:0" onerror="this.onerror=null;this.src='/static/img/missing.webp'" loading="lazy">`;
     const srcLabel = esc(m.source || '');
-    const sourceLogo = m.source === 'TPDB' ? '/static/logos/tpdb.webp'
-      : m.source === 'StashDB' ? '/static/logos/stashdb.webp'
-      : m.source === 'FansDB'  ? '/static/logos/fansdb.webp'
-      : m.source === 'JAVStash' ? '/static/logos/javstash.webp'
-      : '';
+    const sourceLogo = queueSourceLogo(m.source);
     const logoImg = sourceLogo
       ? `<img src="${sourceLogo}" alt="${srcLabel}" style="height:22px;width:auto;display:block;flex-shrink:0" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${srcLabel}',style:'font-size:var(--text-small);font-weight:600;color:var(--accent)'}))" loading="lazy">`
       : `<span style="font-size:var(--text-small);font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--accent);padding:2px 7px;border-radius:4px">${srcLabel}</span>`;
@@ -4620,17 +4643,17 @@
     const canFile = !!m.date;
     const useBtn = _qSelectedFile
       ? (canFile
-        ? `<button type="button" onclick="event.stopPropagation();useThisScene(${idx})" style="flex-shrink:0;background:linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.30) 0%, rgba(var(--brand-accent-rgb), 0.18) 100%);border:1px solid rgba(var(--brand-accent-rgb), 0.55);border-radius:8px;color:var(--text);padding:8px 14px;cursor:pointer;font-family:var(--secs);font-size:var(--text-body);font-weight:600;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;display:inline-flex;align-items:center;gap:6px"><i class="fa-solid fa-check"></i> Use this</button>`
+        ? `<button type="button" onclick="event.stopPropagation();useThisScene(${idx})" style="flex-shrink:0;background:linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.30) 0%, rgba(var(--brand-accent-rgb), 0.18) 100%);border:1px solid rgba(var(--brand-accent-rgb), 0.55);border-radius:8px;color:var(--text);padding:8px 14px;cursor:pointer;font-family:var(--secs);font-size:var(--text-body);font-weight:600;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;display:inline-flex;align-items:center;gap:6px"><i class="fa-solid fa-check"></i> Use this match</button>`
         : `<span style="font-size:var(--text-small);color:var(--muted);flex-shrink:0" title="No date">No date</span>`)
       : `<span style="font-size:var(--text-small);color:var(--text);flex-shrink:0">No file selected</span>`;
-    const rowClickable = !!(_qSelectedFile && canFile);
-    const rowOnClick = rowClickable ? ` onclick="useThisScene(${idx})"` : '';
+    const rowClickable = true;
+    const rowOnClick = rowClickable ? ` onclick="inspectQueueCandidate(${idx})"` : '';
     const rowCursor = rowClickable ? 'cursor:pointer;' : '';
     const perfNamesPipe = (m.performers || '').split(',').map(s => s.trim()).filter(Boolean).join('|');
     const perfPile = perfNamesPipe
       ? `<div class="ts-perf-pile" data-perf-names="${esc(perfNamesPipe)}" data-cap="5" style="margin-top:6px"></div>`
       : '';
-    return `<div${rowOnClick} style="display:flex;gap:14px;align-items:center;padding:12px;border-radius:10px;border:1px solid rgba(var(--brand-accent-rgb),0.45);background:linear-gradient(160deg, rgba(var(--brand-accent-rgb),0.10) 0%, rgba(0,0,0,0.18) 100%);${rowCursor}min-width:0">
+    return `<div class="qs-candidate" data-index="${idx}"${rowOnClick} style="display:flex;gap:14px;align-items:center;padding:12px;border-radius:10px;border:1px solid rgba(var(--brand-accent-rgb),0.45);background:linear-gradient(160deg, rgba(var(--brand-accent-rgb),0.10) 0%, rgba(0,0,0,0.18) 100%);${rowCursor}min-width:0">
         ${thumb}
         <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:4px">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -4640,19 +4663,22 @@
           </div>
           <div style="font-size:var(--text-body);color:var(--text);font-weight:500;line-height:1.35">${esc(m.title || '')}</div>
           <div style="font-size:var(--text-small);color:var(--dim)">${esc(m.studio||'')}${m.performers ? ' · ' + esc(m.performers) : ''}</div>
+          ${matchEvidence(window._qSearchResults[idx])}
           ${perfPile}
         </div>
-        <div style="flex-shrink:0;align-self:center">${useBtn}</div>
+        <button type="button" class="btn-secondary qs-inspect" onclick="event.stopPropagation();inspectQueueCandidate(${idx})">Inspect</button><div class="qs-use">${useBtn}</div>
       </div>`;
   }
   function toggleQSearchSource(btn) {
     btn.classList.toggle('is-on');
     btn.setAttribute('aria-pressed', String(btn.classList.contains('is-on')));
+    document.getElementById('qsSourceCount').textContent = _qsCurrentSources().length;
     _qsSaveSources(_qsCurrentSources().filter(source => source !== 'IAFD'));
   }
   window.toggleQSearchSource = toggleQSearchSource;
   // Apply the saved selection on page load.
   _qsApplySourcesToUI();
+  document.getElementById('qsSourceCount').textContent = _qsCurrentSources().length;
 
   async function runQueueSearch() {
     if (_qDetailsLoading || (_qSelectedFile && !await saveQueueSearchDetails())) return;
@@ -4704,6 +4730,7 @@
       p.classList.remove('is-on');
       p.setAttribute('aria-pressed', 'false');
     });
+    document.getElementById('qsSourceCount').textContent = _qsCurrentSources().length;
     const resultsEl = document.getElementById('qSearchResults');
     resultsEl.innerHTML = '<div style="padding:48px;text-align:center;color:var(--dim);font-size:var(--text-body)"><span class="loader loader--block" role="status" aria-label="Loading"></span>Searching…</div>';
     try {
@@ -4761,12 +4788,7 @@
         // Backend emits `source: "TPDB"` (see main.py:7397) — the prior
         // `'ThePornDB'` check never matched, so TPDB rows fell through
         // to the plain-text-label branch instead of showing the logo.
-        const sourceLogo = (row.source === 'TPDB' || row.source === 'ThePornDB') ? '/static/logos/tpdb.webp'
-          : row.source === 'FansDB'  ? '/static/logos/fansdb.webp'
-          : row.source === 'IAFD'    ? '/static/logos/iafd.webp'
-          : row.source === 'StashDB' ? '/static/logos/stashdb.webp'
-          : row.source === 'JAVStash' ? '/static/logos/javstash.webp'
-          : '';
+        const sourceLogo = queueSourceLogo(row.source);
         // Resolve the View URL in a fixed order so IAFD rows never leak
         // into the stash-box fallback:
         //   1. Backend-provided view_url (correct by construction)
@@ -4807,7 +4829,7 @@
         const canFile = !!row.date;
         const useBtn = _qSelectedFile
           ? (canFile
-            ? `<button type="button" onclick="event.stopPropagation();useThisScene(${idx})" style="flex-shrink:0;background:linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.30) 0%, rgba(var(--brand-accent-rgb), 0.18) 100%);border:1px solid rgba(var(--brand-accent-rgb), 0.55);border-radius:8px;color:var(--text);padding:8px 14px;cursor:pointer;font-family:var(--secs);font-size:var(--text-body);font-weight:600;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;transition:background 0.15s, border-color 0.15s" onmouseenter="this.style.background='linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.45) 0%, rgba(var(--brand-accent-rgb), 0.28) 100%)';this.style.borderColor='rgba(var(--brand-accent-rgb), 0.85)'" onmouseleave="this.style.background='linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.30) 0%, rgba(var(--brand-accent-rgb), 0.18) 100%)';this.style.borderColor='rgba(var(--brand-accent-rgb), 0.55)'"><i class="fa-solid fa-check"></i> Use this</button>`
+            ? `<button type="button" onclick="event.stopPropagation();useThisScene(${idx})" style="flex-shrink:0;background:linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.30) 0%, rgba(var(--brand-accent-rgb), 0.18) 100%);border:1px solid rgba(var(--brand-accent-rgb), 0.55);border-radius:8px;color:var(--text);padding:8px 14px;cursor:pointer;font-family:var(--secs);font-size:var(--text-body);font-weight:600;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;transition:background 0.15s, border-color 0.15s" onmouseenter="this.style.background='linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.45) 0%, rgba(var(--brand-accent-rgb), 0.28) 100%)';this.style.borderColor='rgba(var(--brand-accent-rgb), 0.85)'" onmouseleave="this.style.background='linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.30) 0%, rgba(var(--brand-accent-rgb), 0.18) 100%)';this.style.borderColor='rgba(var(--brand-accent-rgb), 0.55)'"><i class="fa-solid fa-check"></i> Use this match</button>`
             : `<span style="font-size:var(--text-small);color:var(--muted);flex-shrink:0" title="No date">No date</span>`)
           : `<span style="font-size:var(--text-small);color:var(--text);flex-shrink:0">No file selected</span>`;
         // Headshot pile slot — populated by `_hydratePerfPiles` once
@@ -4817,10 +4839,10 @@
         const perfPile = perfNamesPipe
           ? `<div class="ts-perf-pile" data-perf-names="${esc(perfNamesPipe)}" data-cap="5" style="margin-top:6px"></div>`
           : '';
-        const rowClickable = !!(_qSelectedFile && canFile);
-        const rowOnClick = rowClickable ? ` onclick="useThisScene(${idx})"` : '';
+        const rowClickable = true;
+        const rowOnClick = rowClickable ? ` onclick="inspectQueueCandidate(${idx})"` : '';
         const rowCursor = rowClickable ? 'cursor:pointer;' : '';
-        return `<div${rowOnClick} style="display:flex;gap:14px;align-items:center;padding:12px;border-radius:10px;border:1px solid rgba(var(--brand-purple-rgb),0.16);background:linear-gradient(160deg, rgba(var(--brand-purple-rgb),0.06) 0%, rgba(0,0,0,0.18) 100%);transition:border-color 0.15s, transform 0.15s;${rowCursor}min-width:0" onmouseover="this.style.borderColor='rgba(var(--brand-accent-rgb), 0.45)'" onmouseout="this.style.borderColor='rgba(var(--brand-purple-rgb),0.16)'">
+        return `<div class="qs-candidate" data-index="${idx}"${rowOnClick} style="display:flex;gap:14px;align-items:center;padding:12px;border-radius:10px;border:1px solid rgba(var(--brand-purple-rgb),0.16);background:linear-gradient(160deg, rgba(var(--brand-purple-rgb),0.06) 0%, rgba(0,0,0,0.18) 100%);transition:border-color 0.15s, transform 0.15s;${rowCursor}min-width:0" onmouseover="this.style.borderColor='rgba(var(--brand-accent-rgb), 0.45)'" onmouseout="this.style.borderColor='rgba(var(--brand-purple-rgb),0.16)'">
           ${thumb}
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:4px">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -4830,12 +4852,14 @@
             </div>
             <div style="font-size:var(--text-body);color:var(--text);font-weight:500;line-height:1.35">${_qsHighlight(row.title, qsHighlight)}</div>
             <div style="font-size:var(--text-small);color:var(--dim)">${esc(row.studio||'')}${row.performers ? ' · ' + _qsPerformerCsvHtml(row.performers, qsHighlight) : ''}</div>
-            ${perfPile}
+            ${matchEvidence(window._qSearchResults[idx])}
+          ${perfPile}
           </div>
-          <div style="flex-shrink:0;align-self:center">${useBtn}</div>
+          <button type="button" class="btn-secondary qs-inspect" onclick="event.stopPropagation();inspectQueueCandidate(${idx})">Inspect</button><div class="qs-use">${useBtn}</div>
         </div>`;
       }).join('');
       resultsEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${rowsHtml}</div>`;
+      if (matchMedia('(max-width:760px)').matches) document.getElementById('qsFields').open = false;
       _hydratePerfPiles(resultsEl);
       if (typeof enrichPerformerNames === 'function') enrichPerformerNames(resultsEl);
     } catch(e) { if (e?.name === 'AbortError') return;
@@ -7083,14 +7107,7 @@
     const _h = (s) => (typeof _libraryAndTokenHighlight === 'function')
       ? _libraryAndTokenHighlight(s, _hl)
       : esc(s);
-    const logoSrc = {
-      'StashDB': '/static/logos/stashdb.webp',
-      'TPDB':    '/static/logos/tpdb.webp',
-      'FansDB':  '/static/logos/fansdb.webp',
-      'IAFD':    '/static/logos/iafd.webp',
-      'JAVStash': '/static/logos/javstash.webp',
-      'javstash': '/static/logos/javstash.webp',
-    }[c.source_db] || '';
+    const logoSrc = queueSourceLogo(c.source_db);
     const fnAttr = (filename || '').replace(/'/g, "\\'");
     const sidAttr = (c.source_id || '').replace(/'/g, "\\'");
     const dbAttr = (c.source_db || '').replace(/'/g, "\\'");
@@ -7139,7 +7156,7 @@
           <div style="position:absolute;left:0;right:0;bottom:0;height:55%;background:linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.55) 100%);pointer-events:none"></div>
           <!-- Source logo badge -->
           ${logoSrc
-            ? `<div style="position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.10);border-radius:6px;padding:5px 9px;display:flex;align-items:center;gap:6px"><img src="${logoSrc}" alt="${esc(c.source_db)}" style="height:14px;width:auto;display:block" loading="lazy"></div>`
+            ? `<div style="position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.10);border-radius:6px;padding:5px 9px;display:flex;align-items:center;gap:6px"><img src="${logoSrc}" alt="${esc(c.source_db)}" onerror="this.replaceWith(document.createTextNode(this.alt))" style="height:14px;width:auto;display:block" loading="lazy"></div>`
             : `<div style="position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);border-radius:6px;padding:4px 9px;font-size:var(--text-small);color:var(--text);letter-spacing:0.06em;text-transform:uppercase">${esc(c.source_db || '')}</div>`}
           <!-- Score chip -->
           <div style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.70);border:1px solid ${scoreColor};border-radius:6px;padding:3px 8px;font-family:var(--mono);font-size:var(--text-small);font-weight:600;color:${scoreColor};font-variant-numeric:tabular-nums">${scoreNum}%</div>

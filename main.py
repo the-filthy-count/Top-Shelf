@@ -2608,6 +2608,8 @@ def search_all_databases(term: str = None, title: str = None, performer: str = N
     searchScene (full-text). If date range given, also run queryScenes
     with date filter and merge results.
     """
+    from app.core.matching import studio_search_name
+    studio = studio_search_name(studio)
     keys = get_api_keys()
     all_sources = [
         ("StashDB",   STASHDB_ENDPOINT, keys["stashdb"]),
