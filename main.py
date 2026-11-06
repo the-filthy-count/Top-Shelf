@@ -783,6 +783,7 @@ class _WarmCache:
         self._name = name
         self._builder = builder
         self._backstop = float(backstop_interval_s)
+        self._cold_failures = 0
         self._last_attempt = 0.0
         self._snapshot = None
         self._snapshot_built_at = 0.0
@@ -862,19 +863,23 @@ class _WarmCache:
             with measure("cache.rebuild." + self._name):
                 new = self._builder()
         except Exception as e:
-            _log.warning(f"WarmCache[{self._name}] rebuild failed: {e}")
+            if self._snapshot is None:
+                self._cold_failures += 1
+            _log.exception("WarmCache[%s] rebuild failed: %s", self._name, e)
             return
         # If invalidate() fired while we were building, our snapshot is
         # stale relative to the state that triggered the invalidate.
         # Keep the previous snapshot until a subsequent clean build succeeds.
         if gen_at_start != self._invalidation_gen and not (publish_if_cold and self._snapshot is None):
             return
+        self._cold_failures = 0
         self._snapshot = new
         self._snapshot_built_at = time.time()
 
     def _loop(self) -> None:
         while not _runtime_stop.is_set():
-            self._dirty.wait(timeout=self._backstop)
+            delay = min(self._backstop, 2 ** min(self._cold_failures, 5)) if self._cold_failures else self._backstop
+            self._dirty.wait(timeout=delay)
             if _runtime_stop.wait(max(0.0, 2.0 - (time.monotonic() - self._last_attempt))):
                 return
             self._dirty.clear()
@@ -1441,8 +1446,6 @@ def _run_startup_warmup() -> None:
     # mutation or after the per-cache backstop, off the request thread.
     try:
         _favourites_warm.start()
-        _queue_warm.start()
-        _movies_queue_warm.start()
         _downloads_warm.start()
         _boot_maintenance.submit(_backfill_performer_grid_thumbnails)
     except Exception as e:
@@ -2251,6 +2254,9 @@ async def startup():
     _apply_background_schedules()
     # Kick the boot-loading warmup thread. The HTTP middleware sends all
     # traffic to /loading until this thread sets ``_startup_complete``.
+    # Publish queue content independently of external feed warmups.
+    _queue_warm.start()
+    _movies_queue_warm.start()
     threading.Thread(target=_run_startup_warmup, daemon=True, name="startup-warmup").start()
     # One-shot WebP migration — converts legacy .jpg/.png runtime caches
     # to .webp. Sentinel-guarded so subsequent boots are a fast no-op.
@@ -18339,6 +18345,8 @@ def _build_queue_snapshot() -> dict:
     filed_skipped = 0
     from app.core.filename_parser import cache_signature
     parser_signature = cache_signature(settings)
+    from app.core.queue_records import _library_links
+    link_indexes = {kind: _library_links(kind) for kind in ('performer','studio')}
     for rel, f in rel_entries:
         if any(part.startswith(".") for part in Path(rel).parts):
             continue
@@ -18471,7 +18479,7 @@ def _build_queue_snapshot() -> dict:
         search_record = None
         try:
             from app.core.queue_records import read as read_queue_record, observe_media
-            search_record = read_queue_record(rel, settings=settings, parser_signature=parser_signature)
+            search_record = read_queue_record(rel, settings=settings, parser_signature=parser_signature, link_indexes=link_indexes)
             observe_media(rel, f)
             sf = search_record['fields']
             if search_record['edited']:
@@ -18782,6 +18790,8 @@ _queue_warm = _WarmCache("queue", _build_queue_snapshot, 300.0)
 @app.get("/api/queue")
 async def get_queue():
     snapshot = _queue_warm.peek()
+    if snapshot is None and _queue_warm._cold_failures >= 3:
+        return JSONResponse({"error":"Queue scan failed. Check the server log and retry."}, status_code=503)
     return snapshot if snapshot is not None else JSONResponse({"files": [], "loading": True}, status_code=202)
 
 
@@ -35505,6 +35515,8 @@ _movies_queue_warm = _WarmCache("movies_queue", _build_movies_queue_snapshot, 30
 @app.get("/api/movies/queue")
 def movies_queue():
     snapshot = _movies_queue_warm.peek()
+    if snapshot is None and _movies_queue_warm._cold_failures >= 3:
+        return JSONResponse({"error":"Queue scan failed. Check the server log and retry."}, status_code=503)
     return snapshot if snapshot is not None else JSONResponse({"files": [], "loading": True}, status_code=202)
 
 

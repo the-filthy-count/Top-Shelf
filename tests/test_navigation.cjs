@@ -73,7 +73,7 @@ test('Back restores queue polling once and ordinary pageshow does not duplicate 
 test('library cancellation does not overwrite the existing grid data',async()=>{
   const src=read('favourites.js');const old=[{id:1}];
   const ctx={_kindLoadGenerations:new Map(),_kindControllers:new Map(),_libraryRevision:0,
-    _rowsPerf:old,_loadedKinds:new Set(),AbortController,
+    _rowsPerf:old,_loadedKinds:new Set(),AbortController,AbortSignal,
     fetch:(url,{signal})=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(new DOMException('cancelled','AbortError'))))};
   vm.createContext(ctx);vm.runInContext(extract(src,'_fetchKind'),ctx);
   const request=ctx._fetchKind('performer');ctx._kindControllers.get('performer').abort();

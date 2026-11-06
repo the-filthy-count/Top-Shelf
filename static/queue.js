@@ -331,7 +331,10 @@
           const payload = await response.json();
           clearTimeout(timeout);
           controller.signal.throwIfAborted();
-          if (!payload.loading) return payload;
+          if (!payload.loading) {
+            if (!Array.isArray(payload.files)) throw new Error('Invalid queue response');
+            return payload;
+          }
           await new Promise(resolve => setTimeout(resolve, 500));
         }
       } finally {
@@ -1754,7 +1757,7 @@
         window.showToast?.('Could not refresh the queue. Showing previous results.');
         return;
       }
-      document.getElementById('queueList').innerHTML = '<div class="empty">Error loading movie queue</div>';
+      document.getElementById('queueList').innerHTML = '<div class="empty">Could not load the movie queue. <button type="button" class="btn-secondary" onclick="loadQueue({force:true})">Retry</button></div>';
       const pager = document.getElementById('queuePager');
       if (pager) pager.style.display = 'none';
     }
@@ -2822,7 +2825,7 @@
         window.showToast?.('Could not refresh the queue. Showing previous results.');
         return;
       }
-      document.getElementById('queueList').innerHTML = '<div class="empty">Error loading queue</div>';
+      document.getElementById('queueList').innerHTML = '<div class="empty">Could not load the queue. <button type="button" class="btn-secondary" onclick="loadQueue({force:true})">Retry</button></div>';
       const pager = document.getElementById('queuePager');
       if (pager) pager.style.display = 'none';
     }

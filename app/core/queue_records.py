@@ -49,14 +49,28 @@ def _asset(filename, file_id=None):
     return filename, asset, dict(row)
 
 
-def _links(names, kind):
-    compact = lambda text: ''.join(c for c in text.casefold() if c.isalnum())
+def _link_key(name):
+    return ''.join(char for char in name.casefold() if char.isalnum())
+
+
+def _library_links(kind):
+    columns = ','.join(SOURCE_FIELDS.values())
     with db.get_conn() as conn:
-        rows = [dict(r) for r in conn.execute(
-            "SELECT * FROM favourite_entities WHERE kind=? AND COALESCE(is_group,0)=0", (kind,))]
+        rows = conn.execute(f"SELECT id,folder_name,{columns} FROM favourite_entities "
+                            "WHERE kind=? AND COALESCE(is_group,0)=0", (kind,)).fetchall()
+    by_name = {}
+    for row in rows:
+        by_name.setdefault(_link_key(row['folder_name'] or ''), []).append(dict(row))
+    return by_name
+
+
+def _links(names, kind, indexes=None):
+    if not names:
+        return []
+    by_name = _library_links(kind) if indexes is None else indexes[kind]
     result = []
     for name in names:
-        matches = [r for r in rows if compact(r['folder_name'] or '') == compact(name)]
+        matches = by_name.get(_link_key(name), [])
         link = {'name': name, 'library_id': None, 'source_ids': {}}
         if len(matches) == 1:
             row = matches[0]
@@ -65,7 +79,7 @@ def _links(names, kind):
     return result
 
 
-def read(filename='', file_id=None, *, settings=None, parser_signature=None):
+def read(filename='', file_id=None, *, settings=None, parser_signature=None, link_indexes=None):
     from app.core.filename_parser import parse_filename, cache_signature
     from app.core.matching import _extract_scene_number_from_filename
     filename, asset, technical = _asset(filename, file_id)
@@ -90,8 +104,8 @@ def read(filename='', file_id=None, *, settings=None, parser_signature=None):
     effective.update(overrides)
     effective["studio"] = studio_search_name(effective.get("studio"))
     # Resolve against the library now, retaining links saved with manual edits.
-    links = effective.get('performer_links') or _links(effective.get('performers', []), 'performer')
-    studio_links = effective.get('studio_link') or (_links([effective['studio']], 'studio')[0] if effective.get('studio') else None)
+    links = effective.get('performer_links') or _links(effective.get('performers', []), 'performer', link_indexes)
+    studio_links = effective.get('studio_link') or (_links([effective['studio']], 'studio', link_indexes)[0] if effective.get('studio') else None)
     return dict(file_id=asset['id'], filename=filename, revision=stored['revision'],
                 fields={key:effective.get(key) for key in FIELDS},
                 performer_links=links, studio_link=studio_links,

@@ -3088,7 +3088,7 @@
     _kindControllers.set(kind, controller);
     let r, d;
     try {
-      r = await fetch(url, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+      r = await fetch(url, { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)]) });
       d = await r.json();
       controller.signal.throwIfAborted();
     } finally {
@@ -3097,6 +3097,8 @@
     if (!r.ok) throw new Error(d.error || 'Failed to load');
     if (_kindLoadGenerations.get(kind) !== generation) return;
     if (revision !== _libraryRevision) return _loadKind(kind);
+    const key = {performer:'performers',studio:'studios',movie:'movies',jav:'jav',vice:'vices'}[kind];
+    if (!Array.isArray(d?.[key])) throw new Error('Incomplete library response. Please retry.');
     if (kind === 'performer') _rowsPerf   = d.performers || [];
     if (kind === 'studio')    _rowsStudio = d.studios    || [];
     if (kind === 'movie')     _rowsMovie  = [...(d.movies || []),
@@ -3288,7 +3290,19 @@
       updateFavFilterIconBtns();
       render();
       checkIndexProgressOnce();
-    } catch (e) { if (e.name !== 'AbortError') showMsg(e.message || 'Error'); }
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      const grid = document.getElementById('favGrid');
+      if (grid && (grid.childElementCount === 0 || grid.querySelector('.fav-cell--skeleton'))) {
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'btn-secondary';
+        retry.textContent = 'Retry loading library';
+        retry.onclick = loadActiveView;
+        grid.replaceChildren(retry);
+      }
+      showMsg(e.message || 'Could not load library');
+    }
   }
 
   // Full refresh — wipes cache and refetches every kind. Used by
