@@ -7573,7 +7573,7 @@ button.pp-name-group:hover .pp-name-group-count {
 .pp-social-grid {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 6px;
   margin-top: 4px;
 }
@@ -13083,7 +13083,11 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
 }
 .performer-popup-cell.pp-cell-bio::after {
   background-image: var(--ts-cell-fanart, none);
-  background-size: auto 125%;
+  /* Fit the mask to the image itself, so its left edge reaches zero opacity. */
+  top: -12.5%; bottom: auto; left: auto; right: 0;
+  height: 125%; width: auto;
+  aspect-ratio: var(--pp-backdrop-ratio, .667);
+  background-size: 100% 100%;
   background-position: right center;
   background-repeat: no-repeat;
   filter: blur(12px);

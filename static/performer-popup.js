@@ -1210,6 +1210,14 @@
     }
     cell.style.setProperty('--ts-cell-fanart', `url(${JSON.stringify(url)})`);
     cell.setAttribute('data-has-fanart', '1');
+    cell.style.setProperty('--pp-backdrop-ratio', '0.667');
+    const probe = new Image();
+    probe.onload = () => {
+      if (probe.naturalHeight && cell.style.getPropertyValue('--ts-cell-fanart') === `url(${JSON.stringify(url)})`) {
+        cell.style.setProperty('--pp-backdrop-ratio', String(probe.naturalWidth / probe.naturalHeight));
+      }
+    };
+    probe.src = url;
   }
 
   function paintBgHero(data) {
@@ -1965,7 +1973,7 @@
   async function loadSavedFilmography(el, data) {
     const rowId = data.library_status?.row_id;
     if (!rowId) { el.textContent = 'Add this performer to the library to save their filmography.'; return; }
-    el.innerHTML = '<div class="pp-filmography-tools"><span role="status">Loading filmography…</span><button type="button" class="btn-secondary">Refresh</button></div><div class="pp-filmography-list"></div>';
+    el.innerHTML = '<div class="pp-filmography-tools"><span role="status">Loading filmography…</span><button type="button" class="btn-secondary" title="Refresh filmography" aria-label="Refresh filmography"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button></div><div class="pp-filmography-list"></div>';
     const status = el.querySelector('[role="status"]');
     const button = el.querySelector('button');
     const list = el.querySelector('.pp-filmography-list');
