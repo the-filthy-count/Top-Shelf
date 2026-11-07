@@ -5131,6 +5131,15 @@
   // invalidated elsewhere.
   let _mPerfLibrary = null;
   let _mPerfActiveIdx = -1;
+  let _mPerfRequest = 0;
+  let _mPerfLibraryLoad = null;
+
+  function _mPerfDismiss() {
+    ++_mPerfRequest;
+    _mPerfActiveIdx = -1;
+    const box = document.getElementById("srchPerfSuggestions");
+    if (box) { box.style.display = "none"; box.innerHTML = ""; }
+  }
   //: Pill state for the unified Stars input. Each pill = { name,
   //: inLibrary } — `inLibrary` colours the chip differently so the
   //: user can see at a glance which entries route to an existing
@@ -5139,11 +5148,13 @@
   let _perfPills = [];
 
   function _perfPillsClear() {
+    _mPerfDismiss();
     _perfPills = [];
     _perfPillsRender();
   }
 
   function _perfPillsSet(names, opts) {
+    _mPerfDismiss();
     //: opts.libCheck = run a library lookup so new pills get coloured
     //: as in-library when applicable. Cheap once the library has been
     //: loaded — falls back to "not in library" if the load hasn't run
@@ -5330,20 +5341,22 @@
   }
   async function _mPerfLoadLibrary() {
     if (_mPerfLibrary) return _mPerfLibrary;
-    try {
-      const r = await fetch('/api/performers');
-      const d = await r.json();
-      // Flatten to a search-friendly shape once, reuse on every keystroke.
-      _mPerfLibrary = (d.performers || []).map(p => ({
-        id: p.id,
-        name: p.folder_name || '',
-        aliases: Array.isArray(p.aliases) ? p.aliases : [],
-        image_url: p.image_url || '',
-      })).filter(p => p.name);
-    } catch {
-      _mPerfLibrary = [];
-    }
-    return _mPerfLibrary;
+    if (_mPerfLibraryLoad) return _mPerfLibraryLoad;
+    _mPerfLibraryLoad = (async () => {
+      try {
+        const r = await fetch('/api/performers', {signal: AbortSignal.timeout(30000)});
+        if (!r.ok) throw new Error('Performer lookup failed');
+        const d = await r.json();
+        if (!Array.isArray(d.performers)) throw new Error('Invalid performer response');
+        _mPerfLibrary = d.performers.map(p => ({
+          id: p.id, name: p.folder_name || '',
+          aliases: Array.isArray(p.aliases) ? p.aliases : [], image_url: p.image_url || '',
+        })).filter(p => p.name);
+        return _mPerfLibrary;
+      } catch { return []; }
+      finally { _mPerfLibraryLoad = null; }
+    })();
+    return _mPerfLibraryLoad;
   }
 
   function _mPerfCurrentToken(input) {
@@ -5397,16 +5410,20 @@
   async function _mPerfHandleInput() {
     const input = document.getElementById('srchPerformer');
     if (!input) return;
+    _mPerfDismiss();
+    const request = _mPerfRequest;
     const tok = _mPerfCurrentToken(input);
     const q = tok.trimmed.toLowerCase();
+    if (!q || document.activeElement !== input) return;
     const lib = await _mPerfLoadLibrary();
-    if (!q) { _mPerfRenderSuggestions([], ''); return; }
-    const scored = lib.map(e => { delete e._aliasMatch; return { e, s: _mPerfScoreMatch(e, q) }; })
+    if (request !== _mPerfRequest || document.activeElement !== input || input.value !== tok.rawToken || !input.getClientRects().length) return;
+    const selected = new Set(_perfPills.map(p => p.name.toLowerCase()));
+    const scored = lib.filter(e => !selected.has(e.name.toLowerCase())).map(entry => { const e = {...entry}; delete e._aliasMatch; return { e, s: _mPerfScoreMatch(e, q) }; })
       .filter(x => x.s > 0)
       .sort((a, b) => b.s - a.s)
       .slice(0, 20)
       .map(x => x.e);
-    _mPerfActiveIdx = scored.length ? 0 : -1;
+    _mPerfActiveIdx = -1;
     _mPerfRenderSuggestions(scored, tok.trimmed);
   }
 
@@ -5415,12 +5432,12 @@
     if (!input) return;
     _perfPillsAdd(name);
     input.value = '';
-    document.getElementById('srchPerfSuggestions').style.display = 'none';
-    _mPerfActiveIdx = -1;
+    _mPerfDismiss();
     input.focus();
   }
 
   function _mPerfHandleKeydown(e) {
+    if (e.isComposing) return;
     const input = e.target;
     const box = document.getElementById('srchPerfSuggestions');
     const suggOpen = box && box.style.display !== 'none';
@@ -5447,7 +5464,7 @@
       if (typed) {
         _perfPillsAdd(typed);
         input.value = '';
-        if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+        _mPerfDismiss();
         _mPerfActiveIdx = -1;
       } else {
         //: No typed text + Enter → user wants to run the search with
@@ -5457,8 +5474,8 @@
       return;
     }
     if (e.key === 'Escape') {
-      if (box) box.style.display = 'none';
-      _mPerfActiveIdx = -1;
+      if (suggOpen) { e.preventDefault(); e.stopPropagation(); }
+      _mPerfDismiss();
       return;
     }
     if (e.key === 'Backspace' && !input.value && _perfPills.length) {
@@ -5474,7 +5491,7 @@
         e.preventDefault();
         _perfPillsAdd(typed);
         input.value = '';
-        if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+        _mPerfDismiss();
       }
     }
   }
@@ -5487,7 +5504,7 @@
     input.addEventListener('input', _mPerfHandleInput);
     input.addEventListener('keydown', _mPerfHandleKeydown);
     input.addEventListener('focus', _mPerfHandleInput);
-    input.addEventListener('blur', () => { setTimeout(() => { box.style.display = 'none'; }, 150); });
+    input.addEventListener('blur', _mPerfDismiss);
     box.addEventListener('mousedown', (e) => {
       const row = e.target.closest('[data-name]');
       if (!row) return;

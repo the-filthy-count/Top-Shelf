@@ -1625,12 +1625,17 @@ window.countryFlagHtml = function (raw, extraClass) {
     const n = filtered.length;
     const nAll = all.length;
     if (filterSpec) {
-      statusEl.innerHTML = `<strong>${n}</strong> of <strong>${nAll}</strong> release${nAll === 1 ? '' : 's'} (filtered)`;
+      statusEl.innerHTML = `<span class="ts-prowlarr-result-count"><strong>${n}</strong> of <strong>${nAll}</strong> release${nAll === 1 ? '' : 's'} (filtered)</span>`;
     } else {
-      statusEl.innerHTML = `<strong>${n}</strong> release${n === 1 ? '' : 's'} found`;
+      statusEl.innerHTML = `<span class="ts-prowlarr-result-count"><strong>${n}</strong> release${n === 1 ? '' : 's'} found</span>`;
     }
 
-    if (!chips.length) {
+    const performerHost = fe?.closest('.pp-films-prowlarr-embed');
+    const keywordTools = performerHost?.querySelector('.pp-release-tools');
+    const keywordInput = keywordTools?.querySelector('input');
+    const restoreKeywordFocus = keywordInput && document.activeElement === keywordInput;
+    if (keywordTools) performerHost.appendChild(keywordTools);
+    if (!chips.length && !performerHost) {
       if (fe) {
         fe.innerHTML = '';
         fe.hidden = true;
@@ -1639,6 +1644,8 @@ window.countryFlagHtml = function (raw, extraClass) {
       fe.hidden = false;
       fe.innerHTML = _prowlarrHtmlFilterBar(chips, nAll, filterSpec);
     }
+    performerHost?.dispatchEvent(new Event('prowlarr-results-painted'));
+    if (restoreKeywordFocus) keywordInput.focus({preventScroll: true});
 
     if (!n) {
       resultsEl.innerHTML = '<div class="ts-prowlarr-popup-empty">No releases match this filter.</div>';

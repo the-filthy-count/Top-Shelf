@@ -3528,6 +3528,8 @@
   /* Folder silhouette: raised tab, sloping shoulder and a framed body. */
   .queue-section .q-panel-body .queue-item.queue-item-folder {
     height: 290px !important; min-height: 290px !important; box-sizing: border-box; border: 0 !important; border-radius: 12px !important;
+    overflow: hidden !important; /* Override the responsive row layout so artwork respects the rounded body. */
+    isolation: isolate;
     clip-path: polygon(0 0, 38% 0, 45% 22px, 100% 22px, 100% 100%, 0 100%);
   }
   .queue-section .q-panel-body .queue-item.queue-item-folder::after {

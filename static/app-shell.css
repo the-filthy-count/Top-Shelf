@@ -13041,3 +13041,11 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
 .pp-filmography-tools { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
 .pp-filmography-tools span { flex: 1; font-size: var(--text-small); }
 .pp-filmography-sources { font-size: var(--text-small); padding: 0 8px 8px; opacity: .75; }
+
+.pp-films-prowlarr-embed .ts-prowlarr-result-count { display: none; }
+.pp-films-prowlarr-embed .ts-prowlarr-embed-status:has(> .ts-prowlarr-result-count:only-child) { display: none; }
+.pp-release-tools.pp-release-tools--compact { display: inline-flex; flex: 0 1 auto; gap: 6px; margin: 0; padding: 0; }
+.pp-release-tools--compact .pp-release-keyword { width: clamp(120px, 15vw, 240px); flex: 0 1 auto; }
+.pp-release-tools--compact [hidden] { display: none !important; }
+.pp-release-toggle { width: 30px; height: 30px; padding: 4px; cursor: pointer; border: 1px solid var(--border); border-radius: 6px; background: var(--raised); color: var(--text); }
+.pp-release-toggle[aria-expanded="true"] { color: var(--accent); }

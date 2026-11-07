@@ -1880,12 +1880,13 @@
         <div class="pp-films-panel-body">
           <div class="pp-films-tab pp-films-tab--prowlarr" data-pp-films-pane="prowlarr" role="tabpanel" hidden>
             <div class="ts-prowlarr-embed pp-films-prowlarr-embed">
-              <div class="pp-release-tools">
-                <label class="pp-release-keyword">
+              <div class="pp-release-tools pp-release-tools--compact">
+                <button type="button" class="pp-release-toggle" data-release-toggle title="Filter releases" aria-label="Filter releases" aria-expanded="false"><i class="fa-solid fa-filter" aria-hidden="true"></i></button>
+                <label class="pp-release-keyword" hidden>
                   <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
                   <input type="search" data-release-keyword placeholder="Filter releases…" title="Match all words in any order; filters loaded titles" aria-label="Filter release titles" maxlength="150" autocomplete="off">
                 </label>
-                <button type="button" class="pp-release-clear" data-release-clear aria-label="Clear release filter" title="Clear filter" disabled>×</button>
+                <button type="button" class="pp-release-clear" data-release-clear hidden aria-label="Clear release filter" title="Clear filter" disabled>×</button>
               </div>
               <div class="ts-prowlarr-embed-status ts-prowlarr-popup-status">${name ? 'Searching Prowlarr…' : 'No performer name to search.'}</div>
               <div class="ts-prowlarr-embed-filters ts-prowlarr-popup-filters ts-prowlarr-filter-bar" hidden></div>
@@ -1931,6 +1932,25 @@
   function wireReleaseKeywordFilter(host) {
     const input = host.querySelector('[data-release-keyword]');
     const clear = host.querySelector('[data-release-clear]');
+    const tools = host.querySelector('.pp-release-tools');
+    const toggle = host.querySelector('[data-release-toggle]');
+    const field = input.closest('label');
+    const place = () => {
+      const all = host.querySelector('[data-filter-all]');
+      if (all) all.after(tools);
+    };
+    host.addEventListener('prowlarr-results-painted', place);
+    const setOpen = open => {
+      field.hidden = !open;
+      clear.hidden = !open;
+      toggle.setAttribute('aria-expanded', String(open));
+      if (open) input.focus();
+    };
+    toggle.addEventListener('click', () => {
+      const open = toggle.getAttribute('aria-expanded') !== 'true';
+      if (!open) { input.value = ''; apply(); }
+      setOpen(open);
+    });
     const apply = () => {
       window.filterEmbeddedProwlarrKeyword(host, input.value);
       clear.disabled = !input.value;
@@ -1943,7 +1963,7 @@
       if (ev.key === 'Enter') {
         ev.preventDefault(); ev.stopPropagation(); apply();
       } else if (ev.key === 'Escape' && input.value) {
-        ev.preventDefault(); ev.stopPropagation(); input.value = ''; apply();
+        ev.preventDefault(); ev.stopPropagation(); input.value = ''; apply(); setOpen(false); toggle.focus();
       }
     });
     clear.addEventListener('click', () => {
