@@ -2879,10 +2879,14 @@ def favourite_list(kind: str | None = None) -> list[dict]:
         rows = [dict(r) for r in cur.fetchall()]
         if kind in (None, 'performer'):
             present = {}
-            for bio in conn.execute("SELECT row_id, field FROM performer_bio_fields WHERE TRIM(value) != ''"):
+            tile_bio = {}
+            for bio in conn.execute("SELECT row_id, field, value FROM performer_bio_fields WHERE TRIM(value) != ''"):
                 present.setdefault(bio["row_id"], set()).add(bio["field"])
+                if bio["field"] in ("country", "gender"):
+                    tile_bio.setdefault(bio["row_id"], {})[bio["field"]] = bio["value"]
             for row in rows:
                 if row["kind"] == 'performer':
+                    row.update(tile_bio.get(row["id"], {}))
                     row["bio_missing_fields"] = sorted({'gender','birthdate','country'} - present.get(row['id'], set()))
         return rows
 

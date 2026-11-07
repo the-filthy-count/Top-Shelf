@@ -23,7 +23,7 @@ def load():
         {'id': r['id'], 'aliases_json': '[]'} for r in rows]
     vices=Mock(return_value=[])
     ns=dict(json=json,threading=threading,time=time,_log=logging.getLogger(),Path=Path,db=db,
-            _favourites_row_api=lambda r:r,_load_vices=vices,_movie_library_sort_key=lambda s:s)
+            _favourites_row_api=lambda r, **kwargs:r,_load_vices=vices,_movie_library_sort_key=lambda s:s)
     exec(compile(ast.Module(body=nodes,type_ignores=[]),str(SOURCE),'exec'),ns)
     ns['_favourites_warm']=ns['_LibrarySnapshots']()
     return ns,rows,db,vices
@@ -46,6 +46,26 @@ class LibraryCacheTests(unittest.TestCase):
         self.assertEqual(len(route(kind='performer')['performers']),2)
         rows[:]=[r for r in rows if r['id']!=1];cache.invalidate()
         self.assertEqual([r['id'] for r in route(kind='performer')['performers']],[5])
+
+    def test_vice_list_defers_artwork_to_image_endpoint(self):
+        ns, _, _, vices = load()
+        vices.return_value = [{'name': 'Example', 'tags': []}]
+        ns['_vice_folder_name'] = lambda name: name
+        ns['quote'] = lambda name: name
+        ns['_ensure_vice_logo'] = Mock(side_effect=AssertionError('Artwork blocked list'))
+        ns['_vice_logo_path'] = Mock(side_effect=AssertionError('Artwork stat blocked list'))
+        result = ns['api_favourites_list'](kind='vice')
+        self.assertEqual(result['vices'][0]['image_url'], '/api/vice-logo?name=Example')
+
+    def test_targeted_invalidation_preserves_other_categories(self):
+        ns, rows, db, _ = load()
+        route = ns['api_favourites_list']
+        route(kind='performer'); route(kind='studio')
+        ns['_favourites_warm'].invalidate({'performer'})
+        route(kind='studio')
+        self.assertEqual(db.favourite_list.call_count, 2)
+        route(kind='performer')
+        self.assertEqual(db.favourite_list.call_count, 3)
 
     def test_full_and_multiple_categories_preserve_shape(self):
         ns,rows,db,vices=load();route=ns['api_favourites_list']
@@ -92,3 +112,31 @@ class QueueCacheWorkerTests(unittest.TestCase):
         cache._loop()
         self.assertEqual(cache.peek(),{'files':['ready.mp4']})
         self.assertTrue(cache._dirty.is_set())
+
+class LibraryTileLookupTests(unittest.TestCase):
+    def load_helpers(self):
+        tree = ast.parse(SOURCE.read_text())
+        names = {'_favourite_row_tile_gender', '_favourite_row_tile_country'}
+        nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names]
+        ns = {'_performers_iafd_read_meta': Mock(return_value={}),
+              '_bio_gender_from_popup_cache': Mock(return_value=''),
+              '_bio_country_from_popup_cache': Mock(return_value=''),
+              '_gender_from_tvshow_nfo_path': Mock(return_value='Female'),
+              '_country_from_tvshow_nfo_path': Mock(return_value='US')}
+        exec(compile(ast.Module(body=nodes, type_ignores=[]), str(SOURCE), 'exec'), ns)
+        return ns
+
+    def test_library_listing_never_reads_performer_folders(self):
+        ns = self.load_helpers()
+        for field in ('gender', 'country'):
+            self.assertEqual(ns['_favourite_row_tile_' + field](
+                {'id': 1, 'path': '/slow-nas/performer'}, {}, allow_folder_lookup=False), '')
+            ns['_' + field + '_from_tvshow_nfo_path'].assert_not_called()
+        self.assertEqual(ns['_favourite_row_tile_gender']({'id': 1, 'path': '/folder'}, {}), 'Female')
+
+    def test_recorded_bio_avoids_cache_and_folder_fallbacks(self):
+        ns = self.load_helpers()
+        for field, value in (('gender', 'Female'), ('country', 'US')):
+            self.assertEqual(ns['_favourite_row_tile_' + field]({'id': 1, field: value}), value)
+            ns['_bio_' + field + '_from_popup_cache'].assert_not_called()
+        ns['_performers_iafd_read_meta'].assert_not_called()

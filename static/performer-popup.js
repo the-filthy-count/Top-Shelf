@@ -2367,7 +2367,7 @@
           document.body.appendChild(dialog);
           renderGallery(dialog.querySelector('.pp-polaroid-content'), data, index);
           dialog.querySelector('.pp-polaroid-close').onclick = () => dialog.close();
-          dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+          dialog.addEventListener('click', event => { if (event.target === dialog || event.target.classList.contains('pp-gallery')) dialog.close(); });
           dialog.addEventListener('keydown', event => {
             event.stopPropagation();
             if (event.key === 'ArrowRight') dialog.querySelector('.pp-gallery-next').click();
@@ -2447,6 +2447,12 @@
         tile.innerHTML = `
           <img src="${ESC(img.url)}" alt="" loading="lazy" onerror="this.closest('.pp-gallery-tile').style.display='none'">
           ${img.kind ? `<span class="pp-gallery-kind">${ESC(img.kind)}</span>` : ''}`;
+        const photo = tile.querySelector('img');
+        const sizePhoto = () => {
+          if (photo.naturalHeight) photo.style.setProperty('--photo-ratio', photo.naturalWidth / photo.naturalHeight);
+        };
+        photo.addEventListener('load', sizePhoto, {once: true});
+        if (photo.complete) sizePhoto();
         tile.addEventListener('click', (ev) => {
           ev.preventDefault();
           bringToFront(parseInt(tile.dataset.imgIdx, 10));

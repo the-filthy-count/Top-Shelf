@@ -3271,7 +3271,15 @@
         if (_view === 'vice')  grid.classList.add('fav-grid--vice');
       }
       const missing = kinds.filter(k => !_loadedKinds.has(k));
-      if (missing.length) await Promise.all(missing.map(_loadKind));
+      if (missing.length && grid && !grid.childElementCount) {
+        grid.innerHTML = Array(12).fill('<div class="fav-cell fav-cell--skeleton" aria-hidden="true"><div class="fav-cell-visual" style="aspect-ratio:2/3"></div></div>').join('');
+        grid.setAttribute('aria-busy', 'true');
+      }
+      try {
+        if (missing.length) await Promise.all(missing.map(_loadKind));
+      } finally {
+        grid?.removeAttribute('aria-busy');
+      }
       populateRootFilter();
       // Filter chips ship as "all" in the template; restore whatever
       // the user last had for this view before painting so a full

@@ -1669,7 +1669,14 @@ async def auth_middleware(request: Request, call_next):
                 "/api/health/create-tvshow-nfo",
                 "/api/settings",
             )):
-                _favourites_warm.invalidate()
+                affected = None
+                if path.startswith(("/api/performers/", "/api/library/performer")):
+                    affected = {"performer"}
+                elif path.startswith(("/api/vices", "/api/vice-logo")):
+                    affected = {"vice"}
+                elif path.startswith("/api/studios"):
+                    affected = {"studio"}
+                _favourites_warm.invalidate(affected)
                 with _headshots_by_name_lock:
                     _headshots_by_name_cache.clear()
                 with _genders_by_name_lock:
@@ -18268,19 +18275,9 @@ def _build_queue_snapshot() -> dict:
                 if not sub.is_dir() or sub.name.startswith("."):
                     continue
                 vice_folder = sub.name
-                for f in sub.rglob("*"):
-                    if not f.is_file():
-                        continue
-                    if f.suffix.lower() not in VIDEO_EXTENSIONS:
-                        continue
+                for inner_rel, f in _scene_source_video_relpaths(sub, settings):
                     if "sample" in f.name.lower():
                         continue
-                    # Bucket under `Vices/<Vice>/…` — one rel per real
-                    # file under the vice download watch dir.
-                    try:
-                        inner_rel = f.relative_to(sub).as_posix()
-                    except ValueError:
-                        inner_rel = f.name
                     rel = f"Vices/{vice_folder}/{inner_rel}"
                     vdl_entries.append((rel, f))
     if vdl_entries:
@@ -23436,12 +23433,15 @@ def _bio_country_from_popup_cache(cache_key: str) -> str:
     return (bio.get("country") or bio.get("nationality") or "").strip()
 
 
-def _favourite_row_tile_gender(row: dict, meta: dict | None = None) -> str:
+def _favourite_row_tile_gender(row: dict, meta: dict | None = None, *, allow_folder_lookup: bool = True) -> str:
     """Resolve performer gender for /library tiles without per-row HTTP."""
     try:
         rid = int(row["id"])
     except (KeyError, TypeError, ValueError):
         return ""
+    recorded = str(row.get("gender") or "").strip()
+    if recorded:
+        return recorded
     if meta is None:
         meta = _performers_iafd_read_meta(rid) or {}
     g = (meta.get("gender") or "").strip()
@@ -23463,19 +23463,22 @@ def _favourite_row_tile_gender(row: dict, meta: dict | None = None) -> str:
         if g:
             return g
     path = (row.get("path") or "").strip()
-    if path:
+    if path and allow_folder_lookup:
         g = _gender_from_tvshow_nfo_path(path)
         if g:
             return g
     return ""
 
 
-def _favourite_row_tile_country(row: dict, meta: dict | None = None) -> str:
+def _favourite_row_tile_country(row: dict, meta: dict | None = None, *, allow_folder_lookup: bool = True) -> str:
     """Resolve performer country for /library tiles without per-row HTTP."""
     try:
         rid = int(row["id"])
     except (KeyError, TypeError, ValueError):
         return ""
+    recorded = str(row.get("country") or "").strip()
+    if recorded:
+        return recorded
     if meta is None:
         meta = _performers_iafd_read_meta(rid) or {}
     c = (meta.get("country") or meta.get("nationality") or "").strip()
@@ -23497,14 +23500,14 @@ def _favourite_row_tile_country(row: dict, meta: dict | None = None) -> str:
         if c:
             return c
     path = (row.get("path") or "").strip()
-    if path:
+    if path and allow_folder_lookup:
         c = _country_from_tvshow_nfo_path(path)
         if c:
             return c
     return ""
 
 
-def _favourites_row_api(r: dict) -> dict:
+def _favourites_row_api(r: dict, *, allow_folder_lookup: bool = True) -> dict:
     out = dict(r)
     performer_meta = (_performers_iafd_read_meta(int(out["id"])) or {}) if out.get("kind") == "performer" else {}
     ml = out.get("matches_locked")
@@ -23583,7 +23586,7 @@ def _favourites_row_api(r: dict) -> dict:
             # same custom filename. Stored URLs may predate an image edit.
             meta = performer_meta
             files = meta.get("image_files") or []
-            if files:
+            if files and allow_folder_lookup:
                 headshot = _metadata_dir_for("performer", rid) / files[0]
                 try:
                     stat = headshot.stat()
@@ -23595,8 +23598,8 @@ def _favourites_row_api(r: dict) -> dict:
             pass
     if out.get("kind") == "performer":
         try:
-            country = _favourite_row_tile_country(out, performer_meta)
-            gender = _favourite_row_tile_gender(out, performer_meta)
+            country = _favourite_row_tile_country(out, performer_meta, allow_folder_lookup=allow_folder_lookup)
+            gender = _favourite_row_tile_gender(out, performer_meta, allow_folder_lookup=allow_folder_lookup)
             if country:
                 out["country"] = country
             if gender:
@@ -23609,9 +23612,10 @@ def _favourites_row_api(r: dict) -> dict:
             orig = out.get("image_url") or ""
             m = re.search(r"[?&]v=(\d+)", orig)
             v_part = f"&v={m.group(1)}" if m else ""
-            thumb = _metadata_dir_for("studio", rid) / f"{rid}_logo.webp"
-            if thumb.is_file():
-                v_part = f"&v={thumb.stat().st_mtime_ns}"
+            if allow_folder_lookup:
+                thumb = _metadata_dir_for("studio", rid) / f"{rid}_logo.webp"
+                if thumb.is_file():
+                    v_part = f"&v={thumb.stat().st_mtime_ns}"
             out["image_url"] = f"/api/favourites/studio-thumb?row_id={rid}{v_part}"
         except (KeyError, TypeError, ValueError):
             pass
@@ -23636,7 +23640,7 @@ def _favourites_row_api(r: dict) -> dict:
             # single JAVStash spread we're already showing as the
             # front, so surfacing it re-introduces the wrong-side
             # duplicate the split-on-save fix was meant to remove.
-            if out.get("kind") != "jav" and _favourite_find_local_back_file(out.get("path") or ""):
+            if out.get("kind") != "jav" and (not allow_folder_lookup or _favourite_find_local_back_file(out.get("path") or "")):
                 out["background_url"] = f"/api/favourites/movie-back?row_id={rid}"
         except (KeyError, TypeError, ValueError):
             pass
@@ -25226,7 +25230,7 @@ def _iafd_performer_from_tree(tree) -> dict:
 
 
 def _performers_iafd_read_meta(row_id: int) -> dict | None:
-    p = _performers_iafd_dir(row_id) / f"{int(row_id)}.json"
+    p = _metadata_base_dir() / "performers" / str(int(row_id)) / f"{int(row_id)}.json"
     if not p.is_file():
         return None
     try:
@@ -29621,7 +29625,7 @@ def _build_favourites_snapshot(kind: str | None = None) -> dict:
     Called in a request worker, never on the event loop. Other categories
     and vice logo resolution are skipped when they are not requested.
     """
-    rows = [_favourites_row_api(dict(x)) for x in db.favourite_list(kind)]
+    rows = [_favourites_row_api(dict(x), allow_folder_lookup=False) for x in db.favourite_list(kind)]
     perf = [x for x in rows if x.get("kind") == "performer"]
     stud = [x for x in rows if x.get("kind") == "studio"]
     mov_rows = [x for x in rows if x.get("kind") == "movie"]
@@ -29656,13 +29660,8 @@ def _build_favourites_snapshot(kind: str | None = None) -> dict:
         folder_name = _vice_folder_name(name) or name
         folder_path = str(vices_dir / folder_name) if vices_dir else ""
         path_missing = bool(folder_path) and not Path(folder_path).is_dir()
-        # Ensure a cached logo exists (cached → TPDB → folder art →
-        # generated placeholder). Each step is a no-op when its prereq
-        # isn't met, and the whole chain is skipped once the cache file
-        # is present, so this stays cheap on repeat loads.
-        _ensure_vice_logo(vice, s, tpdb_key=tpdb_key)
-        logo_file = _vice_logo_path(vice)
-        image_url = f"/api/vice-logo?name={quote(name)}" if (logo_file and logo_file.is_file()) else ""
+        # Artwork is resolved by the image endpoint after the tiles render.
+        image_url = f"/api/vice-logo?name={quote(name)}"
         # First tag id that looks like a TPDB integer — used for the
         # /health Vices table's external-link column.
         first_tpdb_id = ""
@@ -29728,8 +29727,10 @@ class _LibrarySnapshots:
     def start(self):
         pass  # Requested categories build in the HTTP worker thread.
 
-    def invalidate(self):
-        for cache in self.caches.values():
+    def invalidate(self, kinds=None):
+        selected = self.keys if kinds is None else set(kinds) & self.keys.keys()
+        for kind in selected:
+            cache = self.caches[kind]
             cache.invalidate()
             cache._snapshot = None
 
