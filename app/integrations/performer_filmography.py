@@ -7,6 +7,7 @@ import threading
 from urllib.parse import quote
 import requests
 import database as db
+from app.core import filmography_records as records
 from runtime_jobs import KeyedExecutor
 
 SOURCES = {'tpdb': ('TPDB', 'https://api.theporndb.net'),
@@ -14,7 +15,7 @@ SOURCES = {'tpdb': ('TPDB', 'https://api.theporndb.net'),
            'fansdb': ('FansDB', 'https://fansdb.cc'),
            'javstash': ('JAVStash', 'https://javstash.org')}
 QUERY = '''query Filmography($input: SceneQueryInput!) { queryScenes(input: $input) {
- scenes { id title release_date studio { name } performers { performer { id } } }
+ scenes { id title release_date fingerprints { hash algorithm duration } studio { name } performers { performer { id } } }
 } }'''
 _active = set()
 _lock = threading.Lock()
@@ -69,6 +70,7 @@ def fetch_source(source, performer_id, api_key, session=requests):
             studio = item.get('site' if source == 'tpdb' else 'studio') or {}
             rows.append({'id': sid, 'source': label, 'title': item.get('title') or '',
                          'date': date, 'year': date[:4], 'studio': studio.get('name') or '',
+                         'fingerprints': records.fingerprints(item.get('fingerprints') or item.get('hashes')),
                          'url': ('https://theporndb.net' if source == 'tpdb' else host) + '/scenes/' + quote(sid, safe='')})
         if source == 'tpdb':
             last = (body.get('meta') or {}).get('last_page')
@@ -97,6 +99,7 @@ def dedupe(rows):
         if index is None:
             index = len(merged)
             merged.append(dict(row, sources=[]))
+        merged[index]['in_library'] = bool(merged[index].get('in_library') or row.get('in_library'))
         keys[exact] = keys[cross] = index
         link = {'source': row['source'], 'id': row['id'], 'url': row['url']}
         if link not in merged[index]['sources']:
@@ -104,37 +107,41 @@ def dedupe(rows):
     return sorted(merged, key=lambda row: (row['date'], row['title'].casefold()), reverse=True)
 
 
-def refresh(ids):
-    settings = db.get_settings()
+def migrate(ids):
+    # Import existing per-source saved scans without guessing performer identity
+    # from the combined display list. Keep JSON backups for rollback.
     key = cache_key(ids)
-    statuses, all_rows = [], []
-    try:
-        for source, performer_ids in ids.items():
-            api_key = str(settings.get('api_key_' + source) or '').strip()
-            if not performer_ids or not api_key:
-                statuses.append({'source': SOURCES[source][0], 'state': 'Not linked' if not performer_ids else 'API key missing'})
-                continue
-            for performer_id in performer_ids:
-                source_key = key + ':' + source + ':' + performer_id
-                saved = db.app_json_cache_get(source_key) or {}
-                try:
-                    scenes = fetch_source(source, performer_id, api_key)
-                    saved = {'scenes': scenes, 'updated_at': time.time()}
-                    db.app_json_cache_put(source_key, saved)
-                    state = 'Complete'
-                except Exception:
-                    state = 'Refresh failed; showing saved results' if saved else 'Refresh failed'
-                all_rows.extend(saved.get('scenes') or [])
-                statuses.append({'source': SOURCES[source][0], 'state': state, 'count': len(saved.get('scenes') or [])})
-    finally:
-        db.app_json_cache_put(key, {'films': dedupe(all_rows), 'sources': statuses, 'loading': False, 'updated_at': time.time()})
+    with db.get_conn() as conn:
+        existing = {(r['source'],r['performer_id']) for r in conn.execute('SELECT source,performer_id FROM filmography_sync')}
+    for source, performers in ids.items():
+        for performer in performers:
+            if (source,performer) not in existing:
+                saved = db.app_json_cache_get(key + ':' + source + ':' + performer)
+                if saved and isinstance(saved.get('scenes'),list):
+                    records.save(source,performer,saved['scenes'],updated_at=0)
+
+
+def refresh(ids):
+    migrate(ids)
+    settings = db.get_settings()
+    for source, performer_ids in ids.items():
+        api_key = str(settings.get('api_key_' + source) or '').strip()
+        if not api_key:
+            continue
+        for performer_id in performer_ids:
+            try:
+                scenes = fetch_source(source, performer_id, api_key)
+                records.save(source,performer_id,scenes)
+            except Exception:
+                records.failed(source,performer_id)
 
 
 def read(ids):
-    key = cache_key(ids)
-    result = db.app_json_cache_get(key) or {'films': [], 'sources': []}
+    migrate(ids)
+    result = records.read(ids,SOURCES)
+    result['films'] = dedupe(result['films'])
     with _lock:
-        result['loading'] = key in _active
+        result['loading'] = cache_key(ids) in _active
     return result
 
 

@@ -1993,7 +1993,7 @@
           if (first && !force && (!result.updated_at || Date.now() / 1000 - result.updated_at > 7 * 86400) && !result.loading) { method = 'POST'; first = false; continue; }
           first = false; method = 'GET';
           if (!el.isConnected) break;
-          renderFilmography(list, {filmography: result.films || []});
+          renderFilmography(list, {filmography: result.films || [], identity: data.identity});
           status.textContent = (result.loading ? 'Fetching filmography… ' : '') + (result.films || []).length + ' scenes';
           status.title = (result.sources || []).filter(s => s.state !== 'Not linked' && s.state !== 'API key missing').map(s => s.source + ': ' + s.state).join('\n');
           const failures = (result.sources || []).filter(s => s.state.includes('failed'));
@@ -2019,7 +2019,7 @@
     // bio popup's filmography list.
     const parts = [];
     let curYear = '__init__';
-    for (const f of films) {
+    for (const [filmIndex, f] of films.entries()) {
       const y = (f.year || '').toString().trim();
       const yLabel = y || 'Year unknown';
       if (yLabel !== curYear) {
@@ -2035,7 +2035,8 @@
         return `<a class="pp-film-source-icon" href="${ESC(source.url)}" target="_blank" rel="noopener noreferrer" title="${ESC(source.source)}" aria-label="Open in ${ESC(source.source)}">${logo ? `<img src="/static/logos/${logo}.webp" alt="${ESC(source.source)}">` : ESC(source.source)}</a>`;
       }).join('');
       parts.push(`<div class="pp-films-row pp-filmography-row">
-        <span class="pp-film-date">[${ESC(date)}]</span><span aria-hidden="true">-</span>
+        <button type="button" class="pp-film-search" data-film-index="${filmIndex}" title="Search Prowlarr" aria-label="Search Prowlarr for ${ESC(title)}"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
+        <span class="pp-film-date">[${ESC(date)}]</span>${f.in_library ? '<span class="pp-film-owned" title="In library — exact scene ID or fingerprint match" aria-label="In library"><i class="fa-solid fa-check" aria-hidden="true"></i></span>' : ''}<span aria-hidden="true">-</span>
         <span class="pp-films-title" title="${ESC(title)}">${ESC(title)}</span>
         <span class="pp-film-trailing">
           ${studio ? `<span class="pp-film-studio" title="${ESC(studio)}">${ESC(studio)}</span>` : ''}
@@ -2044,6 +2045,16 @@
       </div>`);
     }
     el.innerHTML = `<div class="pp-film-list">${parts.join('')}</div>`;
+    el.querySelectorAll('[data-film-index]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        const film = films[Number(button.dataset.filmIndex)];
+        const source = film.sources?.[0] || film;
+        window.openProwlarrSearchPopup({title: film.title, studio: film.studio,
+          performer: data.identity?.canonical_name || '', source: String(source.source || '').toLowerCase(),
+          ext_id: source.id || '', kind: 'scene'});
+      });
+    });
     wirePpScrollAffordance(el);
   }
 

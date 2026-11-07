@@ -13060,3 +13060,8 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
 
 .pp-film-trailing { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; max-width: 45%; min-width: 0; }
 .pp-film-trailing .pp-film-studio { flex: 0 1 auto; text-align: right; }
+
+.pp-film-search { flex: 0 0 28px; width: 28px; height: 28px; padding: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--raised); color: var(--accent); cursor: pointer; }
+.pp-film-search:hover { border-color: var(--accent); }
+
+.pp-film-owned { color: #4ade80; flex-shrink: 0; }

@@ -31,11 +31,10 @@ class FilmographyTests(unittest.TestCase):
     def test_failed_refresh_keeps_saved_source_results(self):
         ids={source:['p'] if source=='tpdb' else [] for source in f.SOURCES}
         key=f.cache_key(ids)
-        store={key+':tpdb:p':{'scenes':[self.row('TPDB')]}}
-        with patch.object(f.db,'get_settings',return_value={'api_key_tpdb':'key'}), patch.object(f.db,'app_json_cache_get',side_effect=store.get), patch.object(f.db,'app_json_cache_put',side_effect=lambda k,v:store.__setitem__(k,v)), patch.object(f,'fetch_source',side_effect=RuntimeError('offline')):
+        with patch.object(f,'migrate'), patch.object(f.db,'get_settings',return_value={'api_key_tpdb':'key'}), patch.object(f.records,'save') as save, patch.object(f.records,'failed') as failed, patch.object(f,'fetch_source',side_effect=RuntimeError('offline')):
             f.refresh(ids)
-        self.assertEqual(len(store[key]['films']),1)
-        self.assertIn('failed',store[key]['sources'][0]['state'])
+        save.assert_not_called()
+        failed.assert_called_once_with('tpdb','p')
 
     def test_group_ids_are_source_scoped(self):
         ids=f.identity({'match_tpdb_id':'one','group_ids_json':'{"tpdb":["two", {"id":"one"}], "fansdb":["three"]}'})

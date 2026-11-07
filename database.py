@@ -1047,6 +1047,9 @@ def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS idx_lf_dup_ignored ON library_files(duplicate_ignored)"
         )
 
+        from app.core.filmography_records import create_schema as _filmography_schema
+        _filmography_schema(conn)
+
         # Scene-side fingerprint cache. Populated when stash-box scene
         # responses include fingerprints (or via on-demand backfill via
         # findScene(id)). Joined against library_files.phash_1/2/3 to
