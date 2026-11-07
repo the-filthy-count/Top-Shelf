@@ -1995,8 +1995,8 @@
           if (!el.isConnected) break;
           renderFilmography(list, {filmography: result.films || []});
           status.textContent = (result.loading ? 'Fetching filmography… ' : '') + (result.films || []).length + ' scenes';
-          status.title = (result.sources || []).map(s => s.source + ': ' + s.state).join('\n');
-          const failures = (result.sources || []).filter(s => s.state !== 'Complete');
+          status.title = (result.sources || []).filter(s => s.state !== 'Not linked' && s.state !== 'API key missing').map(s => s.source + ': ' + s.state).join('\n');
+          const failures = (result.sources || []).filter(s => s.state.includes('failed'));
           if (!result.loading && failures.length) status.textContent += ' · ' + failures.map(s => s.source + ': ' + s.state).join(' · ');
           if (!result.loading) break;
           await new Promise(resolve => setTimeout(resolve, 1500));
@@ -2028,13 +2028,18 @@
       }
       const studio = (f.studio || '').toString().trim();
       const title = (f.title || '').toString().trim() || '(untitled)';
-      const href = (f.url || '').toString().trim();
-      const titleAttr = ESC(title + (studio ? ' — ' + studio : ''));
-      const inner = `<span class="pp-films-title">${ESC(title)}</span>${studio ? `<span class="pp-films-studio">${ESC(studio)}</span>` : ''}`;
-      parts.push(href
-        ? `<a class="pp-films-row" href="${ESC(href)}" target="_blank" rel="noopener noreferrer" title="${titleAttr}">${inner}</a>`
-        : `<div class="pp-films-row" title="${titleAttr}">${inner}</div>`);
-      if (f.sources?.length) parts.push(`<div class="pp-filmography-sources">${f.sources.map(source => `<a href="${ESC(source.url)}" target="_blank" rel="noopener noreferrer">${ESC(source.source)}</a>`).join(' · ')}</div>`);
+      const date = /^\d{4}-\d{2}-\d{2}/.test(f.date || '') ? f.date.slice(0, 10) : 'Date unknown';
+      const logos = {TPDB: 'tpdb', StashDB: 'stashdb', FansDB: 'fansdb', JAVStash: 'javstash'};
+      const links = (f.sources || []).map(source => {
+        const logo = logos[source.source];
+        return `<a class="pp-film-source-icon" href="${ESC(source.url)}" target="_blank" rel="noopener noreferrer" title="${ESC(source.source)}" aria-label="Open in ${ESC(source.source)}">${logo ? `<img src="/static/logos/${logo}.webp" alt="${ESC(source.source)}">` : ESC(source.source)}</a>`;
+      }).join('');
+      parts.push(`<div class="pp-films-row pp-filmography-row">
+        <span class="pp-film-date">[${ESC(date)}]</span><span aria-hidden="true">-</span>
+        <span class="pp-films-title" title="${ESC(title)}">${ESC(title)}</span>
+        ${links ? `<span aria-hidden="true">-</span><span class="pp-film-inline-sources">${links}</span>` : ''}
+        ${studio ? `<span aria-hidden="true">-</span><span class="pp-film-studio" title="${ESC(studio)}">${ESC(studio)}</span>` : ''}
+      </div>`);
     }
     el.innerHTML = `<div class="pp-film-list">${parts.join('')}</div>`;
     wirePpScrollAffordance(el);
