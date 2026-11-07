@@ -13054,7 +13054,7 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
 .pp-filmography-row .pp-film-date { flex-shrink: 0; white-space: nowrap; color: var(--dim); }
 .pp-filmography-row .pp-films-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pp-film-inline-sources { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; }
-.pp-film-source-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 24px; }
+.pp-film-source-icon { display: inline-flex; align-items: center; justify-content: center; width: 57px; height: 36px; }
 .pp-film-source-icon img { width: 100%; height: 100%; object-fit: contain; }
 .pp-film-studio { flex: 0 1 25%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
 
