@@ -1871,16 +1871,14 @@
       <div class="pp-films-panel">
         <div class="pp-films-panel-head">
           <div class="ts-seg ts-seg--2 pp-films-source-toggle" role="tablist" aria-label="Release sources">
-            <button type="button" class="active" data-pp-films-tab="prowlarr" role="tab" aria-selected="true" title="Prowlarr" aria-label="Prowlarr">
+            <button type="button" class="active" data-pp-films-tab="filmography" role="tab" aria-selected="true">Filmography</button>
+            <button type="button" data-pp-films-tab="prowlarr" role="tab" aria-selected="false" title="Prowlarr" aria-label="Prowlarr">
               <img src="/static/logos/prowlarr2.webp" alt="Prowlarr" class="pp-films-tab-logo" onerror="this.style.display='none'">
-            </button>
-            <button type="button" data-pp-films-tab="iafd" role="tab" aria-selected="false" title="IAFD filmography" aria-label="IAFD">
-              <img src="/static/logos/iafd.webp" alt="IAFD" class="pp-films-tab-logo" onerror="this.style.display='none'">
             </button>
           </div>
         </div>
         <div class="pp-films-panel-body">
-          <div class="pp-films-tab pp-films-tab--prowlarr is-active" data-pp-films-pane="prowlarr" role="tabpanel">
+          <div class="pp-films-tab pp-films-tab--prowlarr" data-pp-films-pane="prowlarr" role="tabpanel" hidden>
             <div class="ts-prowlarr-embed pp-films-prowlarr-embed">
               <div class="pp-release-tools">
                 <label class="pp-release-keyword">
@@ -1894,14 +1892,14 @@
               <div class="ts-prowlarr-embed-results ts-prowlarr-popup-results"></div>
             </div>
           </div>
-          <div class="pp-films-tab pp-films-tab--iafd" data-pp-films-pane="iafd" role="tabpanel" hidden>
+          <div class="pp-films-tab pp-films-tab--iafd is-active" data-pp-films-pane="filmography" role="tabpanel">
             <div class="pp-films-iafd-inner"></div>
           </div>
         </div>
       </div>`;
     const panel = el.querySelector('.pp-films-panel');
     const iafdInner = el.querySelector('.pp-films-iafd-inner');
-    renderFilmography(iafdInner, data);
+    void loadSavedFilmography(iafdInner, data);
     panel.querySelectorAll('[data-pp-films-tab]').forEach((btn) => {
       btn.addEventListener('click', () => _setFilmsPanelTab(panel, btn.dataset.ppFilmsTab));
     });
@@ -1923,7 +1921,10 @@
       }).then(() => wirePpScrollAffordance(el));
     };
     wireReleaseKeywordFilter(embedHost);
-    el._searchReleaseName(name);
+    let releasesLoaded = false;
+    panel.querySelector('[data-pp-films-tab="prowlarr"]').addEventListener('click', () => {
+      if (!releasesLoaded) { releasesLoaded = true; el._searchReleaseName(name); }
+    });
     wirePpScrollAffordance(el);
   }
 
@@ -1950,10 +1951,47 @@
     });
   }
 
+  async function loadSavedFilmography(el, data) {
+    const rowId = data.library_status?.row_id;
+    if (!rowId) { el.textContent = 'Add this performer to the library to save their filmography.'; return; }
+    el.innerHTML = '<div class="pp-filmography-tools"><span role="status">Loading filmography…</span><button type="button" class="btn-secondary">Refresh</button></div><div class="pp-filmography-list"></div>';
+    const status = el.querySelector('[role="status"]');
+    const button = el.querySelector('button');
+    const list = el.querySelector('.pp-filmography-list');
+    const url = '/api/performers/filmography?row_id=' + encodeURIComponent(rowId);
+    let busy = false;
+    async function fetchFilms(force = false) {
+      if (busy) return;
+      busy = true; button.disabled = true;
+      try {
+        let method = force ? 'POST' : 'GET';
+        let first = true;
+        while (el.isConnected) {
+          const response = await fetch(url, {method, signal: AbortSignal.timeout(35000)});
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Could not load filmography');
+          if (first && !force && (!result.updated_at || Date.now() / 1000 - result.updated_at > 7 * 86400) && !result.loading) { method = 'POST'; first = false; continue; }
+          first = false; method = 'GET';
+          if (!el.isConnected) break;
+          renderFilmography(list, {filmography: result.films || []});
+          status.textContent = (result.loading ? 'Fetching filmography… ' : '') + (result.films || []).length + ' scenes';
+          status.title = (result.sources || []).map(s => s.source + ': ' + s.state).join('\n');
+          const failures = (result.sources || []).filter(s => s.state !== 'Complete');
+          if (!result.loading && failures.length) status.textContent += ' · ' + failures.map(s => s.source + ': ' + s.state).join(' · ');
+          if (!result.loading) break;
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+      } catch (error) { if (el.isConnected) status.textContent = error.message; }
+      finally { busy = false; button.disabled = false; }
+    }
+    button.onclick = () => fetchFilms(true);
+    await fetchFilms();
+  }
+
   function renderFilmography(el, data) {
     const films = data.filmography || [];
     if (!films.length) {
-      el.innerHTML = `<div class="pp-empty pp-empty--silhouette"><img src="/static/img/silhouette5.webp" alt="" class="pp-empty-silhouette" loading="lazy"/>${data.iafd_search_url ? `<a href="${ESC(data.iafd_search_url)}" target="_blank" rel="noopener" class="pp-empty-link">Search IAFD →</a>` : ''}</div>`;
+      el.innerHTML = '<div class="pp-empty">No saved scenes yet.</div>';
       return;
     }
     // Group by year (films arrive ordered year DESC, title ASC). Insert
@@ -1976,6 +2014,7 @@
       parts.push(href
         ? `<a class="pp-films-row" href="${ESC(href)}" target="_blank" rel="noopener noreferrer" title="${titleAttr}">${inner}</a>`
         : `<div class="pp-films-row" title="${titleAttr}">${inner}</div>`);
+      if (f.sources?.length) parts.push(`<div class="pp-filmography-sources">${f.sources.map(source => `<a href="${ESC(source.url)}" target="_blank" rel="noopener noreferrer">${ESC(source.source)}</a>`).join(' · ')}</div>`);
     }
     el.innerHTML = `<div class="pp-film-list">${parts.join('')}</div>`;
     wirePpScrollAffordance(el);

@@ -29783,6 +29783,29 @@ def _favourites_current_aliases(snapshot: dict) -> dict:
     return result
 
 
+def _filmography_identity(row_id: int):
+    from app.integrations.performer_filmography import identity
+    row = db.favourite_get(row_id)
+    if not row or row.get("kind") != "performer":
+        raise HTTPException(status_code=404, detail="Performer not found")
+    return identity(row)
+
+
+@app.get("/api/performers/filmography")
+def performer_filmography(row_id: int):
+    from app.integrations.performer_filmography import read
+    return read(_filmography_identity(row_id))
+
+
+@app.post("/api/performers/filmography")
+def refresh_performer_filmography(row_id: int):
+    from app.integrations.performer_filmography import start, read
+    ids = _filmography_identity(row_id)
+    if not start(ids):
+        return JSONResponse({"error": "Filmography refresh is busy. Please retry."}, status_code=503)
+    return read(ids)
+
+
 @app.get("/api/favourites")
 def api_favourites_list(kind: str | None = None, kinds: str | None = None):
     """Return cached rows for the requested categories plus settings.

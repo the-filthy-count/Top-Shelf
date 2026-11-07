@@ -13036,3 +13036,8 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
   }
   .pp-cell-bio { min-height: 320px; }
 }
+
+.pp-films-iafd-inner, .pp-filmography-list { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.pp-filmography-tools { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+.pp-filmography-tools span { flex: 1; font-size: var(--text-small); }
+.pp-filmography-sources { font-size: var(--text-small); padding: 0 8px 8px; opacity: .75; }
