@@ -835,8 +835,7 @@
 
       renderHeader(m.querySelector('#performerPopupHeader'), data);
       renderBio(m.querySelector('.pp-cell-bio'), data);
-      applyBioCellFanart(m.querySelector('.pp-cell-bio'),
-        (data && data.library_status && data.library_status.row_id) || null);
+      applyBioCellHeadshot(m.querySelector('.pp-cell-bio'), data.headshot_url);
       renderFilmsPanel(m.querySelector('.pp-cell-films'), data);
       renderCarousel(m.querySelector('.pp-cell-carousel'), data, controller.signal);
       renderGallery(m.querySelector('.pp-cell-gallery'), data);
@@ -1202,24 +1201,15 @@
   //: throwaway Image so a 404 doesn't show up as a console error and
   //: doesn't trigger the CSS ::before. Mirrors `applyCellFanart` in
   //: studio-popup.js — same CSS rules in app-shell.css drive both.
-  function applyBioCellFanart(cell, rowId) {
+  function applyBioCellHeadshot(cell, url) {
     if (!cell) return;
-    if (!rowId) {
+    if (!url) {
       cell.removeAttribute('data-has-fanart');
       cell.style.removeProperty('--ts-cell-fanart');
       return;
     }
-    const url = '/api/favourites/folder-fanart?row_id=' + encodeURIComponent(rowId);
-    const probe = new Image();
-    probe.onload = () => {
-      cell.style.setProperty('--ts-cell-fanart', `url("${url}")`);
-      cell.setAttribute('data-has-fanart', '1');
-    };
-    probe.onerror = () => {
-      cell.removeAttribute('data-has-fanart');
-      cell.style.removeProperty('--ts-cell-fanart');
-    };
-    probe.src = url;
+    cell.style.setProperty('--ts-cell-fanart', `url(${JSON.stringify(url)})`);
+    cell.setAttribute('data-has-fanart', '1');
   }
 
   function paintBgHero(data) {
@@ -1267,6 +1257,7 @@
             if (slot) {
               slot.innerHTML = `<img class="pp-headshot" src="${ESC(d.headshot_url)}&v=${Date.now()}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='<div class=pp-headshot-fallback><i class=fa-solid fa-person></i></div>'">`;
             }
+            applyBioCellHeadshot(document.querySelector('#performerPopupModal .pp-cell-bio'), d.headshot_url);
             paintBgHero(d);
           }
           // Nudge /library to refetch this row so the newly-enriched
