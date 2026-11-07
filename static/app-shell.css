@@ -7588,6 +7588,9 @@ button.pp-name-group:hover .pp-name-group-count {
   width: 30px;
   height: 30px;
   border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  padding: 0;
   border: 1px solid rgba(var(--brand-purple-rgb), 0.28);
   background: rgba(var(--brand-purple-rgb), 0.08);
   color: var(--text);
@@ -7601,14 +7604,14 @@ button.pp-name-group:hover .pp-name-group-count {
   transform: translateY(-1px);
 }
 .pp-social-pill img {
-  width: 16px;
-  height: 16px;
+  width: 100%;
+  height: 100%;
   display: block;
   object-fit: contain;
 }
 .pp-social-pill i {
   pointer-events: none;
-  font-size: 13px;
+  font-size: 22px;
   color: var(--text);
   opacity: 0.85;
 }
@@ -12976,3 +12979,54 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
 }
 .ts-phash-results > div { padding: 5px 0; }
 .ts-phash-results small { display: block; color: var(--dim); }
+
+/* Performer workspace: biography and downloads above a two-row scene shelf. */
+@media (min-width: 701px) {
+  .performer-popup-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(200px, 16%);
+    grid-template-rows: minmax(220px, 1fr) minmax(90px, .55fr) minmax(220px, .85fr);
+    grid-template-areas: "bio films posters" "gallery films posters" "carousel carousel posters";
+  }
+  .pp-cell-carousel .pp-scenes-grid {
+    grid-template-columns: none;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: clamp(160px, 15vw, 260px);
+    overflow-x: auto;
+    overflow-y: hidden;
+    align-content: stretch;
+  }
+  .pp-cell-carousel .scene-card { min-height: 0; }
+  .pp-cell-carousel .scene-card .img-load { max-height: calc(100% - 38px); }
+}
+.performer-popup-cell.pp-cell-gallery { overflow: hidden !important; }
+.pp-photo-thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  grid-auto-rows: 92px;
+  gap: 8px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.pp-photo-thumb {
+  padding: 0; min-width: 0; overflow: hidden; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--raised);
+}
+.pp-photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pp-photo-thumb:hover, .pp-photo-thumb:focus-visible { outline: 2px solid var(--accent, #0bb); }
+.pp-polaroid-dialog {
+  width: min(900px, 92vw); height: min(850px, 88vh); max-height: 88vh;
+  padding: 24px; border: 1px solid var(--border); border-radius: 16px;
+  background: #181b20; color: var(--text); overflow: hidden;
+}
+.pp-polaroid-dialog::backdrop { background: #000b; backdrop-filter: blur(6px); }
+.pp-polaroid-content { display: flex; height: 100%; min-height: 0; }
+.pp-polaroid-close { position: absolute; right: 12px; top: 12px; z-index: 100; width: 36px; height: 36px; cursor: pointer; }
+@media (max-width: 700px) {
+  .performer-popup-grid {
+    grid-template-areas: "bio" "gallery" "films" "carousel" "posters";
+    grid-template-rows: auto 180px 360px 400px 600px;
+    overflow-y: auto;
+  }
+  .pp-cell-bio { min-height: 320px; }
+}

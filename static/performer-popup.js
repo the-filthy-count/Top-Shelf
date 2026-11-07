@@ -2339,7 +2339,7 @@
     });
   }
 
-  function renderGallery(el, data) {
+  function renderGallery(el, data, selectedIndex = null) {
     // Primary + secondary live in the right-rail poster tiles, so
     // strip them from the polaroid deck to avoid duplicates. Match
     // by `kind` first, then by url substring (same heuristic as
@@ -2352,6 +2352,31 @@
     const sil = data.cat_gay ? 'silhouette7.webp' : 'silhouette6.webp';
     if (!imgs.length) {
       el.innerHTML = `<div class="pp-empty pp-empty--silhouette pp-empty--corner"><img src="/static/img/${sil}" alt="" class="pp-empty-silhouette pp-empty-silhouette--corner" loading="lazy"/></div>`;
+      return;
+    }
+    if (selectedIndex === null) {
+      el.innerHTML = `<div class="pp-photo-thumbs" aria-label="Photo gallery">${imgs.map((img, index) =>
+        `<button type="button" class="pp-photo-thumb" aria-label="Open photo ${index + 1}"><img src="${ESC(img.url)}" alt="${ESC(img.kind || 'Photo')}" loading="lazy"></button>`
+      ).join('')}</div>`;
+      el.querySelectorAll('.pp-photo-thumb').forEach((button, index) => {
+        button.addEventListener('click', () => {
+          const dialog = document.createElement('dialog');
+          dialog.className = 'pp-polaroid-dialog';
+          dialog.setAttribute('aria-label', 'Photo gallery');
+          dialog.innerHTML = '<button type="button" class="pp-polaroid-close" aria-label="Close photo gallery">×</button><div class="pp-polaroid-content"></div>';
+          document.body.appendChild(dialog);
+          renderGallery(dialog.querySelector('.pp-polaroid-content'), data, index);
+          dialog.querySelector('.pp-polaroid-close').onclick = () => dialog.close();
+          dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+          dialog.addEventListener('keydown', event => {
+            event.stopPropagation();
+            if (event.key === 'ArrowRight') dialog.querySelector('.pp-gallery-next').click();
+            if (event.key === 'ArrowLeft') dialog.querySelector('.pp-gallery-prev').click();
+          });
+          dialog.addEventListener('close', () => { dialog.remove(); button.focus(); }, {once: true});
+          dialog.showModal();
+        });
+      });
       return;
     }
     // Show up to 6 polaroids stacked. Top one is interactive; the rest
@@ -2380,7 +2405,7 @@
     // same headshot. Rest of the stack stays in its natural order; we
     // only swap the front index with a random other one.
     if (order.length > 1) {
-      const pick = Math.floor(Math.random() * order.length);
+      const pick = Math.max(0, Math.min(selectedIndex, order.length - 1));
       if (pick !== 0) {
         [order[0], order[pick]] = [order[pick], order[0]];
       }
@@ -2423,15 +2448,8 @@
           <img src="${ESC(img.url)}" alt="" loading="lazy" onerror="this.closest('.pp-gallery-tile').style.display='none'">
           ${img.kind ? `<span class="pp-gallery-kind">${ESC(img.kind)}</span>` : ''}`;
         tile.addEventListener('click', (ev) => {
-          // Any polaroid: click → view full-screen. Earlier behaviour
-          // shuffled background tiles forward on click, but the deck
-          // animates over 550ms so the polaroid moved out from under
-          // the cursor and felt fiddly to hit. Fullscreen-on-click is
-          // a stable target; the next/prev arrows still drive the
-          // shuffle for users who want to flip through the deck in
-          // place.
           ev.preventDefault();
-          showFullScreenImage(imgs, parseInt(tile.dataset.imgIdx, 10));
+          bringToFront(parseInt(tile.dataset.imgIdx, 10));
         });
         stage.insertBefore(tile, stage.querySelector('.pp-gallery-counter'));
       });
