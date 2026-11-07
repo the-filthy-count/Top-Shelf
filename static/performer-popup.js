@@ -1411,6 +1411,9 @@
   function renderHeader(el, data) {
     if (!el) return;
     const id = data.identity || {};
+    if (/^\/performer(?:\/|$)/.test(window.location.pathname)) {
+      document.title = id.canonical_name ? `${id.canonical_name} — Top-Shelf` : 'Performer — Top-Shelf';
+    }
     const bio = data.bio || {};
     const lib = data.library_status || {};
     const flag = (bio.country && window.countryFlagHtml)

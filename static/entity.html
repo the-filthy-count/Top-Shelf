@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <link rel="icon" href="/static/img/favicon.ico" type="image/x-icon">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Top-Shelf — Entity</title>
+<title>Top-Shelf</title>
 
 <link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
 <link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
@@ -241,6 +241,7 @@
     if (typeof window.openPerformerPopup !== 'function') {
       return showError('Performer viewer failed to load.');
     }
+    document.title = opts.name ? `${opts.name} — Top-Shelf` : 'Performer — Top-Shelf';
     if (status) status.textContent = 'Loading performer…';
     const generation = ++_entityOpenGeneration;
     _entityOpening = true;
