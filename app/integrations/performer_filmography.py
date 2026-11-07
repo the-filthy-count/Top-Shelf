@@ -40,7 +40,7 @@ def cache_key(ids):
     return 'filmography:v1:' + hashlib.sha256(json.dumps(ids, sort_keys=True).encode()).hexdigest()
 
 
-def fetch_source(source, performer_id, api_key, session=requests):
+def fetch_source(source, performer_id, api_key, session=requests, limit=None):
     label, host = SOURCES[source]
     rows, seen = [], set()
     for page in range(1, 1001):
@@ -72,6 +72,8 @@ def fetch_source(source, performer_id, api_key, session=requests):
                          'date': date, 'year': date[:4], 'studio': studio.get('name') or '',
                          'fingerprints': records.fingerprints(item.get('fingerprints') or item.get('hashes')),
                          'url': ('https://theporndb.net' if source == 'tpdb' else host) + '/scenes/' + quote(sid, safe='')})
+        if limit is not None and len(rows) >= limit:
+            return rows[:limit]
         if source == 'tpdb':
             last = (body.get('meta') or {}).get('last_page')
             finished = page >= int(last) if last is not None else not (body.get('links') or {}).get('next')
@@ -162,3 +164,24 @@ def start(ids):
         with _lock:
             _active.discard(key)
     return accepted
+
+
+def preview(source, performer_id, force=False):
+    if source not in SOURCES or not performer_id or len(performer_id) > 200:
+        raise ValueError('Invalid performer source or ID')
+    key = 'filmography-preview:v1:' + source + ':' + performer_id
+    saved = db.app_json_cache_get(key)
+    if saved and not force and time.time() - saved.get('updated_at', 0) < 3600:
+        return saved
+    api_key = str(db.get_settings().get('api_key_' + source) or '').strip()
+    if not api_key:
+        raise ValueError('This source needs an API key in Settings')
+    try:
+        rows = fetch_source(source, performer_id, api_key, limit=50)
+    except Exception:
+        if saved:
+            return dict(saved, sources=[{'source': SOURCES[source][0], 'state': 'Refresh failed; showing saved results'}])
+        raise
+    result = {'films': dedupe(rows), 'sources': [], 'updated_at': time.time(), 'loading': False, 'preview': True}
+    db.app_json_cache_put(key, result)
+    return result

@@ -36,6 +36,21 @@ class FilmographyTests(unittest.TestCase):
         save.assert_not_called()
         failed.assert_called_once_with('tpdb','p')
 
+    def test_preview_stops_after_first_page(self):
+        session=Mock()
+        rows=[{'id':str(i),'title':'Scene'} for i in range(50)]
+        session.post.return_value=Mock(json=Mock(return_value={'data':{'queryScenes':{'scenes':rows}}}))
+        self.assertEqual(len(f.fetch_source('javstash','p','key',session,limit=50)),50)
+        self.assertEqual(session.post.call_count,1)
+
+    def test_preview_keeps_source_identity_and_uses_saved_results(self):
+        saved={'films':[], 'updated_at':f.time.time(), 'preview':True}
+        with patch.object(f.db,'app_json_cache_get',return_value=saved) as read, patch.object(f,'fetch_source') as fetch:
+            self.assertEqual(f.preview('fansdb','performer-id'),saved)
+            read.assert_called_once_with('filmography-preview:v1:fansdb:performer-id')
+            fetch.assert_not_called()
+        with self.assertRaises(ValueError): f.preview('unknown','id')
+
     def test_group_ids_are_source_scoped(self):
         ids=f.identity({'match_tpdb_id':'one','group_ids_json':'{"tpdb":["two", {"id":"one"}], "fansdb":["three"]}'})
         self.assertEqual(ids['tpdb'],['one','two'])

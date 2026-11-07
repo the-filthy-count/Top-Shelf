@@ -775,6 +775,7 @@
         if (value && typeof value === 'object') return imageUrl(value.url || value.image);
         return '';
       };
+      data.filmographySource = opts.tpdbId ? 'tpdb' : opts.fansdbId ? 'fansdb' : opts.javstashId ? 'javstash' : opts.stashId ? 'stashdb' : '';
       data.headshot_url = imageUrl(data.headshot_url);
       data.images = (Array.isArray(data.images) ? data.images : []).flatMap(image => {
         const url = imageUrl(image);
@@ -1972,28 +1973,31 @@
 
   async function loadSavedFilmography(el, data) {
     const rowId = data.library_status?.row_id;
-    if (!rowId) { el.textContent = 'Add this performer to the library to save their filmography.'; return; }
+    const externalSources = [['tpdb', 'tpdb_id'], ['stashdb', 'stash_id'], ['fansdb', 'fansdb_id'], ['javstash', 'javstash_id']].filter(([, key]) => data.identity?.[key]);
+    const external = externalSources.find(([source]) => source === data.filmographySource) || externalSources[0];
+    if (!rowId && !external) { el.textContent = 'No source performer ID is available for this profile.'; return; }
     el.innerHTML = '<div class="pp-filmography-tools"><span role="status">Loading filmography…</span><button type="button" class="btn-secondary" title="Refresh filmography" aria-label="Refresh filmography"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button></div><div class="pp-filmography-list"></div>';
     const status = el.querySelector('[role="status"]');
     const button = el.querySelector('button');
     const list = el.querySelector('.pp-filmography-list');
-    const url = '/api/performers/filmography?row_id=' + encodeURIComponent(rowId);
+    const url = rowId ? '/api/performers/filmography?row_id=' + encodeURIComponent(rowId)
+      : '/api/performers/filmography-preview?source=' + external[0] + '&performer_id=' + encodeURIComponent(data.identity[external[1]]);
     let busy = false;
     async function fetchFilms(force = false) {
       if (busy) return;
       busy = true; button.disabled = true;
       try {
-        let method = force ? 'POST' : 'GET';
+        let method = force && rowId ? 'POST' : 'GET';
         let first = true;
         while (el.isConnected) {
-          const response = await fetch(url, {method, signal: AbortSignal.timeout(35000)});
+          const response = await fetch(url + (!rowId && force ? '&refresh=true' : ''), {method, signal: AbortSignal.timeout(35000)});
           const result = await response.json();
           if (!response.ok) throw new Error(result.error || 'Could not load filmography');
-          if (first && !force && (!result.updated_at || Date.now() / 1000 - result.updated_at > 7 * 86400) && !result.loading) { method = 'POST'; first = false; continue; }
+          if (rowId && first && !force && (!result.updated_at || Date.now() / 1000 - result.updated_at > 7 * 86400) && !result.loading) { method = 'POST'; first = false; continue; }
           first = false; method = 'GET';
           if (!el.isConnected) break;
           renderFilmography(list, {filmography: result.films || [], identity: data.identity});
-          status.textContent = (result.loading ? 'Fetching filmography… ' : '') + (result.films || []).length + ' scenes';
+          status.textContent = (result.loading ? 'Fetching filmography… ' : '') + (result.films || []).length + (result.preview ? ' recent scenes' : ' scenes');
           status.title = (result.sources || []).filter(s => s.state !== 'Not linked' && s.state !== 'API key missing').map(s => s.source + ': ' + s.state).join('\n');
           const failures = (result.sources || []).filter(s => s.state.includes('failed'));
           if (!result.loading && failures.length) status.textContent += ' · ' + failures.map(s => s.source + ': ' + s.state).join(' · ');

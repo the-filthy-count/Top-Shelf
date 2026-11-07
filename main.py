@@ -29791,6 +29791,18 @@ def _filmography_identity(row_id: int):
     return identity(row)
 
 
+@app.get("/api/performers/filmography-preview")
+def performer_filmography_preview(source: str, performer_id: str, refresh: bool = False):
+    from app.integrations.performer_filmography import preview
+    try:
+        return preview(source, performer_id, force=refresh)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except Exception:
+        _log.exception("Performer filmography preview failed")
+        return JSONResponse({"error": "Could not fetch filmography from this source. Please retry."}, status_code=502)
+
+
 @app.get("/api/performers/filmography")
 def performer_filmography(row_id: int):
     from app.integrations.performer_filmography import read
