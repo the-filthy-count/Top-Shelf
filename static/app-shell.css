@@ -13057,3 +13057,6 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
 .pp-film-source-icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 24px; }
 .pp-film-source-icon img { width: 100%; height: 100%; object-fit: contain; }
 .pp-film-studio { flex: 0 1 25%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
+
+.pp-film-trailing { display: inline-flex; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; max-width: 45%; min-width: 0; }
+.pp-film-trailing .pp-film-studio { flex: 0 1 auto; text-align: right; }

@@ -2037,8 +2037,10 @@
       parts.push(`<div class="pp-films-row pp-filmography-row">
         <span class="pp-film-date">[${ESC(date)}]</span><span aria-hidden="true">-</span>
         <span class="pp-films-title" title="${ESC(title)}">${ESC(title)}</span>
-        ${links ? `<span aria-hidden="true">-</span><span class="pp-film-inline-sources">${links}</span>` : ''}
-        ${studio ? `<span aria-hidden="true">-</span><span class="pp-film-studio" title="${ESC(studio)}">${ESC(studio)}</span>` : ''}
+        <span class="pp-film-trailing">
+          ${studio ? `<span class="pp-film-studio" title="${ESC(studio)}">${ESC(studio)}</span>` : ''}
+          ${links ? `<span class="pp-film-inline-sources">${links}</span>` : ''}
+        </span>
       </div>`);
     }
     el.innerHTML = `<div class="pp-film-list">${parts.join('')}</div>`;
