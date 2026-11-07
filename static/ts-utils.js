@@ -3301,8 +3301,8 @@ window.tsProfileOwnershipFilters = async function(host, scenes) {
   const stateKey = 'ts:profile-titles:' + location.pathname + location.search + ':' + (host.id || 'titles');
   let saved = {}; try { saved = JSON.parse(sessionStorage.getItem(stateKey) || '{}'); } catch (_) {}
   const bar = document.createElement('div'); bar.style.cssText = 'display:flex;gap:8px;align-items:center;padding:8px 0;flex-wrap:wrap';
-  const select = document.createElement('select'); select.className = 'field-input'; select.style.width = 'auto'; select.setAttribute('aria-label','Filter loaded profile titles');
-  for (const text of ['All loaded titles','Owned','Wanted','Available']) { const option = document.createElement('option'); option.value=text; option.textContent=text; select.appendChild(option); }
+  const select = document.createElement('select'); select.className = 'field-input'; select.style.width = 'auto'; select.style.padding = '6px 12px'; select.setAttribute('aria-label','Filter loaded profile titles');
+  for (const text of ['All loaded titles','Owned','Wanted','Available']) { const option = document.createElement('option'); option.value=text; option.textContent=text==='All loaded titles'?'All':text; select.appendChild(option); }
   const status = document.createElement('span'); status.style.color='var(--dim)'; status.textContent='Checking library…';
   bar.append(select,status);grid.before(bar);select.disabled=true;
   try {

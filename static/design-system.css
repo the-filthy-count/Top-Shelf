@@ -12,7 +12,7 @@
   --control-danger: color-mix(in srgb, var(--red) 14%, var(--raised));
 }
 html[data-theme] body :is(button, a.btn-primary, a.btn-secondary, a.btn-icon):not(:where(
-  .fav-cell, .scene-card, .movie-card, .studio-logo-pick-tile, .pp-member-tile, .pp-gallery-tile,
+  .fav-cell, .scene-card, .movie-card, .studio-logo-pick-tile, .pp-member-tile, .pp-gallery-tile, .pp-photo-thumb,
   .qfs-thumb, .stat-card, .emb-summary-card, .theme-card, .theme-swatch,
   [role="switch"], .toggle-switch, .ts-sidebar-backdrop, .settings-nav-item,
   .ts-seg button, .home-section-mode-btn, .home-disc-src-chip, .fav-filter-ibtn
