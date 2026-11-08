@@ -2160,7 +2160,7 @@
     // the swap turn into NO SIGNAL pads (different state — confirmed
     // empty, not still loading). MIN_TILES matches the post-fetch
     // padding floor so the slot count doesn't jump on swap.
-    const MIN_TILES = 9;
+    const MIN_TILES = 10;
     {
       const placeholders = Array.from({ length: MIN_TILES }, () => `
         <div class="scene-card scene-card--loading discover-info-scene-card discover-info-scene-card--performer" aria-hidden="true">
@@ -2172,7 +2172,7 @@
             <div style="font-size:var(--text-small);color:rgba(255,255,255,0.25)">&nbsp;</div>
           </div>
         </div>`).join('');
-      el.innerHTML = `<div class="pp-scenes-grid">${placeholders}</div>`;
+      el.innerHTML = `<div class="pp-scenes-grid" style="--pp-scene-columns:${MIN_TILES / 2}">${placeholders}</div>`;
     }
     let merged = [];
     if (hasAnyId) {
@@ -2224,7 +2224,8 @@
     // grid) so the slot count doesn't jump when real tiles swap in.
     const realCount = scenes.length;
     const padded = scenes.slice();
-    while (padded.length < MIN_TILES) padded.push({ __static: true });
+    const tileCount = Math.max(MIN_TILES, Math.ceil(realCount / 2) * 2);
+    while (padded.length < tileCount) padded.push({ __static: true });
     const renderTile = (s) => {
       if (s && s.__static) {
         return `
@@ -2320,7 +2321,7 @@
     };
     const cards = padded.map(renderTile).join('');
     el.innerHTML = `
-      <div class="pp-scenes-grid">${cards}</div>`;
+      <div class="pp-scenes-grid" style="--pp-scene-columns:${padded.length / 2}">${cards}</div>`;
     window.tsProfileOwnershipFilters?.(el, scenes);
     wirePpScrollAffordance(el);
   }
