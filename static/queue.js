@@ -4674,7 +4674,7 @@
           ${matchEvidence(window._qSearchResults[idx])}
           ${perfPile}
         </div>
-        <button type="button" class="btn-secondary qs-inspect" onclick="event.stopPropagation();inspectQueueCandidate(${idx})">Inspect</button><div class="qs-use">${useBtn}</div>
+        <div class="qs-use">${useBtn}</div>
       </div>`;
   }
   function toggleQSearchSource(btn) {
@@ -4863,7 +4863,7 @@
             ${matchEvidence(window._qSearchResults[idx])}
           ${perfPile}
           </div>
-          <button type="button" class="btn-secondary qs-inspect" onclick="event.stopPropagation();inspectQueueCandidate(${idx})">Inspect</button><div class="qs-use">${useBtn}</div>
+          <div class="qs-use">${useBtn}</div>
         </div>`;
       }).join('');
       resultsEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${rowsHtml}</div>`;
