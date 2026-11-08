@@ -6219,6 +6219,7 @@ def library_files_find_processed_match_for_stem(stem: str) -> int | None:
 def library_files_duplicate_groups() -> list[dict]:
     """Groups of 2+ active files sharing effective phash (3 then 2 then 1).
 
+    Missing paths are excluded without deleting their records (storage may be offline).
     Within each phash bucket we dedupe by case-folded destination so a
     stale index row (e.g. the file was originally indexed as `.MKV` and
     later re-indexed as `.mkv` without the old row being marked removed)
@@ -6239,10 +6240,17 @@ def library_files_duplicate_groups() -> list[dict]:
         buckets.setdefault(eff, []).append(r)
     out = []
     for ph, members in sorted(buckets.items(), key=lambda x: x[0]):
+        if len(members) < 2:
+            continue
         seen: dict[str, dict] = {}
         for m in members:
             dest = (m.get("destination") or "").strip()
             if not dest:
+                continue
+            try:
+                if not Path(dest).is_file():
+                    continue
+            except OSError:
                 continue
             key = dest.casefold()
             prev = seen.get(key)

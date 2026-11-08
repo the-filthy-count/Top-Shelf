@@ -3593,6 +3593,7 @@ def _duplicate_recommend(group: list[dict]) -> dict:
     Pick keeper: higher resolution, larger size, longer filename, lower id.
     If top two tie on resolution and size within 1%, confidence is low.
     """
+    group = [f for f in group if f.get("on_disk") is not False]
     if not group:
         return {
             "keeper": None,
@@ -3809,6 +3810,9 @@ def _run_dup_resolve_all_job() -> None:
             if any(int(r.get("duplicate_ignored") or 0) for r in files_raw):
                 continue
             enriched = [_health_dup_file_payload(r) for r in files_raw]
+            enriched = [f for f in enriched if f["on_disk"]]
+            if len(enriched) < 2:
+                continue
             rec = _duplicate_recommend(enriched)
             if rec.get("confidence") == "low":
                 skipped_n += 1
@@ -38595,6 +38599,9 @@ def _health_duplicate_groups_payload() -> list[dict]:
         files_out = []
         for r in g["files"]:
             files_out.append(_health_dup_file_payload(dict(r)))
+        files_out = [f for f in files_out if f["on_disk"]]
+        if len(files_out) < 2:
+            continue
         rec = _duplicate_recommend(files_out)
         keeper = rec.get("keeper") or {}
         kdest = (keeper.get("destination") or "").strip()
