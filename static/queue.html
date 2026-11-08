@@ -3662,6 +3662,10 @@
   .qs-phash--close { color:#ffb454; }
   .qs-phash--different { color:#ff7777; }
   .qs-phash--unknown { color:var(--dim); }
+  .qs-preview-wrap { position:relative; flex:none; min-height:42px; }
+  .qs-image-url-btn { position:absolute;right:22px;bottom:12px; }
+  #qsImageUrlEditor:not([hidden]) { display:flex;gap:8px;margin:0 18px 10px; }
+  #qsImageUrlEditor input { flex:1;min-width:0; }
   #qsFileFrame {display:block;width:calc(100% - 36px);height:clamp(140px,30vh,340px);flex:none;object-fit:contain;margin:8px 18px;background:#111;border-radius:6px}
   #qsFileFrame[hidden] {display:none}
   .qs-frame-pick,.qs-frame-pick img {display:block;width:100%;height:100%;object-fit:cover;padding:0;border:0;cursor:pointer}
@@ -3853,7 +3857,14 @@
         <!-- Filmstrip — pulled into the left column now so the right
              column can split into Search results + Brain matches. -->
         <div id="searchFrameStrip" class="film-strip film-strip--suggestions" style="display:none;justify-content:center;gap:4px;overflow:hidden;margin:12px 18px 0;flex-shrink:0"></div>
-        <img id="qsFileFrame" alt="Selected frame from the queue file" hidden>
+        <div class="qs-preview-wrap">
+          <img id="qsFileFrame" alt="Selected frame from the queue file" hidden>
+          <button type="button" class="btn-icon qs-image-url-btn" onclick="toggleSceneImageUrl()" title="Use an image URL" aria-label="Use an image URL" aria-controls="qsImageUrlEditor" aria-expanded="false" id="qsImageUrlToggle"><i class="fa-solid fa-link" aria-hidden="true"></i></button>
+        </div>
+        <div id="qsImageUrlEditor" hidden>
+          <input class="field-input" id="mImageUrl" type="url" placeholder="https://…" aria-label="Image URL" onkeydown="if(event.key==='Enter'){event.preventDefault();applySceneImageUrl();}else if(event.key==='Escape'){event.stopPropagation();toggleSceneImageUrl(false);}">
+          <button type="button" class="btn-icon" onclick="applySceneImageUrl()" title="Use image" aria-label="Use image"><i class="fa-solid fa-check" aria-hidden="true"></i></button>
+        </div>
         <div class="search-panel-filters q-search-modal-filters" style="flex-shrink:0;padding:14px 24px;border-bottom:1px solid rgba(var(--brand-purple-rgb),0.14);background:rgba(0,0,0,0.18)">
           <div class="field-row" style="margin-bottom:10px">
             <label class="field-label">Title</label>
@@ -3920,7 +3931,7 @@
                 </div>
                 <div id="mThumbPercent" style="font-size:var(--text-small);color:var(--dim);text-align:center;margin-top:4px"></div>
                 <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
-                  <input class="field-input" id="mImageUrl" type="text" placeholder="Paste image URL..." oninput="mThumbMode='url';mThumbPreview(this.value)" style="width:100%;box-sizing:border-box">
+
                   <button class="btn-secondary" id="mRandBtn" onclick="generateThumb()" title="Random frame" style="width:100%;box-sizing:border-box"><i class="fa-solid fa-dice"></i> <span class="btn-label">Random frame</span></button>
                   <button class="btn-secondary" id="mRegenBtn" onclick="generateThumb()" title="Regenerate" style="display:none;width:100%;box-sizing:border-box"><i class="fa-solid fa-dice"></i><span class="btn-label" style="margin-left:6px">Re-roll</span></button>
                 </div>

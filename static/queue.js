@@ -3820,6 +3820,7 @@
     document.querySelectorAll('#searchFrameStrip > div').forEach((slot,i) => slot.classList.toggle('is-picked', i === index && !!src && !_qsPreviewOverride));
   }
   function _clearSearchFrames() {
+    toggleSceneImageUrl(false);
     _qsPreviewOverride = '';
     _qsPickedFrame = null;
     _showFileFrame(-1);
@@ -5578,6 +5579,26 @@
     _mShowRandBtn();
   }
 
+  function toggleSceneImageUrl(open) {
+    const editor = document.getElementById('qsImageUrlEditor');
+    const show = typeof open === 'boolean' ? open : editor.hidden;
+    editor.hidden = !show;
+    document.getElementById('qsImageUrlToggle').setAttribute('aria-expanded', String(show));
+    if (show) document.getElementById('mImageUrl').focus();
+  }
+  function applySceneImageUrl() {
+    const field = document.getElementById('mImageUrl');
+    const value = field.value.trim();
+    try {
+      const url = new URL(value);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error();
+    } catch (_) { window.toast('Enter a valid http or https image URL'); field.focus(); return; }
+    field.value = value;
+    mThumbMode = 'url';
+    mThumbDataUrl = null;
+    mThumbPreview(value);
+    toggleSceneImageUrl(false);
+  }
   function mThumbPreview(url) {
     const img = document.getElementById('mThumbImg');
     const empty = document.getElementById('mThumbEmpty');
@@ -5772,6 +5793,10 @@
       _plot: finalPlot,
       _tags: formTags,
     });
+    const selectedImageUrl = document.getElementById('mImageUrl').value.trim();
+    if (mThumbMode === 'url' && selectedImageUrl) {
+      scene.images = [{url: selectedImageUrl, width: 0, height: 0}];
+    }
     //: Kind override travels with the scene dict so /api/file/manual
     //: routes it into the filing plan. ``null`` means "use server
     //: auto-detect" — leave ``_extra_kind`` off so the wrapper detects
