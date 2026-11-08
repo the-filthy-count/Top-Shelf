@@ -190,7 +190,12 @@ class ProcessingPipeline:
             await asyncio.to_thread(self.callbacks.get("run_name_search_async"), filename)
             return {"status": "unmatched"}
 
-        matched_scene = matches[0]
+        from app.core.fingerprint_selection import select_scene, save_review
+        matched_scene = select_scene(matches, phash)
+        if matched_scene is None:
+            self.emit('  Lookup: competing fingerprint matches — saved for review')
+            await asyncio.to_thread(save_review, db, filename, matches, source, phash)
+            return {"status": "unmatched", "review_required": True}
         if import_vice and isinstance(matched_scene, dict):
             matched_scene["_force_vice"] = import_vice
         # File move + image download + NFO write — sync I/O off-thread.

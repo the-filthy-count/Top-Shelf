@@ -8994,6 +8994,13 @@ def process_single(video: Path) -> dict:
         _run_name_search_async(filename)
         return {"status": "unmatched"}
 
+    from app.core.fingerprint_selection import select_scene, save_review
+    selected_scene = select_scene(matches, phash)
+    if selected_scene is None:
+        emit('  Lookup: competing fingerprint matches — saved for review')
+        save_review(db, filename, matches, source, phash)
+        return {"status": "unmatched", "review_required": True}
+
     # Import-folder hint: file dropped under a per-vice inbox
     # (`<vice_download_watch_dir>/<Vice>/…`) forces filing under that
     # vice regardless of the phash-matched scene's own tags. Mirrors
@@ -9004,9 +9011,9 @@ def process_single(video: Path) -> dict:
         import_vice = None
     if import_vice:
         emit(f"  Import folder → vice '{import_vice}'")
-        if isinstance(matches[0], dict):
-            matches[0]["_force_vice"] = import_vice
-    return file_scene_from_match(video, matches[0], source=source)
+        if isinstance(selected_scene, dict):
+            selected_scene["_force_vice"] = import_vice
+    return file_scene_from_match(video, selected_scene, source=source)
 
 
 def run_pipeline(filenames: list = None) -> None:
@@ -39551,7 +39558,11 @@ async def health_library_video_auto_match(payload: dict = Body(...)):
             src = ""
 
     if matches:
-        scene = copy.deepcopy(matches[0])
+        from app.core.fingerprint_selection import select_scene
+        selected_scene = select_scene(matches, phash)
+        if selected_scene is None:
+            return {"ok": False, "review_required": True, "error": "Competing fingerprint matches; select a scene manually"}
+        scene = copy.deepcopy(selected_scene)
         scene["_source"] = src
         result = write_library_scene_nfo_and_thumb(v, scene, source=src or "Auto")
         if result.get("status") == "ok":
