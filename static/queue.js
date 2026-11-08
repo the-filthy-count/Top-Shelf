@@ -838,7 +838,7 @@
     // used by the search results. Lets the user spot at a glance
     // which performer / studio / vice each row corresponds to
     // without scanning the full filename.
-    const _titleText = f.search_details?.fields?.title || spaceifyReleaseName(f.display_name || f.filename);
+    const _titleText = f.match_title || f.search_details?.fields?.title || spaceifyReleaseName(f.display_name || f.filename);
     // Per-row tokens come from THIS file's matched performers + studio
     // (filtered to library studios only). Vices and other library
     // entities arrive via `_libraryAndTokenHighlight`, which paints
@@ -859,7 +859,7 @@
         <div class="qi-crt-info">
           <span class="badge-size">${esc(String(f.size_mb))} MB</span>${matchLinkEl}${noDirChip}${errorChip}
           ${f.in_duplicate_group ? `<span class="q-dup-badge" title="Duplicate files"><i class="fa-solid fa-clone"></i> ${esc(String(f.duplicate_group_size || 2))}</span>` : ''}
-          ${metaText && metaClass !== 'qi-meta qi-meta-guess' ? `<span class="qi-crt-meta" title="${esc(f.match_title || '')}">${metaText}</span>` : ''}
+          ${f.match_date ? `<span class="qi-crt-meta">${esc(f.match_date)}</span>` : ''}
         </div>
       <div class="qi-cell qi-actions">
         ${f.has_phash ? `<button type="button" class="badge-cached qi-phash-btn" title="Find exact and near fingerprint matches" data-phash="${esc(f.phash || '')}" data-filename="${esc(f.filename || '')}" onclick="showQueuePhashPopup(event, this)"><i class="fa-solid fa-fingerprint queue-phash-fa"></i></button>` : ''}${_queueHistoryButton(f)}
@@ -949,7 +949,7 @@
     // matches the Vices / JAV tab's folder-tile aesthetic.
     return `<div class="queue-item queue-file-tile" id="qi-${i}" data-filename="${esc(f.filename)}" data-file-id="${esc(f.file_id || '')}" tabindex="0" onclick="queueTileSearch(event,this,'openMovieManualSearch')" onkeydown="queueTileSearch(event,this,'openMovieManualSearch')">
       ${_queueCrtScreen(f, statusEl, `<img class="qi-studio-logo" data-logo-fallback="${_queueFileLogoFallback()}" ${f.match_studio ? `data-logo-src="/api/studio-logo?name=${encodeURIComponent(f.match_studio)}"` : `src="${_queueFileLogoFallback()}"`} alt="Studio" onerror="this.onerror=null; this.src=this.dataset.logoFallback">`, [], '', true)}
-      <div class="qi-crt-tab"><div class="qi-crt-title" title="${esc(f.filename)}">${esc(spaceifyReleaseName(f.display_name || f.filename))}</div>
+      <div class="qi-crt-tab"><div class="qi-crt-title" title="${esc(f.filename)}">${esc(f.match_title || spaceifyReleaseName(f.display_name || f.filename))}</div>
       <div class="qi-crt-info"><span class="badge-size">${esc(String(f.size_mb))} MB</span><span class="qi-crt-meta">${metaText}</span></div>
       <div class="qi-cell qi-actions">${_queueHistoryButton(f)}
         <button type="button" class="btn-icon" onclick="_qCall('openMovieManualSearch', this)" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>

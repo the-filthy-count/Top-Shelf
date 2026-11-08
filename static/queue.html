@@ -3590,6 +3590,29 @@
   #queueList .qi-crt-tab .qi-actions > button { flex: 0 1 32px; width: 32px !important; height: 32px !important;
     min-width: 0 !important; min-height: 0 !important; padding: 0 !important; }
   #queueList .qi-crt-tab .qi-edit-details { order: -1; }
+  /* Reserve the same footer height; controls overlay it without moving the image. */
+  #queueList .queue-file-tile .qi-crt-tab { height: 100px; justify-content: center; }
+  #queueList .queue-file-tile .qi-crt-title {
+    white-space: normal; display: -webkit-box; -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2; line-height: 1.5; max-height: 3em; overflow-wrap: anywhere;
+  }
+  #queueList .queue-file-tile .qi-crt-tab .qi-actions {
+    position: absolute; left: 0; right: 0; bottom: 0; width: 100%; box-sizing: border-box;
+    padding: 8px 10px; background: #1b2022;
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity .15s ease;
+  }
+  #queueList .queue-file-tile:is(:hover,:focus-within) .qi-crt-tab .qi-actions {
+    opacity: 1; visibility: visible; pointer-events: auto;
+  }
+  @media (hover: none), (pointer: coarse) {
+    #queueList .queue-file-tile .qi-crt-tab { height: 100px; padding-bottom: 46px; }
+    #queueList .queue-file-tile .qi-crt-title { -webkit-line-clamp: 1; }
+    #queueList .queue-file-tile .qi-crt-tab .qi-actions {
+      opacity: 1; visibility: visible; pointer-events: auto;
+    }
+  }
+
   .queue-section:has(#queueChanges:not([hidden])) :is(#queueList,#queuePager) { display:none !important; }
   .q-details-bar { display: flex; align-items: end; gap: 14px; margin-top: 12px; }
   .q-search-date-scene { display: grid; grid-template-columns: minmax(0, 1fr) minmax(100px, 120px); gap: 12px; align-items: end; min-width: 0; }
