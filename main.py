@@ -36323,6 +36323,7 @@ async def queue_match_scene(filename: str):
         "date": scene.get("release_date") or "",
         "studio": studio_name,
         "performers": perfs,
+        "scene": {**scene, "_source": label},
         "description": scene.get("details") or "",
         "image_url": image_url,
     }

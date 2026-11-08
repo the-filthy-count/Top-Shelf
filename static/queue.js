@@ -3722,6 +3722,7 @@
               image:       d.image_url || '',
               description: d.description || '',
               view_url:    '',
+              _raw:        d.scene || null,
               _stored:     true,
             };
             _qsRenderStoredMatchIfIdle();
@@ -4178,8 +4179,7 @@
 
     _qConfirmScene = scene;
     _qConfirmPerformers = (scene.performers || []).map(p => ({
-      id:   (p.performer && p.performer.id)   || '',
-      name: (p.performer && p.performer.name) || '',
+      ...(p.performer || p),
     })).filter(p => p.name);
     _qConfirmChecked = _qConfirmPerformers.map(() => false);
     _qConfirmFilename = _qSelectedFile;
@@ -4586,7 +4586,7 @@
       performer_count: perfNames.length,
       image: m.image || '',
       view_url: m.view_url || '',
-      _raw: {
+      _raw: m._raw ? { ...m._raw, _source: m.source } : {
         id: m.id,
         title: m.title || '',
         release_date: m.date || '',
@@ -5725,7 +5725,7 @@
     }
     const chosen = pillNames.map(name => {
       const hit = perfByName.get(name.toLowerCase().trim());
-      return { performer: { id: (hit && hit.id) || '', name } };
+      return { performer: { ...(hit || {}), id: (hit && hit.id) || '', name } };
     });
     const titleEl = document.getElementById('srchTitle');
     const finalTitle = (titleEl ? titleEl.value : '').trim() || _qConfirmBaseTitle;
