@@ -2404,6 +2404,7 @@ query SearchScenes($term: String!, $limit: Int) {
     studio { id name }
     performers { performer { id name gender } }
     images { url width height }
+    fingerprints { hash algorithm duration }
     tags { name }
   }
 }
@@ -2418,7 +2419,8 @@ query QueryScenes($input: SceneQueryInput!) {
       studio { id name }
       performers { performer { id name gender } }
       images { url width height }
-      tags { name }
+      fingerprints { hash algorithm duration }
+    tags { name }
     }
   }
 }
@@ -3503,6 +3505,7 @@ def _fetch_grab_scene_for_filing(grab: dict) -> dict | None:
             "images": [{"url": data.get("image") or data.get("poster"), "width": 0, "height": 0}]
                 if data.get("image") or data.get("poster") else [],
             "tags": data.get("tags") or [],
+            "fingerprints": data.get("fingerprints") or data.get("hashes") or [],
         }
     elif source in ("StashDB", "FansDB", "JAVStash"):
         ep = _endpoint_query_var_for_match_source(source)
@@ -3511,7 +3514,8 @@ def _fetch_grab_scene_for_filing(grab: dict) -> dict | None:
         query = """query SceneForFiling($id: ID!) {
           findScene(id: $id) { id title details release_date
             studio { id name } performers { performer { id name gender } }
-            images { url width height } tags { name } }
+            images { url width height } tags { name }
+            fingerprints { hash algorithm duration } }
         }"""
         scene = _stashbox_post(ep[0], ep[1], query, {"id": sid}).get("findScene")
     else:

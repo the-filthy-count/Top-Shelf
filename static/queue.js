@@ -855,11 +855,14 @@
     return `<div class="queue-item queue-file-tile" id="qi-${i}" data-filename="${esc(f.filename)}" data-file-id="${esc(f.file_id || '')}" tabindex="0" onclick="queueTileSearch(event,this,'openManualSearch')" onkeydown="queueTileSearch(event,this,'openManualSearch')">
       ${_queueCrtScreen(f, statusEl, studioLogo, displayPerfs, headshotSlot)}
       <div class="qi-crt-tab">
-        <div class="qi-crt-title" title="${esc(f.filename)}">${_titleHtml}</div>
+        <div class="qi-crt-title" title="${esc(_titleText)}">${_titleHtml}</div>
         <div class="qi-crt-info">
-          <span class="badge-size">${esc(String(f.size_mb))} MB</span>${matchLinkEl}${noDirChip}${errorChip}
-          ${f.in_duplicate_group ? `<span class="q-dup-badge" title="Duplicate files"><i class="fa-solid fa-clone"></i> ${esc(String(f.duplicate_group_size || 2))}</span>` : ''}
+          <span class="badge-size">${esc(String(f.size_mb))} MB</span>${matchLinkEl}
           ${f.match_date ? `<span class="qi-crt-meta">${esc(f.match_date)}</span>` : ''}
+        </div>
+        <div class="qi-crt-info qi-crt-state">
+          ${noDirChip}${errorChip}
+          ${f.in_duplicate_group ? `<span class="q-dup-badge" title="Duplicate files"><i class="fa-solid fa-clone"></i> ${esc(String(f.duplicate_group_size || 2))}</span>` : ''}
         </div>
       <div class="qi-cell qi-actions">
         ${f.has_phash ? `<button type="button" class="badge-cached qi-phash-btn" title="Find exact and near fingerprint matches" data-phash="${esc(f.phash || '')}" data-filename="${esc(f.filename || '')}" onclick="showQueuePhashPopup(event, this)"><i class="fa-solid fa-fingerprint queue-phash-fa"></i></button>` : ''}${_queueHistoryButton(f)}
@@ -4637,6 +4640,31 @@
     ]).get(String(source || '').toLowerCase());
     return file ? '/static/logos/' + file + '.webp' : '';
   }
+  function _qsPhashComparison(row) {
+    const hash = String(_qSearchRecord?.technical?.phash || '').trim();
+    const valid = value => /^[0-9a-f]{16}$/i.test(String(value || '').trim());
+    if (!valid(hash)) return {state: 'unknown', label: 'pHash unavailable', detail: 'File fingerprint is unavailable'};
+    const raw = row?._raw || {};
+    let fingerprints = raw.fingerprints || raw.hashes || [];
+    if (!Array.isArray(fingerprints)) {
+      fingerprints = Object.entries(fingerprints).map(([algorithm, hash]) => ({algorithm, hash}));
+    }
+    const hashes = fingerprints.filter(f => f && String(f.algorithm || f.type || '').toUpperCase() === 'PHASH')
+      .map(f => String(f.hash || f.value || '').trim()).filter(valid);
+    if (!hashes.length) return {state: 'unknown', label: 'pHash unavailable', detail: 'Source supplied no comparable PHASH fingerprint'};
+    const distance = Math.min(...hashes.map(other => {
+      let bits = BigInt('0x' + hash) ^ BigInt('0x' + other), count = 0;
+      while (bits) { bits &= bits - 1n; count++; }
+      return count;
+    }));
+    return {state: distance === 0 ? 'exact' : distance <= 12 ? 'close' : 'different',
+      label: distance === 0 ? 'pHash match' : distance <= 12 ? 'pHash close' : 'pHash no match',
+      detail: `Closest fingerprint: ${distance}/64 bits different. Close threshold: 12 bits. Fingerprint similarity alone does not confirm scene identity.`};
+  }
+  function _qsPhashIndicator(row) {
+    const match = _qsPhashComparison(row);
+    return `<span class="qs-phash qs-phash--${match.state}" title="${esc(match.detail)}"><i class="fa-solid fa-fingerprint" aria-hidden="true"></i> ${match.label}</span>`;
+  }
   function _qsRenderStoredMatchRow(idx) {
     const m = _qStoredMatchScene || {};
     const thumbSrc = m.image || '/static/img/missing.webp';
@@ -4647,7 +4675,7 @@
       ? `<img src="${sourceLogo}" alt="${srcLabel}" style="height:22px;width:auto;display:block;flex-shrink:0" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${srcLabel}',style:'font-size:var(--text-small);font-weight:600;color:var(--accent)'}))" loading="lazy">`
       : `<span style="font-size:var(--text-small);font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:var(--accent);padding:2px 7px;border-radius:4px">${srcLabel}</span>`;
     const sourceTile = `<span style="flex-shrink:0;display:inline-flex;align-items:center;padding:4px 8px">${logoImg}</span>`;
-    const storedBadge = `<span style="flex-shrink:0;font-size:var(--text-small);font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:3px 8px;border-radius:4px;background:rgba(var(--brand-accent-rgb),0.18);border:1px solid rgba(var(--brand-accent-rgb),0.45);color:var(--accent)">phash match</span>`;
+    const storedBadge = _qsPhashIndicator(_qsBuildStoredMatchResult());
     const canFile = !!m.date;
     const useBtn = _qSelectedFile
       ? (canFile
@@ -4854,7 +4882,7 @@
           ${thumb}
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:4px">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              ${sourceTile}
+              ${sourceTile}${_qsPhashIndicator(row)}
               <span style="font-size:var(--text-small);color:var(--dim);flex-shrink:0">${esc(row.date||'')}</span>
               ${metaLine}
             </div>
