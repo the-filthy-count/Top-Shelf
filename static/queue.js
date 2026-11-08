@@ -3799,15 +3799,24 @@
   let _searchFrameSources = [];
   let _searchFrameIndex = 0;
   let _qsPickedFrame = null;
+  let _qsPreviewOverride = '';
+  function _showScenePreview(src) {
+    _qsPreviewOverride = src || '';
+    _qsPickedFrame = null;
+    _showFileFrame(-1);
+  }
   function _showFileFrame(index) {
     const preview = document.getElementById('qsFileFrame');
-    const src = _searchFrameSources[index];
+    const src = _qsPreviewOverride || _searchFrameSources[index];
+    if (!preview) return;
+    preview.alt = _qsPreviewOverride ? 'Selected scene thumbnail' : 'Selected frame from the queue file';
     preview.hidden = !src;
     if (src) preview.src = src;
     else preview.removeAttribute('src');
-    document.querySelectorAll('#searchFrameStrip > div').forEach((slot,i) => slot.classList.toggle('is-picked', i === index && !!src));
+    document.querySelectorAll('#searchFrameStrip > div').forEach((slot,i) => slot.classList.toggle('is-picked', i === index && !!src && !_qsPreviewOverride));
   }
   function _clearSearchFrames() {
+    _qsPreviewOverride = '';
     _qsPickedFrame = null;
     _showFileFrame(-1);
     const strip = document.getElementById('searchFrameStrip');
@@ -3826,6 +3835,7 @@
   function _pickFrameAsThumb(i) {
     const src = _searchFrameSources[i];
     if (!src) return;
+    _qsPreviewOverride = '';
     _qsPickedFrame = i;
     _showFileFrame(i);
     const pct = (_searchFramePercents && _searchFramePercents[i]);
@@ -5543,6 +5553,7 @@
     const img = document.getElementById('mThumbImg');
     const empty = document.getElementById('mThumbEmpty');
     if (!url) { _mResetThumb(); return; }
+    _showScenePreview(url);
     if (img) {
       img.onerror = () => { _mResetThumb(); };
       img.src = url;
@@ -5800,6 +5811,7 @@
       const d = await r.json();
       if (d.error) { window.toast(`Thumb error: ${d.error}`); return; }
       mThumbDataUrl = d.data_url; mThumbMode = 'generated';
+      _showScenePreview(d.data_url);
       if (img) { img.src = d.data_url; img.style.display = 'block'; }
       if (empty) empty.style.display = 'none';
       if (pctLabel) pctLabel.textContent = `Frame at ${d.percent}%`;
