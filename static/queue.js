@@ -4663,7 +4663,7 @@
   }
   function _qsPhashIndicator(row) {
     const match = _qsPhashComparison(row);
-    return `<span class="qs-phash qs-phash--${match.state}" title="${esc(match.detail)}"><i class="fa-solid fa-fingerprint" aria-hidden="true"></i> ${match.label}</span>`;
+    return `<span class="qs-phash qs-phash--${match.state}" role="img" aria-label="${esc(match.label)}" title="${esc(match.label + ' — ' + match.detail)}"><i class="fa-solid fa-fingerprint" aria-hidden="true"></i></span>`;
   }
   function _qsRenderStoredMatchRow(idx) {
     const m = _qStoredMatchScene || {};
@@ -4694,7 +4694,6 @@
         <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:4px">
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             ${sourceTile}
-            ${storedBadge}
             <span style="font-size:var(--text-small);color:var(--dim);flex-shrink:0">${esc(m.date||'')}</span>
           </div>
           <div style="font-size:var(--text-body);color:var(--text);font-weight:500;line-height:1.35">${esc(m.title || '')}</div>
@@ -4703,6 +4702,7 @@
           ${perfPile}
         </div>
         <div class="qs-use">${useBtn}</div>
+        ${storedBadge}
       </div>`;
   }
   function toggleQSearchSource(btn) {
@@ -4882,7 +4882,7 @@
           ${thumb}
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:4px">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-              ${sourceTile}${_qsPhashIndicator(row)}
+              ${sourceTile}
               <span style="font-size:var(--text-small);color:var(--dim);flex-shrink:0">${esc(row.date||'')}</span>
               ${metaLine}
             </div>
@@ -4892,6 +4892,7 @@
           ${perfPile}
           </div>
           <div class="qs-use">${useBtn}</div>
+          ${_qsPhashIndicator(row)}
         </div>`;
       }).join('');
       resultsEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${rowsHtml}</div>`;
