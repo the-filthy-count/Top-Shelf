@@ -231,7 +231,8 @@
   #homeScenesGrid { grid-template-columns: repeat(auto-fill, minmax(262.5px, 1fr)); }
   .home-toprow { display: grid; grid-template-columns: auto minmax(180px, 1fr) 140px; }
   .home-toprow > .home-search { position: static; transform: none; width: 100%; }
-  .home-toprow__brand { position: static; transform: none; max-width: 140px; height: 50px; justify-self: end; object-position: right center; }
+  /* Fill the reserved logo column without increasing the toolbar height. */
+  .home-toprow__brand { position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 140px; max-width: 140px; height: auto; object-position: right center; }
 }
 @media (max-width: 900px) {
   :root { --text-small: 12px; --text-body: 14px; --text-section: 16px; --text-title: 20px; }
