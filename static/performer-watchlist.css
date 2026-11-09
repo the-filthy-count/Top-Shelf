@@ -15,9 +15,9 @@
 .watch-row--review {border-left-color:var(--amber,#e9bc63);}
 .watch-row--identified {border-left-color:var(--green,#6edca2);}
 .watch-identity {display:flex;align-items:center;gap:14px;min-width:0;}
-.watch-avatar {display:grid;place-items:center;width:42px;height:42px;flex:0 0 42px;border-radius:50%;color:var(--accent);background:rgba(var(--brand-accent-rgb),.08);border:1px solid rgba(var(--brand-accent-rgb),.25);}
+.watch-avatar {display:grid;place-items:center;width:64px;height:64px;flex:0 0 64px;border-radius:50%;color:var(--accent);background:rgba(var(--brand-accent-rgb),.08);border:1px solid rgba(var(--brand-accent-rgb),.25);}
 .watch-name {min-width:0;overflow-wrap:anywhere;}
-.watch-name strong {color:var(--text);font-size:var(--text-body);letter-spacing:.03em;}
+.watch-name strong {color:var(--text);font-size:calc(var(--text-body) + 2px);letter-spacing:.03em;}
 .watch-row small,.watch-candidates small {display:block;margin-top:5px;color:var(--dim);font-size:var(--text-small);overflow-wrap:anywhere;line-height:1.5;}
 .watch-name a {display:inline-block;margin-top:7px;color:var(--accent);font-size:var(--text-small);text-decoration:none;}
 .watch-name a:hover {text-decoration:underline;}
