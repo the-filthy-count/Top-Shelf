@@ -1,5 +1,13 @@
 (() => {
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function linkNotes(value) {
+    return String(value).split(/((?:https?:\/\/|www\.)[^\s<>"']+)/gi).map((part, index) => {
+      if (!(index % 2)) return esc(part);
+      const url = part.replace(/[.,;!?)]+$/, '');
+      const suffix = part.slice(url.length);
+      return `<a href="${esc(/^www\./i.test(url) ? 'https://' + url : url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>${esc(suffix)}`;
+    }).join('');
+  }
   let items = [], timer, mounted = false;
   const host = () => document.getElementById('performerWatchlist');
   async function api(path='', method='GET', body) {
@@ -9,6 +17,7 @@
     return result;
   }
   function sourceUrl(hit) {
+    if (['Babepedia','Coomer'].includes(hit.source) && /^https?:\/\//i.test(hit.url || '')) return hit.url;
     const bases={TPDB:'https://theporndb.net/performers/',StashDB:'https://stashdb.org/performers/',FansDB:'https://fansdb.cc/performers/',JAVStash:'https://javstash.org/performers/'};
     return (bases[hit.source] || '') + encodeURIComponent(hit.id);
   }
@@ -23,7 +32,7 @@
     if(Object.values(row.checks).some(s => s !== 'Checked')) return 'Check incomplete';
     return 'Not found';
   }
-  const sourceLogos = {TPDB:'tpdb', StashDB:'stashdb', FansDB:'fansdb', JAVStash:'javstash'};
+  const sourceLogos = {TPDB:'tpdb', StashDB:'stashdb', FansDB:'fansdb', JAVStash:'javstash', Babepedia:'babepedia', Coomer:'coomer'};
   function checkSummary(row) {
     const label = status(row);
     const state = row.confirmed ? 'identified' : row.checking || !row.checked_at ? 'checking' : row.candidates.length ? 'review' : 'quiet';
@@ -47,7 +56,7 @@
       items = (await api()).items;
       host().querySelector('.watch-status').textContent = `${items.length} watched · Unidentified entries checked daily`;
       host().querySelector('.watch-list').innerHTML = items.length ? items.map(row => `<article class="watch-row${row.confirmed ? ' watch-row--identified' : row.candidates.length ? ' watch-row--review' : ''}">
-        <div class="watch-identity"><span class="watch-avatar${row.confirmed ? ' watch-avatar--confirmed' : ''}" aria-hidden="true"><i class="fa-solid ${row.confirmed ? 'fa-user-check' : 'fa-user'}"></i>${row.confirmed?.image && /^https?:\/\//i.test(row.confirmed.image) ? `<img src="${esc(row.confirmed.image)}" alt="" loading="lazy" onerror="this.remove()">` : ''}</span><div class="watch-name"><strong>${row.source_url ? `<a class="watch-name-link" href="${esc(row.source_url)}" target="_blank" rel="noopener noreferrer" title="Open source link">${esc(row.name)}</a>` : esc(row.name)}</strong>${row.aliases?.length ? `<small>${esc(row.aliases.join(', '))}</small>`:''}${row.notes ? `<small>${esc(row.notes)}</small>`:''}</div></div>
+        <div class="watch-identity"><span class="watch-avatar${row.confirmed ? ' watch-avatar--confirmed' : ''}" aria-hidden="true"><i class="fa-solid ${row.confirmed ? 'fa-user-check' : 'fa-user'}"></i>${row.confirmed?.image && /^https?:\/\//i.test(row.confirmed.image) ? `<img src="${esc(row.confirmed.image)}" alt="" loading="lazy" onerror="this.remove()">` : ''}</span><div class="watch-name"><strong>${row.source_url ? `<a class="watch-name-link" href="${esc(row.source_url)}" target="_blank" rel="noopener noreferrer" title="Open source link">${esc(row.name)}</a>` : esc(row.name)}</strong>${row.aliases?.length ? `<small>${esc(row.aliases.join(', '))}</small>`:''}${row.notes ? `<small>${linkNotes(row.notes)}</small>`:''}</div></div>
         ${checkSummary(row)}
         <div class="watch-actions">${row.confirmed ? `<button data-action="profile" data-id="${row.id}" title="Open profile / Add to library" aria-label="Open profile / Add to library"><i class="fa-solid fa-circle-plus" aria-hidden="true"></i></button>` : `<button data-action="review" data-id="${row.id}" title="Review matches" aria-label="Review ${row.candidates.length} candidate matches" ${row.candidates.length?'':'disabled'}><i class="fa-solid fa-user-check" aria-hidden="true"></i> <span class="watch-db-count">${String(Math.min(row.candidates.length, 99)).padStart(2, '0')}</span></button><button data-action="check" data-id="${row.id}" title="Check databases" aria-label="Check databases" ${row.checking?'disabled':''}><i class="fa-solid fa-rotate"></i></button>`}<button data-action="edit" data-id="${row.id}" title="Edit entry" aria-label="Edit entry"><i class="fa-solid fa-pen"></i></button><button data-action="delete" data-id="${row.id}" title="Remove from watchlist" aria-label="Remove from watchlist"><i class="fa-solid fa-xmark"></i></button></div>
         </article>`).join('') : '<div class="watch-empty"><i class="fa-solid fa-eye" aria-hidden="true"></i><strong>Keep an eye out</strong><p>Add a name above. We’ll check the databases for you.</p></div>';
@@ -65,7 +74,7 @@
   }
   function review(row) {
     const dialog=document.createElement('dialog');dialog.className='watch-review';
-    dialog.innerHTML=`<header><h2>Matches for ${esc(row.name)}</h2><button data-close aria-label="Close">×</button></header><p>Review the profile before confirming. Shared aliases can belong to different people.</p><div class="watch-review-filters"><div class="watch-source-filters" role="group" aria-label="Filter by database"><button type="button" data-source="" aria-pressed="true">All</button>${Object.entries(sourceLogos).map(([source,logo])=>`<button type="button" data-source="${source}" aria-pressed="false" title="${source}" aria-label="${source}" ${row.candidates.some(hit=>hit.source===source)?'':'disabled'}><img src="/static/logos/${logo}.webp" alt="${source}"></button>`).join('')}</div><div class="watch-review-search"><input type="search" data-match-query placeholder="Filter names or aliases…" aria-label="Filter names or aliases"><button type="button" data-photo-filter aria-pressed="false" title="Only candidates with photos" aria-label="Only candidates with photos"><i class="fa-solid fa-image" aria-hidden="true"></i></button><button type="button" data-reset-filters title="Reset filters" aria-label="Reset filters"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></button></div><span class="watch-match-count" aria-live="polite"></span></div><div class="watch-candidates">${row.candidates.map((hit,i)=>`<article data-candidate="${i}"><img src="${esc(hit.image || '/static/img/logo.webp')}" alt="" loading="lazy"><div><strong>${esc(hit.name)}</strong><small>${esc(Array.isArray(hit.aliases)?hit.aliases.join(', '):hit.aliases)}</small><button class="watch-profile-button" data-open="${i}" title="View ${esc(hit.source)} profile" aria-label="View ${esc(hit.source)} profile"><img src="/static/logos/${sourceLogos[hit.source] || 'stashdb'}.webp" alt="${esc(hit.source)}"></button> <button data-confirm="${i}" title="Confirm performer" aria-label="Confirm performer"><i class="fa-solid fa-check" aria-hidden="true"></i></button></div></article>`).join('')}</div><p class="watch-no-matches" hidden>No candidates match these filters.</p><p role="status"></p>`;
+    dialog.innerHTML=`<header><h2>Matches for ${esc(row.name)}</h2><button data-close aria-label="Close">×</button></header><p>Review the profile before confirming. Shared aliases can belong to different people.</p><div class="watch-review-filters"><div class="watch-source-filters" role="group" aria-label="Filter by database"><button type="button" data-source="" aria-pressed="true">All</button>${Object.entries(sourceLogos).map(([source,logo])=>`<button type="button" data-source="${source}" aria-pressed="false" title="${source}" aria-label="${source}" ${row.candidates.some(hit=>hit.source===source)?'':'disabled'}><img src="/static/logos/${logo}.webp" alt="${source}"></button>`).join('')}</div><div class="watch-review-search"><input type="search" data-match-query placeholder="Filter names or aliases…" aria-label="Filter names or aliases"><button type="button" data-photo-filter aria-pressed="false" title="Only candidates with photos" aria-label="Only candidates with photos"><i class="fa-solid fa-image" aria-hidden="true"></i></button><button type="button" data-reset-filters title="Reset filters" aria-label="Reset filters"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></button></div><span class="watch-match-count" aria-live="polite"></span></div><div class="watch-candidates">${row.candidates.map((hit,i)=>`<article data-candidate="${i}"><img src="${esc(hit.image || '/static/img/logo.webp')}" alt="" loading="lazy"><div><strong>${esc(hit.name)}</strong><small>${esc(Array.isArray(hit.aliases)?hit.aliases.join(', '):hit.aliases)}</small><button class="watch-profile-button" data-open="${i}" title="View ${esc(hit.source)} profile" aria-label="View ${esc(hit.source)} profile"><img src="/static/logos/${sourceLogos[hit.source] || 'stashdb'}.webp" alt="${esc(hit.source)}"></button> ${hit.external_only ? '' : `<button data-confirm="${i}" title="Confirm performer" aria-label="Confirm performer"><i class="fa-solid fa-check" aria-hidden="true"></i></button>`}</div></article>`).join('')}</div><p class="watch-no-matches" hidden>No candidates match these filters.</p><p role="status"></p>`;
     let selectedSource = '', photosOnly = false;
     const search = dialog.querySelector('[data-match-query]');
     const applyFilters = () => {
