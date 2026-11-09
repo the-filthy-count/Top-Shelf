@@ -99,3 +99,6 @@
 .watch-candidates [data-confirm] {width:44px;padding:0;}
 
 .watch-name .watch-source-link {display:inline-flex;align-items:center;justify-content:center;margin:4px 0 0 6px;padding:4px;vertical-align:middle;text-decoration:none;}
+
+.watch-name a.watch-name-link {display:inline;margin:0;padding:0;font:inherit;color:inherit;}
+.watch-name a.watch-name-link:hover,.watch-name a.watch-name-link:focus-visible {color:var(--accent);text-decoration:underline;text-underline-offset:3px;}
