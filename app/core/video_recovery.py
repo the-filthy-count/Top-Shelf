@@ -45,11 +45,6 @@ def archive(raw, *, library_file_id=None):
     except PartialDownloadPending as exc:
         raise ValueError(str(exc)) from exc
     recovery = store()
-    configured = [Path(row['path']).expanduser().resolve() for row in roots()]
-    configured += [Path(value).expanduser().resolve() for key, value in db.get_settings().items()
-                   if key.endswith('_dir') and isinstance(value, str) and value.strip()]
-    if any(base == recovery.root or base in recovery.root.parents for base in configured):
-        raise ValueError('Recovery storage must be outside configured media directories')
     paths = [video]
     siblings = list(video.parent.iterdir())
     shared = any(p != video and p.stem == video.stem and p.suffix.lower() in VIDEO_EXTENSIONS for p in siblings)
@@ -89,9 +84,9 @@ def archive(raw, *, library_file_id=None):
         for table, records in processed.items():
             for row in records:
                 conn.execute(f"UPDATE {table} SET status='removed' WHERE id=?", (row['id'],))
-                conn.execute("""UPDATE processing_jobs SET state='cancelled',phase='Moved to recovery'
+                conn.execute("""UPDATE processing_jobs SET state='cancelled',phase='Deleted'
                     WHERE file_id IN (SELECT id FROM file_assets WHERE queue_table=? AND queue_id=?)""", (table, row['id']))
-    return recovery.archive(paths, context['file_id'], context, commit, validate)
+    return recovery.delete(paths, context['file_id'], context, commit, validate)
 
 
 def restore(operation_id):

@@ -44,9 +44,9 @@
 
   function confirmDeleteDisk(ctx) {
     return confirm(
-      `Move “${ctx.name}” and its folder contents to recovery?\n\n` +
-      `Files and records are retained for restoration. Disk space is retained. ` +
-      `Restore or permanently delete it from the queue’s recovery panel.`
+      `Permanently delete “${ctx.name}” and its folder contents?\n\n` +
+      `Files will be deleted from disk. ` +
+      `This cannot be undone.`
     );
   }
 
@@ -78,7 +78,7 @@
     const body = { id: ctx.id };
     if (ctx.viceId) body.vice_id = ctx.viceId;
     const result = await postJson('/api/library/entity/delete-from-disk', body);
-    toast(result.recoverable ? `Moved “${ctx.name}” to recovery` : `Deleted “${ctx.name}” from disk`, { kind: 'success' });
+    toast(`Deleted “${ctx.name}” from disk`, { kind: 'success' });
     refreshBanner();
     return true;
   }
@@ -943,7 +943,7 @@
     }
     items.push(
       { action: 'remove', label: 'Remove from library', icon: 'fa-bookmark' },
-      { action: 'delete', label: 'Move to recovery', icon: 'fa-trash', danger: true },
+      { action: 'delete', label: 'Delete permanently', icon: 'fa-trash', danger: true },
     );
     if (ctx.canChangeDirectory) {
       const insertAt = items.findIndex((it) => it.action === 'delete');
@@ -968,6 +968,7 @@
     const btn = wrap.querySelector('.lib-entity-menu-btn');
     const menu = wrap.querySelector('.lib-entity-menu-dropdown');
     menu.innerHTML = buildMenuItems(ctx).map((it) =>
+      (it.danger ? '<div class="lib-entity-menu-divider" role="separator"></div>' : '') +
       `<button type="button" class="lib-entity-menu-item${it.danger ? ' is-danger' : ''}" ` +
       `data-action="${esc(it.action)}" role="menuitem">` +
       `<i class="fa-solid ${esc(it.icon)}"></i><span>${esc(it.label)}</span></button>`

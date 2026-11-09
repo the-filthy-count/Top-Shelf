@@ -48,6 +48,46 @@ class RecoveryStore:
         self.root = Path(root).resolve()
         self.move = move
 
+    def delete(self, paths, file_id, context, commit, validate=None):
+        """Delete in place. Retain an audit event, never a recovery copy."""
+        with _lock, self.connect() as conn:
+            if validate is not None:
+                validate(conn, context)
+            entries = []
+            for raw in paths:
+                path = Path(raw)
+                if path.is_symlink() or not path.is_file():
+                    raise ValueError('Deletion requires existing regular files')
+                signature = _signature(path)
+                expected = context.get('source_stats', {}).get(str(path.resolve()))
+                if expected is not None and signature != expected:
+                    raise OSError('Source identity changed before deletion')
+                entries.append((path, signature))
+            if not entries and context.get('kind') not in ('library', 'vice'):
+                raise ValueError('No files to delete')
+            freed = 0
+            deleted = []
+            try:
+                conn.execute('BEGIN IMMEDIATE')
+                for path, signature in entries:
+                    if path.is_symlink() or _signature(path) != signature:
+                        raise OSError('Source changed before deletion')
+                    path.unlink()
+                    deleted.append(str(path))
+                    freed += signature[2]
+                commit(conn, context)
+                conn.execute("UPDATE file_assets SET current_path='' WHERE id=?", (file_id,))
+                conn.execute('INSERT INTO file_events(file_id,kind,detail) VALUES(?,?,?)',
+                             (file_id, 'file.deleted', json.dumps({'paths': deleted, 'freed_bytes': freed})))
+                conn.commit()
+            except Exception as exc:
+                conn.rollback()
+                conn.execute('INSERT INTO file_events(file_id,kind,detail) VALUES(?,?,?)',
+                             (file_id, 'file.delete_failed', json.dumps({'deleted_paths': deleted, 'error': str(exc)})))
+                conn.commit()
+                raise
+            return {'deleted': True, 'recoverable': False, 'freed_bytes': freed}
+
     def archive(self, paths, file_id, context, commit, validate=None):
         """Commit receives the journal connection only after every file is safe."""
         with _lock:

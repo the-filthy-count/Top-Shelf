@@ -3671,10 +3671,10 @@ def _health_unlink_nfo_thumb_sidecars(video_path: Path) -> None:
 
 
 def _duplicate_delete_one_library_video(dest: str) -> int:
-    """Retain the removed copy and records in recovery; no bytes are freed yet."""
+    """Permanently delete the duplicate video and its unshared sidecars."""
     from app.core.video_recovery import archive
-    archive(dest)
-    return 0
+    result = archive(dest)
+    return int(result.get("freed_bytes") or 0)
 
 
 def _duplicate_resolve_non_keepers(
@@ -33277,8 +33277,8 @@ async def api_library_entity_delete_from_disk(payload: dict = Body(...)):
         if not deleted:
             return JSONResponse({"error": "Vice not found"}, status_code=404)
         _favourites_warm.invalidate()
-        db.notification_add("success", f"Moved “{label}” to recovery", ttl_seconds=240)
-        return {"ok": True, "kind": "vice", "recoverable": True}
+        db.notification_add("success", f"Deleted “{label}”", ttl_seconds=240)
+        return {"ok": True, "kind": "vice", "recoverable": False}
     if not row_id:
         return JSONResponse({"error": "id required"}, status_code=400)
     row = db.favourite_get(row_id)
@@ -33291,8 +33291,8 @@ async def api_library_entity_delete_from_disk(payload: dict = Body(...)):
         return JSONResponse({"error": "Not found"}, status_code=404)
     _favourites_warm.invalidate()
     _favourites_name_index_bump()
-    db.notification_add("success", f"Moved “{label}” to recovery", ttl_seconds=240)
-    return {"ok": True, "recoverable": True}
+    db.notification_add("success", f"Deleted “{label}”", ttl_seconds=240)
+    return {"ok": True, "recoverable": False}
 
 
 @app.get("/api/library/performer-move-targets")
@@ -38512,7 +38512,7 @@ def _queue_duplicate_groups_payload(*, compute_missing_phash: bool = False) -> d
 
 
 def _queue_delete_filename_sync(filename: str, queue_kind: str = "scene", expected_file_id: str = "") -> dict:
-    """Move queue media to recovery storage within its configured inbox."""
+    """Permanently delete queue media within its configured inbox."""
     if expected_file_id:
         from app.core.queue_recovery import resolve_target
         try:
@@ -38552,7 +38552,7 @@ def _queue_delete_filename_sync(filename: str, queue_kind: str = "scene", expect
         result = _archive_queue_file(fn, target_resolved, root.resolve(), table, queue_key, queue_kind, expected_file_id)
     except (OSError, ValueError) as exc:
         return {"ok": False, "error": f"Removal failed: {exc}"}
-    emit(f"Moved to recovery: {fn}")
+    emit(f"Deleted: {fn}")
     return {"ok": True, "deleted": True, "filename": fn, "freed_bytes": 0, **result}
 
 
@@ -39312,7 +39312,7 @@ async def health_delete_video(payload: dict = Body(...)):
         _health_scan_cache_strip("video_no_nfo", path_raw, str(p))
     except (ValueError, OSError) as exc:
         return JSONResponse({"error": str(exc)}, status_code=409)
-    return {"ok": True, "recoverable": True, "freed_bytes": 0, **result}
+    return {"ok": True, "recoverable": False, "freed_bytes": 0, **result}
 
 
 

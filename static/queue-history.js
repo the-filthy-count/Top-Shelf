@@ -42,7 +42,7 @@
   const size = bytes => `${(Number(bytes || 0) / 1024 / 1024).toFixed(1)} MB retained`;
   const labels = {'registered':'Added to queue', 'queue.rename':'Renamed', 'queue.status':'Status changed',
     'queue.record_removed':'Queue record removed', 'file.destination':'Filed',
-    'file.recovered_removal':'Moved to recovery', 'file.restored':'Restored', 'file.recovery_purged':'Permanently deleted from recovery'};
+    'file.deleted':'Permanently deleted', 'file.delete_failed':'Deletion failed', 'file.recovered_removal':'Moved to recovery', 'file.restored':'Restored', 'file.recovery_purged':'Permanently deleted from recovery'};
   async function recovery() {
     const token = open('Recover removed files');
     const list = node('ul', undefined, 'queue-details-list');

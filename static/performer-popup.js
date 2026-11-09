@@ -1121,9 +1121,7 @@
     m.querySelector('.pp-cell-films').innerHTML = `
       <div class="pp-skel pp-skel-films">
         <div class="pp-skel-line pp-skel-line--lg" style="width:55%;margin-bottom:12px"></div>
-        <div class="pp-skel-thumbs" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
-          ${Array.from({ length: 4 }).map(() => '<div class="pp-skel-thumb"></div>').join('')}
-        </div>
+        ${Array.from({ length: 8 }).map(() => '<div class="pp-skel-line" style="width:100%;height:38px;margin-bottom:10px"></div>').join('')}
       </div>`;
     m.querySelector('.pp-cell-carousel').innerHTML = `
       <div class="pp-skel pp-skel-scenes">
@@ -1134,9 +1132,9 @@
       </div>`;
     m.querySelector('.pp-cell-gallery').innerHTML = `
       <div class="pp-skel pp-skel-gallery">
-        <div class="pp-skel-polaroid pp-skel-polaroid--3"></div>
-        <div class="pp-skel-polaroid pp-skel-polaroid--2"></div>
-        <div class="pp-skel-polaroid pp-skel-polaroid--1"></div>
+        <div class="pp-photo-thumbs" aria-hidden="true">
+          ${Array.from({ length: 20 }).map(() => '<div class="pp-skel-thumb" style="height:96px"></div>').join('')}
+        </div>
       </div>`;
   }
 
@@ -1897,6 +1895,7 @@
             </div>
           </div>
           <div class="pp-films-tab pp-films-tab--iafd is-active" data-pp-films-pane="filmography" role="tabpanel">
+            <img class="pp-filmography-silhouette" src="/static/img/${data.cat_gay ? 'silhouette7.webp' : 'silhouette6.webp'}" alt="" aria-hidden="true">
             <div class="pp-films-iafd-inner"></div>
           </div>
         </div>
@@ -2435,7 +2434,7 @@
     const imgs = allImgs.filter(i => !isPosterRole(i));
     const sil = data.cat_gay ? 'silhouette7.webp' : 'silhouette6.webp';
     if (!imgs.length) {
-      el.innerHTML = `<div class="pp-empty pp-empty--silhouette pp-empty--corner"><img src="/static/img/${sil}" alt="" class="pp-empty-silhouette pp-empty-silhouette--corner" loading="lazy"/></div>`;
+      el.innerHTML = '<div class="pp-empty">No photos available</div>';
       return;
     }
     if (selectedIndex === null) {

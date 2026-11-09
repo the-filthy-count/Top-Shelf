@@ -869,7 +869,7 @@
         ${profileButton}
         <button type="button" class="btn-icon" onclick="_qCall('openQueueFilmstrip', this)" title="Filmstrip"><i class="fa-solid fa-photo-film"></i></button>
         <button type="button" class="btn-icon qi-filing-btn qi-edit-details ${_viceMatchesFilename(f.filename) ? 'is-vice-match' : ''}" onclick="_qCall('openQueueSearchDetails', this)" title="Edit saved search details" aria-label="Edit saved search details"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
-        <button type="button" class="btn-icon qi-delete-btn" onclick="_qCall('confirmDeleteQueueFile', this)" title="Move to recovery"><i class="fa-solid fa-trash"></i></button>
+        <button type="button" class="btn-icon qi-delete-btn" onclick="_qCall('confirmDeleteQueueFile', this)" title="Delete permanently"><i class="fa-solid fa-trash"></i></button>
         <button type="button" class="btn-run-file" onclick="_qCall('runQueueFile', this)" title="Run"><i class="fa-solid fa-play"></i></button>
       </div></div>
     </div>`;
@@ -956,7 +956,7 @@
       <div class="qi-crt-info"><span class="badge-size">${esc(String(f.size_mb))} MB</span><span class="qi-crt-meta">${metaText}</span></div>
       <div class="qi-cell qi-actions">${_queueHistoryButton(f)}
         <button type="button" class="btn-icon" onclick="_qCall('openMovieManualSearch', this)" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
-        <button type="button" class="btn-icon qi-delete-btn" onclick="_qCall('confirmDeleteQueueFile', this)" title="Move to recovery"><i class="fa-solid fa-trash"></i></button>
+        <button type="button" class="btn-icon qi-delete-btn" onclick="_qCall('confirmDeleteQueueFile', this)" title="Delete permanently"><i class="fa-solid fa-trash"></i></button>
         <button type="button" class="btn-run-file" onclick="_qCall('runQueueFile', this)" title="Auto-match"><i class="fa-solid fa-play"></i></button>
       </div></div>
     </div>`;
@@ -2726,10 +2726,10 @@
     }
   }
 
-  // Keep removed media recoverable and preserve the current queue view.
+  // Delete media permanently and preserve the current queue view.
   async function confirmDeleteQueueFile(filename, identity = {}) {
     if (!filename) return;
-    const ok = confirm(`Move this file to recovery?\n\n${filename}\n\nThe video and sidecars will be retained so you can restore them. This does not free disk space.`);
+    const ok = confirm(`Permanently delete this file?\n\n${filename}\n\nThe video and its sidecars will be deleted. This cannot be undone.`);
     if (!ok) return;
     try {
       const r = await fetch('/api/queue/delete', {
@@ -2744,7 +2744,7 @@
       if (_qSelectedFile === filename) { clearSelectedFile(); clearSearch(); }
       loadQueue({ preserveView: true });
       loadQueueStats();
-      if (d.recovery_id) window.toast('Moved to recovery — use the recovery button to restore it.');
+      if (d.deleted) window.toast('File deleted.');
     } catch (e) {
       window.toast('Delete failed: ' + (e.message || e));
     }
@@ -6896,7 +6896,7 @@
     }
     const count = plans.reduce((n, p) => n + p.delete_filenames.length, 0);
     if (!count) { queueDupStatus('No eligible duplicates selected. Groups needing review require manual selection.'); return; }
-    if (!confirm(`Move ${count} duplicate(s) to recovery, keeping one copy per group? Disk space remains in use until recovery is emptied.`)) return;
+    if (!confirm(`Permanently delete ${count} duplicate(s), keeping one copy per group? This cannot be undone.`)) return;
     _queueDupRemoving = true;
     queueDupSelectionChanged();
     let removed = 0;
@@ -6914,7 +6914,7 @@
         } catch (e) { errors.push(String(e.message || e)); }
       }
       await refreshQueueDuplicatesModal();
-      queueDupStatus(`Moved ${removed} duplicate(s) to recovery.` + (errors.length ? `\n${errors.length} group(s) failed: ${errors.join('; ')}` : ''));
+      queueDupStatus(`Deleted ${removed} duplicate(s).` + (errors.length ? `\n${errors.length} group(s) failed: ${errors.join('; ')}` : ''));
       if (typeof loadQueue === 'function') loadQueue({ preserveView: true, force: true });
       if (typeof loadQueueStats === 'function') loadQueueStats();
     } finally { _queueDupRemoving = false; queueDupSelectionChanged(); }

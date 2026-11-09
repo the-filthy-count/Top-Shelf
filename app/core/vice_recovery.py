@@ -53,11 +53,6 @@ def archive(vice_id, raw_folder):
     if not raw_root or folder.parent != Path(raw_root).expanduser().resolve():
         raise ValueError('Vice folder must be a direct child of the configured Vice library')
     recovery = store()
-    configured = [Path(r['path']).expanduser().resolve() for r in roots()]
-    configured += [Path(v).expanduser().resolve() for k, v in db.get_settings().items()
-                   if k.endswith('_dir') and isinstance(v, str) and v.strip()]
-    if any(base == recovery.root or base in recovery.root.parents for base in configured):
-        raise ValueError('Recovery storage must be outside configured media directories')
     with db.file_operation_connection() as conn:
         vices = _vices(conn)
         matches = [v for v in vices if str(v.get('id')) == str(vice_id)]
@@ -97,7 +92,7 @@ def archive(vice_id, raw_folder):
             conn.execute('DELETE FROM library_files WHERE id=?', (record['id'],))
         _write(conn, [v for v in vices if str(v.get('id')) != str(vice_id)])
     try:
-        return recovery.archive(paths, context['file_id'], context, commit, validate)
+        return recovery.delete(paths, context['file_id'], context, commit, validate)
     except Exception:
         for raw in directories:
             path = Path(raw)

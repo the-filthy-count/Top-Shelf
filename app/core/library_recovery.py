@@ -43,12 +43,6 @@ def archive(row_id):
         raise ValueError('Library entry has no folder')
     folder = checked_folder(row['path'], roots())
     recovery = store()
-    configured = [Path(r['path']).expanduser().resolve() for r in roots()]
-    settings = db.get_settings()
-    configured += [Path(v).expanduser().resolve() for k, v in settings.items()
-                   if k.endswith('_dir') and isinstance(v, str) and v.strip()]
-    if any(base == recovery.root or base in recovery.root.parents for base in configured):
-        raise ValueError('Recovery storage must be outside configured media directories')
     files, directories = [], []
     def failed(error):
         raise error
@@ -95,7 +89,7 @@ def archive(row_id):
         conn.execute('DELETE FROM favourite_entities WHERE id=?', (row_id,))
 
     try:
-        return recovery.archive(files, context['file_id'], context, commit, validate)
+        return recovery.delete(files, context['file_id'], context, commit, validate)
     except Exception:
         # Preserve originally empty directories too after a rolled-back removal.
         for raw in directories:

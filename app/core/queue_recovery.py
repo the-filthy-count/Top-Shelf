@@ -59,17 +59,6 @@ def archive(filename, video, root, table, queue_key, queue_kind="scene", expecte
     except PartialDownloadPending as exc:
         raise ValueError(str(exc)) from exc
     recovery = store()
-    # Keep recovery media out of all configured source/library scan roots.
-    settings = db.get_settings()
-    candidates = [root]
-    for key, value in settings.items():
-        if key in {'source_dir', 'movies_source_dir', 'series_dir', 'features_dir', 'jav_dir',
-                   'download_watch_dir', 'movie_download_watch_dir', 'vice_download_watch_dir',
-                   'jav_download_watch_dir', 'vice_download_stage_dir', 'jav_download_stage_dir'} and value and str(value).strip():
-            candidates.append(Path(value).expanduser().resolve())
-    candidates.extend(Path(row['path']).expanduser().resolve() for row in db.get_directories() if row.get('path'))
-    if any(recovery.root == candidate or candidate in recovery.root.parents for candidate in candidates):
-        raise ValueError('Recovery storage must be outside configured media directories')
     if expected_file_id:
         current = db.file_identity(queue_key, table)
         with db.get_conn() as conn:
@@ -108,7 +97,7 @@ def archive(filename, video, root, table, queue_key, queue_kind="scene", expecte
     def commit(conn, context):
         _check_context(conn, context)
         conn.execute(f"UPDATE {table} SET status='removed' WHERE id=?", (record['id'],))
-        conn.execute("UPDATE processing_jobs SET state='cancelled',phase='Moved to recovery' WHERE file_id=?", (asset['id'],))
+        conn.execute("UPDATE processing_jobs SET state='cancelled',phase='Deleted' WHERE file_id=?", (asset['id'],))
 
     with db.file_operation_connection() as conn:
         _check_context(conn, context)
@@ -116,7 +105,7 @@ def archive(filename, video, root, table, queue_key, queue_kind="scene", expecte
     return execute(asset['id'], 'recover', {'filename': filename, 'queue_kind': queue_kind,
                    'video':str(video),'root':str(root),'table':table,'queue_key':queue_key,
                    'allow_running':allow_running,'duplicate_destination':duplicate_destination},
-                   lambda: recovery.archive(paths, asset['id'], context, commit, _check_context))
+                   lambda: recovery.delete(paths, asset['id'], context, commit, _check_context))
 
 
 def restore(operation_id):
