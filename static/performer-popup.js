@@ -1880,6 +1880,7 @@
         </div>
         <div class="pp-films-panel-body">
           <div class="pp-films-tab pp-films-tab--prowlarr" data-pp-films-pane="prowlarr" role="tabpanel" hidden>
+            <img class="pp-filmography-silhouette" src="/static/img/${data.cat_gay ? 'silhouette7.webp' : 'silhouette6.webp'}" alt="" aria-hidden="true">
             <div class="ts-prowlarr-embed pp-films-prowlarr-embed">
               <div class="pp-release-tools pp-release-tools--compact">
                 <button type="button" class="pp-release-toggle" data-release-toggle title="Filter releases" aria-label="Filter releases" aria-expanded="false"><i class="fa-solid fa-filter" aria-hidden="true"></i></button>
@@ -2057,7 +2058,7 @@
         const source = film.sources?.[0] || film;
         window.openProwlarrSearchPopup({title: film.title, studio: film.studio,
           performer: data.identity?.canonical_name || '', source: String(source.source || '').toLowerCase(),
-          ext_id: source.id || '', kind: 'scene'});
+          ext_id: source.id || '', kind: 'scene', performerSceneSearch: true});
       });
     });
     wirePpScrollAffordance(el);
@@ -2292,7 +2293,7 @@
       const sourceJson = ESC(JSON.stringify(rowSource));
       const perfJson   = ESC(JSON.stringify(carouselPerfName));
       const prowlarrBtn = `
-        <button type="button" class="pp-scene-prowlarr-center" onclick="event.stopPropagation(); window.openProwlarrSearchPopup({title:${titleJson},studio:${studioJson},performer:${perfJson},source:${sourceJson},ext_id:${sidJson},kind:'scene'})" title="Search Prowlarr" aria-label="Search Prowlarr">
+        <button type="button" class="pp-scene-prowlarr-center" onclick="event.stopPropagation(); window.openProwlarrSearchPopup({title:${titleJson},studio:${studioJson},performer:${perfJson},source:${sourceJson},ext_id:${sidJson},kind:'scene',performerSceneSearch:true})" title="Search Prowlarr" aria-label="Search Prowlarr">
           <i class="fa-solid fa-download" aria-hidden="true"></i>
         </button>`;
       const blacklistBtn = `<button type="button" class="scene-card-blacklist-btn" data-title="${ESC(title || '')}" onclick="event.stopPropagation();sceneCardBlacklist(this)" title="Blacklist this title" aria-label="Blacklist title"><i class="fa-solid fa-ban"></i></button>`;

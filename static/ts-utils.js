@@ -2166,6 +2166,12 @@ window.countryFlagHtml = function (raw, extraClass) {
     const perf = (o.performer || '').trim();
     const perfStr = (o.performers || '').trim();
     const studio = (o.studio || '').trim();
+    if (o.performerSceneSearch && perf) {
+      // Performer-profile scene and filmography buttons use two plain queries.
+      const terms = [`${perf} ${title}`.trim()];
+      if (studio) terms.push(`${perf} ${studio}`);
+      return [...new Set(terms)];
+    }
     const perfHasSpace = perf && /\s/.test(perf);
     const titleLower = title.toLowerCase();
     const perfLower = perf.toLowerCase();

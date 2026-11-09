@@ -13117,7 +13117,8 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
 }
 
 /* Filmography decoration stays behind the list, anchored to the panel floor. */
-.pp-films-tab[data-pp-films-pane="filmography"] {
+.pp-films-tab[data-pp-films-pane="filmography"],
+.pp-films-tab[data-pp-films-pane="prowlarr"] {
   position: relative;
   isolation: isolate;
   overflow: hidden;
@@ -13170,4 +13171,20 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/* Image quality filters have no surrounding button frame. */
+.ts-prowlarr-popup-filters button.ts-prowlarr-filter-pill--img {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.ts-prowlarr-popup-filters button.ts-prowlarr-filter-pill--img.is-active {
+  box-shadow: none;
+  filter: brightness(1.2);
+}
+.ts-prowlarr-popup-filters button.ts-prowlarr-filter-pill--img:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
