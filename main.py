@@ -1346,6 +1346,8 @@ def _restart_watcher():
 app = FastAPI(title="Top-Shelf")
 from magpie_integration import router as magpie_router
 app.include_router(magpie_router)
+from app.api.performer_watchlist import router as performer_watchlist_router
+app.include_router(performer_watchlist_router)
 
 # NOTE: GZipMiddleware was tried here as a first-load optimisation but
 # reverted — Starlette's implementation runs zlib synchronously on the
@@ -2190,6 +2192,8 @@ def _stash_compat_phash_rebuild() -> None:
 @app.on_event("startup")
 async def startup():
     db.init_db()
+    from app.core.performer_watchlist import start as start_watchlist
+    start_watchlist()
     from runtime_jobs import claim_sources
     source_settings = db.get_settings()
     claim_sources([source_settings.get(key, "") for key in (

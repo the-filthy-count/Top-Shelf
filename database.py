@@ -581,6 +581,8 @@ def init_db() -> None:
     with get_conn() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=FULL")
+        from app.core.performer_watchlist import install as install_watchlist
+        install_watchlist(conn)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS processed_files (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -712,6 +712,7 @@
     studio: 'Studios Library',
     vice: 'Vice Library',
     search: 'Search Library',
+    watchlist: 'Stars Watchlist',
   };
 
   function setView(kind, options = {}) {
@@ -728,6 +729,9 @@
     // `?.` the .classList call throws and setView() bails before the
     // search host toggle runs — the Add tab flips active but the
     // panel stays on the grid.
+    document.getElementById('segWatchlist')?.classList.toggle('active', kind === 'watchlist');
+    const watchHost = document.getElementById('performerWatchlist');
+    if (watchHost) watchHost.hidden = kind !== 'watchlist';
     document.getElementById('segSearch')?.classList.toggle('active', kind === 'search');
     document.getElementById('segPerf')?.classList.toggle('active', kind === 'performer');
     document.getElementById('segStudio')?.classList.toggle('active', kind === 'studio');
@@ -740,6 +744,15 @@
     const mobileFilterBtn = document.getElementById('favMobileFilterOpen');
     const pager = document.getElementById('favPager');
     const gridEl = document.getElementById('favGrid');
+    if (kind === 'watchlist' && watchHost) {
+      if (searchHost) searchHost.hidden = true;
+      if (toolbarHost) toolbarHost.style.display = 'none';
+      if (mobileFilterBtn) mobileFilterBtn.style.display = 'none';
+      if (pager) pager.style.display = 'none';
+      if (gridEl) gridEl.style.display = 'none';
+      window.PerformerWatchlist.mount();
+      return;
+    }
     if (kind === 'search') {
       if (searchHost) searchHost.hidden = false;
       if (toolbarHost) toolbarHost.style.display = 'none';
@@ -2531,6 +2544,7 @@
   }
 
   function render() {
+    if (_view === 'watchlist') return;
     _mountIssueFilter();
     const list = _kindListFor(_view);
     const filtered = list.filter(r => rowPassesFilters(r));
@@ -2592,8 +2606,8 @@
   }
   function _syncFavPageUrl(push = false) {
     const url = new URL(window.location.href);
-    if (_view === 'search') {
-      url.searchParams.set('view', 'search');
+    if (_view === 'search' || _view === 'watchlist') {
+      url.searchParams.set('view', _view);
       url.searchParams.delete('page');
     } else {
       url.searchParams.delete('view');
@@ -2606,7 +2620,7 @@
   let _favPage = _readFavPageUrl();
   window.addEventListener('popstate', () => {
     const params = new URLSearchParams(window.location.search);
-    const kind = params.get('view') === 'search' ? 'search' : (window.__FAV_INITIAL_VIEW || 'performer');
+    const kind = ['search','watchlist'].includes(params.get('view')) ? params.get('view') : (window.__FAV_INITIAL_VIEW || 'performer');
     setView(kind, {page: _readFavPageUrl(), history: 'replace'});
   });
   function _renderFavPager(totalRows) {
@@ -3254,6 +3268,7 @@
   // tab triggers a single-kind fetch the first time. Big perf win when
   // your library has thousands of performers but you only want movies.
   async function loadActiveView() {
+    if (_view === 'watchlist') return;
     const kinds = _LIB_TAB_KINDS[_view] || ['performer'];
     try {
       // Sync the grid's kind-specific class before render() runs —
@@ -4086,6 +4101,7 @@
   function _bootRestoreSearchView() {
     if (_focusId || _initParams.has('page')) return false;
     const s = _readPageState();
+    if (document.getElementById('performerWatchlist') && (_initParams.get('view') === 'watchlist' || (!_initParams.has('view') && s?.view === 'watchlist'))) { setView('watchlist', {history:'replace'}); return true; }
     if (_initParams.get('view') !== 'search' && (!s || s.view !== 'search')) return false;
     if (typeof setView !== 'function') return false;
     try { setView('search', {history: 'replace'}); } catch (_) { return false; }

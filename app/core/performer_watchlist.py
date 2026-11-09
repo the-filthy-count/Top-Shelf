@@ -1,0 +1,114 @@
+"""Unidentified performers: persisted leads, explicit identity confirmation."""
+import json
+import logging
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlparse
+import requests
+import database as db
+
+SOURCES = {'TPDB': ('api_key_tpdb', 'https://api.theporndb.net/performers'),
+           'StashDB': ('api_key_stashdb', 'https://stashdb.org/graphql'),
+           'FansDB': ('api_key_fansdb', 'https://fansdb.cc/graphql'),
+           'JAVStash': ('api_key_javstash', 'https://javstash.org/graphql')}
+_wake = threading.Event()
+_thread = None
+
+def install(conn):
+    conn.execute('''CREATE TABLE IF NOT EXISTS performer_watchlist (
+        id INTEGER PRIMARY KEY, name TEXT NOT NULL, aliases TEXT NOT NULL DEFAULT '[]',
+        notes TEXT NOT NULL DEFAULT '', source_url TEXT NOT NULL DEFAULT '',
+        candidates TEXT NOT NULL DEFAULT '[]', checks TEXT NOT NULL DEFAULT '{}',
+        confirmed TEXT, checked_at REAL, next_check REAL NOT NULL DEFAULT 0,
+        checking INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL DEFAULT 1)''')
+    conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS watchlist_name ON performer_watchlist(lower(name))')
+
+def validate(payload):
+    name = str(payload.get('name') or '').strip()
+    aliases = payload.get('aliases') or []
+    if not name or len(name) > 150: raise ValueError('Enter a name or alias (up to 150 characters)')
+    if not isinstance(aliases, list) or any(not isinstance(a, str) for a in aliases) or len(aliases) > 10: raise ValueError('Use up to 10 additional aliases')
+    aliases = list(dict.fromkeys(str(a).strip() for a in aliases if str(a).strip()))
+    if any(len(a) > 150 for a in aliases): raise ValueError('Aliases must be under 150 characters')
+    notes = str(payload.get('notes') or '').strip()
+    url = str(payload.get('source_url') or '').strip()
+    if len(notes) > 2000 or len(url) > 2000: raise ValueError('Notes or URL are too long')
+    if url and (urlparse(url).scheme not in ('https', 'http') or not urlparse(url).netloc):
+        raise ValueError('Source link must be an HTTP or HTTPS URL')
+    return name, json.dumps(aliases), notes, url
+
+def rows():
+    with db.get_conn() as c:
+        result = [dict(r) for r in c.execute('SELECT * FROM performer_watchlist ORDER BY lower(name),id')]
+    for r in result:
+        for k in ('aliases','candidates','checks','confirmed'): r[k] = json.loads(r[k]) if r[k] else None
+    return result
+
+def search_source(source, names, settings):
+    key, endpoint = SOURCES[source]
+    if not settings.get(key): return [], 'Not configured'
+    hits = {}
+    try:
+        for name in names:
+            if source == 'TPDB':
+                response = requests.get(endpoint, params={'q': name}, headers={'Authorization': 'Bearer '+settings[key]}, timeout=15)
+            else:
+                query = 'query($name: String!) { searchPerformer(term: $name, limit: 25) { id name aliases images { url } } }'
+                response = requests.post(endpoint, json={'query': query, 'variables': {'name': name}}, headers={'ApiKey': settings[key]}, timeout=15)
+            response.raise_for_status()
+            body = response.json()
+            if body.get('errors'): raise ValueError('Database returned an error')
+            data = body.get('data') if source == 'TPDB' else (body.get('data') or {}).get('searchPerformer')
+            if not isinstance(data, list): raise ValueError('Unexpected database response')
+            for item in data:
+                identity = str(item.get('id') or '')
+                if not identity: continue
+                images = item.get('posters') or item.get('images') or []
+                image = images[0] if images else ''
+                if isinstance(image, dict): image = image.get('url') or ''
+                if urlparse(str(image)).scheme not in ('http','https'): image = ''
+                hits[identity] = {'source':source,'id':identity,'name':str(item.get('name') or name),
+                                  'image':image,'aliases':item.get('aliases') or []}
+        return list(hits.values()), 'Checked'
+    except Exception:
+        # Never turn a failed request into a definitive "not found".
+        return list(hits.values()), 'Check failed — retry later'
+
+def check_entry(row):
+    names = list(dict.fromkeys([row['name']] + json.loads(row['aliases'])))
+    settings = db.get_settings()
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda source: search_source(source, names, settings), SOURCES))
+    candidates = [hit for hits, _ in results for hit in hits]
+    checks = dict(zip(SOURCES, (status for _, status in results)))
+    with db.get_conn() as c:
+        c.execute('''UPDATE performer_watchlist SET candidates=?,checks=?,checked_at=?,
+            next_check=?,checking=0 WHERE id=? AND revision=?''',
+            (json.dumps(candidates),json.dumps(checks),time.time(),time.time()+86400,row['id'],row['revision']))
+        c.commit()
+
+def start():
+    global _thread
+    if _thread and _thread.is_alive(): return
+    with db.get_conn() as c:
+        c.execute('UPDATE performer_watchlist SET checking=0'); c.commit()
+    def run():
+        while True:
+            try:
+                with db.get_conn() as c:
+                    c.execute('BEGIN IMMEDIATE')
+                    row = c.execute('SELECT * FROM performer_watchlist WHERE confirmed IS NULL AND checking=0 AND next_check<=? ORDER BY next_check,id LIMIT 1', (time.time(),)).fetchone()
+                    if row:
+                        row = dict(row)
+                        c.execute('UPDATE performer_watchlist SET checking=1 WHERE id=?',(row['id'],)); c.commit()
+                if row:
+                    try: check_entry(row)
+                    except Exception:
+                        logging.exception('Watchlist check failed')
+                        with db.get_conn() as c:
+                            c.execute('UPDATE performer_watchlist SET checking=0,next_check=? WHERE id=? AND revision=?',(time.time()+3600,row['id'],row['revision'])); c.commit()
+                    continue
+            except Exception: logging.exception('Watchlist worker failed')
+            _wake.wait(60); _wake.clear()
+    _thread = threading.Thread(target=run,name='performer-watchlist',daemon=True); _thread.start()
