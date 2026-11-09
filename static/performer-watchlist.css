@@ -93,3 +93,7 @@
 
 .watch-avatar--confirmed {position:relative;width:64px;height:64px;flex-basis:64px;overflow:hidden;box-shadow:0 0 14px rgba(var(--brand-accent-rgb),.12);}
 .watch-avatar--confirmed img {position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 20%;border-radius:50%;}
+
+.watch-candidates .watch-profile-button,
+.watch-candidates [data-confirm] {display:inline-flex;align-items:center;justify-content:center;height:44px;box-sizing:border-box;vertical-align:middle;}
+.watch-candidates [data-confirm] {width:44px;padding:0;}
