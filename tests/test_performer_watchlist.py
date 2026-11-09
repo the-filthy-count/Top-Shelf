@@ -63,10 +63,11 @@ class ExternalLeadTests(unittest.TestCase):
             hits, status = w.search_external('Coomer', ['Jane Doe'])
             self.assertEqual(status, 'Checked')
             self.assertEqual(len(hits), 1)
-            self.assertEqual(hits[0]['url'], 'https://coomer.st/onlyfans/user/janedoe')
+            self.assertEqual(hits[0]['url'], 'https://site1.coomer.com.co/onlyfans/user/janedoe')
             self.assertTrue(hits[0]['external_only'])
             w.search_external('Coomer', ['Someone Else'])
             self.assertEqual(get.call_count, 1)
+            self.assertEqual(get.call_args.args[0], 'https://site1.coomer.com.co/api/v1/creators')
 
     def test_failed_catalogue_is_not_not_found(self):
         with patch.object(w, '_creators_cache', (0, [])), patch.object(w.requests, 'get', side_effect=OSError):

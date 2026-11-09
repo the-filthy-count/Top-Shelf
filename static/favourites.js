@@ -105,7 +105,7 @@
     return 'TPDB';
   }
 
-  const _SRC_LOGOS = { tpdb: 'tpdb', stashdb: 'stashdb', fansdb: 'fansdb', javstash: 'javstash', stashapp: 'stashapp', iafd: 'iafd', babepedia: 'babepedia', coomer: 'coomer', tmdb: 'tmdb', freeones: 'freeones', javdatabase: 'javdatabase' };
+  const _SRC_LOGOS = { tpdb: 'tpdb', stashdb: 'stashdb', fansdb: 'fansdb', javstash: 'javstash', stashapp: 'stashapp', iafd: 'iafd', coomer: 'coomer', tmdb: 'tmdb', freeones: 'freeones', javdatabase: 'javdatabase' };
   function srcLogo(key, alt, cls) {
     const k = (key || '').toLowerCase().replace(/\s/g, '');
     const file = _SRC_LOGOS[k];
@@ -853,7 +853,6 @@
     }
     if (src === 'IAFD' && row.match_iafd_url) return row.match_iafd_url;
     if (src === 'Freeones' && row.match_freeones_url) return row.match_freeones_url;
-    if (src === 'Babepedia' && row.match_babepedia_url) return row.match_babepedia_url;
     if ((src === 'JAV Database' || src === 'JAVDATABASE') && row.match_javdatabase_url) return row.match_javdatabase_url;
     return null;
   }
@@ -914,16 +913,14 @@
     </div>`;
   }
 
-  /** External reference links for a performer: IAFD, Babepedia, Freeones (always URL-constructable). */
+  /** External reference links for a performer: IAFD, Freeones (always URL-constructable). */
   function favExternalLinks(row) {
     const name = (row.folder_name || '').trim();
     if (!name) return '';
     const iafdUrl = 'https://www.iafd.com/results.asp?searchtype=comprehensive&searchstring=' + encodeURIComponent(name);
-    const babepediaUrl = 'https://www.babepedia.com/babe/' + encodeURIComponent(name.replace(/ /g, '_'));
     const freeonesUrl = 'https://www.freeones.com/' + encodeURIComponent(name.replace(/ /g, '-')) + '/bio';
     return `<div class="fav-ov-ext-links">
       <a href="${escAttr(iafdUrl)}" target="_blank" rel="noopener noreferrer" class="fav-ov-ext-btn" title="IAFD">${srcLogo('iafd','IAFD')}</a>
-      <a href="${escAttr(babepediaUrl)}" target="_blank" rel="noopener noreferrer" class="fav-ov-ext-btn" title="Babepedia">${srcLogo('babepedia','Babepedia')}</a>
       <a href="${escAttr(freeonesUrl)}" target="_blank" rel="noopener noreferrer" class="fav-ov-ext-btn" title="Freeones">${srcLogo('freeones','Freeones')}</a>
     </div>`;
   }
@@ -1418,7 +1415,7 @@
   }
 
 
-  /* ── Ext Link Modal (IAFD / Freeones / Babepedia) ───── */
+  /* ── Ext Link Modal (IAFD / Freeones) ───── */
   let _extLinkRowId = null;
   let _extLinkSite = null;
   const _EXT_SEARCH_SITES = new Set(['iafd', 'freeones', 'tmdb', 'javdatabase']);
@@ -3512,7 +3509,6 @@
       JAVSTASH: ['match_javstash_id', 'match_javstash_name'],
       IAFD:     ['match_iafd_url'],
       FREEONES: ['match_freeones_url'],
-      BABEPEDIA:['match_babepedia_url'],
       COOMER:   ['match_coomer_url'],
     };
     const cols = fieldMap[u] || [];
@@ -3644,7 +3640,7 @@
     }
   }
 
-  const _EXT_LINK_MODAL_SOURCES = new Set(['TMDB', 'IAFD', 'Freeones', 'Babepedia', 'Coomer', 'JAV Database']);
+  const _EXT_LINK_MODAL_SOURCES = new Set(['TMDB', 'IAFD', 'Freeones', 'Coomer', 'JAV Database']);
 
   function openSearchForRow(rowId, focusSource) {
     const row = [..._rowsPerf, ..._rowsStudio, ..._rowsMovie].find(r => r.id === rowId);

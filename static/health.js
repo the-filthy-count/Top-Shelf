@@ -2899,7 +2899,7 @@
   let _perfProgressPoll = null;
   let _perfLoaded = false;
 
-  const _EMB_LOGOS = { tpdb: 'tpdb', stashdb: 'stashdb', fansdb: 'fansdb', iafd: 'iafd', babepedia: 'babepedia', coomer: 'coomer', tmdb: 'tmdb', freeones: 'freeones' };
+  const _EMB_LOGOS = { tpdb: 'tpdb', stashdb: 'stashdb', fansdb: 'fansdb', iafd: 'iafd', coomer: 'coomer', tmdb: 'tmdb', freeones: 'freeones' };
   function embSrcLogo(key, alt) {
     const k = (key || '').toLowerCase();
     return _EMB_LOGOS[k]
@@ -3199,7 +3199,6 @@
     if ('tmdb' in stored) { p.tmdb_id = stored.tmdb; }
     if ('iafd' in stored)      p.iafd_url      = stored.iafd;
     if ('freeones' in stored)  p.freeones_url  = stored.freeones;
-    if ('babepedia' in stored) p.babepedia_url = stored.babepedia;
     if ('coomer' in stored)    p.coomer_url    = stored.coomer;
     if ('javdatabase' in stored) p.javdatabase_url = stored.javdatabase;
     perfApplyFilter();

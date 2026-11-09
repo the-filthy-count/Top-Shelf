@@ -1323,7 +1323,6 @@
     tmdb:      '/static/logos/tmdb.webp',
     iafd:      '/static/logos/iafd.webp',
     freeones:  '/static/logos/freeones.webp',
-    babepedia: '/static/logos/babepedia.webp',
     coomer:    '/static/logos/coomer.webp',
     javdatabase: '/static/logos/javdatabase.webp',
   };
@@ -1355,7 +1354,6 @@
       { key: 'tmdb',      label: 'TMDB',       site: 'TMDB',     kind: 'ext', url: links.tmdb && links.tmdb.url },
       { key: 'iafd',      label: 'IAFD',       site: 'IAFD',     kind: 'ext', url: links.iafd && links.iafd.url },
       { key: 'freeones',  label: 'Freeones',   site: 'Freeones', kind: 'ext', url: links.freeones && links.freeones.url },
-      { key: 'babepedia', label: 'Babepedia',  site: 'Babepedia',kind: 'ext', url: links.babepedia && links.babepedia.url },
       { key: 'coomer',    label: 'Coomer',     site: 'Coomer',   kind: 'ext', url: links.coomer && links.coomer.url },
       { key: 'javdatabase', label: 'JAV Database', site: 'JAV Database', kind: 'ext', url: links.javdatabase && links.javdatabase.url },
     ];

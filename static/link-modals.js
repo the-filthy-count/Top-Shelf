@@ -13,7 +13,7 @@
  *                  picks via /api/favourites/match)
  *   kind = 'ext' → IAFD / Freeones / TMDB (calls
  *                  /api/performers/search-ext-link, saves via
- *                  /api/favourites/ext-link). Babepedia / Coomer fall
+ *                  /api/favourites/ext-link). Coomer fall
  *                  through to the manual-URL form (no scraper backend).
  */
 (function () {
@@ -83,7 +83,7 @@
     javstash: 'JAVStash',
   };
 
-  const EXT_SEARCH_SITES = new Set(['iafd', 'freeones', 'tmdb', 'javdatabase', 'babepedia']);
+  const EXT_SEARCH_SITES = new Set(['iafd', 'freeones', 'tmdb', 'javdatabase']);
 
   function extSiteApiKey(site) {
     return String(site || '').toLowerCase().replace(/\s+/g, '');
@@ -267,7 +267,7 @@
     document.getElementById('tsLinkExtResults').innerHTML = '';
     document.getElementById('tsLinkExtModal').classList.add('open');
     setTimeout(() => input.focus(), 60);
-    // Some ext sites have no search backend (Babepedia, Coomer); the
+    // Some ext sites have no search backend (Coomer); the
     // user can still paste a URL directly into the bottom input.
     const lc = extSiteApiKey(site);
     if (name && EXT_SEARCH_SITES.has(lc)) runExtSearch();

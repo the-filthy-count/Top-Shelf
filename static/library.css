@@ -1645,7 +1645,7 @@ body .app .fav-stage {
 
   .src-logo { height: 21px; width: auto; object-fit: contain; display: inline-block; vertical-align: middle; opacity: 0.9; }
   .src-logo--sm { height: 17px; }
-  /* External link row (IAFD / Babepedia / Freeones) */
+  /* External link row (IAFD / Freeones) */
   .fav-ov-ext-links {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;

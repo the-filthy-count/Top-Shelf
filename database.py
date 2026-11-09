@@ -916,7 +916,6 @@ def init_db() -> None:
         for _col in (
             "match_iafd_url",
             "match_freeones_url",
-            "match_babepedia_url",
             "match_coomer_url",
             "match_javdatabase_url",
         ):
@@ -3468,7 +3467,7 @@ def favourite_clear_all_match_ids(row_id: int) -> None:
 
 
 def favourite_clear_source_match(row_id: int, source: str) -> None:
-    """Clear a single source's match fields. source: TMDB, TPDB, STASHDB, FANSDB, JAVSTASH, IAFD, FREEONES, or BABEPEDIA."""
+    """Clear a single source's match fields. source: TMDB, TPDB, STASHDB, FANSDB, JAVSTASH, IAFD, FREEONES."""
     u = (source or "").strip().upper()
     if u == "TMDB":
         clause = "match_tmdb_id = NULL, match_tmdb_name = NULL"
@@ -3484,8 +3483,6 @@ def favourite_clear_source_match(row_id: int, source: str) -> None:
         clause = "match_iafd_url = NULL"
     elif u == "FREEONES":
         clause = "match_freeones_url = NULL"
-    elif u == "BABEPEDIA":
-        clause = "match_babepedia_url = NULL"
     elif u == "COOMER":
         clause = "match_coomer_url = NULL"
     elif u in ("JAVDATABASE", "JAV DATABASE"):
@@ -3493,7 +3490,7 @@ def favourite_clear_source_match(row_id: int, source: str) -> None:
     else:
         raise ValueError(
             "source must be TMDB, TPDB, StashDB, FansDB, JAVStash, IAFD, Freeones, "
-            "Babepedia, Coomer, or JAV Database"
+            "Coomer, or JAV Database"
         )
     now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:
@@ -3506,7 +3503,7 @@ def favourite_clear_source_match(row_id: int, source: str) -> None:
 
 def favourite_set_ext_link(row_id: int, site: str, url: str) -> None:
     """Store a confirmed external profile URL/ID for a performer.
-    site: tmdb, iafd, freeones, or babepedia.
+    site: tmdb, iafd, freeones, coomer, or javdatabase.
     For TMDB, url may be a full person URL (https://www.themoviedb.org/person/123) or a bare numeric ID.
     """
     import re as _re
@@ -3519,14 +3516,13 @@ def favourite_set_ext_link(row_id: int, site: str, url: str) -> None:
         col_map = {
             "iafd": "match_iafd_url",
             "freeones": "match_freeones_url",
-            "babepedia": "match_babepedia_url",
             "coomer": "match_coomer_url",
             "javdatabase": "match_javdatabase_url",
         }
         col = col_map.get(s)
         if not col:
             raise ValueError(
-                "site must be tmdb, iafd, freeones, babepedia, coomer, or javdatabase"
+                "site must be tmdb, iafd, freeones, coomer, or javdatabase"
             )
         store_val = url.strip() or None
     now = datetime.now(timezone.utc).isoformat()

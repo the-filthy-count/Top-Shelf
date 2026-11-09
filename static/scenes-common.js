@@ -618,7 +618,7 @@
       </div>`).join('');
   }
 
-  const _LOCAL_LOGOS = { 'TPDB': 'tpdb', 'ThePornDB': 'tpdb', 'StashDB': 'stashdb', 'FansDB': 'fansdb', 'JAVStash': 'javstash', 'javstash': 'javstash', 'TMDB': 'tmdb', 'Freeones': 'freeones', 'IAFD': 'iafd', 'Babepedia': 'babepedia', 'Coomer': 'coomer' };
+  const _LOCAL_LOGOS = { 'TPDB': 'tpdb', 'ThePornDB': 'tpdb', 'StashDB': 'stashdb', 'FansDB': 'fansdb', 'JAVStash': 'javstash', 'javstash': 'javstash', 'TMDB': 'tmdb', 'Freeones': 'freeones', 'IAFD': 'iafd', 'Coomer': 'coomer' };
   // Inline badge used by the /scenes + /discover search results to
   // show which source a row came from. Swaps the raw text label for
   // the source's logo when one exists; otherwise prints the label so

@@ -2193,7 +2193,9 @@ def _stash_compat_phash_rebuild() -> None:
 async def startup():
     db.init_db()
     from app.core.performer_watchlist import start as start_watchlist
-    start_watchlist()
+    from app.core.iafd_dataset import start as start_iafd_dataset
+    start_iafd_dataset()
+    start_watchlist(iafd_search=_iafd_performer_query)
     from runtime_jobs import claim_sources
     source_settings = db.get_settings()
     claim_sources([source_settings.get(key, "") for key in (
@@ -2708,6 +2710,12 @@ def search_all_databases(term: str = None, title: str = None, performer: str = N
         """
         if not combined:
             return []
+        from app.core.iafd_catalogue import search as catalogue_search
+        try:
+            catalogue = catalogue_search(title or term or '', performer or '', studio or '', date_from or '', date_to or '')
+            if catalogue: return [(row, 'IAFD') for row in catalogue]
+        except Exception as exc:
+            emit(f'IAFD catalogue unavailable: {exc}')
         local_hits = _search_iafd_from_persisted(title or term, performer, limit=20)
         if local_hits is not None:
             return [(s, "IAFD") for s in local_hits]
@@ -9137,10 +9145,16 @@ def build_movie_nfo(movie: dict, filename: str) -> str:
     ET.SubElement(root, "rating").text       = str(movie.get("rating") or "")
     ET.SubElement(root, "runtime").text      = str(movie.get("runtime") or "")
     ET.SubElement(root, "id").text           = movie.get("id") or ""
-    ET.SubElement(root, "tmdbid").text       = movie.get("id") or ""
+    if movie.get("iafd_id"):
+        ET.SubElement(root, "uniqueid", {"type":"iafd", "default":"true"}).text = movie["iafd_id"]
+    else:
+        ET.SubElement(root, "tmdbid").text = movie.get("id") or ""
     ET.SubElement(root, "mpaa").text         = "Adult"
     ET.SubElement(root, "tag").text          = "Porn"
     ET.SubElement(root, "tag").text          = "XXX"
+    if movie.get("iafd_id"):
+        if movie.get("studio"): ET.SubElement(root, "studio").text = movie["studio"]
+        if movie.get("release_date"): ET.SubElement(root, "premiered").text = movie["release_date"]
     for genre in movie.get("genres") or []:
         ET.SubElement(root, "genre").text = genre
     for director in movie.get("directors") or []:
@@ -11941,7 +11955,6 @@ def _maybe_kick_performer_image_enrichment(row: dict) -> None:
         _missing_ext = not all([
             (row.get("match_iafd_url") or "").strip(),
             (row.get("match_freeones_url") or "").strip(),
-            (row.get("match_babepedia_url") or "").strip(),
         ])
         _has_db_id = any([
             (row.get("match_tpdb_id") or "").strip(),
@@ -13645,13 +13658,13 @@ def _coomer_profile_url(value: str) -> str | None:
 
 
 def _parse_performer_ext_links(data_or_urls) -> dict:
-    """Extract TMDB/IAFD/Freeones/Babepedia profile URLs from a TPDB/StashDB/FansDB data dict or URL list.
+    """Extract TMDB/IAFD/Freeones profile URLs from a TPDB/StashDB/FansDB data dict or URL list.
 
     Accepts:
       - A data dict (TPDB response) — checks ``urls``, ``links``, ``extras.links``
       - A list of URL strings or ``{url, type}`` dicts (StashDB/FansDB format)
 
-    Returns a dict with keys from {"tmdb", "iafd", "freeones", "babepedia"} for each URL found.
+    Returns a dict with keys from {"tmdb", "iafd", "freeones"} for each URL found.
     For "tmdb" the value is the numeric person ID string.
     """
     if isinstance(data_or_urls, dict):
@@ -13685,8 +13698,6 @@ def _parse_performer_ext_links(data_or_urls) -> dict:
             out["iafd"] = u
         elif "freeones.com" in ul and "freeones" not in out:
             out["freeones"] = u
-        elif "babepedia.com" in ul and "babepedia" not in out:
-            out["babepedia"] = u
         elif _coomer_profile_url(u) and "coomer" not in out:
             out["coomer"] = _coomer_profile_url(u)
         elif "javdatabase.com/idols/" in ul and "javdatabase" not in out:
@@ -22565,7 +22576,7 @@ def _ensure_performer_posters(row_id: int) -> list[Path]:
 
     poster_primary.jpg   — copied from local library poster.jpg only.
                            If no local poster exists, primary stays empty.
-    poster_secondary.jpg — best image from TPDB → StashDB → Babepedia.
+    poster_secondary.jpg — best image from TPDB → StashDB.
 
     Writes to the same per-row directory the headshot lives in
     (metadata/performers/{row_id}/). Logs every source attempt via emit()
@@ -22612,7 +22623,7 @@ def _ensure_performer_posters(row_id: int) -> list[Path]:
         else:
             emit(f"  posters row {row_id}: no local library poster.jpg to copy")
 
-    # Secondary: first available from TPDB → StashDB → JAVStash → Babepedia
+    # Secondary: first available from TPDB → StashDB → JAVStash
     secondary_cached = _perf_poster_resolve(row_id, "poster_secondary")
     if secondary_cached:
         emit(f"  posters row {row_id}: secondary already present")
@@ -22704,33 +22715,6 @@ def _ensure_performer_posters(row_id: int) -> list[Path]:
                 except Exception as e:
                     emit(f"  posters row {row_id}: JAVStash error: {e}")
 
-        # Babepedia
-        if not secondary_bytes:
-            bp_url = (row.get("match_babepedia_url") or "").strip()
-            if bp_url:
-                try:
-                    from lxml import html as lxml_html
-                    r3 = requests.get(bp_url, timeout=12, headers={"User-Agent": "Top-Shelf/1.0"})
-                    if r3.status_code == 200:
-                        tree = lxml_html.fromstring(r3.content)
-                        img_els = tree.xpath('//div[@id="profimg"]//img/@src')
-                        if img_els:
-                            src_url = img_els[0]
-                            if not src_url.startswith("http"):
-                                src_url = "https://www.babepedia.com" + src_url
-                            r4 = requests.get(src_url, timeout=10)
-                            if r4.status_code == 200 and len(r4.content) > 500:
-                                secondary_bytes = r4.content
-                                secondary_src = "Babepedia"
-                            else:
-                                emit(f"  posters row {row_id}: Babepedia image HTTP {r4.status_code}")
-                        else:
-                            emit(f"  posters row {row_id}: Babepedia profimg xpath empty")
-                    else:
-                        emit(f"  posters row {row_id}: Babepedia page HTTP {r3.status_code}")
-                except Exception as e:
-                    emit(f"  posters row {row_id}: Babepedia error: {e}")
-
         if secondary_bytes:
             try:
                 if (not _favourite_images_locked(row_id) and save_image_bytes_optimized(secondary_bytes, p_secondary, max_edge=max_edge)):
@@ -22751,10 +22735,6 @@ def _ensure_performer_posters(row_id: int) -> list[Path]:
             else:                                           id_summary.append("FansDB✗")
             if (row.get("match_javstash_id") or "").strip(): id_summary.append("JAVStash✓")
             else:                                            id_summary.append("JAVStash✗")
-            if (row.get("match_babepedia_url") or "").strip():
-                id_summary.append("Babepedia✓")
-            else:
-                id_summary.append("Babepedia✗")
             emit(f"  posters row {row_id}: no secondary from any source ({' '.join(id_summary)})")
 
     # Return whichever files now exist on disk — could be a freshly-
@@ -23114,7 +23094,7 @@ def _restore_performer_from_library_mirrors(row_id: int) -> dict:
     Runs at the head of every enrichment pass so a rescued library
     folder (rebuilt from a backup, moved between hosts, restored after
     a wiped metadata dir) rehydrates its cached images without a
-    fresh round-trip to TPDB / StashDB / IAFD / Babepedia. Idempotent:
+    fresh round-trip to TPDB / StashDB / IAFD. Idempotent:
     only writes when the corresponding cache slot is currently missing.
 
     Returns ``{"restored": [roles filled]}`` for logging.
@@ -24107,6 +24087,11 @@ def _iafd_abs_href(src: str) -> str:
 
 
 def _iafd_performer_query(name: str) -> list[dict]:
+    from app.core.iafd_dataset import search_with_fallback
+    return search_with_fallback(name, _iafd_performer_query_live)
+
+
+def _iafd_performer_query_live(name: str) -> list[dict]:
     q = quote_plus((name or "").strip())
     tree = _iafd_fetch_tree(
         f"https://www.iafd.com/results.asp?searchtype=comprehensive&searchstring={q}"
@@ -24384,6 +24369,12 @@ def _iafd_scene_search(query: str, limit: int = 20, performer_filter: str = "", 
     #: sank under ancillary matches. Parsing a bigger table is free
     #: (single HTML fetch); we only incur extra cost when we enrich
     #: the sliced top-N for cast.
+    from app.core.iafd_catalogue import search as catalogue_search
+    try:
+        local = catalogue_search(q, performer_filter, limit=limit)
+        if local: return local
+    except Exception as exc:
+        emit(f'IAFD catalogue unavailable: {exc}')
     raw_limit = max(limit * 3, 30)
     rows = _iafd_scene_search_single(q, raw_limit)
     rows = _iafd_rank_rows_by_title(rows, q)[:limit]
@@ -24499,6 +24490,11 @@ def _iafd_scene_detail_performers(title_url: str) -> list[dict]:
     URL isn't re-scraped when the user reruns a search or the confirm
     modal follows the list-enrichment pass.
     """
+    from app.core.iafd_catalogue import detail as catalogue_detail
+    try:
+        local = catalogue_detail(title_url)
+        if local: return local['performers']
+    except Exception: pass
     title_url = (title_url or "").strip()
     if not title_url:
         return []
@@ -24894,6 +24890,12 @@ def _iafd_performer_filmography(performer_url: str) -> list[dict]:
     url = (performer_url or "").strip()
     if not url:
         return []
+    from app.core.iafd_catalogue import filmography as catalogue_filmography
+    try:
+        identity = url.split('/id=')[-1].split('?')[0].rstrip('/')
+        local = catalogue_filmography(identity)
+        if local: return local
+    except Exception: pass
     now = time.time()
     with _iafd_filmography_cache_lock:
         hit = _iafd_filmography_cache.get(url)
@@ -25698,74 +25700,15 @@ def _freeones_performer_search(name: str) -> list[dict]:
         return []
 
 
-def _babepedia_performer_search(name: str) -> list[dict]:
-    """Search Babepedia by performer name; return up to 8 candidates {name, url, thumb_url}.
-
-    Babepedia's search page (`/search.php?q=…`) ships result tiles as
-    `<a class="thumb" href="/babe/<Slug>/">` blocks containing an `<img>`
-    and a name span. The DOM has changed shape historically, so we look up
-    `/babe/` links and resolve display name from nearby text or the slug.
-    """
-    qstr = (name or "").strip()
-    if not qstr:
-        return []
-    try:
-        from lxml import html as _lxml_html  # noqa: PLC0415
-        scraper = _iafd_get_scraper()
-        q = quote_plus(qstr)
-        resp = scraper.get(
-            f"https://www.babepedia.com/search.php?q={q}",
-            timeout=(6, 20),
-            headers={"User-Agent": "Top-Shelf/1.0"},
-        )
-        if resp.status_code != 200:
-            return []
-        tree = _lxml_html.fromstring(resp.content)
-        # Find anchors pointing at /babe/<slug>/ — these are the result tiles.
-        anchors = tree.xpath('//a[starts-with(@href, "/babe/")]')
-        seen: set[str] = set()
-        results: list[dict] = []
-        for a in anchors:
-            href = (a.get("href") or "").strip()
-            slug = href.rstrip("/").rsplit("/", 1)[-1]
-            if not slug or slug in seen or slug.lower() in ("search", "babes"):
-                continue
-            seen.add(slug)
-            url = "https://www.babepedia.com" + href.rstrip("/") + "/"
-            # Prefer the result tile's caption (figcaption or .name span);
-            # fall back to the slug humanised.
-            cap_nodes = a.xpath('.//figcaption/text() | .//span[contains(@class,"name")]/text() | ./text()')
-            display = ""
-            for t in cap_nodes:
-                ts = (t or "").strip()
-                if ts:
-                    display = ts
-                    break
-            if not display:
-                display = slug.replace("_", " ").replace("-", " ")
-            # Inline <img> first, else the next image in document order.
-            thumb_xpath = a.xpath('.//img/@src') or a.xpath('./following::img[1]/@src')
-            thumb = (thumb_xpath[0] if thumb_xpath else "").strip()
-            if thumb and not thumb.startswith("http"):
-                thumb = "https://www.babepedia.com" + (thumb if thumb.startswith("/") else "/" + thumb)
-            results.append({"name": display, "url": url, "thumb_url": thumb or None})
-            if len(results) >= 8:
-                break
-        return results
-    except Exception as exc:
-        _log.debug("Babepedia search '%s': %s", name, exc)
-        return []
-
-
 def _fetch_performer_ext_links_from_db_ids(
     mt_id: str | None,
     ms_id: str | None,
     mf_id: str | None,
 ) -> dict:
     """For each known DB ID (TPDB/StashDB/FansDB), fetch performer detail and extract
-    IAFD/Freeones/Babepedia profile URLs from the embedded link arrays.
+    IAFD/Freeones profile URLs from the embedded link arrays.
 
-    Returns ``{"iafd": url, "freeones": url, "babepedia": url, "coomer": url, "bio": text}``
+    Returns ``{"iafd": url, "freeones": url, "coomer": url, "bio": text}``
     (keys only present if found). First source to yield a value wins.
     """
     combined: dict[str, str] = {}
@@ -26216,8 +26159,6 @@ def _performer_ext_links_from_row(row: dict, *, iafd_url: str | None = None) -> 
         links["iafd"] = {"label": "IAFD", "url": iafd_u}
     if (row.get("match_freeones_url") or "").strip():
         links["freeones"] = {"label": "Freeones", "url": row["match_freeones_url"].strip()}
-    if (row.get("match_babepedia_url") or "").strip():
-        links["babepedia"] = {"label": "Babepedia", "url": row["match_babepedia_url"].strip()}
     if (row.get("match_coomer_url") or "").strip():
         links["coomer"] = {"label": "Coomer", "url": row["match_coomer_url"].strip()}
     if (row.get("match_javdatabase_url") or "").strip():
@@ -26351,7 +26292,6 @@ def _enrich_performer_headshot_bg(row_id: int) -> None:
     3. Stored IAFD profile URL
     4. IAFD name search (auto-match if exactly 1 result)
     5. Stored Freeones URL → Freeones name search
-    6. Stored Babepedia URL
     """
     if _favourite_images_locked(row_id):
         return
@@ -26611,7 +26551,7 @@ def _auto_link_scene_cast_to_favourites(scene: dict, source: str) -> None:
 
 
 def _enrich_performer_ext_links_bg(row_id: int) -> None:
-    """Background: populate IAFD/Freeones/Babepedia links from TPDB/StashDB/FansDB cross-references,
+    """Background: populate IAFD/Freeones links from TPDB/StashDB/FansDB cross-references,
     then trigger headshot enrichment using any newly-stored IAFD/Freeones URL.
     """
     if _favourite_images_locked(row_id):
@@ -26632,7 +26572,6 @@ def _enrich_performer_ext_links_bg(row_id: int) -> None:
             missing_links = not all([
                 (row.get("match_iafd_url") or "").strip(),
                 (row.get("match_freeones_url") or "").strip(),
-                (row.get("match_babepedia_url") or "").strip(),
                 (row.get("match_coomer_url") or "").strip(),
                 (row.get("match_javdatabase_url") or "").strip(),
             ])
@@ -26642,7 +26581,7 @@ def _enrich_performer_ext_links_bg(row_id: int) -> None:
                 for k, v in _fetch_performer_ext_links_from_javstash(mj_id).items():
                     if k not in ext:
                         ext[k] = v
-                for site in ("iafd", "freeones", "babepedia", "coomer", "javdatabase"):
+                for site in ("iafd", "freeones", "coomer", "javdatabase"):
                     url = ext.get(site)
                     if url and not (row.get(f"match_{site}_url") or "").strip():
                         try:
@@ -26653,7 +26592,7 @@ def _enrich_performer_ext_links_bg(row_id: int) -> None:
                         except Exception:
                             pass
                 # Fallback: if TPDB/StashDB/FansDB cross-refs didn't surface
-                # IAFD/Freeones/Babepedia URLs, run an independent name search
+                # IAFD/Freeones URLs, run an independent name search
                 # and auto-link only when there's a single unambiguous hit
                 # AND the hit's name plausibly matches the query (token
                 # overlap). The name guard stops site nav anchors or stray
@@ -26693,15 +26632,6 @@ def _enrich_performer_ext_links_bg(row_id: int) -> None:
                                 _log.debug("Freeones fallback linked row %s: %s", row_id, fo_url)
                         except Exception as exc:
                             _log.debug("Freeones fallback search row %s: %s", row_id, exc)
-                    if not (row_after.get("match_babepedia_url") or "").strip():
-                        try:
-                            opts = _babepedia_performer_search(name)
-                            if len(opts) == 1 and opts[0].get("url") and _hit_name_matches(name, opts[0].get("name") or ""):
-                                bp_url = opts[0]["url"]
-                                db.favourite_set_ext_link(row_id, "babepedia", bp_url)
-                                _log.debug("Babepedia fallback linked row %s: %s", row_id, bp_url)
-                        except Exception as exc:
-                            _log.debug("Babepedia fallback search row %s: %s", row_id, exc)
                 # Save bio text to JSON meta if we got one and don't already have it
                 bio_text = ext.get("bio", "")
                 if bio_text:
@@ -26843,7 +26773,7 @@ async def api_performers_enrich(payload: dict = Body(...)):
 
 @app.post("/api/performers/fetch-ext-links")
 async def api_performers_fetch_ext_links(payload: dict = Body(...)):
-    """Manually re-fetch IAFD/Freeones/Babepedia links from a performer's stored DB IDs.
+    """Manually re-fetch IAFD/Freeones links from a performer's stored DB IDs.
     Stores any links not already set and returns what was found/stored.
     """
     try:
@@ -26873,7 +26803,7 @@ async def api_performers_fetch_ext_links(payload: dict = Body(...)):
         for k, v in _fetch_performer_ext_links_from_javstash(mj_id).items():
             if k not in ext:
                 ext[k] = v
-    for site in ("iafd", "freeones", "babepedia", "coomer", "javdatabase"):
+    for site in ("iafd", "freeones", "coomer", "javdatabase"):
         url = ext.get(site)
         if url and not (row.get(f"match_{site}_url") or "").strip():
             try:
@@ -26946,8 +26876,6 @@ async def api_performers_search_ext_link(payload: dict = Body(...)):
         ]
     elif site == "freeones":
         results = await run_maint(_freeones_performer_search, name)
-    elif site == "babepedia":
-        results = await run_maint(_babepedia_performer_search, name)
     elif site == "javdatabase":
         # JAVStash is needed for AUTO-linking (canonical romanized name as
         # source-of-truth for the slug), but not for manual search — the
@@ -26963,7 +26891,7 @@ async def api_performers_search_ext_link(payload: dict = Body(...)):
         results = await run_in_threadpool(_javdatabase_search_merged, qnames)
     else:
         return JSONResponse(
-            {"error": "site must be tmdb, iafd, freeones, babepedia, or javdatabase"},
+            {"error": "site must be tmdb, iafd, freeones, or javdatabase"},
             status_code=400,
         )
     return {"results": results}
@@ -26975,7 +26903,7 @@ _EXT_LINKS_ENRICH_PROGRESS: dict = {"total": 0, "done": 0, "current": "", "runni
 
 def _background_enrich_all_ext_links() -> None:
     """Bulk backfill in two phases:
-    Phase 1 — fetch IAFD/Freeones/Babepedia URLs from TPDB/StashDB/FansDB cross-references.
+    Phase 1 — fetch IAFD/Freeones URLs from TPDB/StashDB/FansDB cross-references.
     Phase 2 — scrape headshots for all performers that still have none.
     Rate-limited with small sleeps. Safe to call at any time.
     """
@@ -27046,7 +26974,7 @@ def _background_enrich_all_ext_links() -> None:
                             db.favourite_set_ext_link(rid, "tmdb", tmdb_val)
                         except Exception:
                             pass
-                    for site in ("iafd", "freeones", "babepedia", "coomer", "javdatabase"):
+                    for site in ("iafd", "freeones", "coomer", "javdatabase"):
                         url = ext.get(site)
                         if url and not (row.get(f"match_{site}_url") or "").strip():
                             try:
@@ -27387,7 +27315,6 @@ def _performers_enrichment_status_payload() -> dict:
             "fansdb_id": (r.get("match_fansdb_id") or "").strip() or None,
             "iafd_url": (r.get("match_iafd_url") or "").strip() or None,
             "freeones_url": (r.get("match_freeones_url") or "").strip() or None,
-            "babepedia_url": (r.get("match_babepedia_url") or "").strip() or None,
             "coomer_url": (r.get("match_coomer_url") or "").strip() or None,
             "javdatabase_url": (r.get("match_javdatabase_url") or "").strip() or None,
             "has_headshot": has_headshot,
@@ -28310,12 +28237,12 @@ def _normalize_ext_link_store(site: str, url: str) -> str:
         if not norm:
             raise ValueError("Coomer link must be a coomer.st/onlyfans/user/… or coomer.st/fansly/user/… profile URL")
         return norm
-    if s in ("iafd", "freeones", "babepedia"):
+    if s in ("iafd", "freeones"):
         if not re.match(r"^https?://", raw, re.I):
             raise ValueError(f"{site} link must start with http:// or https://")
         return raw
     raise ValueError(
-        "site must be tmdb, iafd, freeones, babepedia, coomer, or javdatabase"
+        "site must be tmdb, iafd, freeones, coomer, or javdatabase"
     )
 
 
@@ -28488,12 +28415,12 @@ def _tpdb_performer_fetch_by_name(name: str) -> dict | None:
 
 
 # Hosts already represented as DB / profile pills (rendered via the
-# `ext_links` block — StashDB/FansDB/TPDB/IAFD/Freeones/Babepedia/
+# `ext_links` block — StashDB/FansDB/TPDB/IAFD/Freeones/
 # Coomer/TMDB). We skip these so the social row only carries Twitter/
 # Instagram/OnlyFans/etc. and never duplicates a pill above it.
 _PERFORMER_POPUP_SOCIAL_DB_HOSTS = frozenset({
     "stashdb.org", "fansdb.cc", "theporndb.net", "iafd.com",
-    "freeones.com", "babepedia.com", "coomer.st", "themoviedb.org",
+    "freeones.com", "babepedia.com", "coomer.st", "themoviedb.org",  # Suppress retired source links too.
     "javdatabase.com", "javstash.org",
 })
 
@@ -29267,7 +29194,7 @@ async def api_performers_poster_image(row_id: int, kind: str = "secondary"):
     """Serve a cached performer poster image for popup background overlay.
 
     kind=primary  — local library poster (may not exist)
-    kind=secondary — TPDB/StashDB/Babepedia poster
+    kind=secondary — TPDB/StashDB poster
     """
     md = _metadata_dir_for("performer", row_id)
     k = kind.strip().lower()
@@ -29921,7 +29848,7 @@ def api_favourites_performer_thumb(row_id: int, prefer: str = "primary"):
         # Check every known cached poster filename (including legacy _poster_1 /
         # _poster_2 variants written by older enrichment passes). Secondary
         # (poster 2) is preferred — the richer enrichment art fetched from
-        # TPDB/StashDB/Babepedia — with the local library primary as fallback.
+        # TPDB/StashDB — with the local library primary as fallback.
         # Resolver checks .webp first then legacy .jpg for each role
         # in the fallback chain. Same priority as the old explicit list.
         pth = _perf_poster_resolve(
@@ -33984,7 +33911,7 @@ async def api_favourites_unmatch(payload: dict = Body(...)):
 
 @app.post("/api/favourites/ext-link")
 async def api_favourites_ext_link(payload: dict = Body(...)):
-    """Set a confirmed external profile URL (IAFD / Freeones / Babepedia) for a performer row."""
+    """Set a confirmed external profile URL (IAFD / Freeones) for a performer row."""
     row_id = int(payload.get("row_id") or 0)
     site = _ext_site_key(payload.get("site") or "")
     url = (payload.get("url") or "").strip()
@@ -34729,11 +34656,18 @@ async def movies_search(q: str = "", year: str = "", page: int = 1):
         # age floor that the /latest feed uses, otherwise searching
         # for older titles by name returns nothing.
         base_params["_no_age_floor"] = True
-        payload = _collect_filtered_tpdb_movies(base_params, page=page, page_size=20)
+        try:
+            payload = _collect_filtered_tpdb_movies(base_params, page=page, page_size=20)
+        except Exception as exc:
+            payload = {'results': [], 'warnings': [f'TPDB search unavailable: {exc}']}
+
         try:
             payload["jav_scenes"] = _javstash_scenes_for_movie_search(q, year, limit=18)
         except Exception:
             payload["jav_scenes"] = []
+        from app.core.iafd_catalogue import search as catalogue_search
+        payload['iafd_titles'] = await run_in_threadpool(catalogue_search, q, '', '',
+            year+'-01-01' if year else '', year+'-12-31' if year else '', 20, max(0,page-1)*20)
         return payload
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -35596,10 +35530,11 @@ async def file_movie_endpoint(payload: dict, background_tasks: BackgroundTasks):
     tpdb_id = payload.get("tpdb_id", "").strip()
     javstash_id = payload.get("javstash_id", "").strip()
 
-    pick_n = int(bool(tmdb_id)) + int(bool(tpdb_id)) + int(bool(javstash_id))
+    iafd_id = str(payload.get("iafd_id") or "").strip()
+    pick_n = int(bool(tmdb_id)) + int(bool(tpdb_id)) + int(bool(javstash_id)) + int(bool(iafd_id))
     if not filename or pick_n != 1:
         return JSONResponse(
-            {"error": "filename and exactly one of tmdb_id, tpdb_id, or javstash_id required"},
+            {"error": "filename and exactly one of tmdb_id, tpdb_id, javstash_id, or iafd_id required"},
             status_code=400,
         )
 
@@ -35667,6 +35602,18 @@ def _manual_run_desired_movie(payload):
                 md = _tpdb_detail_as_movie_filing_dict(detail)
                 tid = md.pop("_tpdb_id", None) or tpdb_id
                 result = file_movie(video, md, tpdb_id=str(tid), match_source="tpdb", history_filename=filename)
+            elif payload.get('iafd_id'):
+                from app.core.iafd_catalogue import detail as catalogue_detail
+                row = catalogue_detail(payload['iafd_id'])
+                if not row: raise ValueError('IAFD title no longer available in catalogue')
+                md = {'id':'', 'iafd_id':row['_iafd_url'], 'title':row['title'],
+                      'year':row['release_date'][:4], 'overview':row['details'],
+                      'runtime':round(row['duration']/60) if row['duration'] else '',
+                      'studio':row['studio']['name'], 'release_date':row['release_date'],
+                      'cast':[p['performer']['name'] for p in row['performers']],
+                      'directors':[row['director']] if row['director'] else [],
+                      'poster_url':row['images'][0]['url'] if row['images'] else ''}
+                result = file_movie(video, md, match_source='iafd', history_filename=filename)
             else:
                 emit(f"  Fetching JAVStash scene {javstash_id}...")
                 jscene = _fetch_javstash_scene_for_filing(javstash_id)
@@ -35996,7 +35943,6 @@ async def library_favourite_lookup(name: str):
     for site, col in (
         ("iafd",       "match_iafd_url"),
         ("freeones",   "match_freeones_url"),
-        ("babepedia",  "match_babepedia_url"),
         ("coomer",     "match_coomer_url"),
         ("javdatabase", "match_javdatabase_url"),
     ):
@@ -36033,7 +35979,6 @@ def _favourite_links_from_row(r: dict) -> dict:
     for site, col in (
         ("iafd",       "match_iafd_url"),
         ("freeones",   "match_freeones_url"),
-        ("babepedia",  "match_babepedia_url"),
         ("coomer",     "match_coomer_url"),
         ("javdatabase", "match_javdatabase_url"),
     ):
@@ -48258,7 +48203,6 @@ def _url_label(url: str) -> str:
             "stashdb.org": "StashDB",
             "fansdb.cc": "FansDB",
             "javstash.org": "JAVStash",
-            "babepedia.com": "Babepedia",
             "freeones.com": "FreeOnes",
             "iafd.com": "IAFD",
         }
@@ -48790,7 +48734,7 @@ def _spotlight_lib_image_url(row_id: int) -> str:
     exists on disk (most rows DON'T have one — posters only generate
     after `_ensure_performer_posters` runs for that row). Check what's
     actually present and return a URL that points to a real file:
-        1. cached secondary poster (TPDB/StashDB/Babepedia)
+        1. cached secondary poster (TPDB/StashDB)
         2. cached primary poster (local library poster.jpg)
         3. cached headshot via the existing performer-thumb endpoint,
            which falls back through every cached image variant.

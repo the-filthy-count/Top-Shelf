@@ -1454,7 +1454,7 @@
     // kind hydrator receives a `links` map from the lookup endpoint
     // and reveals the anchors whose site actually has a stored URL,
     // filling in `href` on the way. Order (StashDB → FansDB → TPDB →
-    // JAVStash → TMDB → IAFD → Freeones → Babepedia → Coomer →
+    // JAVStash → TMDB → IAFD → Freeones → Coomer →
     // JAVDatabase) matches Discover Card / performer popup so users
     // see the same left-to-right sequence everywhere.
     const dbLinkSlot = folderName ? `
@@ -1466,7 +1466,6 @@
           <a class="qi-folder-dblink" data-db="tmdb"       href="#" target="_blank" rel="noopener" title="TMDB"       onclick="event.stopPropagation()"><img src="/static/logos/tmdb.webp" alt="TMDB"></a>
           <a class="qi-folder-dblink" data-db="iafd"       href="#" target="_blank" rel="noopener" title="IAFD"       onclick="event.stopPropagation()"><img src="/static/logos/iafd.webp" alt="IAFD"></a>
           <a class="qi-folder-dblink" data-db="freeones"   href="#" target="_blank" rel="noopener" title="Freeones"   onclick="event.stopPropagation()"><img src="/static/logos/freeones.webp" alt="Freeones"></a>
-          <a class="qi-folder-dblink" data-db="babepedia"  href="#" target="_blank" rel="noopener" title="Babepedia"  onclick="event.stopPropagation()"><img src="/static/logos/babepedia.webp" alt="Babepedia"></a>
           <a class="qi-folder-dblink" data-db="coomer"     href="#" target="_blank" rel="noopener" title="Coomer"     onclick="event.stopPropagation()"><img src="/static/logos/coomer.webp" alt="Coomer"></a>
           <a class="qi-folder-dblink" data-db="javdatabase" href="#" target="_blank" rel="noopener" title="JAVDatabase" onclick="event.stopPropagation()"><img src="/static/logos/javdatabase.webp" alt="JAVDatabase"></a>
         </span>` : '';
@@ -4979,6 +4978,7 @@
 
   // ── Movie search (centered modal, unified results) ──
   const _MOVIE_SRCH_SRC = {
+    iafd: { logo: 'iafd', label: 'IAFD', attr: 'data-iafd-id', pick: 'pickMovieIafd' },
     tmdb: { logo: 'tmdb', label: 'TMDB', attr: 'data-tmdb-id', pick: 'pickMovieTmdb' },
     tpdb: { logo: 'tpdb', label: 'TPDB', attr: 'data-tpdb-id', pick: 'pickMovieTpdb' },
     javstash: { logo: 'javstash', label: 'JAVStash', attr: 'data-javstash-id', pick: 'pickMovieJavstash' },
@@ -5059,7 +5059,7 @@
     const el = document.getElementById('movieSearchResults');
     if (!q) { el.innerHTML = '<div class="empty">Enter a title</div>'; return; }
     el.innerHTML = '<div class="empty">Searching…</div>';
-    let tmdb = [], tpdbRes = [], javRes = [], tmdbErr = '';
+    let tmdb = [], tpdbRes = [], javRes = [], iafdRes = [], tmdbErr = '';
     try {
       const [rt, rp] = await Promise.all([
         window.tsModalFetch('qMovieSearchOverlay', '/api/movies/tmdb-search?q=' + encodeURIComponent(q) + (year ? '&year=' + encodeURIComponent(year) : '')).then(r => r.json()),
@@ -5068,6 +5068,7 @@
       if (rt.results) tmdb = rt.results;
       if (rt.error) tmdbErr = String(rt.error);
       if (rp.results) tpdbRes = rp.results;
+      iafdRes = rp.iafd_titles || [];
       if (rp.jav_scenes) javRes = rp.jav_scenes;
     } catch { el.innerHTML = '<div class="empty">Search failed</div>'; return; }
     const sel = !!_qSelectedMovieFile;
@@ -5093,6 +5094,8 @@
       const poster = (s.poster && String(s.poster).trim()) || (s.thumb && String(s.thumb).trim()) || '';
       rows.push(_movieSrchRow('javstash', { id: s.id, title: s.title || '', meta: meta, poster: poster }, sel));
     });
+    iafdRes.forEach(s => rows.push(_movieSrchRow('iafd', {id:s._iafd_url, title:s.title,
+      meta:esc([s.studio?.name,s.release_date].filter(Boolean).join(' · ')),poster:s.images?.[0]?.url || ''},sel)));
     const warn = tmdbErr ? '<div class="movie-srch-warn">' + esc(tmdbErr) + '</div>' : '';
     el.innerHTML = warn + '<div class="movie-srch-list">' + (rows.join('') || '<div class="movie-srch-empty">No results</div>') + '</div>';
   }
@@ -5116,6 +5119,17 @@
     window.toast(`Pipeline busy — ${label} queued${suffix}`, { kind: 'success' });
   }
 
+  window.pickMovieIafd = async function(btn) {
+    if (!_qSelectedMovieFile) return;
+    btn.disabled = true;
+    try {
+      const response = await fetch('/api/movies/file', {method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({filename:_qSelectedMovieFile,file_id:_qSelectedMovieId,iafd_id:btn.dataset.iafdId})});
+      const data = await response.json();
+      if (!response.ok || data.error) throw Error(data.error || 'Filing failed');
+      _toastIfQueued(data,'movie filing');closeMovieSearchPanel();_refreshAfterMoviePick();
+    } catch(error) {window.toast(error.message);btn.disabled=false;}
+  };
   async function pickMovieTmdb(btn) {
     const tmdbId = btn.getAttribute('data-tmdb-id');
     if (!_qSelectedMovieFile) { window.toast('No file selected'); return; }

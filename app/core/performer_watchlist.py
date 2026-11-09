@@ -14,7 +14,9 @@ SOURCES = {'TPDB': ('api_key_tpdb', 'https://api.theporndb.net/performers'),
            'StashDB': ('api_key_stashdb', 'https://stashdb.org/graphql'),
            'FansDB': ('api_key_fansdb', 'https://fansdb.cc/graphql'),
            'JAVStash': ('api_key_javstash', 'https://javstash.org/graphql')}
-EXTERNAL_SOURCES = ('Babepedia', 'Coomer')
+COOMER_BASE = 'https://site1.coomer.com.co'
+EXTERNAL_SOURCES = ('Coomer', 'IAFD')
+_iafd_search = None
 _creators_lock = threading.Lock()
 _creators_cache = (0, [])
 _wake = threading.Event()
@@ -64,9 +66,21 @@ def search_terms(names):
 def rows():
     with db.get_conn() as c:
         result = [dict(r) for r in c.execute('SELECT * FROM performer_watchlist ORDER BY lower(name),id')]
+        fields = {'TPDB': 'match_tpdb_id', 'StashDB': 'match_stashdb_id',
+                  'FansDB': 'match_fansdb_id', 'JAVStash': 'match_javstash_id'}
+        library = set()
+        for entity in c.execute("SELECT match_tpdb_id,match_stashdb_id,match_fansdb_id,match_javstash_id FROM favourite_entities WHERE kind='performer' AND COALESCE(is_group,0)=0"):
+            for source, field in fields.items():
+                if entity[field] and str(entity[field]).strip():
+                    library.add((source, str(entity[field]).strip()))
     for r in result:
         for k in ('aliases','candidates','checks','confirmed'): r[k] = json.loads(r[k]) if r[k] else None
-        r['candidates'] = [h for h in r['candidates'] if matches_names(h, [r['name']] + (r['aliases'] or []))]
+        r['candidates'] = [h for h in r['candidates'] if h.get('source') in (*SOURCES, *EXTERNAL_SOURCES) and matches_names(h, [r['name']] + (r['aliases'] or []))]
+        for hit in r['candidates']:
+            hit['in_library'] = (hit.get('source'), str(hit.get('id', '')).strip()) in library
+        r['checks'] = {k: v for k, v in r['checks'].items() if k in (*SOURCES, *EXTERNAL_SOURCES)}
+        confirmed = r.get('confirmed') or {}
+        r['in_library'] = (confirmed.get('source'), str(confirmed.get('id', '')).strip()) in library
     return result
 
 def search_source(source, names, settings):
@@ -104,13 +118,23 @@ def search_external(source, names):
     """Supplementary profile leads, never library identity confirmations."""
     hits = {}
     try:
-        if source == 'Coomer':
+        if source == 'IAFD':
+            from app.core.iafd_dataset import search
+            lookup = _iafd_search or search
+            for name in names:
+                for item in lookup(name):
+                    if not matches_names(item, names) or not item.get('urls'): continue
+                    url = item['urls'][0]
+                    hits[url] = dict(source='IAFD', id=item.get('id') or url, name=item['name'],
+                                     aliases=item.get('aliases') or [], url=url,
+                                     image=item.get('thumb_url') or '', external_only=True)
+        elif source == 'Coomer':
             global _creators_cache
             # The creator catalogue is shared across all watchlist entries.
             with _creators_lock:
                 if time.time() - _creators_cache[0] > 3600:
-                    response = requests.get('https://coomer.st/api/v1/creators.txt',
-                                            headers={'Accept': 'text/css'}, timeout=30)
+                    response = requests.get(COOMER_BASE + '/api/v1/creators',
+                                            headers={'Accept': 'application/json'}, timeout=30)
                     response.raise_for_status()
                     creators = response.json()
                     if not isinstance(creators, list): raise ValueError('Unexpected creator catalogue')
@@ -118,30 +142,11 @@ def search_external(source, names):
                 creators = _creators_cache[1]
             for creator in creators:
                 service, identity = creator.get('service'), str(creator.get('id') or '')
-                if service not in ('onlyfans', 'fansly') or not identity: continue
+                if service not in ('onlyfans', 'fansly', 'candfans') or not identity: continue
                 hit = {'name': creator.get('name') or identity, 'aliases': [identity]}
                 if not matches_names(hit, names): continue
-                url = f'https://coomer.st/{service}/user/{quote(identity, safe="")}'
+                url = f'{COOMER_BASE}/{service}/user/{quote(identity, safe="")}'
                 hits[url] = dict(hit, source=source, id=url, url=url, image='', external_only=True)
-        else:
-            from lxml import html
-            for term in search_terms(names):
-                response = requests.get('https://www.babepedia.com/search.php', params={'q': term},
-                                        headers={'User-Agent': 'Top-Shelf/1.0'}, timeout=20)
-                response.raise_for_status()
-                tree = html.fromstring(response.content)
-                if not tree.xpath('//a[starts-with(@href, "/babe/")]') and re.search(
-                        r'just a moment|captcha|access denied', response.text, re.I):
-                    raise ValueError('Search blocked')
-                for anchor in tree.xpath('//a[starts-with(@href, "/babe/")]'):
-                    href = anchor.get('href').split('?')[0].rstrip('/')
-                    slug = href.rsplit('/', 1)[-1]
-                    name = unquote(slug).replace('_', ' ')
-                    captions = anchor.xpath('.//figcaption/text() | .//span[contains(@class,"name")]/text()')
-                    hit = {'name': next((t.strip() for t in captions if t.strip()), name), 'aliases': [name]}
-                    if not matches_names(hit, names): continue
-                    url = 'https://www.babepedia.com' + href + '/'
-                    hits[url] = dict(hit, source=source, id=url, url=url, image='', external_only=True)
         return list(hits.values()), 'Checked'
     except Exception:
         return list(hits.values()), 'Check failed — retry later'
@@ -161,8 +166,9 @@ def check_entry(row):
             (json.dumps(candidates),json.dumps(checks),time.time(),time.time()+86400,row['id'],row['revision']))
         c.commit()
 
-def start():
-    global _thread
+def start(iafd_search=None):
+    global _thread, _iafd_search
+    _iafd_search = iafd_search
     if _thread and _thread.is_alive(): return
     with db.get_conn() as c:
         c.execute('UPDATE performer_watchlist SET checking=0'); c.commit()

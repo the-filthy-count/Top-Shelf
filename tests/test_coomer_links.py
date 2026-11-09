@@ -13,6 +13,9 @@ exec(compile(ast.Module(body=nodes, type_ignores=[]), "main.py", "exec"), namesp
 parse = namespace["_parse_performer_ext_links"]
 
 class CoomerLinksTests(unittest.TestCase):
+    def test_retired_source_not_imported(self):
+        self.assertEqual(parse(['https://www.babepedia.com/babe/Example']), {})
+
     def test_social_profiles_do_not_create_archive_links(self):
         for service in ("fansly", "onlyfans"):
             self.assertNotIn("coomer", parse([f"https://{service}.com/example"]))
