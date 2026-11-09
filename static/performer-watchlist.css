@@ -97,3 +97,5 @@
 .watch-candidates .watch-profile-button,
 .watch-candidates [data-confirm] {display:inline-flex;align-items:center;justify-content:center;height:44px;box-sizing:border-box;vertical-align:middle;}
 .watch-candidates [data-confirm] {width:44px;padding:0;}
+
+.watch-name .watch-source-link {display:inline-flex;align-items:center;justify-content:center;margin:4px 0 0 6px;padding:4px;vertical-align:middle;text-decoration:none;}
