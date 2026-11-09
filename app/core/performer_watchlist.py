@@ -3,6 +3,8 @@ import json
 import logging
 import threading
 import time
+import re
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
 import requests
@@ -38,11 +40,30 @@ def validate(payload):
         raise ValueError('Source link must be an HTTP or HTTPS URL')
     return name, json.dumps(aliases), notes, url
 
+def name_key(value):
+    return ''.join(c for c in unicodedata.normalize('NFKC', str(value or '')).casefold() if c.isalnum())
+
+def matches_names(hit, names):
+    wanted = {name_key(name) for name in names} - {''}
+    aliases = hit.get('aliases') or []
+    if isinstance(aliases, str): aliases = aliases.split(',')
+    recorded = [hit.get('name') or ''] + [a.get('name', '') if isinstance(a, dict) else a for a in aliases]
+    return any(name_key(name) in wanted for name in recorded)
+
+def search_terms(names):
+    terms = []
+    for name in names:
+        spaced = re.sub(r'[\s_]+', ' ', name).strip()
+        for term in (spaced, spaced.replace(' ', '')):
+            if term and term.casefold() not in {t.casefold() for t in terms}: terms.append(term)
+    return terms
+
 def rows():
     with db.get_conn() as c:
         result = [dict(r) for r in c.execute('SELECT * FROM performer_watchlist ORDER BY lower(name),id')]
     for r in result:
         for k in ('aliases','candidates','checks','confirmed'): r[k] = json.loads(r[k]) if r[k] else None
+        r['candidates'] = [h for h in r['candidates'] if matches_names(h, [r['name']] + (r['aliases'] or []))]
     return result
 
 def search_source(source, names, settings):
@@ -50,7 +71,7 @@ def search_source(source, names, settings):
     if not settings.get(key): return [], 'Not configured'
     hits = {}
     try:
-        for name in names:
+        for name in search_terms(names):
             if source == 'TPDB':
                 response = requests.get(endpoint, params={'q': name}, headers={'Authorization': 'Bearer '+settings[key]}, timeout=15)
             else:
@@ -62,6 +83,7 @@ def search_source(source, names, settings):
             data = body.get('data') if source == 'TPDB' else (body.get('data') or {}).get('searchPerformer')
             if not isinstance(data, list): raise ValueError('Unexpected database response')
             for item in data:
+                if not matches_names(item, names): continue
                 identity = str(item.get('id') or '')
                 if not identity: continue
                 images = item.get('posters') or item.get('images') or []

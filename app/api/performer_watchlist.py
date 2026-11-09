@@ -54,9 +54,10 @@ def check(identity:int):
 def confirm(identity:int,payload:dict=Body(...)):
     with db.get_conn() as c:
         c.execute('BEGIN IMMEDIATE')
-        row=c.execute('SELECT candidates FROM performer_watchlist WHERE id=?',(identity,)).fetchone()
+        row=c.execute('SELECT candidates,name,aliases FROM performer_watchlist WHERE id=?',(identity,)).fetchone()
         if not row: raise HTTPException(404,'Entry not found')
         candidate=next((h for h in json.loads(row[0]) if h['source']==payload.get('source') and h['id']==payload.get('id')),None)
+        if candidate and not watch.matches_names(candidate, [row[1]] + json.loads(row[2])): candidate = None
         if not candidate: raise HTTPException(409,'Candidate changed; check again')
         c.execute('UPDATE performer_watchlist SET confirmed=?,revision=revision+1,checking=0 WHERE id=?',(json.dumps(candidate),identity)); c.commit()
     return {'ok':True}

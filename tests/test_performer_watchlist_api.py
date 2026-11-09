@@ -19,7 +19,7 @@ class WatchlistAPITests(unittest.TestCase):
         identity=api.add({'name':'Unknown Alias','notes':'Found on a site'})['id']
         with self.assertRaises(HTTPException) as error: api.add({'name':'unknown alias'})
         self.assertEqual(error.exception.status_code,409)
-        hit={'id':'source-id','source':'FansDB','name':'Known Name'}
+        hit={'id':'source-id','source':'FansDB','name':'Known Name','aliases':['Unknown Alias']}
         self.conn.execute('UPDATE performer_watchlist SET candidates=? WHERE id=?',(json.dumps([hit]),identity));self.conn.commit()
         with self.assertRaises(HTTPException): api.confirm(identity,{**hit,'id':'invented'})
         api.confirm(identity,hit)

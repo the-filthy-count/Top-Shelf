@@ -35,3 +35,19 @@ class WatchlistTests(unittest.TestCase):
             c.execute('delete from performer_watchlist');c.commit();w.check_entry(old)
             self.assertEqual(c.execute('select count(*) from performer_watchlist').fetchone()[0],0)
         c.close()
+
+    def test_full_name_matching_keeps_order_and_accepts_joined_aliases(self):
+        names = ['Valeria Pixie', 'lovelybabylove1']
+        for value in ['Valeria Pixie', 'valeria_pixie', 'VALERIAPIXIE']:
+            self.assertTrue(w.matches_names({'name':value}, names))
+        for value in ['Valeria', 'Pixie', 'Pixie Valeria', 'Valeria Pixie Extra']:
+            self.assertFalse(w.matches_names({'name':value}, names))
+        self.assertTrue(w.matches_names({'name':'Different Name','aliases':['lovelybabylove1']}, names))
+        self.assertEqual(w.search_terms(['Valeria_Pixie']), ['Valeria Pixie','ValeriaPixie'])
+    def test_broad_database_results_are_filtered(self):
+        response=Mock();response.json.return_value={'data':{'searchPerformer':[
+            {'id':'wrong','name':'Valeria'}, {'id':'reverse','name':'Pixie Valeria'},
+            {'id':'right','name':'ValeriaPixie'}]}}
+        with patch.object(w.requests,'post',return_value=response):
+            hits,_=w.search_source('FansDB',['Valeria Pixie'],{'api_key_fansdb':'test'})
+        self.assertEqual([h['id'] for h in hits],['right'])
