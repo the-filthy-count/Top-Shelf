@@ -13045,6 +13045,7 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
 .pp-polaroid-dialog::backdrop { background: rgba(0, 0, 0, 0.08); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 .pp-polaroid-dialog .pp-gallery-bg-silhouette { display: none; }
 .pp-polaroid-dialog .pp-gallery-tile img {
+  filter: saturate(1.025) contrast(1.01);
   width: min(72vw, calc(72dvh * var(--photo-ratio, .67)));
   height: auto; max-width: 72vw; max-height: 72dvh;
 }
@@ -13188,3 +13189,9 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+
+/* Selective colour is confined to gallery thumbnails, never full-size photos. */
+.pp-photo-thumb img { filter: url(#pp-skin-tones); }
+
+.pp-photo-thumb:hover img,
+.pp-photo-thumb:focus-visible img { filter: none; }

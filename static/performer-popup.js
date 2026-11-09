@@ -2423,6 +2423,29 @@
     });
   }
 
+  function ensureGallerySkinToneFilter() {
+    if (document.getElementById('pp-skin-tone-filter-defs')) return;
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    defs.id = 'pp-skin-tone-filter-defs';
+    defs.setAttribute('aria-hidden', 'true');
+    defs.setAttribute('width', '0');
+    defs.setAttribute('height', '0');
+    defs.style.position = 'absolute';
+    // Soft YCbCr chroma bands preserve warm skin-like colours, not anatomy.
+    // SVG works on remote images without canvas reads or changing source files.
+    defs.innerHTML = `<defs><filter id="pp-skin-tones" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+      <feColorMatrix in="SourceGraphic" type="saturate" values="0" result="mono"/>
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  .5 -.418688 -.081312 0 .5"/>
+      <feComponentTransfer result="redChroma"><feFuncA type="table" tableValues="0 0 0 0 0 0 0 0 0 0 0 1 1 1 0 0 0 0 0 0 0"/></feComponentTransfer>
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  -.168736 -.331264 .5 0 .5"/>
+      <feComponentTransfer result="blueChroma"><feFuncA type="table" tableValues="0 0 0 0 0 0 1 1 1 .7 0 0 0 0 0 0 0 0 0 0 0"/></feComponentTransfer>
+      <feComposite in="redChroma" in2="blueChroma" operator="in" result="skinMask"/>
+      <feComposite in="SourceGraphic" in2="skinMask" operator="in" result="colour"/>
+      <feMerge><feMergeNode in="mono"/><feMergeNode in="colour"/></feMerge>
+    </filter></defs>`;
+    document.body.appendChild(defs);
+  }
+
   function renderGallery(el, data, selectedIndex = null) {
     // Primary + secondary live in the right-rail poster tiles, so
     // strip them from the polaroid deck to avoid duplicates. Match
@@ -2439,6 +2462,7 @@
       return;
     }
     if (selectedIndex === null) {
+      ensureGallerySkinToneFilter();
       el.innerHTML = `<div class="pp-photo-thumbs" aria-label="Photo gallery">${imgs.map((img, index) =>
         `<button type="button" class="pp-photo-thumb" aria-label="Open photo ${index + 1}"><img src="${ESC(img.url)}" alt="${ESC(img.kind || 'Photo')}" loading="lazy"></button>`
       ).join('')}</div>`;
