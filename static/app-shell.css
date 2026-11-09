@@ -13133,3 +13133,41 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
   z-index: -1;
 }
 .pp-skel-gallery { position: static; }
+
+/* Compact, clickable alias text below the profile links. */
+.pp-bio-text > .pp-social-grid { margin: 0 0 10px; }
+.pp-bio-text .pp-aliases {
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  align-items: baseline;
+  line-height: 1.7;
+}
+.pp-bio-text .pp-alias-chips { display: block; }
+.pp-bio-text .pp-aliases button.pp-alias-chip {
+  display: inline;
+  min-width: 0;
+  min-height: 0;
+  width: auto;
+  height: auto;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--text);
+  font: inherit;
+  font-style: normal;
+  letter-spacing: inherit;
+  line-height: inherit;
+  white-space: normal;
+}
+.pp-bio-text .pp-aliases button.pp-alias-chip:hover,
+.pp-bio-text .pp-aliases button.pp-alias-chip:focus-visible,
+.pp-bio-text .pp-aliases button.pp-alias-chip.is-selected {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

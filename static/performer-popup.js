@@ -152,7 +152,7 @@
     const chips = opts.map((o) => {
       const cls = 'pp-alias-chip' + (o.value === sel ? ' is-selected' : '');
       return `<button type="button" class="${cls}" data-folder-name="${ESC(o.value)}" title="${ESC(o.label)}">${ESC(o.label)}</button>`;
-    }).join('');
+    }).join(', ');
     return `<div class="pp-aliases pp-aliases--pickable"><div class="pp-alias-chips">${chips}</div></div>`;
   }
   let _popupLoadController = null;
@@ -1661,7 +1661,7 @@
     if (lib.in_library) {
       const searchNames = ppFolderNameOptions(id).map(option => option.value);
       aliasHtml = searchNames.length
-        ? `<div class="pp-aliases"><span>${searchNames.map(alias => `<button type="button" class="pp-alias-chip" data-release-name="${ESC(alias)}" title="Search releases for ${ESC(alias)}">${ESC(alias)}</button>`).join(' ')}</span>${aliasEditBtn}</div>`
+        ? `<div class="pp-aliases"><span>${searchNames.map(alias => `<button type="button" class="pp-alias-chip" data-release-name="${ESC(alias)}" title="Search releases for ${ESC(alias)}">${ESC(alias)}</button>`).join(', ')}</span>${aliasEditBtn}</div>`
         : `<div class="pp-aliases pp-aliases--empty"><span style="opacity:0.5">no aliases yet</span>${aliasEditBtn}</div>`;
     } else if (id.canonical_name || (id.aliases && id.aliases.length)) {
       ppEnsureFolderNameSelection(id);
@@ -1688,6 +1688,7 @@
           ${skullHtml}
         </div>
         <div class="pp-bio-text">
+          ${buildSocialLinksHtml(data)}
           ${aliasHtml}
           <div class="pp-stats" style="position:relative;${lib.in_library ? 'padding-right:44px;min-height:36px' : ''}">
             ${stat('Gender', bio.gender)}
@@ -1706,7 +1707,6 @@
             ${lib.in_library ? '<button type="button" class="pp-alias-edit" data-edit-bio aria-label="Edit bio" title="Edit bio" style="position:absolute;right:8px;bottom:8px;margin:0"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>' : ''}
           </div>
           ${bio.biography ? `<div class="pp-biography">${ESC(bio.biography)}</div>` : ''}
-          ${buildSocialLinksHtml(data)}
           ${ctaHtml}
           ${data.is_stub ? '<div class="pp-stub-note">Limited info — not yet matched in any database.</div>' : ''}
         </div>
