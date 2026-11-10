@@ -2195,6 +2195,9 @@ async def startup():
     from app.core.performer_watchlist import start as start_watchlist
     from app.core.iafd_dataset import start as start_iafd_dataset
     start_iafd_dataset()
+    from app.core import performer_watchlist as watchlist_core
+    watchlist_core._detail_loader = _watchlist_details
+    watchlist_core._library_creator = _watchlist_create_library
     start_watchlist(iafd_search=_iafd_performer_query)
     from runtime_jobs import claim_sources
     source_settings = db.get_settings()
@@ -41063,6 +41066,74 @@ def _fetch_performer_detail_javstash_by_name(name: str) -> dict | None:
     if not hits:
         return None
     return fetch_performer_detail("JAVStash", str(hits[0]["id"]))
+
+
+def _watchlist_details(hit):
+    source=hit['source']
+    if source == 'IAFD':
+        from urllib.parse import urlparse
+        url=hit.get('url','')
+        if urlparse(url).hostname not in ('iafd.com','www.iafd.com'): raise ValueError('Invalid IAFD profile URL')
+        data=_iafd_performer_from_tree(_iafd_fetch_tree(url))
+    elif source == 'Coomer':
+        data={}  # Creator listings provide identity/link data, not verified biography.
+    else:
+        data=fetch_performer_detail(source,hit['id']) or {}
+    flat={**(data.get('extras') or {}),**data}
+    mapping={'birthdate':('birthdate','birth_date','birthday'),'country':('country','nationality'),
+             'biography':('biography','bio','description'),'hair_color':('hair_color','hair_colour')}
+    result={}
+    for field in db.PERFORMER_BIO_FIELDS:
+        value=next((flat[k] for k in mapping.get(field,(field,)) if flat.get(k) is not None),'')
+        if isinstance(value,list):
+            value='; '.join(' '.join(str(v.get(k) or '') for k in ('location','description')).strip() if isinstance(v,dict) else str(v) for v in value)
+        if isinstance(value,(str,int,float)) and str(value).strip(): result[field]=str(value).strip()
+    images=data.get('_image_srcs') or data.get('posters') or data.get('images') or []
+    image=images[0] if images else hit.get('image','')
+    if isinstance(image,dict): image=image.get('url','')
+    if image: result['image_url']=image
+    urls=[v.get('url','') if isinstance(v,dict) else v for v in data.get('urls',[])]
+    bases={'TPDB':'https://theporndb.net/performers/','StashDB':'https://stashdb.org/performers/','FansDB':'https://fansdb.cc/performers/','JAVStash':'https://javstash.org/performers/'}
+    profile=hit.get('url') or bases.get(source,'')+quote(str(hit['id']),safe='')
+    result['urls']='\n'.join(dict.fromkeys([profile]+[u for u in urls if isinstance(u,str)]))
+    result['evidence']='Confirmed '+source+' profile: '+profile
+    return result
+
+
+def _watchlist_create_library(row, destination):
+    from pathlib import Path
+    existing_id=row.get('library_row_id')
+    if existing_id and db.favourite_get(existing_id): return existing_id
+    roots={str(Path(d['path']).resolve()) for d in db.get_directories('performer')}
+    root=Path(destination or '').resolve()
+    if str(root) not in roots or not root.is_dir(): raise ValueError('Choose an available performer library directory')
+    details=json.loads(row['details'])
+    confirmed=json.loads(row['confirmed'] or 'null')
+    if confirmed and confirmed.get('source') in ('TPDB','StashDB','FansDB','JAVStash'):
+        ids={source:confirmed['id'] if confirmed['source']==source else None for source in ('TPDB','StashDB','FansDB','JAVStash')}
+        existing=db.favourite_find_performer_folder_by_crosswalk(ids['TPDB'],ids['StashDB'],ids['FansDB'],ids['JAVStash'])
+        if existing:
+            with db.get_conn() as c:
+                c.execute('UPDATE performer_watchlist SET library_row_id=? WHERE id=?',(existing['id'],row['id']));c.commit()
+            return existing['id']
+    label=_sanitize_fs_component(row['name'])
+    if not label or label in ('.','..'): raise ValueError('Invalid performer folder name')
+    parent=root/performer_letter_bucket(label) if _performer_dir_is_bucketed(root) else root
+    folder=parent/label
+    if folder.exists(): raise ValueError('A folder with this name already exists; link the existing library entry first')
+    data={**details,'name':row['name'],'aliases':json.loads(row['aliases']),'bio':details.get('biography','')}
+    folder=create_tvshow_folder(label,parent,build_performer_tvshow_nfo(data),details.get('image_url'),poster_aspect_2x3=True)
+    rid=_favourites_index_created_folder('performer',folder,root,create_name=label,initial_aliases=json.loads(row['aliases']))
+    if not rid: raise ValueError('Folder created but indexing failed; inspect the library before retrying')
+    confirmed=json.loads(row['confirmed'] or 'null')
+    if confirmed and confirmed.get('source') in ('TPDB','StashDB','FansDB','JAVStash'):
+        prefix={'TPDB':'tpdb','StashDB':'stashdb','FansDB':'fansdb','JAVStash':'javstash'}[confirmed['source']]
+        db.favourite_update_matches(rid,**{f'match_{prefix}_id':confirmed['id'],f'match_{prefix}_name':confirmed['name']})
+    db.performer_bio_set_many(rid,{k:v for k,v in details.items() if k in db.PERFORMER_BIO_FIELDS})
+    with db.get_conn() as c:
+        c.execute('UPDATE performer_watchlist SET library_row_id=? WHERE id=?',(rid,row['id']));c.commit()
+    _favourites_warm.invalidate()
+    return rid
 
 
 @app.post("/api/metadata/create")

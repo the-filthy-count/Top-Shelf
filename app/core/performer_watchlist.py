@@ -31,6 +31,9 @@ def install(conn):
         checking INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL DEFAULT 1)''')
     if 'details' not in {row[1] for row in conn.execute('PRAGMA table_info(performer_watchlist)')}:
         conn.execute("ALTER TABLE performer_watchlist ADD COLUMN details TEXT NOT NULL DEFAULT '{}'")
+    for column, definition in [('submissions', "TEXT NOT NULL DEFAULT '{}'"), ('library_row_id', 'INTEGER'), ('origin_sources', "TEXT NOT NULL DEFAULT '[]'")]:
+        if column not in {row[1] for row in conn.execute('PRAGMA table_info(performer_watchlist)')}:
+            conn.execute(f'ALTER TABLE performer_watchlist ADD COLUMN {column} {definition}')
     conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS watchlist_name ON performer_watchlist(lower(name))')
 
 def validate(payload):
@@ -76,13 +79,13 @@ def rows():
                 if entity[field] and str(entity[field]).strip():
                     library.add((source, str(entity[field]).strip()))
     for r in result:
-        for k in ('aliases','candidates','checks','confirmed','details'): r[k] = json.loads(r[k]) if r[k] else None
+        for k in ('aliases','candidates','checks','confirmed','details','origin_sources'): r[k] = json.loads(r[k]) if r[k] else None
         r['candidates'] = [h for h in r['candidates'] if h.get('source') in (*SOURCES, *EXTERNAL_SOURCES) and matches_names(h, [r['name']] + (r['aliases'] or []))]
         for hit in r['candidates']:
             hit['in_library'] = (hit.get('source'), str(hit.get('id', '')).strip()) in library
         r['checks'] = {k: v for k, v in r['checks'].items() if k in (*SOURCES, *EXTERNAL_SOURCES)}
         confirmed = r.get('confirmed') or {}
-        r['in_library'] = (confirmed.get('source'), str(confirmed.get('id', '')).strip()) in library
+        r['in_library'] = bool(r.get('library_row_id')) or (confirmed.get('source'), str(confirmed.get('id', '')).strip()) in library
     return result
 
 def search_source(source, names, settings):
@@ -216,3 +219,85 @@ def validate_details(details):
                 if url.strip() and (urlparse(url.strip()).scheme not in ('http','https') or not urlparse(url.strip()).netloc):
                     raise ValueError('Image and profile links must be HTTP or HTTPS URLs')
     return {key: value.strip() for key, value in details.items()}
+
+_detail_loader = None
+_library_creator = None
+_submission_lock = threading.Lock()
+
+def hydrate_details(identity):
+    with db.get_conn() as c:
+        row = c.execute('SELECT * FROM performer_watchlist WHERE id=?',(identity,)).fetchone()
+        if not row: raise ValueError('Entry not found')
+        row = dict(row)
+    hit = json.loads(row['confirmed'] or 'null')
+    if not hit: return json.loads(row['details'])
+    data = _detail_loader(hit) if _detail_loader else {}
+    data = data or {}
+    details = {}
+    for key, value in data.items():
+        try: details.update(validate_details({key:value}))
+        except ValueError: continue
+    with db.get_conn() as c:
+        current = c.execute('SELECT details,confirmed FROM performer_watchlist WHERE id=?',(identity,)).fetchone()
+        if not current or current['confirmed'] != row['confirmed']: raise ValueError('Confirmed match changed; reopen the editor')
+        details.update(json.loads(current['details']))  # Explicit edits, including blanks, win.
+        origins=set(json.loads(row['origin_sources'])) | {hit['source']}
+        c.execute('UPDATE performer_watchlist SET details=?,origin_sources=? WHERE id=?',(json.dumps(details),json.dumps(sorted(origins)),identity))
+        c.commit()
+    return details
+
+def submit_draft(identity, source, destination):
+    if source not in ('FansDB','JAVStash'): raise ValueError('Submission is not enabled for this database')
+    if not _library_creator: raise ValueError('Library creation is not available')
+    with _submission_lock:
+        with db.get_conn() as c:
+            raw=c.execute('SELECT * FROM performer_watchlist WHERE id=?',(identity,)).fetchone()
+            if not raw: raise ValueError('Entry not found')
+            row=dict(raw)
+        origins=set(json.loads(row['origin_sources']))
+        confirmed=json.loads(row['confirmed'] or 'null')
+        if confirmed: origins.add(confirmed.get('source'))
+        if source in origins: raise ValueError('Cannot submit imported details back to their source database')
+        details=validate_details(json.loads(row['details']))
+        if not all(details.get(k) for k in ('image_url','gender','evidence')) or not (details.get('urls') or row['source_url']):
+            raise ValueError('Add a photo URL, gender, source link and evidence before submitting')
+        key, endpoint=SOURCES[source]
+        token=db.get_settings().get(key)
+        if not token: raise ValueError('Configure the database API key first')
+        receipts=json.loads(row['submissions'])
+        receipt=receipts.get(source)
+        if receipt and receipt.get('state')=='sending':
+            raise ValueError('Previous submission outcome is unknown. Check your drafts on the database before retrying.')
+        # Create/index locally first; this callback is idempotent for this watchlist entry.
+        library_id=_library_creator(row,destination)
+        if receipt and receipt.get('id'): return {'library_row_id':library_id,**receipt}
+        data={'name':row['name'],'aliases':', '.join(json.loads(row['aliases'])),
+              'urls':list(dict.fromkeys(filter(None,[row['source_url']]+details.get('urls','').splitlines()))),
+              'disambiguation':details.get('biography','')}
+        for field in ('gender','ethnicity','country','eye_color','hair_color','height','measurements','tattoos','piercings'):
+            if details.get(field): data[field]=details[field]
+        for old,new in (('birthdate','birthdate'),('death_date','deathdate')):
+            if details.get(old): data[new]=details[old]
+        for field in ('career_start_year','career_end_year'):
+            if details.get(field): data[field]=int(details[field])
+        # Include evidence and the photo link without inventing an uploaded image ID.
+        data['urls']=list(dict.fromkeys(data['urls']+[details['image_url']]))
+        data['disambiguation']='\n\n'.join(filter(None,[data['disambiguation'],details['evidence']]))
+        receipts[source]={'state':'sending'}
+        def persist():
+            with db.get_conn() as c:
+                c.execute('UPDATE performer_watchlist SET submissions=? WHERE id=?',(json.dumps(receipts),identity));c.commit()
+        persist()
+        response=requests.post(endpoint,headers={'ApiKey':token},json={
+            'query':'mutation($input: PerformerDraftInput!) { submitPerformerDraft(input: $input) { id } }',
+            'variables':{'input':data}},timeout=30)
+        response.raise_for_status()
+        body=response.json()
+        if body.get('errors'):
+            receipts.pop(source,None);persist()
+            raise ValueError('Database rejected submission: '+str(body['errors'][0].get('message','Unknown error')))
+        draft_id=((body.get('data') or {}).get('submitPerformerDraft') or {}).get('id')
+        if not draft_id: raise ValueError('Database did not return a draft ID; check the destination before retrying')
+        receipts[source]={'state':'draft','id':draft_id}
+        persist()
+        return {'library_row_id':library_id,**receipts[source]}

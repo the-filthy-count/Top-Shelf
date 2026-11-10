@@ -93,3 +93,47 @@ class WatchlistAPITests(unittest.TestCase):
             with self.assertRaises(HTTPException):
                 api.edit(identity,{'name':'Different','details':details})
             self.assertEqual(api.listing()['items'][0]['name'],'Bella')
+
+    def test_external_confirmation_and_detail_import_preserves_edits(self):
+        identity=api.add({'name':'Bella'})['id']
+        hit={'source':'IAFD','id':'iafd-id','name':'Bella','url':'https://www.iafd.com/person.rme/perfid=bella','external_only':True}
+        self.conn.execute('UPDATE performer_watchlist SET candidates=?,details=? WHERE id=?',(json.dumps([hit]),json.dumps({'country':'Manual country'}),identity));self.conn.commit()
+        api.confirm(identity,hit)
+        with patch.object(watch,'_detail_loader',return_value={'country':'Source country','hair_color':'Brown'}):
+            self.assertEqual(api.details(identity)['details'],{'country':'Manual country','hair_color':'Brown'})
+        self.assertEqual(api.listing()['items'][0]['origin_sources'],['IAFD'])
+
+    def test_submission_blocks_origin_before_library_or_network(self):
+        identity=api.add({'name':'Bella'})['id']
+        self.conn.execute('UPDATE performer_watchlist SET origin_sources=? WHERE id=?',(json.dumps(['FansDB']),identity));self.conn.commit()
+        with patch.object(watch,'_library_creator') as create,patch.object(watch.requests,'post') as post:
+            with self.assertRaisesRegex(ValueError,'source database'): watch.submit_draft(identity,'FansDB','/library')
+            create.assert_not_called();post.assert_not_called()
+        for source in ('TPDB','StashDB','Coomer','IAFD'):
+            with self.assertRaises(ValueError): watch.submit_draft(identity,source,'/library')
+
+    def test_submission_receipt_prevents_duplicate_drafts(self):
+        identity=api.add({'name':'Bella','source_url':'https://example.com/profile'})['id']
+        details={'image_url':'https://example.com/photo.jpg','gender':'Female','evidence':'Verified profile'}
+        self.conn.execute('UPDATE performer_watchlist SET details=? WHERE id=?',(json.dumps(details),identity));self.conn.commit()
+        with patch.object(watch,'_library_creator',return_value=5),patch.object(watch.db,'get_settings',return_value={'api_key_fansdb':'test'}),patch.object(watch.requests,'post') as post:
+            post.return_value.json.return_value={'data':{'submitPerformerDraft':{'id':'draft-1'}}}
+            first=watch.submit_draft(identity,'FansDB','/library')
+            second=watch.submit_draft(identity,'FansDB','/library')
+            self.assertEqual(first,second);self.assertEqual(first['library_row_id'],5)
+            self.assertEqual(post.call_count,1)
+
+    def test_incomplete_submission_does_not_create_library_entry(self):
+        identity=api.add({'name':'Bella'})['id']
+        with patch.object(watch,'_library_creator') as create:
+            with self.assertRaises(ValueError): watch.submit_draft(identity,'FansDB','/library')
+            create.assert_not_called()
+
+    def test_uncertain_submission_is_not_sent_again(self):
+        identity=api.add({'name':'Bella','source_url':'https://example.com/profile'})['id']
+        details={'image_url':'https://example.com/photo.jpg','gender':'Female','evidence':'Verified profile'}
+        self.conn.execute('UPDATE performer_watchlist SET details=? WHERE id=?',(json.dumps(details),identity));self.conn.commit()
+        with patch.object(watch,'_library_creator',return_value=5),patch.object(watch.db,'get_settings',return_value={'api_key_fansdb':'test'}),patch.object(watch.requests,'post',side_effect=TimeoutError) as post:
+            with self.assertRaises(TimeoutError): watch.submit_draft(identity,'FansDB','/library')
+            with self.assertRaisesRegex(ValueError,'unknown'): watch.submit_draft(identity,'FansDB','/library')
+            self.assertEqual(post.call_count,1)

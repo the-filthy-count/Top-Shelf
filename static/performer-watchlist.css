@@ -129,3 +129,13 @@
 .watch-editor footer {display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;bottom:-24px;padding:12px 0;background:var(--bg);}
 .watch-editor [role=status] {color:var(--amber);font-size:var(--text-small);}
 @media(max-width:600px){.watch-editor-fields{grid-template-columns:1fr}.watch-editor footer{bottom:-14px}}
+
+.watch-identity .watch-name {flex:1;}
+.watch-name-heading {flex-wrap:nowrap;}
+.watch-name-heading .watch-library-logo {margin-left:auto;margin-right:auto;}
+
+.watch-submit-actions,.watch-submit-actions > span {display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.watch-submit-actions [hidden] {display:none;}
+.watch-submit-actions img {width:70px;height:22px;object-fit:contain;}
+.watch-submit-actions button:disabled img {filter:grayscale(1);opacity:.4;}
+.watch-editor footer {flex-wrap:wrap;}

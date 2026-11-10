@@ -117,10 +117,46 @@
       } catch(e){form.querySelector('[role=status]').textContent=e.message;button.disabled=false;}
     };
     document.body.appendChild(dialog);dialog.showModal();
+    const form=dialog.querySelector('form');
+    const statusEl=form.querySelector('[role=status]');
+    const actions=document.createElement('div');actions.className='watch-submit-actions';
+    actions.innerHTML=`<select data-destination aria-label="Library destination"><option value="">Choose library directory…</option></select><span data-submit-options hidden><button type="button" disabled title="StashDB submission disabled" aria-label="StashDB submission disabled"><img src="/static/logos/stashdb.webp" alt="StashDB"></button>${['FansDB','JAVStash'].filter(source=>!new Set([...(row.origin_sources||[]),row.confirmed?.source]).has(source)).map(source=>`<button type="button" data-submit-db="${source}" title="Submit draft to ${source} and add to library" aria-label="Submit draft to ${source} and add to library"><img src="/static/logos/${sourceLogos[source]}.webp" alt="${source}"></button>`).join('')}</span>`;
+    form.querySelector('footer').appendChild(actions);
+    const eligible=()=>['image_url','gender','evidence'].every(key=>form.elements[key].value.trim()) && !!(form.elements.urls.value.trim()||form.elements.source_url.value.trim());
+    const updateOptions=()=>{actions.querySelector('[data-submit-options]').hidden=!eligible();};
+    form.addEventListener('input',updateOptions);updateOptions();
+    fetch('/api/metadata/dirs?kind=performer').then(r=>{if(!r.ok)throw Error('Could not load library directories');return r.json();}).then(data=>{
+      actions.querySelector('select').innerHTML='<option value="">Choose library directory…</option>'+(data.dirs||[]).map(d=>`<option value="${esc(d.path)}">${esc(d.label)}</option>`).join('');
+    }).catch(e=>statusEl.textContent=e.message);
+    actions.addEventListener('click',async event=>{
+      const button=event.target.closest('[data-submit-db]');if(!button)return;
+      if(!form.reportValidity())return;
+      const destination=actions.querySelector('select').value;
+      if(!destination){statusEl.textContent='Choose a library directory first.';return;}
+      const values=Object.fromEntries(new FormData(form));
+      const details=Object.fromEntries(fields.map(([key])=>[key,values[key]]));
+      const buttons=Array.from(form.querySelectorAll('button'));buttons.forEach(b=>b.disabled=true);
+      try {
+        await api('/'+row.id,'PUT',{name:values.name,aliases:values.aliases.split(',').map(v=>v.trim()).filter(Boolean),source_url:values.source_url,notes:values.notes,details});
+        const result=await api('/'+row.id+'/submit','POST',{source:button.dataset.submitDb,dest_dir:destination});
+        statusEl.textContent=`Added to library. ${button.dataset.submitDb} draft ${result.id} submitted for review.`;
+        await load();
+      } catch(e){statusEl.textContent=e.message;}
+      finally {buttons.forEach(b=>b.disabled=false);actions.querySelector('button:not([data-submit-db])').disabled=true;}
+    });
+    if(row.confirmed){
+      statusEl.textContent='Loading confirmed profile…';
+      const edited=new Set();form.addEventListener('input',event=>edited.add(event.target.name));
+      api('/'+row.id+'/details','POST').then(result=>{
+        if(!dialog.isConnected)return;
+        for(const [key,value] of Object.entries(result.details||{}))if(form.elements[key]&&!edited.has(key))form.elements[key].value=value;
+        statusEl.textContent='';updateOptions();
+      }).catch(e=>{statusEl.textContent='Could not import profile details: '+e.message;});
+    }
   }
   function review(row) {
     const dialog=document.createElement('dialog');dialog.className='watch-review';
-    dialog.innerHTML=`<header><h2>Matches for ${esc(row.name)}</h2><button data-close aria-label="Close">×</button></header><p>Review the profile before confirming. Shared aliases can belong to different people.</p><div class="watch-review-filters"><div class="watch-source-filters" role="group" aria-label="Filter by database"><button type="button" data-source="" aria-pressed="true">All</button>${Object.entries(sourceLogos).map(([source,logo])=>`<button type="button" data-source="${source}" aria-pressed="false" title="${source}" aria-label="${source}" ${row.candidates.some(hit=>hit.source===source)?'':'disabled'}><img src="/static/logos/${logo}.webp" alt="${source}"></button>`).join('')}</div><div class="watch-review-search"><input type="search" data-match-query placeholder="Filter names or aliases…" aria-label="Filter names or aliases"><button type="button" data-photo-filter aria-pressed="false" title="Only candidates with photos" aria-label="Only candidates with photos"><i class="fa-solid fa-image" aria-hidden="true"></i></button><button type="button" data-reset-filters title="Reset filters" aria-label="Reset filters"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></button></div><span class="watch-match-count" aria-live="polite"></span></div><div class="watch-candidates">${row.candidates.map((hit,i)=>`<article data-candidate="${i}"><img src="${esc(hit.image || '/static/img/profile.webp')}" alt="" loading="lazy" onerror="this.onerror=null;this.src='/static/img/profile.webp'"><div><strong>${esc(hit.name)}</strong>${hit.in_library ? libraryBadge : ''}<small>${esc(Array.isArray(hit.aliases)?hit.aliases.join(', '):hit.aliases)}</small><button class="watch-profile-button" data-open="${i}" title="View ${esc(hit.source)} profile" aria-label="View ${esc(hit.source)} profile"><img src="/static/logos/${sourceLogos[hit.source] || 'stashdb'}.webp" alt="${esc(hit.source)}"></button> ${hit.external_only ? '' : `<button data-confirm="${i}" title="Confirm performer" aria-label="Confirm performer"><i class="fa-solid fa-check" aria-hidden="true"></i></button>`}</div></article>`).join('')}</div><p class="watch-no-matches" hidden>No candidates match these filters.</p><p role="status"></p>`;
+    dialog.innerHTML=`<header><h2>Matches for ${esc(row.name)}</h2><button data-close aria-label="Close">×</button></header><p>Review the profile before confirming. Shared aliases can belong to different people.</p><div class="watch-review-filters"><div class="watch-source-filters" role="group" aria-label="Filter by database"><button type="button" data-source="" aria-pressed="true">All</button>${Object.entries(sourceLogos).map(([source,logo])=>`<button type="button" data-source="${source}" aria-pressed="false" title="${source}" aria-label="${source}" ${row.candidates.some(hit=>hit.source===source)?'':'disabled'}><img src="/static/logos/${logo}.webp" alt="${source}"></button>`).join('')}</div><div class="watch-review-search"><input type="search" data-match-query placeholder="Filter names or aliases…" aria-label="Filter names or aliases"><button type="button" data-photo-filter aria-pressed="false" title="Only candidates with photos" aria-label="Only candidates with photos"><i class="fa-solid fa-image" aria-hidden="true"></i></button><button type="button" data-reset-filters title="Reset filters" aria-label="Reset filters"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></button></div><span class="watch-match-count" aria-live="polite"></span></div><div class="watch-candidates">${row.candidates.map((hit,i)=>`<article data-candidate="${i}"><img src="${esc(hit.image || '/static/img/profile.webp')}" alt="" loading="lazy" onerror="this.onerror=null;this.src='/static/img/profile.webp'"><div><strong>${esc(hit.name)}</strong>${hit.in_library ? libraryBadge : ''}<small>${esc(Array.isArray(hit.aliases)?hit.aliases.join(', '):hit.aliases)}</small><button class="watch-profile-button" data-open="${i}" title="View ${esc(hit.source)} profile" aria-label="View ${esc(hit.source)} profile"><img src="/static/logos/${sourceLogos[hit.source] || 'stashdb'}.webp" alt="${esc(hit.source)}"></button> ${`<button data-confirm="${i}" title="Confirm performer" aria-label="Confirm performer"><i class="fa-solid fa-check" aria-hidden="true"></i></button>`}</div></article>`).join('')}</div><p class="watch-no-matches" hidden>No candidates match these filters.</p><p role="status"></p>`;
     let selectedSource = '', photosOnly = false;
     const search = dialog.querySelector('[data-match-query]');
     const applyFilters = () => {
@@ -169,7 +205,7 @@
         const row=items.find(r=>r.id===+button.dataset.id);if(!row)return;
         const action=button.dataset.action;
         if(action==='edit')return editDetails(row);
-        if(action==='profile')return profile(row.confirmed);
+        if(action==='profile')return row.confirmed?.external_only ? editDetails(row) : profile(row.confirmed);
         if(action==='review')return review(row);
         if(action==='delete'&&!confirm(`Remove ${row.name} from the watchlist? This does not delete library files.`))return;
         button.disabled=true;
