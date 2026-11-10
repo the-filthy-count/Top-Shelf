@@ -7168,10 +7168,8 @@
           <!-- sprocket holes painted via ::before/::after on the .film-strip--suggestions class block in CSS -->
         </div>
 
-        <!-- Candidate cards — fixed 3-up grid so the row always matches
-             the top-3 search budget. Tracks share the body evenly; if
-             fewer than 3 candidates land they sit left-aligned. -->
-        <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:16px">${cands}</div>
+        <!-- Center complete and partial rows within the review area. -->
+        <div class="suggestion-candidates">${cands}</div>
       </div>`;
   }
   function _scenePublicUrl(source_db, source_id) {

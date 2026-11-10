@@ -3686,6 +3686,29 @@
     #qSearchOverlay .qs-candidate {flex-wrap:wrap}
     #qSearchOverlay .qs-candidate > img:first-child {max-width:100%}
   }
+
+  /* Full-screen review surface, with a centered reading area. */
+  #suggestionsOverlay .suggestions-header {
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    padding-inline: max(24px, calc((100% - 1600px) / 2)) !important;
+  }
+  #suggestionsBody { scrollbar-gutter: stable both-edges; }
+  #suggestionsBody .suggestion-file { max-width: 1600px; margin-inline: auto; }
+  .suggestion-candidates {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 16px;
+  }
+  .suggestion-candidates > * { flex: 0 1 calc((100% - 32px) / 3); min-width: 0; }
+  @media (max-width: 900px) {
+    .suggestion-candidates > * { flex-basis: calc((100% - 16px) / 2); }
+  }
+  @media (max-width: 600px) {
+    .suggestion-candidates > * { flex-basis: 100%; }
+  }
+
 </style>
 <link rel="stylesheet" href="/static/mobile.css?v=20260930-desktop-scale">
 <link rel="stylesheet" href="/static/design-system.css?v=20261011-toggle-layer-fix">
@@ -4301,11 +4324,11 @@
      filmstrip alongside its top 3 candidate matches so the user can
      visually compare frames vs scene posters. Prev/Next navigates
      through the unmatched-with-suggestions list one file at a time. -->
-<div id="suggestionsOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);z-index:9998;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeSuggestionsModal()">
-  <div class="panel suggestions-shell" style="width:min(1400px,98vw);max-height:94vh;display:flex;flex-direction:column;background:linear-gradient(165deg, rgba(var(--panel-hi-rgb),0.95) 0%, rgba(var(--panel-lo-rgb),0.96) 100%);border:1px solid rgba(var(--brand-accent-rgb), 0.35);border-radius:18px;box-shadow:0 40px 100px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 60px rgba(var(--brand-purple-rgb),0.18);overflow:hidden;position:relative">
+<div id="suggestionsOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);z-index:9998;align-items:center;justify-content:center;padding:0" onclick="if(event.target===this)closeSuggestionsModal()">
+  <div class="panel suggestions-shell" style="width:100%;height:100%;max-width:none;max-height:none;margin:0;box-sizing:border-box;display:flex;flex-direction:column;background:linear-gradient(165deg, rgba(var(--panel-hi-rgb),0.95) 0%, rgba(var(--panel-lo-rgb),0.96) 100%);border:1px solid rgba(var(--brand-accent-rgb), 0.35);border-radius:0;box-shadow:0 40px 100px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.06), 0 0 60px rgba(var(--brand-purple-rgb),0.18);overflow:hidden;position:relative">
     <!-- Decorative top-edge glow -->
     <div aria-hidden="true" style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg, transparent 0%, rgba(var(--brand-accent-rgb), 0.55) 25%, rgba(var(--brand-purple-rgb),0.65) 50%, rgba(var(--brand-accent-rgb), 0.55) 75%, transparent 100%);pointer-events:none"></div>
-    <div style="display:flex;align-items:center;gap:14px;padding:18px 24px;border-bottom:1px solid rgba(var(--brand-accent-rgb), 0.20);background:linear-gradient(180deg, rgba(var(--brand-accent-rgb), 0.06) 0%, rgba(var(--brand-purple-rgb),0) 100%)">
+    <div class="suggestions-header" style="display:flex;align-items:center;gap:14px;padding:18px 24px;border-bottom:1px solid rgba(var(--brand-accent-rgb), 0.20);background:linear-gradient(180deg, rgba(var(--brand-accent-rgb), 0.06) 0%, rgba(var(--brand-purple-rgb),0) 100%)">
       <div style="width:42px;height:42px;border-radius:11px;background:linear-gradient(145deg, rgba(var(--brand-accent-rgb), 0.18), rgba(var(--brand-purple-rgb),0.12));border:1px solid rgba(var(--brand-accent-rgb), 0.30);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 12px rgba(var(--brand-accent-rgb), 0.20)">
         <i class="fa-solid fa-brain" style="font-size:18px"></i>
       </div>
@@ -4327,10 +4350,6 @@
     </div>
     <div id="suggestionsBody" style="flex:1;min-height:0;overflow-y:auto;padding:22px 24px"></div>
   </div>
-  <!-- Prev / next chevrons live OUTSIDE the modal panel so they sit at
-       the viewport edges and never overlap the candidate cards. -->
-  <button type="button" onclick="suggestionsStep(-1)" title="Prev (←)" aria-label="Previous file" style="position:absolute;left:24px;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;background:rgba(0,0,0,0.55);border:1px solid rgba(var(--brand-purple-rgb),0.32);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:var(--text-body);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:background 0.15s, border-color 0.15s, transform 0.15s;z-index:2" onmouseover="this.style.background='rgba(var(--brand-purple-rgb),0.22)';this.style.borderColor='rgba(var(--brand-accent-rgb), 0.55)';this.style.transform='translateY(-50%) scale(1.06)'" onmouseout="this.style.background='rgba(0,0,0,0.55)';this.style.borderColor='rgba(var(--brand-purple-rgb),0.32)';this.style.transform='translateY(-50%)'"><i class="fa-solid fa-chevron-left"></i></button>
-  <button type="button" onclick="suggestionsStep(1)" title="Next (→)" aria-label="Next file" style="position:absolute;right:24px;top:50%;transform:translateY(-50%);width:48px;height:48px;border-radius:50%;background:rgba(0,0,0,0.55);border:1px solid rgba(var(--brand-purple-rgb),0.32);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:var(--text-body);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:background 0.15s, border-color 0.15s, transform 0.15s;z-index:2" onmouseover="this.style.background='rgba(var(--brand-purple-rgb),0.22)';this.style.borderColor='rgba(var(--brand-accent-rgb), 0.55)';this.style.transform='translateY(-50%) scale(1.06)'" onmouseout="this.style.background='rgba(0,0,0,0.55)';this.style.borderColor='rgba(var(--brand-purple-rgb),0.32)';this.style.transform='translateY(-50%)'"><i class="fa-solid fa-chevron-right"></i></button>
 </div>
 
 <script defer src="/static/activity-banner.js?v=20261014-navigation"></script>
