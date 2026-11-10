@@ -3357,7 +3357,16 @@ if (!customElements.get('ts-custom-link')) {
       link.className='pp-profile-pill '+(this.url?'is-linked':'is-missing');
       link.title=this.url?'Open custom link':'Add custom link';link.setAttribute('aria-label',link.title);
       link.innerHTML='<i class="fa-solid fa-link" aria-hidden="true"></i>';
-      if(this.url){link.href=this.url;link.target='_blank';link.rel='noopener noreferrer';}
+      if(this.url){
+        link.href=this.url;link.target='_blank';link.rel='noopener noreferrer';
+        const favicon=document.createElement('img');
+        favicon.className='custom-link-favicon';favicon.alt='';favicon.referrerPolicy='no-referrer';
+        favicon.loading='lazy';favicon.hidden=true;
+        favicon.onload=()=>{if(favicon.naturalWidth){link.querySelector('i')?.remove();favicon.hidden=false;}};
+        favicon.onerror=()=>favicon.remove();
+        favicon.src=new URL('/favicon.ico',this.url).href;
+        link.appendChild(favicon);
+      }
       else {link.type='button';link.onclick=event=>{event.stopPropagation();this.edit();};}
       wrapper.appendChild(link);
       if(this.url){const edit=document.createElement('button');edit.type='button';edit.className='custom-link-edit';edit.title='Edit custom link';edit.setAttribute('aria-label',edit.title);edit.innerHTML='<i class="fa-solid fa-pen" aria-hidden="true"></i>';edit.onclick=event=>{event.stopPropagation();this.edit();};wrapper.appendChild(edit);}

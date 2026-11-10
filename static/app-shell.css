@@ -13209,3 +13209,6 @@ ts-custom-link {display:inline-flex;align-items:center;}
 .custom-link-dialog button {padding:8px 12px;}
 .custom-link-dialog [role=status] {color:var(--amber);}
 @media(hover:none){.custom-link-edit{opacity:1;pointer-events:auto;}}
+
+.custom-link-favicon {width:24px;height:24px;object-fit:contain;}
+.custom-link-favicon[hidden] {display:none;}
