@@ -137,3 +137,33 @@ class WatchlistAPITests(unittest.TestCase):
             with self.assertRaises(TimeoutError): watch.submit_draft(identity,'FansDB','/library')
             with self.assertRaisesRegex(ValueError,'unknown'): watch.submit_draft(identity,'FansDB','/library')
             self.assertEqual(post.call_count,1)
+
+    def test_supplementary_link_keeps_main_database_searches_active(self):
+        identity=api.add({'name':'Bella'})['id']
+        coomer={'source':'Coomer','id':'creator','name':'Bella','url':'https://site1.coomer.com.co/onlyfans/user/creator','external_only':True}
+        main={'source':'FansDB','id':'main-id','name':'Bella'}
+        self.conn.execute('UPDATE performer_watchlist SET candidates=?,next_check=123 WHERE id=?',(json.dumps([coomer,main]),identity));self.conn.commit()
+        api.confirm(identity,coomer)
+        row=api.listing()['items'][0]
+        self.assertIsNone(row['confirmed'])
+        self.assertEqual(row['linked_profiles']['Coomer'],coomer)
+        api.check_all()
+        self.assertEqual(api.listing()['items'][0]['next_check'],0)
+        api.confirm(identity,main)
+        self.assertEqual(api.listing()['items'][0]['confirmed'],main)
+        self.assertEqual(set(api.listing()['items'][0]['linked_profiles']),{'Coomer','FansDB'})
+        api.confirm(identity,coomer)
+        self.assertEqual(api.listing()['items'][0]['confirmed'],main)
+
+    def test_old_external_confirmation_migrates_without_losing_details(self):
+        identity=api.add({'name':'Bella'})['id']
+        hit={'source':'IAFD','id':'123','name':'Bella','external_only':True}
+        self.conn.execute('UPDATE performer_watchlist SET confirmed=?,details=?,next_check=999 WHERE id=?',(json.dumps(hit),json.dumps({'country':'US'}),identity));self.conn.commit()
+        watch.install(self.conn)
+        row=api.listing()['items'][0]
+        self.assertIsNone(row['confirmed'])
+        self.assertEqual(row['linked_profiles']['IAFD'],hit)
+        self.assertEqual(row['details'],{'country':'US'})
+        self.assertEqual(row['next_check'],0)
+        watch.install(self.conn)
+        self.assertEqual(api.listing()['items'][0]['linked_profiles'],row['linked_profiles'])

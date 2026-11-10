@@ -31,9 +31,15 @@ def install(conn):
         checking INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL DEFAULT 1)''')
     if 'details' not in {row[1] for row in conn.execute('PRAGMA table_info(performer_watchlist)')}:
         conn.execute("ALTER TABLE performer_watchlist ADD COLUMN details TEXT NOT NULL DEFAULT '{}'")
-    for column, definition in [('submissions', "TEXT NOT NULL DEFAULT '{}'"), ('library_row_id', 'INTEGER'), ('origin_sources', "TEXT NOT NULL DEFAULT '[]'")]:
+    for column, definition in [('submissions', "TEXT NOT NULL DEFAULT '{}'"), ('library_row_id', 'INTEGER'), ('origin_sources', "TEXT NOT NULL DEFAULT '[]'"), ('linked_profiles', "TEXT NOT NULL DEFAULT '{}'")]:
         if column not in {row[1] for row in conn.execute('PRAGMA table_info(performer_watchlist)')}:
             conn.execute(f'ALTER TABLE performer_watchlist ADD COLUMN {column} {definition}')
+    # Older versions treated supplementary profiles as final identities.
+    for row in conn.execute('SELECT id,confirmed,linked_profiles FROM performer_watchlist WHERE confirmed IS NOT NULL').fetchall():
+        hit=json.loads(row[1])
+        if hit.get('source') in EXTERNAL_SOURCES:
+            links=json.loads(row[2]);links[hit['source']]=hit
+            conn.execute('UPDATE performer_watchlist SET linked_profiles=?,confirmed=NULL,checking=0,next_check=0,revision=revision+1 WHERE id=?',(json.dumps(links),row[0]))
     conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS watchlist_name ON performer_watchlist(lower(name))')
 
 def validate(payload):
@@ -79,7 +85,7 @@ def rows():
                 if entity[field] and str(entity[field]).strip():
                     library.add((source, str(entity[field]).strip()))
     for r in result:
-        for k in ('aliases','candidates','checks','confirmed','details','origin_sources'): r[k] = json.loads(r[k]) if r[k] else None
+        for k in ('aliases','candidates','checks','confirmed','details','origin_sources','linked_profiles'): r[k] = json.loads(r[k]) if r[k] else None
         r['candidates'] = [h for h in r['candidates'] if h.get('source') in (*SOURCES, *EXTERNAL_SOURCES) and matches_names(h, [r['name']] + (r['aliases'] or []))]
         for hit in r['candidates']:
             hit['in_library'] = (hit.get('source'), str(hit.get('id', '')).strip()) in library
@@ -230,18 +236,21 @@ def hydrate_details(identity):
         if not row: raise ValueError('Entry not found')
         row = dict(row)
     hit = json.loads(row['confirmed'] or 'null')
-    if not hit: return json.loads(row['details'])
-    data = _detail_loader(hit) if _detail_loader else {}
-    data = data or {}
+    hits=list(json.loads(row['linked_profiles']).values())
+    if hit: hits=[h for h in hits if h['source'] != hit['source']]+[hit]
+    if not hits: return json.loads(row['details'])
+    data={}
+    for profile in hits:
+        if _detail_loader: data.update(_detail_loader(profile) or {})
     details = {}
     for key, value in data.items():
         try: details.update(validate_details({key:value}))
         except ValueError: continue
     with db.get_conn() as c:
-        current = c.execute('SELECT details,confirmed FROM performer_watchlist WHERE id=?',(identity,)).fetchone()
-        if not current or current['confirmed'] != row['confirmed']: raise ValueError('Confirmed match changed; reopen the editor')
+        current = c.execute('SELECT details,confirmed,linked_profiles FROM performer_watchlist WHERE id=?',(identity,)).fetchone()
+        if not current or (current['confirmed'] != row['confirmed'] or current['linked_profiles'] != row['linked_profiles']): raise ValueError('Confirmed match changed; reopen the editor')
         details.update(json.loads(current['details']))  # Explicit edits, including blanks, win.
-        origins=set(json.loads(row['origin_sources'])) | {hit['source']}
+        origins=set(json.loads(row['origin_sources'])) | {h['source'] for h in hits}
         c.execute('UPDATE performer_watchlist SET details=?,origin_sources=? WHERE id=?',(json.dumps(details),json.dumps(sorted(origins)),identity))
         c.commit()
     return details

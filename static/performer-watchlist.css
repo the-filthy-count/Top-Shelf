@@ -139,3 +139,6 @@
 .watch-submit-actions img {width:70px;height:22px;object-fit:contain;}
 .watch-submit-actions button:disabled img {filter:grayscale(1);opacity:.4;}
 .watch-editor footer {flex-wrap:wrap;}
+
+a.watch-db {text-decoration:none;}
+a.watch-db:hover {background:rgba(var(--brand-accent-rgb),.18);}

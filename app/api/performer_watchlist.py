@@ -44,7 +44,7 @@ def edit(identity: int, payload: dict = Body(...)):
         c.execute('UPDATE performer_watchlist SET name=?,aliases=?,notes=?,source_url=?,details=? WHERE id=?',
                   (*values,json.dumps(details),identity))
         if changed:
-            c.execute("UPDATE performer_watchlist SET revision=revision+1,candidates='[]',checks='{}',confirmed=NULL,checked_at=NULL,next_check=0,checking=0 WHERE id=?",(identity,))
+            c.execute("UPDATE performer_watchlist SET revision=revision+1,candidates='[]',checks='{}',confirmed=NULL,linked_profiles='{}',checked_at=NULL,next_check=0,checking=0 WHERE id=?",(identity,))
         c.commit()
     watch._wake.set()
     return {'ok':True}
@@ -60,14 +60,20 @@ def check(identity:int):
 def confirm(identity:int,payload:dict=Body(...)):
     with db.get_conn() as c:
         c.execute('BEGIN IMMEDIATE')
-        row=c.execute('SELECT candidates,name,aliases,origin_sources FROM performer_watchlist WHERE id=?',(identity,)).fetchone()
+        row=c.execute('SELECT candidates,name,aliases,origin_sources,linked_profiles FROM performer_watchlist WHERE id=?',(identity,)).fetchone()
         if not row: raise HTTPException(404,'Entry not found')
         candidate=next((h for h in json.loads(row[0]) if h['source']==payload.get('source') and h['id']==payload.get('id')),None)
         if candidate and candidate.get('source') not in (*watch.SOURCES, *watch.EXTERNAL_SOURCES): candidate = None
         if candidate and not watch.matches_names(candidate, [row[1]] + json.loads(row[2])): candidate = None
         if not candidate: raise HTTPException(409,'Candidate changed; check again')
         origins=sorted(set(json.loads(row[3])) | {candidate['source']})
-        c.execute('UPDATE performer_watchlist SET confirmed=?,origin_sources=?,revision=revision+1,checking=0 WHERE id=?',(json.dumps(candidate),json.dumps(origins),identity)); c.commit()
+        links=json.loads(row[4]);links[candidate['source']]=candidate
+        if candidate['source'] in watch.EXTERNAL_SOURCES:
+            c.execute('UPDATE performer_watchlist SET linked_profiles=?,origin_sources=?,revision=revision+1,checking=0 WHERE id=?',(json.dumps(links),json.dumps(origins),identity))
+        else:
+            c.execute('UPDATE performer_watchlist SET confirmed=?,linked_profiles=?,origin_sources=?,revision=revision+1,checking=0 WHERE id=?',(json.dumps(candidate),json.dumps(links),json.dumps(origins),identity))
+        c.commit()
+    watch._wake.set()
     return {'ok':True}
 
 @router.delete('/{identity}')
