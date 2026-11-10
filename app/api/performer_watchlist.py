@@ -72,6 +72,11 @@ def confirm(identity:int,payload:dict=Body(...)):
             c.execute('UPDATE performer_watchlist SET linked_profiles=?,origin_sources=?,revision=revision+1,checking=0 WHERE id=?',(json.dumps(links),json.dumps(origins),identity))
         else:
             c.execute('UPDATE performer_watchlist SET confirmed=?,linked_profiles=?,origin_sources=?,revision=revision+1,checking=0 WHERE id=?',(json.dumps(candidate),json.dumps(links),json.dumps(origins),identity))
+        if candidate.get('image'):
+            saved=json.loads(c.execute('SELECT details FROM performer_watchlist WHERE id=?',(identity,)).fetchone()[0])
+            if candidate['source'] in watch.SOURCES or not saved.get('image_url'):
+                saved['image_url']=candidate['image']
+                c.execute('UPDATE performer_watchlist SET details=? WHERE id=?',(json.dumps(saved),identity))
         c.commit()
     watch._wake.set()
     return {'ok':True}

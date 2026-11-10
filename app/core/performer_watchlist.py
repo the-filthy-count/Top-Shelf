@@ -91,6 +91,7 @@ def rows():
             hit['in_library'] = (hit.get('source'), str(hit.get('id', '')).strip()) in library
         r['checks'] = {k: v for k, v in r['checks'].items() if k in (*SOURCES, *EXTERNAL_SOURCES)}
         confirmed = r.get('confirmed') or {}
+        r['profile_image'] = profile_image(r)
         r['in_library'] = bool(r.get('library_row_id')) or (confirmed.get('source'), str(confirmed.get('id', '')).strip()) in library
     return result
 
@@ -157,7 +158,7 @@ def search_external(source, names):
                 hit = {'name': creator.get('name') or identity, 'aliases': [identity]}
                 if not matches_names(hit, names): continue
                 url = f'{COOMER_BASE}/{service}/user/{quote(identity, safe="")}'
-                hits[url] = dict(hit, source=source, id=url, url=url, image='', external_only=True)
+                hits[url] = dict(hit, source=source, id=url, url=url, image=f'https://img.coomer.st/icons/{service}/{quote(identity, safe="")}', external_only=True)
         return list(hits.values()), 'Checked'
     except Exception:
         return list(hits.values()), 'Check failed — retry later'
@@ -240,8 +241,12 @@ def hydrate_details(identity):
     if hit: hits=[h for h in hits if h['source'] != hit['source']]+[hit]
     if not hits: return json.loads(row['details'])
     data={}
+    main_image=''
     for profile in hits:
-        if _detail_loader: data.update(_detail_loader(profile) or {})
+        if _detail_loader:
+            loaded=_detail_loader(profile) or {}
+            data.update(loaded)
+            if profile.get('source') in SOURCES: main_image=loaded.get('image_url') or main_image
     details = {}
     for key, value in data.items():
         try: details.update(validate_details({key:value}))
@@ -250,6 +255,8 @@ def hydrate_details(identity):
         current = c.execute('SELECT details,confirmed,linked_profiles FROM performer_watchlist WHERE id=?',(identity,)).fetchone()
         if not current or (current['confirmed'] != row['confirmed'] or current['linked_profiles'] != row['linked_profiles']): raise ValueError('Confirmed match changed; reopen the editor')
         details.update(json.loads(current['details']))  # Explicit edits, including blanks, win.
+        if main_image and urlparse(main_image).scheme in ('http','https'):
+            details['image_url']=main_image
         origins=set(json.loads(row['origin_sources'])) | {h['source'] for h in hits}
         c.execute('UPDATE performer_watchlist SET details=?,origin_sources=? WHERE id=?',(json.dumps(details),json.dumps(sorted(origins)),identity))
         c.commit()
@@ -310,3 +317,20 @@ def submit_draft(identity, source, destination):
         receipts[source]={'state':'draft','id':draft_id}
         persist()
         return {'library_row_id':library_id,**receipts[source]}
+
+
+def profile_image(row):
+    confirmed=row.get('confirmed') or {}
+    links=row.get('linked_profiles') or {}
+    choices=[confirmed.get('image') if confirmed.get('source') in SOURCES else '',
+             (row.get('details') or {}).get('image_url')]
+    for source in ('IAFD','Coomer'):
+        hit=links.get(source) or {}
+        image=hit.get('image')
+        if not image and source == 'Coomer':
+            parsed=urlparse(hit.get('url') or '')
+            parts=parsed.path.strip('/').split('/')
+            if parsed.hostname in ('coomer.st','coomer.su','site1.coomer.com.co') and len(parts)==3 and parts[1]=='user' and parts[0] in ('onlyfans','fansly','candfans'):
+                image=f'https://img.coomer.st/icons/{parts[0]}/{quote(unquote(parts[2]),safe="")}'
+        choices.append(image)
+    return next((value for value in choices if value and urlparse(value).scheme in ('http','https') and urlparse(value).netloc),'')

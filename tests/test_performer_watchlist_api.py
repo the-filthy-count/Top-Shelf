@@ -167,3 +167,23 @@ class WatchlistAPITests(unittest.TestCase):
         self.assertEqual(row['next_check'],0)
         watch.install(self.conn)
         self.assertEqual(api.listing()['items'][0]['linked_profiles'],row['linked_profiles'])
+
+    def test_supplementary_photo_is_replaced_by_main_match(self):
+        identity=api.add({'name':'Bella'})['id']
+        external={'source':'IAFD','id':'123','name':'Bella','image':'https://example.com/iafd.jpg','external_only':True}
+        main={'source':'FansDB','id':'456','name':'Bella','image':'https://example.com/main.jpg'}
+        self.conn.execute('UPDATE performer_watchlist SET candidates=? WHERE id=?',(json.dumps([external,main]),identity));self.conn.commit()
+        api.confirm(identity,external)
+        self.assertEqual(api.listing()['items'][0]['profile_image'],external['image'])
+        self.assertIsNone(api.listing()['items'][0]['confirmed'])
+        api.confirm(identity,main)
+        row=api.listing()['items'][0]
+        self.assertEqual(row['profile_image'],main['image'])
+        self.assertEqual(row['details']['image_url'],main['image'])
+        api.confirm(identity,external)
+        self.assertEqual(api.listing()['items'][0]['profile_image'],main['image'])
+
+    def test_existing_coomer_link_gets_avatar_without_recheck(self):
+        row={'linked_profiles':{'Coomer':{'url':'https://site1.coomer.com.co/onlyfans/user/bella'}}}
+        self.assertEqual(watch.profile_image(row),'https://img.coomer.st/icons/onlyfans/bella')
+        self.assertEqual(watch.profile_image({'linked_profiles':{'Coomer':{'url':'https://untrusted.example/onlyfans/user/bella'}}}),'')

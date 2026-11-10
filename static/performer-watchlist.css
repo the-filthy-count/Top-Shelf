@@ -142,3 +142,6 @@
 
 a.watch-db {text-decoration:none;}
 a.watch-db:hover {background:rgba(var(--brand-accent-rgb),.18);}
+
+.watch-db-lock {color:#92999e;font-size:16px;}
+.watch-db-lock--matched {color:#ffd34d;}
