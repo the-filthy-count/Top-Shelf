@@ -21,7 +21,12 @@
   async function api(path='', method='GET', body) {
     const response = await fetch('/api/performer-watchlist'+path, {method,headers:{'Content-Type':'application/json'},body:body ? JSON.stringify(body):undefined});
     const result = await response.json();
-    if (!response.ok) throw Error(result.detail || 'Watchlist request failed');
+    if (!response.ok) {
+      if (response.status === 409 && result.detail?.name_conflict && !body?.confirm_same_name && confirm(result.detail.message)) {
+        return api(path, method, {...body, confirm_same_name:true});
+      }
+      throw Error(result.detail?.message || result.detail || 'Watchlist request failed');
+    }
     return result;
   }
   function sourceUrl(hit) {

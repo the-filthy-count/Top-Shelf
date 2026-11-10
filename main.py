@@ -5,6 +5,7 @@ Run with:
     uvicorn main:app --host 0.0.0.0 --port 8891 --reload
 """
 
+from app.core.performer_creation import NameInUse, reserve_folder, identify_show, preserve_name
 from contextvars import ContextVar
 import asyncio
 from runtime_jobs import ActivityBuffer, BoundedExecutor
@@ -33661,7 +33662,7 @@ async def api_library_performer_rename(payload: dict = Body(...)):
         with db.get_conn() as conn:
             conn.execute(
                 "UPDATE favourite_entities "
-                "SET folder_name = ?, path = ?, aliases_json = ?, "
+                "SET folder_name = ?, library_name = NULL, path = ?, aliases_json = ?, "
                 "    path_missing = 0, updated_at = ? "
                 "WHERE id = ?",
                 (new_name_safe, str(dst_path), new_aliases_json, now_iso, row_id),
@@ -41136,12 +41137,12 @@ def _watchlist_create_library(row, destination):
     label=_sanitize_fs_component(row['name'])
     if not label or label in ('.','..'): raise ValueError('Invalid performer folder name')
     parent=root/performer_letter_bucket(label) if _performer_dir_is_bucketed(root) else root
-    folder=parent/label
-    if folder.exists(): raise ValueError('A folder with this name already exists; link the existing library entry first')
+    folder=reserve_folder(parent,label,row.get('_confirm_same_name') is True)
     data={**details,'name':row['name'],'aliases':json.loads(row['aliases']),'bio':details.get('biography','')}
-    folder=create_tvshow_folder(label,parent,build_performer_tvshow_nfo(data),details.get('image_url'),poster_aspect_2x3=True)
+    folder=create_tvshow_folder(folder.name,parent,identify_show(build_performer_tvshow_nfo(data)),details.get('image_url'),poster_aspect_2x3=True)
     rid=_favourites_index_created_folder('performer',folder,root,create_name=label,initial_aliases=json.loads(row['aliases']))
     if not rid: raise ValueError('Folder created but indexing failed; inspect the library before retrying')
+    preserve_name(rid,label)
     confirmed=json.loads(row['confirmed'] or 'null')
     if confirmed and confirmed.get('source') in ('TPDB','StashDB','FansDB','JAVStash'):
         prefix={'TPDB':'tpdb','StashDB':'stashdb','FansDB':'fansdb','JAVStash':'javstash'}[confirmed['source']]
@@ -41331,8 +41332,12 @@ def metadata_create(payload: dict):
             dest_path / performer_letter_bucket(folder_label)
             if _performer_dir_is_bucketed(dest_path) else dest_path
         )
+        try:
+            reserved = reserve_folder(bucketed_parent, folder_label, payload.get("confirm_same_name") is True)
+        except NameInUse as exc:
+            return JSONResponse({"error": str(exc), "name_conflict": True}, status_code=409)
         folder = create_tvshow_folder(
-            folder_label, bucketed_parent, nfo, poster_url,
+            reserved.name, bucketed_parent, identify_show(nfo), poster_url,
             poster_aspect_2x3=True,
         )
         name = folder_label
@@ -41389,6 +41394,8 @@ def metadata_create(payload: dict):
         initial_aliases=performer_initial_aliases if mtype == "performer" else None,
     )
     if fav_row_id:
+        if mtype == "performer":
+            preserve_name(fav_row_id, name)
         _performer_popup_cache_invalidate_row(fav_row_id)
         if mtype != "performer" and (logo_url or poster_url):
             if not _favourite_find_local_studio_art(str(folder)):

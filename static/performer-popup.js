@@ -625,11 +625,12 @@
     submitBtn.disabled = true;
     submitBtn.innerHTML = (typeof loaderHtml === 'function' ? loaderHtml('loader--btn') : '<span class="loader loader--btn" role="status" aria-label="Loading"></span>') + ' Adding…';
     try {
-      const r = await fetch('/api/metadata/create', {
+      const createRequest = async (confirmed = false) => fetch('/api/metadata/create', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          confirm_same_name: confirmed,
           type:        'performer',
           source:      ctx.source || '',
           id:          ctx.id || '',
@@ -640,7 +641,13 @@
           dest_dir:    dest,
         }),
       });
-      const d = await r.json();
+      let r = await createRequest();
+      let d = await r.json();
+      if (r.status === 409 && d.name_conflict) {
+        if (!window.confirm(d.error)) return;
+        r = await createRequest(true);
+        d = await r.json();
+      }
       // 409 duplicate: this source id is already linked to a library row
       // (primary match_*_id or via group_ids_json). Reopen the existing
       // row's popup instead of surfacing a raw error — the user meant
@@ -2182,7 +2189,8 @@
           const params = new URLSearchParams({
             source:      p.source,
             id:          p.id,
-            type:        'performer',
+            confirm_same_name: confirmed,
+          type:        'performer',
             slug:        '',
             name:        '',
             tpdb_id:     p.srcKey === 'tpdb'     ? p.id : '',

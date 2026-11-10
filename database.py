@@ -915,6 +915,7 @@ def init_db() -> None:
             pass
         for _col in (
             "custom_url",
+            "library_name",
             "match_iafd_url",
             "match_freeones_url",
             "match_coomer_url",
@@ -3078,7 +3079,7 @@ def favourite_upsert_folder(
             ) VALUES (?, ?, ?, ?, 0, NULL, ?, ?, ?, ?, 0)
             ON CONFLICT(path) DO UPDATE SET
                 kind = excluded.kind,
-                folder_name = excluded.folder_name,
+                folder_name = COALESCE(favourite_entities.library_name, excluded.folder_name),
                 root_label = excluded.root_label,
                 gender_filters_json = excluded.gender_filters_json,
                 scanned_at = excluded.scanned_at,
@@ -7848,7 +7849,7 @@ def favourite_merge_commit(plan: dict) -> None:
             current = conn.execute("SELECT path FROM favourite_entities WHERE id=?", (row['id'],)).fetchone()
             if not current or current['path'] != row['path']:
                 raise ValueError("A merge source changed in the library; refusing to commit")
-        conn.execute("""UPDATE favourite_entities SET folder_name=?,path=?,is_group=1,
+        conn.execute("""UPDATE favourite_entities SET folder_name=?,library_name=NULL,path=?,is_group=1,
                      group_ids_json=?,path_missing=0,updated_at=? WHERE id=?""",
                      (plan['group_name'], plan['destination'], json.dumps(plan['group_ids']),
                       _iso_now(), plan['primary_id']))

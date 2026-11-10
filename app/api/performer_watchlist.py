@@ -1,3 +1,4 @@
+from app.core.performer_creation import NameInUse
 from fastapi import APIRouter, Body, HTTPException
 import json
 import database as db
@@ -91,9 +92,11 @@ def remove(identity:int):
 @router.post('/{identity}/details')
 def details(identity:int):
     try: return {'details':watch.hydrate_details(identity)}
+    except NameInUse as exc: raise HTTPException(409,{'name_conflict':True,'message':str(exc)})
     except Exception as exc: raise HTTPException(400,str(exc))
 
 @router.post('/{identity}/submit')
 def submit(identity:int,payload:dict=Body(...)):
-    try: return watch.submit_draft(identity,payload.get('source'),payload.get('dest_dir'))
+    try: return watch.submit_draft(identity,payload.get('source'),payload.get('dest_dir'),payload.get('confirm_same_name',False))
+    except NameInUse as exc: raise HTTPException(409,{'name_conflict':True,'message':str(exc)})
     except Exception as exc: raise HTTPException(400,str(exc))

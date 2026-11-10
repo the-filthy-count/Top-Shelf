@@ -262,7 +262,7 @@ def hydrate_details(identity):
         c.commit()
     return details
 
-def submit_draft(identity, source, destination):
+def submit_draft(identity, source, destination, confirm_same_name=False):
     if source not in ('FansDB','JAVStash'): raise ValueError('Submission is not enabled for this database')
     if not _library_creator: raise ValueError('Library creation is not available')
     with _submission_lock:
@@ -285,6 +285,7 @@ def submit_draft(identity, source, destination):
         if receipt and receipt.get('state')=='sending':
             raise ValueError('Previous submission outcome is unknown. Check your drafts on the database before retrying.')
         # Create/index locally first; this callback is idempotent for this watchlist entry.
+        row['_confirm_same_name']=confirm_same_name is True
         library_id=_library_creator(row,destination)
         if receipt and receipt.get('id'): return {'library_row_id':library_id,**receipt}
         data={'name':row['name'],'aliases':', '.join(json.loads(row['aliases'])),
