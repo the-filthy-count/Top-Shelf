@@ -2189,8 +2189,7 @@
           const params = new URLSearchParams({
             source:      p.source,
             id:          p.id,
-            confirm_same_name: confirmed,
-          type:        'performer',
+            type:        'performer',
             slug:        '',
             name:        '',
             tpdb_id:     p.srcKey === 'tpdb'     ? p.id : '',
