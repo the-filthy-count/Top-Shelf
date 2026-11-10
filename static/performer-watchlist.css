@@ -125,7 +125,7 @@
 
 .watch-editor-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:20px 0;}
 .watch-editor-wide {grid-column:1/-1;}
-.watch-editor input,.watch-editor textarea {box-sizing:border-box;width:100%;padding:10px 12px;}
+.watch-editor input,.watch-editor select,.watch-editor textarea {box-sizing:border-box;width:100%;padding:10px 12px;}
 .watch-editor footer {display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;bottom:-24px;padding:12px 0;background:var(--bg);}
 .watch-editor [role=status] {color:var(--amber);font-size:var(--text-small);}
 @media(max-width:600px){.watch-editor-fields{grid-template-columns:1fr}.watch-editor footer{bottom:-14px}}

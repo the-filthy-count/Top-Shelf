@@ -103,7 +103,24 @@
     ];
     const dialog = document.createElement('dialog');
     dialog.className = 'watch-review watch-editor';
-    const input = (key,label,value,type='text',detail=false) => `<label class="watch-field${type==='textarea'?' watch-editor-wide':''}"><span>${label}</span>${type==='textarea'?`<textarea name="${key}" rows="3" ${detail?'data-detail':''}>${esc(value)}</textarea>`:`<input name="${key}" type="${type}" value="${esc(value)}" ${detail?'data-detail':''} ${key==='name'?'required maxlength="150"':''}>`}</label>`;
+    const countries = Object.values(window.COUNTRY_FLAG_LOOKUP || {});
+    const choices = {
+      gender:['Female','Male','Transgender Female','Transgender Male','Non-binary','Intersex','Other'],
+      country:[...new Set(countries.map(v=>v.code.toUpperCase()))].sort((a,b)=>countryLabel(a).localeCompare(countryLabel(b))),
+      ethnicity:['Asian','Black','Caucasian','Hispanic','Indian','Middle Eastern','Mixed','Native American','Pacific Islander','Other'],
+      hair_color:['Black','Brown','Blonde','Red','Auburn','Grey','White','Bald','Other'],
+      eye_color:['Brown','Blue','Green','Hazel','Grey','Amber','Other']
+    };
+    function countryLabel(value) {return window.COUNTRY_FLAG_LOOKUP?.[value.toLowerCase()]?.name || value;}
+    const input = (key,label,value,type='text',detail=false) => {
+      let control;
+      if (choices[key]) {
+        const values=[...new Set([value,...choices[key]].filter(Boolean))];
+        control=`<select name="${key}" data-detail><option value="">Not set</option>${values.map(v=>`<option value="${esc(v)}" ${v===value?'selected':''}>${esc(key==='country'?countryLabel(v):v)}</option>`).join('')}</select>`;
+      } else if(type==='textarea') control=`<textarea name="${key}" rows="3" ${detail?'data-detail':''}>${esc(value)}</textarea>`;
+      else control=`<input name="${key}" type="${type}" value="${esc(value)}" ${detail?'data-detail':''} ${key==='name'?'required maxlength="150"':''}>`;
+      return `<label class="watch-field${type==='textarea'?' watch-editor-wide':''}"><span>${label}</span>${control}</label>`;
+    };
     dialog.innerHTML = `<form><header><h2>Edit ${esc(row.name)}</h2><button type="button" data-close aria-label="Close">×</button></header><div class="watch-editor-fields">${input('name','Name / alias',row.name)}${input('aliases','Other aliases, comma separated',(row.aliases||[]).join(', '))}${input('source_url','Source link',row.source_url,'url')}${input('notes','Notes',row.notes)}${fields.map(([key,label,type])=>input(key,label,row.details?.[key]||'',type,true)).join('')}</div><footer><span role="status" aria-live="polite"></span><button type="submit" title="Save details" aria-label="Save details"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i></button></footer></form>`;
     dialog.querySelector('[data-close]').onclick=()=>dialog.close();
     dialog.addEventListener('close',()=>dialog.remove(),{once:true});
@@ -151,7 +168,11 @@
       const edited=new Set();form.addEventListener('input',event=>edited.add(event.target.name));
       api('/'+row.id+'/details','POST').then(result=>{
         if(!dialog.isConnected)return;
-        for(const [key,value] of Object.entries(result.details||{}))if(form.elements[key]&&!edited.has(key))form.elements[key].value=value;
+        for(const [key,value] of Object.entries(result.details||{}))if(form.elements[key]&&!edited.has(key)){
+          const field=form.elements[key];
+          if(field.tagName==='SELECT' && value && !Array.from(field.options).some(option=>option.value===value))field.add(new Option(key==='country'?countryLabel(value):value,value));
+          field.value=value;
+        }
         statusEl.textContent='';updateOptions();
       }).catch(e=>{statusEl.textContent='Could not import profile details: '+e.message;});
     }
