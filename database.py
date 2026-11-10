@@ -914,6 +914,7 @@ def init_db() -> None:
         except sqlite3.OperationalError:
             pass
         for _col in (
+            "custom_url",
             "match_iafd_url",
             "match_freeones_url",
             "match_coomer_url",
@@ -7976,3 +7977,21 @@ def queue_search_record(filename):
 def queue_observe_media(filename, video):
     from app.core.queue_records import observe_media
     return observe_media(filename, video)
+
+
+def favourite_set_custom_url(row_id: int, url: str) -> None:
+    from urllib.parse import urlsplit
+    if not isinstance(url, str) or len(url) > 2000:
+        raise ValueError('URL must be under 2000 characters')
+    url=url.strip()
+    if url:
+        try:
+            parsed=urlsplit(url)
+            valid=parsed.scheme in ('http','https') and parsed.hostname and not parsed.username and not parsed.password and not any(c.isspace() or ord(c)<32 for c in url)
+        except ValueError:
+            valid=False
+        if not valid: raise ValueError('Enter a valid HTTP or HTTPS URL')
+    with get_conn() as conn:
+        result=conn.execute('UPDATE favourite_entities SET custom_url=? WHERE id=?',(url or None,row_id))
+        if not result.rowcount: raise ValueError('Library entry not found')
+        conn.commit()

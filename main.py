@@ -33912,6 +33912,23 @@ async def api_favourites_unmatch(payload: dict = Body(...)):
     return {"ok": True}
 
 
+@app.get("/api/favourites/custom-link")
+def api_favourite_custom_link(row_id: int):
+    row=db.favourite_get(row_id)
+    if not row: raise HTTPException(404,'Library entry not found')
+    return {'url':row.get('custom_url') or ''}
+
+
+@app.put("/api/favourites/custom-link")
+def api_favourite_set_custom_link(payload: dict = Body(...)):
+    try:
+        row_id=int(payload.get('row_id') or 0)
+        db.favourite_set_custom_url(row_id,payload.get('url',''))
+    except (ValueError,TypeError) as exc:
+        raise HTTPException(400,str(exc))
+    return {'ok':True}
+
+
 @app.post("/api/favourites/ext-link")
 async def api_favourites_ext_link(payload: dict = Body(...)):
     """Set a confirmed external profile URL (IAFD / Freeones) for a performer row."""

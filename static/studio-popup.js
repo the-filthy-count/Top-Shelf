@@ -856,7 +856,7 @@
         ${logo}
         <i class="fa-solid fa-magnifying-glass" style="font-size:9px;opacity:0.7"></i>
       </button>`;
-    }).join('');
+    }).join('') + (rowId ? `<ts-custom-link row-id="${rowId}"></ts-custom-link>` : '');
     wirePillHandlers(el);
   }
 

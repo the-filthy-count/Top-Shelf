@@ -13195,3 +13195,17 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
 
 .pp-photo-thumb:hover img,
 .pp-photo-thumb:focus-visible img { filter: none; }
+
+ts-custom-link {display:inline-flex;align-items:center;}
+.custom-link-wrap {position:relative;display:inline-flex;}
+.custom-link-wrap > .pp-profile-pill {min-width:48px;justify-content:center;}
+.custom-link-edit {position:absolute;right:-5px;top:-8px;opacity:0;pointer-events:none;padding:3px 5px;font-size:10px;background:var(--bg);transition:opacity .15s;}
+.custom-link-wrap:hover .custom-link-edit,.custom-link-wrap:focus-within .custom-link-edit {opacity:1;pointer-events:auto;}
+.custom-link-dialog {width:min(440px,90vw);padding:20px;border:1px solid var(--accent);border-radius:10px;background:var(--bg);color:var(--text);}
+.custom-link-dialog::backdrop {background:#0008;backdrop-filter:blur(3px);}
+.custom-link-dialog header,.custom-link-dialog footer {display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;}
+.custom-link-dialog input {display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:8px;}
+.custom-link-dialog footer {justify-content:flex-end;margin:12px 0 0;}
+.custom-link-dialog button {padding:8px 12px;}
+.custom-link-dialog [role=status] {color:var(--amber);}
+@media(hover:none){.custom-link-edit{opacity:1;pointer-events:auto;}}

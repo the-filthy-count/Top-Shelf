@@ -1562,7 +1562,7 @@
         if (toolbar) el.insertBefore(pillsEl, toolbar);
         else el.appendChild(pillsEl);
       }
-      pillsEl.innerHTML = pillsHtml;
+      pillsEl.innerHTML = pillsHtml + (lib.row_id ? `<ts-custom-link row-id="${Number(lib.row_id)}"></ts-custom-link>` : '');
     }
 
     // The group-members modal owns member visibility now — drop any

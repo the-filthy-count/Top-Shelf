@@ -1964,7 +1964,7 @@
             <div class="bio-links-block" style="margin-top:auto">
               <div class="bio-section-label">Profiles</div>
               <div class="pp-profiles-grid">
-                ${moviePillsHtml}
+                ${moviePillsHtml}<ts-custom-link row-id="${Number(row.id)}"></ts-custom-link>
               </div>
             </div>
           </div>
@@ -2219,7 +2219,7 @@
         ${logo}
         <i class="fa-solid fa-magnifying-glass" style="font-size:9px;opacity:0.7"></i>
       </button>`;
-    }).join('')}</div>`;
+    }).join('')}<ts-custom-link row-id="${Number(row.id)}"></ts-custom-link></div>`;
 
     const plocked = !!row.matches_locked;
     const panelLockTitle = plocked

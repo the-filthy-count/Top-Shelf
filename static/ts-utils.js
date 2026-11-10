@@ -3334,3 +3334,52 @@ window.tsProfileOwnershipFilters = async function(host, scenes) {
     grid.addEventListener('click',()=>setTimeout(apply,250));
   } catch(e) { status.textContent=e.message; }
 };
+
+// One optional, user-owned URL per library entry, independent of database IDs.
+if (!customElements.get('ts-custom-link')) {
+  customElements.define('ts-custom-link', class extends HTMLElement {
+    connectedCallback() {
+      this.rowId=Number(this.getAttribute('row-id'));
+      if(!this.rowId)return;
+      this.url='';this.render();
+      this.onChange=event=>{if(event.detail.rowId===this.rowId){this.url=event.detail.url;this.render();}};
+      window.addEventListener('ts-custom-link-changed',this.onChange);
+      fetch('/api/favourites/custom-link?row_id='+this.rowId).then(async response=>{
+        const data=await response.json();if(!response.ok)throw Error(data.detail||'Unable to load link');
+        if(this.isConnected){this.url=data.url||'';this.render();}
+      }).catch(error=>{this.error=error.message;this.render();});
+    }
+    disconnectedCallback(){window.removeEventListener('ts-custom-link-changed',this.onChange);}
+    render(){
+      this.replaceChildren();
+      const wrapper=document.createElement('span');wrapper.className='custom-link-wrap';
+      const link=document.createElement(this.url?'a':'button');
+      link.className='pp-profile-pill '+(this.url?'is-linked':'is-missing');
+      link.title=this.url?'Open custom link':'Add custom link';link.setAttribute('aria-label',link.title);
+      link.innerHTML='<i class="fa-solid fa-link" aria-hidden="true"></i>';
+      if(this.url){link.href=this.url;link.target='_blank';link.rel='noopener noreferrer';}
+      else {link.type='button';link.onclick=event=>{event.stopPropagation();this.edit();};}
+      wrapper.appendChild(link);
+      if(this.url){const edit=document.createElement('button');edit.type='button';edit.className='custom-link-edit';edit.title='Edit custom link';edit.setAttribute('aria-label',edit.title);edit.innerHTML='<i class="fa-solid fa-pen" aria-hidden="true"></i>';edit.onclick=event=>{event.stopPropagation();this.edit();};wrapper.appendChild(edit);}
+      this.appendChild(wrapper);
+    }
+    edit(){
+      const dialog=document.createElement('dialog');dialog.className='custom-link-dialog';
+      dialog.innerHTML='<form><header><strong>Custom link</strong><button type="button" data-close aria-label="Close">×</button></header><label>URL<input type="url" name="url" maxlength="2000" placeholder="https://…" aria-label="Custom URL"></label><p role="status"></p><footer><button type="button" data-clear title="Remove link" aria-label="Remove link"><i class="fa-solid fa-trash" aria-hidden="true"></i></button><button type="submit" title="Save link" aria-label="Save link"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i></button></footer></form>';
+      dialog.querySelector('input').value=this.url;
+      dialog.querySelector('[role=status]').textContent=this.error||'';
+      dialog.querySelector('[data-close]').onclick=()=>dialog.close();
+      dialog.querySelector('[data-clear]').onclick=()=>{dialog.querySelector('input').value='';dialog.querySelector('form').requestSubmit();};
+      dialog.querySelector('form').onsubmit=async event=>{
+        event.preventDefault();const url=dialog.querySelector('input').value.trim();
+        const buttons=dialog.querySelectorAll('button');buttons.forEach(button=>button.disabled=true);
+        try{
+          const response=await fetch('/api/favourites/custom-link',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({row_id:this.rowId,url})});
+          const data=await response.json();if(!response.ok)throw Error(data.detail||'Unable to save link');
+          window.dispatchEvent(new CustomEvent('ts-custom-link-changed',{detail:{rowId:this.rowId,url}}));dialog.close();
+        }catch(error){dialog.querySelector('[role=status]').textContent=error.message;buttons.forEach(button=>button.disabled=false);}
+      };
+      dialog.addEventListener('close',()=>dialog.remove(),{once:true});document.body.appendChild(dialog);dialog.showModal();
+    }
+  });
+}
