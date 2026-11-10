@@ -59,3 +59,37 @@ class WatchlistAPITests(unittest.TestCase):
         row = api.listing()['items'][0]
         self.assertEqual(row['candidates'], [])
         self.assertEqual(row['checks'], {})
+
+    def test_confirmed_entry_skips_direct_check_and_stale_worker(self):
+        identity = api.add({'name':'Bella'})['id']
+        snapshot = dict(self.conn.execute('SELECT * FROM performer_watchlist WHERE id=?', (identity,)).fetchone())
+        self.conn.execute("UPDATE performer_watchlist SET confirmed='{}',next_check=123 WHERE id=?", (identity,))
+        self.conn.commit()
+        api.check(identity)
+        with patch.object(watch.db, 'get_settings') as settings:
+            watch.check_entry(snapshot)
+            settings.assert_not_called()
+        self.assertEqual(self.conn.execute('SELECT next_check FROM performer_watchlist WHERE id=?', (identity,)).fetchone()[0],123)
+
+    def test_details_persist_without_resetting_confirmed_identity(self):
+        identity=api.add({'name':'Bella'})['id']
+        hit={'source':'FansDB','id':'123','name':'Bella'}
+        self.conn.execute('UPDATE performer_watchlist SET candidates=? WHERE id=?',(json.dumps([hit]),identity))
+        self.conn.commit()
+        api.confirm(identity,hit)
+        details={'country':'United States','biography':'Known facts','image_url':'https://example.com/photo.webp','urls':'https://example.com/profile','evidence':'Source checked'}
+        api.edit(identity,{'name':'Bella','notes':'Updated notes','details':details})
+        row=api.listing()['items'][0]
+        self.assertEqual(row['details'],details)
+        self.assertEqual(row['confirmed'],hit)
+        api.edit(identity,{'name':'Bella','notes':'Another note'})
+        self.assertEqual(api.listing()['items'][0]['details'],details)
+        watch.install(self.conn)
+        self.assertEqual(api.listing()['items'][0]['details'],details)
+
+    def test_invalid_details_do_not_modify_entry(self):
+        identity=api.add({'name':'Bella'})['id']
+        for details in ({'image_url':'javascript:alert(1)'},{'birthdate':'not a date'},{'unknown':'value'}):
+            with self.assertRaises(HTTPException):
+                api.edit(identity,{'name':'Different','details':details})
+            self.assertEqual(api.listing()['items'][0]['name'],'Bella')

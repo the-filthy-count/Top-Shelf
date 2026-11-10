@@ -29,6 +29,8 @@ def install(conn):
         candidates TEXT NOT NULL DEFAULT '[]', checks TEXT NOT NULL DEFAULT '{}',
         confirmed TEXT, checked_at REAL, next_check REAL NOT NULL DEFAULT 0,
         checking INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL DEFAULT 1)''')
+    if 'details' not in {row[1] for row in conn.execute('PRAGMA table_info(performer_watchlist)')}:
+        conn.execute("ALTER TABLE performer_watchlist ADD COLUMN details TEXT NOT NULL DEFAULT '{}'")
     conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS watchlist_name ON performer_watchlist(lower(name))')
 
 def validate(payload):
@@ -74,7 +76,7 @@ def rows():
                 if entity[field] and str(entity[field]).strip():
                     library.add((source, str(entity[field]).strip()))
     for r in result:
-        for k in ('aliases','candidates','checks','confirmed'): r[k] = json.loads(r[k]) if r[k] else None
+        for k in ('aliases','candidates','checks','confirmed','details'): r[k] = json.loads(r[k]) if r[k] else None
         r['candidates'] = [h for h in r['candidates'] if h.get('source') in (*SOURCES, *EXTERNAL_SOURCES) and matches_names(h, [r['name']] + (r['aliases'] or []))]
         for hit in r['candidates']:
             hit['in_library'] = (hit.get('source'), str(hit.get('id', '')).strip()) in library
@@ -153,6 +155,11 @@ def search_external(source, names):
 
 
 def check_entry(row):
+    # A queued snapshot may have been confirmed before the worker started it.
+    with db.get_conn() as c:
+        current = c.execute('SELECT confirmed,revision FROM performer_watchlist WHERE id=?', (row['id'],)).fetchone()
+    if current is None or current['confirmed'] is not None or current['revision'] != row['revision']:
+        return
     names = list(dict.fromkeys([row['name']] + json.loads(row['aliases'])))
     settings = db.get_settings()
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -162,7 +169,7 @@ def check_entry(row):
     checks = dict(zip(sources, (status for _, status in results)))
     with db.get_conn() as c:
         c.execute('''UPDATE performer_watchlist SET candidates=?,checks=?,checked_at=?,
-            next_check=?,checking=0 WHERE id=? AND revision=?''',
+            next_check=?,checking=0 WHERE id=? AND revision=? AND confirmed IS NULL''',
             (json.dumps(candidates),json.dumps(checks),time.time(),time.time()+86400,row['id'],row['revision']))
         c.commit()
 
@@ -191,3 +198,21 @@ def start(iafd_search=None):
             except Exception: logging.exception('Watchlist worker failed')
             _wake.wait(60); _wake.clear()
     _thread = threading.Thread(target=run,name='performer-watchlist',daemon=True); _thread.start()
+
+
+def validate_details(details):
+    if not isinstance(details, dict):
+        raise ValueError('Invalid performer details')
+    extra = {'image_url', 'urls', 'evidence'}
+    if set(details) - db.PERFORMER_BIO_FIELDS - extra:
+        raise ValueError('Unknown performer detail')
+    for field, value in details.items():
+        if not isinstance(value, str) or len(value) > 20000:
+            raise ValueError('Invalid performer detail')
+        if field in db.PERFORMER_BIO_FIELDS:
+            db._validate_performer_bio_field(field, value)
+        if field in {'image_url', 'urls'}:
+            for url in value.splitlines():
+                if url.strip() and (urlparse(url.strip()).scheme not in ('http','https') or not urlparse(url.strip()).netloc):
+                    raise ValueError('Image and profile links must be HTTP or HTTPS URLs')
+    return {key: value.strip() for key, value in details.items()}

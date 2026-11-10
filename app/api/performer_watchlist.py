@@ -36,9 +36,15 @@ def edit(identity: int, payload: dict = Body(...)):
         c.execute('BEGIN IMMEDIATE')
         if c.execute('SELECT 1 FROM performer_watchlist WHERE lower(name)=lower(?) AND id!=?',(values[0],identity)).fetchone():
             raise HTTPException(409,'That name is already on the watchlist')
-        result=c.execute('''UPDATE performer_watchlist SET name=?,aliases=?,notes=?,source_url=?,
-            revision=revision+1,candidates='[]',checks='{}',confirmed=NULL,checked_at=NULL,next_check=0,checking=0 WHERE id=?''',(*values,identity))
-        if not result.rowcount: raise HTTPException(404,'Entry not found')
+        row=c.execute('SELECT * FROM performer_watchlist WHERE id=?',(identity,)).fetchone()
+        if not row: raise HTTPException(404,'Entry not found')
+        try: details=watch.validate_details(payload.get('details', json.loads(row['details'])))
+        except ValueError as exc: raise HTTPException(400,str(exc))
+        changed = values[0] != row['name'] or json.loads(values[1]) != json.loads(row['aliases'])
+        c.execute('UPDATE performer_watchlist SET name=?,aliases=?,notes=?,source_url=?,details=? WHERE id=?',
+                  (*values,json.dumps(details),identity))
+        if changed:
+            c.execute("UPDATE performer_watchlist SET revision=revision+1,candidates='[]',checks='{}',confirmed=NULL,checked_at=NULL,next_check=0,checking=0 WHERE id=?",(identity,))
         c.commit()
     watch._wake.set()
     return {'ok':True}
