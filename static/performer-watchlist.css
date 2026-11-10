@@ -145,3 +145,12 @@ a.watch-db:hover {background:rgba(var(--brand-accent-rgb),.18);}
 
 .watch-db-lock {color:#92999e;font-size:16px;}
 .watch-db-lock--matched {color:#ffd34d;}
+
+.watch-avatar[data-photo-preview] {cursor:zoom-in;}
+.watch-avatar[data-photo-preview]:focus-visible {outline:2px solid var(--accent);outline-offset:4px;}
+.watch-photo-preview {position:fixed;z-index:10000;width:min(280px,70vw);height:min(380px,75vh);padding:5px;background:var(--bg);border:1px solid var(--accent);border-radius:8px;box-shadow:0 12px 40px #0008;pointer-events:none;}
+.watch-photo-preview img {width:100%;height:100%;object-fit:contain;display:block;}
+.watch-photo-dialog {position:fixed;inset:0;margin:auto;padding:0;border:0;background:transparent;max-width:94vw;max-height:92vh;overflow:visible;}
+.watch-photo-dialog::backdrop {background:#0009;backdrop-filter:blur(3px);}
+.watch-photo-dialog img {display:block;max-width:90vw;max-height:88vh;object-fit:contain;}
+.watch-photo-dialog button {position:absolute;right:8px;top:8px;width:36px;height:36px;padding:0;background:var(--bg);font-size:24px;}

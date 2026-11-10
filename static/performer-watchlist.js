@@ -70,12 +70,13 @@
     } catch(e) {host().querySelector('.watch-status').textContent=e.message;}
   }
   function render() {
+      hidePhotoPreview();
       const shown = items.filter(visibleRow);
       host().querySelector('.watch-status').textContent = `${shown.length} / ${items.length} watched`;
       host().querySelectorAll('[data-list-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.listFilter === listFilter)));
       host().querySelectorAll('[data-db-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.dbFilter === databaseFilter)));
       host().querySelector('.watch-list').innerHTML = shown.length ? shown.map(row => `<article class="watch-row${row.confirmed ? ' watch-row--identified' : reviewCandidates(row).length ? ' watch-row--review' : ''}">
-        <div class="watch-identity"><span class="watch-avatar${row.confirmed ? ' watch-avatar--confirmed' : ''}" aria-hidden="true"><img src="${esc(row.profile_image || '/static/img/profile.webp')}" alt="" loading="lazy" onerror="this.onerror=null;this.src='/static/img/profile.webp'"></span><div class="watch-name"><div class="watch-name-heading"><strong>${row.source_url ? `<a class="watch-name-link" href="${esc(row.source_url)}" target="_blank" rel="noopener noreferrer" title="Open source link">${esc(row.name)}</a>` : esc(row.name)}</strong>${row.in_library ? libraryBadge : ''}</div>${row.aliases?.length ? `<small>${esc(row.aliases.join(', '))}</small>`:''}${row.notes ? `<small>${linkNotes(row.notes)}</small>`:''}</div></div>
+        <div class="watch-identity"><span class="watch-avatar${row.confirmed ? ' watch-avatar--confirmed' : ''}" role="button" tabindex="0" data-photo-preview title="Enlarge profile picture" aria-label="Enlarge profile picture"><img src="${esc(row.profile_image || '/static/img/profile.webp')}" alt="" loading="lazy" onerror="this.onerror=null;this.src='/static/img/profile.webp'"></span><div class="watch-name"><div class="watch-name-heading"><strong>${row.source_url ? `<a class="watch-name-link" href="${esc(row.source_url)}" target="_blank" rel="noopener noreferrer" title="Open source link">${esc(row.name)}</a>` : esc(row.name)}</strong>${row.in_library ? libraryBadge : ''}</div>${row.aliases?.length ? `<small>${esc(row.aliases.join(', '))}</small>`:''}${row.notes ? `<small>${linkNotes(row.notes)}</small>`:''}</div></div>
         <div>${checkSummary(row)}</div>
         <div class="watch-actions">${row.confirmed ? `<button data-action="profile" data-id="${row.id}" title="Open profile / Add to library" aria-label="Open profile / Add to library"><i class="fa-solid fa-circle-plus" aria-hidden="true"></i></button>` : `<button data-action="review" data-id="${row.id}" title="Review matches" aria-label="Review ${reviewCandidates(row).length} candidate matches" ${row.candidates.length?'':'disabled'}><i class="fa-solid fa-user-check" aria-hidden="true"></i> <span class="watch-db-count">${String(Math.min(reviewCandidates(row).length, 99)).padStart(2, '0')}</span></button><button data-action="check" data-id="${row.id}" title="Check databases" aria-label="Check databases" ${row.checking?'disabled':''}><i class="fa-solid fa-rotate"></i></button>`}<button data-action="edit" data-id="${row.id}" title="Edit entry" aria-label="Edit entry"><i class="fa-solid fa-pen"></i></button><button data-action="delete" data-id="${row.id}" title="Remove from watchlist" aria-label="Remove from watchlist"><i class="fa-solid fa-xmark"></i></button></div>
         </article>`).join('') : '<div class="watch-empty"><i class="fa-solid fa-eye" aria-hidden="true"></i><strong>Keep an eye out</strong><p>Add a name above. We’ll check the databases for you.</p></div>';
@@ -213,6 +214,24 @@
       catch(e){dialog.querySelector('[role=status]').textContent=e.message;confirm.disabled=false;}
     });
   }
+  let photoPreview;
+  function hidePhotoPreview() {photoPreview?.remove();photoPreview=null;}
+  function previewPhoto(avatar, pinned=false) {
+    const original=avatar.querySelector('img');if(!original)return;
+    hidePhotoPreview();
+    const picture=document.createElement('img');picture.src=original.currentSrc||original.src;picture.alt='Performer profile';
+    if(pinned){
+      const dialog=document.createElement('dialog');dialog.className='watch-photo-dialog';
+      const close=document.createElement('button');close.type='button';close.textContent='×';close.setAttribute('aria-label','Close image');close.onclick=()=>dialog.close();
+      dialog.append(picture,close);document.body.appendChild(dialog);
+      dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});
+      dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();return;
+    }
+    photoPreview=document.createElement('div');photoPreview.className='watch-photo-preview';photoPreview.appendChild(picture);document.body.appendChild(photoPreview);
+    const rect=avatar.getBoundingClientRect(),box=photoPreview.getBoundingClientRect();
+    photoPreview.style.left=Math.max(8,Math.min(rect.right+12,window.innerWidth-box.width-8))+'px';
+    photoPreview.style.top=Math.max(8,Math.min(rect.top,window.innerHeight-box.height-8))+'px';
+  }
   function mount() {
     if(!mounted){
       mounted=true;
@@ -223,7 +242,14 @@
       form.onsubmit=async event=>{event.preventDefault();const button=form.querySelector('[type=submit]');button.disabled=true;try{const data=Object.fromEntries(new FormData(form));data.aliases=data.aliases.split(',').map(s=>s.trim()).filter(Boolean);await api(form.dataset.id?'/'+form.dataset.id:'',form.dataset.id?'PUT':'POST',data);edit(null);await load();}catch(e){host().querySelector('.watch-status').textContent=e.message;}finally{button.disabled=false;}};
       host().querySelector('[data-cancel]').onclick=()=>edit(null);
       host().querySelector('[data-all]').onclick=async()=>{try{await api('/check','POST');await load();}catch(e){host().querySelector('.watch-status').textContent=e.message;}};
+      const list=host().querySelector('.watch-list');
+      list.addEventListener('pointerover',event=>{const avatar=event.target.closest('[data-photo-preview]');if(avatar&&event.pointerType!=='touch'&&!avatar.contains(event.relatedTarget))previewPhoto(avatar);});
+      list.addEventListener('pointerout',event=>{const avatar=event.target.closest('[data-photo-preview]');if(avatar&&!avatar.contains(event.relatedTarget))hidePhotoPreview();});
+      list.addEventListener('keydown',event=>{const avatar=event.target.closest('[data-photo-preview]');if(avatar&&['Enter',' '].includes(event.key)){event.preventDefault();previewPhoto(avatar,true);}});
+      window.addEventListener('scroll',hidePhotoPreview,true);
+      window.addEventListener('resize',hidePhotoPreview);
       host().querySelector('.watch-list').onclick=async event=>{
+        const avatar=event.target.closest('[data-photo-preview]');if(avatar){previewPhoto(avatar,true);return;}
         const button=event.target.closest('[data-action]');if(!button)return;
         const row=items.find(r=>r.id===+button.dataset.id);if(!row)return;
         const action=button.dataset.action;
