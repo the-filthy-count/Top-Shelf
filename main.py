@@ -25447,7 +25447,7 @@ def _freeones_fetch_image_from_profile_url(profile_url: str) -> bytes | None:
     """Fetch the headshot from a known Freeones bio URL, e.g. https://www.freeones.com/Name/bio."""
     try:
         from lxml import html as _lxml_html  # noqa: PLC0415
-        scraper = _iafd_get_scraper()
+        scraper = requests.Session()
         bio_url = re.sub(r"/feed$", "/bio", profile_url.rstrip("/"))
         if not bio_url.endswith("/bio"):
             bio_url = bio_url.rstrip("/") + "/bio"
@@ -25477,7 +25477,8 @@ def _freeones_fetch_image_from_profile_url(profile_url: str) -> bytes | None:
             emit(f"Freeones: no image found in bio page HTML for {bio_url}")
             return None
         time.sleep(1.0)
-        resp2 = scraper.get(img_src, timeout=(6, 20))
+        from urllib.parse import urljoin
+        resp2 = scraper.get(urljoin(bio_url, img_src), timeout=(6, 20))
         if resp2.status_code == 200 and _iafd_bytes_look_like_image(resp2.content):
             return resp2.content
         emit(f"Freeones: image fetch failed (HTTP {resp2.status_code}, {len(resp2.content)} bytes) for {img_src}")
@@ -25488,33 +25489,14 @@ def _freeones_fetch_image_from_profile_url(profile_url: str) -> bytes | None:
 
 
 def _freeones_performer_image(name: str) -> bytes | None:
-    """Search Freeones for a performer by name and return their headshot as bytes, or None."""
+    """Only use an unambiguous exact-name search result for enrichment."""
     try:
-        from lxml import html as _lxml_html  # noqa: PLC0415
-        scraper = _iafd_get_scraper()
-        q = quote_plus(name)
-        resp = scraper.get(
-            f"https://www.freeones.com/babes?q={q}&v=teasers&s=relevance&l=96"
-            "&m%5BcanPreviewFeatures%5D=0",
-            timeout=(6, 20),
-        )
-        if resp.status_code != 200:
-            emit(f"Freeones search: HTTP {resp.status_code} for '{name}'")
-            return None
-        tree = _lxml_html.fromstring(resp.content)
-        hrefs = (
-            tree.xpath('//div[@id="search-result"]//div[@data-test="teaser-subject"]/a/@href')
-            or tree.xpath('//div[@data-test="teaser-subject"]/a/@href')
-        )
-        if not hrefs:
-            emit(f"Freeones search: no results for '{name}'")
-            return None
-        profile_url = "https://www.freeones.com" + re.sub(r"/feed$", "/bio", hrefs[0])
-        time.sleep(1.5)
-        return _freeones_fetch_image_from_profile_url(profile_url)
+        hits = _freeones_performer_search(name)
+        exact = [h for h in hits if h['name'].strip().casefold() == name.strip().casefold()]
+        if len(exact) == 1:
+            return _freeones_fetch_image_from_profile_url(exact[0]['url'])
     except Exception as exc:
-        emit(f"Freeones search error for '{name}': {exc}")
-        _log.warning("Freeones image fetch for '%s': %s", name, exc)
+        emit(f"FreeOnes image search failed: {exc}")
     return None
 
 
@@ -25584,16 +25566,20 @@ def _enrich_freeones_fallback(row_id: int, name: str, row: dict) -> None:
         if stored_url:
             img_bytes = _freeones_fetch_image_from_profile_url(stored_url)
         else:
-            img_bytes = _freeones_performer_image(name)
+            hits = _freeones_performer_search(name)
+            exact = [h for h in hits if h['name'].strip().casefold() == name.strip().casefold()]
+            if len(exact) != 1:
+                return
+            resolved_url = exact[0]['url']
+            img_bytes = _freeones_fetch_image_from_profile_url(resolved_url)
         if not img_bytes:
             return
         if not _save_headshot_bytes_from_source(row_id, name, img_bytes, "freeones"):
             return
         # Store the Freeones profile URL if not already set
         if not stored_url:
-            fo_slug = name.replace(" ", "-")
             try:
-                db.favourite_set_ext_link(int(row_id), "freeones", f"https://www.freeones.com/{fo_slug}/bio")
+                db.favourite_set_ext_link(int(row_id), "freeones", resolved_url)
             except Exception:
                 pass
         emit(f"Freeones: saved headshot for '{name}'")
@@ -25668,40 +25654,9 @@ def _iafd_performer_scrape(row_id: int, iafd_url: str) -> list[str]:
 
 
 def _freeones_performer_search(name: str) -> list[dict]:
-    """Search Freeones by performer name; return up to 8 candidates {name, url, thumb_url}."""
-    try:
-        from lxml import html as _lxml_html  # noqa: PLC0415
-        scraper = _iafd_get_scraper()
-        q = quote_plus((name or "").strip())
-        resp = scraper.get(
-            f"https://www.freeones.com/babes?q={q}&v=teasers&s=relevance&l=12",
-            timeout=(6, 20),
-        )
-        if resp.status_code != 200:
-            return []
-        tree = _lxml_html.fromstring(resp.content)
-        hrefs = (
-            tree.xpath('//div[@id="search-result"]//div[@data-test="teaser-subject"]/a/@href')
-            or tree.xpath('//div[@data-test="teaser-subject"]/a/@href')
-        )
-        names_raw = (
-            tree.xpath('//div[@id="search-result"]//p[@data-test="subject-name"]/text()')
-            or tree.xpath('//p[@data-test="subject-name"]/text()')
-        )
-        imgs = (
-            tree.xpath('//div[@id="search-result"]//div[@data-test="teaser-subject"]//img/@src')
-            or tree.xpath('//div[@data-test="teaser-subject"]//img/@src')
-        )
-        results: list[dict] = []
-        for i, href in enumerate(hrefs[:8]):
-            profile_url = "https://www.freeones.com" + re.sub(r"/feed$", "/bio", href)
-            n = names_raw[i].strip() if i < len(names_raw) else name
-            thumb = imgs[i] if i < len(imgs) else None
-            results.append({"name": n, "url": profile_url, "thumb_url": thumb})
-        return results
-    except Exception as exc:
-        _log.debug("Freeones search '%s': %s", name, exc)
-        return []
+    """Search FreeOnes independently of IAFD; surface transport failures."""
+    from app.integrations.freeones import search
+    return search(name)
 
 
 def _fetch_performer_ext_links_from_db_ids(
@@ -26879,7 +26834,10 @@ async def api_performers_search_ext_link(payload: dict = Body(...)):
             if o.get("urls")
         ]
     elif site == "freeones":
-        results = await run_maint(_freeones_performer_search, name)
+        try:
+            results = await run_maint(_freeones_performer_search, name)
+        except Exception as exc:
+            return JSONResponse({"error": str(exc), "results": []}, status_code=503)
     elif site == "javdatabase":
         # JAVStash is needed for AUTO-linking (canonical romanized name as
         # source-of-truth for the slug), but not for manual search — the
