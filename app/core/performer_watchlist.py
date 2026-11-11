@@ -74,25 +74,45 @@ def search_terms(names):
             if term and term.casefold() not in {t.casefold() for t in terms}: terms.append(term)
     return terms
 
+def library_identity(source, identity):
+    identity = str(identity or '').strip()
+    if re.fullmatch(r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}', identity):
+        identity = identity.lower()
+    return source, identity
+
 def rows():
     with db.get_conn() as c:
         result = [dict(r) for r in c.execute('SELECT * FROM performer_watchlist ORDER BY lower(name),id')]
         fields = {'TPDB': 'match_tpdb_id', 'StashDB': 'match_stashdb_id',
                   'FansDB': 'match_fansdb_id', 'JAVStash': 'match_javstash_id'}
         library = set()
-        for entity in c.execute("SELECT match_tpdb_id,match_stashdb_id,match_fansdb_id,match_javstash_id FROM favourite_entities WHERE kind='performer' AND COALESCE(is_group,0)=0"):
+        for entity in c.execute("SELECT match_tpdb_id,match_stashdb_id,match_fansdb_id,match_javstash_id,is_group,group_ids_json FROM favourite_entities WHERE kind='performer'"):
             for source, field in fields.items():
                 if entity[field] and str(entity[field]).strip():
-                    library.add((source, str(entity[field]).strip()))
+                    library.add(library_identity(source, entity[field]))
+            if entity['is_group']:
+                try:
+                    linked = json.loads(entity['group_ids_json'] or '{}')
+                except (ValueError, TypeError):
+                    linked = {}
+                if isinstance(linked, dict):
+                    for source in fields:
+                        entries = linked.get(source.lower(), [])
+                        if not isinstance(entries, list):
+                            continue
+                        for entry in entries:
+                            identity = db._entry_id(entry)
+                            if identity:
+                                library.add(library_identity(source, identity))
     for r in result:
         for k in ('aliases','candidates','checks','confirmed','details','origin_sources','linked_profiles'): r[k] = json.loads(r[k]) if r[k] else None
         r['candidates'] = [h for h in r['candidates'] if h.get('source') in (*SOURCES, *EXTERNAL_SOURCES) and matches_names(h, [r['name']] + (r['aliases'] or []))]
         for hit in r['candidates']:
-            hit['in_library'] = (hit.get('source'), str(hit.get('id', '')).strip()) in library
+            hit['in_library'] = library_identity(hit.get('source'), hit.get('id')) in library
         r['checks'] = {k: v for k, v in r['checks'].items() if k in (*SOURCES, *EXTERNAL_SOURCES)}
         confirmed = r.get('confirmed') or {}
         r['profile_image'] = profile_image(r)
-        r['in_library'] = bool(r.get('library_row_id')) or (confirmed.get('source'), str(confirmed.get('id', '')).strip()) in library
+        r['in_library'] = bool(r.get('library_row_id')) or library_identity(confirmed.get('source'), confirmed.get('id')) in library
     return result
 
 def search_source(source, names, settings):

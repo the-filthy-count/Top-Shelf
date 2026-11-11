@@ -12,7 +12,7 @@ class WatchlistAPITests(unittest.TestCase):
         self.conn=sqlite3.connect(':memory:')
         self.conn.row_factory=sqlite3.Row
         watch.install(self.conn)
-        self.conn.execute("CREATE TABLE favourite_entities(kind TEXT,is_group INTEGER DEFAULT 0,match_tpdb_id TEXT,match_stashdb_id TEXT,match_fansdb_id TEXT,match_javstash_id TEXT)")
+        self.conn.execute("CREATE TABLE favourite_entities(kind TEXT,is_group INTEGER DEFAULT 0,match_tpdb_id TEXT,match_stashdb_id TEXT,match_fansdb_id TEXT,match_javstash_id TEXT,group_ids_json TEXT)")
         self.patch=patch.object(watch.db,'get_conn',return_value=self.conn);self.patch.start()
     def tearDown(self):
         self.patch.stop();self.conn.close()
@@ -50,6 +50,24 @@ class WatchlistAPITests(unittest.TestCase):
         self.assertFalse(row['in_library'])
         api.confirm(identity, hits[0])
         self.assertTrue(api.listing()['items'][0]['in_library'])
+
+    def test_group_members_have_library_badges(self):
+        identity = api.add({'name': 'Bella'})['id']
+        hits = [{'source': source, 'id': 'member', 'name': 'Bella'}
+                for source in ('TPDB','StashDB','FansDB','JAVStash')]
+        groups = {'tpdb':['member'], 'stashdb':[{'id':'member','name':'Bella'}],
+                  'fansdb':['member'], 'javstash':[{'id':'member'}]}
+        self.conn.execute("INSERT INTO favourite_entities(kind,is_group,group_ids_json) VALUES('performer',1,?)", (json.dumps(groups),))
+        self.conn.execute('UPDATE performer_watchlist SET candidates=? WHERE id=?', (json.dumps(hits),identity))
+        self.assertTrue(all(h['in_library'] for h in api.listing()['items'][0]['candidates']))
+        api.confirm(identity, hits[0])
+        self.assertTrue(api.listing()['items'][0]['in_library'])
+
+    def test_invalid_group_data_does_not_break_listing(self):
+        api.add({'name':'Bella'})
+        for value in ('broken', '[]', '{"tpdb":"wrong shape"}'):
+            self.conn.execute("INSERT INTO favourite_entities(kind,is_group,group_ids_json) VALUES('performer',1,?)", (value,))
+        self.assertFalse(api.listing()['items'][0]['in_library'])
 
     def test_retired_source_results_are_hidden(self):
         identity = api.add({'name': 'Bella'})['id']
