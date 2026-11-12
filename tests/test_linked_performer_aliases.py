@@ -35,3 +35,13 @@ class LinkedAliasesTests(unittest.TestCase):
             self.assertEqual(db._library_guess_from_release_name('Poppy - Arrangement.mp4',*indexes)['performers'],[])
             self.assertEqual(db._library_guess_from_release_name('Poppy Palmers - Arrangement.mp4',*indexes)['performers'],['Strawberry Poppy'])
         c.close()
+
+    def test_stashbox_detail_query_supplies_identity_for_alias_sync(self):
+        import ast
+        from pathlib import Path
+        tree=ast.parse((Path(__file__).resolve().parents[1]/'main.py').read_text())
+        query=next(n.value.value for n in tree.body if isinstance(n,ast.Assign)
+                   and any(isinstance(t,ast.Name) and t.id=='FANSDB_PERFORMER_DETAIL_GQL' for t in n.targets))
+        fields=query.split('findPerformer(id: $id) {',1)[1].split('images',1)[0].split()
+        self.assertIn('id',fields)
+        self.assertIn('aliases',fields)

@@ -9840,7 +9840,7 @@ query($term: String!) {
 FANSDB_PERFORMER_DETAIL_GQL = """
 query($id: ID!) {
   findPerformer(id: $id) {
-    name disambiguation aliases birth_date ethnicity country gender
+    id name disambiguation aliases birth_date ethnicity country gender
     images { url }
     urls { url type }
   }
@@ -28166,7 +28166,7 @@ def _performer_popup_cache_invalidate_row(row_id: int) -> None:
     # write under a `solo_` prefix that the plain keys never cover.
     keys |= {f"solo_{k}" for k in list(keys)}
     base_keys = set(keys)
-    for version in ("v2_", "v3_", "v4_"):
+    for version in ("v2_", "v3_", "v4_", "v5_"):
         keys |= {f"{version}{k}" for k in base_keys}
     cache_dir = _performer_popup_cache_dir()
     for key in keys:
@@ -28522,7 +28522,7 @@ async def api_performer_popup(
         return JSONResponse({"error": "row_id, stash_id, tpdb_id, fansdb_id, javstash_id, or name required"}, status_code=400)
 
     has_external_id = bool(sid_arg or tid_arg or fans_arg or jav_id_arg)
-    prefix = "v4_" + ("solo_" if standalone else "")
+    prefix = "v5_" + ("solo_" if standalone else "")
     if rid_arg:
         cache_key = f"{prefix}row_{rid_arg}"
     elif sid_arg:
