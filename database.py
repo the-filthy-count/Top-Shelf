@@ -3219,6 +3219,41 @@ def favourite_set_sort_birth_date(row_id: int, sort_birth_date: str | None) -> N
         conn.commit()
 
 
+def favourite_merge_linked_aliases(row_id, profiles):
+    """Persist aliases only from profiles whose source ID is linked to this row."""
+    columns = {'TPDB':'match_tpdb_id', 'StashDB':'match_stashdb_id',
+               'FansDB':'match_fansdb_id', 'JAVStash':'match_javstash_id'}
+    with get_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        row = conn.execute("SELECT * FROM favourite_entities WHERE id=? AND kind='performer'", (row_id,)).fetchone()
+        if not row: return False
+        try:
+            existing = json.loads(row['aliases_json'] or '[]')
+        except (ValueError, TypeError):
+            existing = []
+        if not isinstance(existing, list): existing = []
+        merged = list(existing)
+        seen = {a.strip().casefold() for a in existing if isinstance(a, str)}
+        for source, profile in profiles:
+            if source not in columns or not isinstance(profile, dict): continue
+            linked = str(row[columns[source]] or '').strip()
+            identity = str(profile.get('id') or profile.get('_id') or '').strip()
+            if not linked or identity != linked: continue
+            aliases = profile.get('aliases') or []
+            if not isinstance(aliases, list): continue
+            for alias in aliases:
+                value = alias.get('name') if isinstance(alias, dict) else alias
+                if not isinstance(value, str) or not value.strip(): continue
+                value = value.strip()
+                if value.casefold() not in seen:
+                    seen.add(value.casefold()); merged.append(value)
+        if merged == existing: return False
+        conn.execute('UPDATE favourite_entities SET aliases_json=?,updated_at=? WHERE id=?',
+                     (json.dumps(merged),datetime.now(timezone.utc).isoformat(),row_id))
+        conn.commit()
+        return True
+
+
 def favourite_set_aliases_json(row_id: int, aliases_json: str | None) -> None:
     """Replace just the ``aliases_json`` column on a favourite row.
 
@@ -3898,7 +3933,7 @@ def library_match_generation() -> str:
             "SELECT MAX(last_fetched_at) AS m, COUNT(*) AS n "
             "FROM studio_logos WHERE logo_path IS NOT NULL"
         ).fetchone()
-    return "exact-path-names-v5:{}:{}:{}:{}:{}:{}".format(
+    return "exact-path-names-v6:{}:{}:{}:{}:{}:{}".format(
         (fav_p["m"] if fav_p else "") or "",
         (fav_p["n"] if fav_p else 0) or 0,
         (fav_s["m"] if fav_s else "") or "",
@@ -4958,7 +4993,7 @@ def _library_guess_from_release_name(
     if not release_name:
         return empty
     release_key = _normalize_release_for_match(release_name)
-    if not release_key or len(release_key) < 8:
+    if not release_key:
         return empty
     try:
         if studio_index is None or performer_index is None:
@@ -4997,11 +5032,15 @@ def _library_guess_from_release_name(
         def _overlaps(a: int, b: int) -> bool:
             return any(not (b < s or a > e) for s, e in used)
 
+        owners = {}
+        for tokens, _, owner in performer_index:
+            owners.setdefault("".join(tokens), set()).add(owner)
         for ptokens, display, row_id in performer_index:
             if row_id in matched_row_ids:
                 continue
             wanted = "".join(ptokens)
-            if not wanted:
+            if not wanted or len(owners[wanted]) > 1:
+                # A shared alias cannot choose between different library identities.
                 continue
             found = False
             for i in range(len(release_tokens)):
@@ -5038,14 +5077,8 @@ def _build_library_match_indexes() -> tuple[list[tuple[str, str]], list[tuple[tu
           * canonical DB primary names (match_tpdb_name /
             match_stashdb_name / match_fansdb_name) when set
 
-    Notes on alias handling: aliases from ``aliases_json`` are ingested
-    only as **multi-token** phrases (two or more tokens). Single-token
-    aliases ("Daisy", "Violet") are too noisy — every first-name match
-    would paint unrelated releases — so they're dropped, mirroring the
-    safety rule the frontend highlighter uses in `ts-utils.js`. Without
-    this, releases whose only library hit is via an alias (e.g. a
-    misspelled stage name) would highlight in the title but fail to
-    resolve a headshot for the download progress circle.
+    Every saved alias is indexed, including single-token and short aliases.
+    Matching still requires complete ordered tokens (or their joined form).
     """
     alnum = re.compile(r"[^a-z0-9]")
     studio_idx: list[tuple[str, str]] = []
@@ -5131,21 +5164,6 @@ def _build_library_match_indexes() -> tuple[list[tuple[str, str]], list[tuple[tu
                 tokens = tuple(_tokenize_for_match(s, release=False))
                 if not tokens:
                     return
-                canonical_tokens = tuple(_tokenize_for_match(folder_name, release=False))
-                # Reordered names can identify entirely different people.
-                # Do not import a reverse-name alias as equivalent identity.
-                if alias_safe and tokens != canonical_tokens and sorted(tokens) == sorted(canonical_tokens):
-                    return
-                # Min char-length stays at 5 so pathological 1-2 letter
-                # tokens (stray initials) don't match.
-                total_chars = sum(len(t) for t in tokens)
-                if total_chars < 5:
-                    return
-                # Aliases must be multi-token — see docstring; single-
-                # word aliases ("Daisy") would paint every release with
-                # that first name.
-                if alias_safe and len(tokens) < 2:
-                    return
                 if tokens in seen_token_tuples:
                     return
                 seen_token_tuples.add(tokens)
@@ -5155,21 +5173,10 @@ def _build_library_match_indexes() -> tuple[list[tuple[str, str]], list[tuple[tu
             # single-token folder ("Christian") is the user's explicit
             # choice; we trust it even if it risks first-name collisions.
             _push(folder_name, tier=0)
-            # Canonical DB primary names (tier 1). These come from
-            # TPDB/StashDB/FansDB which can have one-word stage names
-            # ("Christian") that collide with arbitrary words in
-            # releases — so require multi-token here, same safety rule
-            # the aliases use. Without this, a Nicole Doshi release
-            # containing "Christian Clay" would token-match a library
-            # row whose match_tpdb_name happens to be just "Christian"
-            # and pull the wrong performer's headshot/details.
+            # Linked database names also participate in exact matching.
             for field in ("match_tpdb_name", "match_stashdb_name", "match_fansdb_name"):
                 _push((r[field] or "").strip(), tier=1, alias_safe=True)
-            # Multi-token aliases (tier 2). Catches misspellings + stage
-            # names that releases use instead of the canonical primary —
-            # the frontend already highlights against these, so the
-            # backend matching the same set keeps title highlights and
-            # download-circle headshots in sync.
+            # Include all saved aliases.
             try:
                 aliases_raw = r["aliases_json"] or ""
                 if aliases_raw:

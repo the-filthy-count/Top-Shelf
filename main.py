@@ -28165,7 +28165,9 @@ def _performer_popup_cache_invalidate_row(row_id: int) -> None:
     # the group-members modal and other bypass_library=True call sites
     # write under a `solo_` prefix that the plain keys never cover.
     keys |= {f"solo_{k}" for k in list(keys)}
-    keys |= {f"v2_{k}" for k in list(keys)}
+    base_keys = set(keys)
+    for version in ("v2_", "v3_", "v4_"):
+        keys |= {f"{version}{k}" for k in base_keys}
     cache_dir = _performer_popup_cache_dir()
     for key in keys:
         try:
@@ -28520,7 +28522,7 @@ async def api_performer_popup(
         return JSONResponse({"error": "row_id, stash_id, tpdb_id, fansdb_id, javstash_id, or name required"}, status_code=400)
 
     has_external_id = bool(sid_arg or tid_arg or fans_arg or jav_id_arg)
-    prefix = "v3_" + ("solo_" if standalone else "")
+    prefix = "v4_" + ("solo_" if standalone else "")
     if rid_arg:
         cache_key = f"{prefix}row_{rid_arg}"
     elif sid_arg:
@@ -28706,6 +28708,17 @@ async def api_performer_popup(
         _gather_jav_from_sid(),
         _gather_jav_from_arg(),
     )
+
+    # The popup and filename matcher must share aliases from linked identities.
+    # Never persist aliases obtained only through a name search or unrelated click.
+    if row:
+        profiles = [("TPDB", tpdb_by_id), ("JAVStash", jav_from_row)]
+        profiles.extend((p.get("_source"), p) for p in
+                        (sb_from_sid, sb_from_fans_arg, sb_from_row_sdb, sb_from_row_fdb)
+                        if isinstance(p, dict))
+        if await run_in_threadpool(db.favourite_merge_linked_aliases, int(row["id"]), profiles):
+            row = await run_in_threadpool(db.favourite_get, int(row["id"]))
+            _favourites_warm.invalidate()
 
     # Resolve precedence — preserves original cascade semantics.
     tpdb_data: dict | None = tpdb_by_id or tpdb_by_name_eager
