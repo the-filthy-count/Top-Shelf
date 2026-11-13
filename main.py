@@ -11977,6 +11977,34 @@ def _maybe_kick_performer_image_enrichment(row: dict) -> None:
         _submit_enrichment(_enrich_performer_ext_links_bg, row_id)
 
 
+def _sync_linked_performer_aliases(row):
+    """Refresh names from linked IDs without changing locked identity or artwork."""
+    if not row or row.get("kind") != "performer":
+        return False
+    profiles = []
+    for source, field in (("TPDB", "match_tpdb_id"), ("StashDB", "match_stashdb_id"),
+                          ("FansDB", "match_fansdb_id"), ("JAVStash", "match_javstash_id")):
+        identity = str(row.get(field) or "").strip()
+        if not identity:
+            continue
+        try:
+            if source in ("StashDB", "FansDB"):
+                profile = _performer_popup_stashbox_bio(identity, source == "FansDB")
+                if profile and profile.get("_source") != source:
+                    continue
+            else:
+                profile = fetch_performer_detail(source, identity)
+            profiles.append((source, profile))
+        except Exception as exc:
+            _log.debug("Linked alias refresh %s/%s: %s", source, identity, exc)
+    changed = db.favourite_merge_linked_aliases(int(row["id"]), profiles)
+    if changed:
+        _favourites_name_index_bump()
+        _favourites_warm.invalidate()
+        _performer_popup_cache_invalidate_row(int(row["id"]))
+    return changed
+
+
 def favourites_refresh_entity_row(
     row_id: int,
     *,
@@ -11996,13 +12024,16 @@ def favourites_refresh_entity_row(
     are filled. Image and aliases are not overwritten when already present unless a new
     match supplies them for an empty slot.
 
-    When matches_locked is set, this function is skipped entirely (returns skipped: True).
+    When matches_locked is set, only linked aliases refresh; identity and artwork stay locked.
     Manual link updates from the overlay search modal use api_favourites_match instead and
     are not blocked by the lock.
     """
     row = db.favourite_get(row_id)
     if not row:
         return {"error": "Not found"}
+    if row.get("kind") == "performer":
+        _sync_linked_performer_aliases(row)
+        row = db.favourite_get(row_id) or row
     if int(row.get("matches_locked") or 0):
         return {"ok": True, "id": row_id, "skipped": True}
     name = row["folder_name"]

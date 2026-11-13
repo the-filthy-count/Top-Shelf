@@ -45,3 +45,17 @@ class LinkedAliasesTests(unittest.TestCase):
         fields=query.split('findPerformer(id: $id) {',1)[1].split('images',1)[0].split()
         self.assertIn('id',fields)
         self.assertIn('aliases',fields)
+
+    def test_locked_refresh_syncs_aliases_before_returning(self):
+        import ast
+        from pathlib import Path
+        from unittest.mock import Mock
+        tree=ast.parse((Path(__file__).resolve().parents[1]/'main.py').read_text())
+        fn=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='favourites_refresh_entity_row')
+        row={'id':1,'kind':'performer','matches_locked':1}
+        fake_db=Mock();fake_db.favourite_get.return_value=row
+        sync=Mock()
+        ns={'db':fake_db,'_sync_linked_performer_aliases':sync,'Path':Path}
+        exec(compile(ast.Module(body=[fn],type_ignores=[]),'main.py','exec'),ns)
+        self.assertTrue(ns['favourites_refresh_entity_row'](1)['skipped'])
+        sync.assert_called_once_with(row)
