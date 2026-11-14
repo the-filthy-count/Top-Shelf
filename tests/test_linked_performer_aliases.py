@@ -59,3 +59,28 @@ class LinkedAliasesTests(unittest.TestCase):
         exec(compile(ast.Module(body=[fn],type_ignores=[]),'main.py','exec'),ns)
         self.assertTrue(ns['favourites_refresh_entity_row'](1)['skipped'])
         sync.assert_called_once_with(row)
+
+    def test_manual_and_bulk_refresh_reach_locked_alias_refresh(self):
+        import ast
+        import asyncio
+        from pathlib import Path
+        from unittest.mock import Mock
+        tree = ast.parse((Path(__file__).resolve().parents[1] / 'main.py').read_text())
+        names = {'api_favourites_refresh', '_favourites_refresh_all_loop'}
+        functions = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name in names]
+        for fn in functions:
+            fn.decorator_list = []
+        refresh = Mock(return_value={'ok': True, 'skipped': True})
+        clear = Mock()
+        ns = {'Body': lambda *args, **kw: None, '_favourite_images_locked': lambda rid: True,
+              'favourites_clear_image_disk_cache': clear,
+              'favourites_refresh_entity_row': refresh,
+              '_favourites_progress_update': Mock(), 'emit': Mock()}
+        exec(compile(ast.Module(body=functions, type_ignores=[]), 'main.py', 'exec'), ns)
+        asyncio.run(ns['api_favourites_refresh']({'id': 1}))
+        refresh.assert_called_once_with(1, scrape_aliases=True, only_missing=False)
+        clear.assert_not_called()
+        refresh.reset_mock()
+        ns['_favourites_refresh_all_loop']([{'id': 1, 'folder_name': 'Strawberry Poppy'}])
+        refresh.assert_called_once_with(1, scrape_aliases=True, only_missing=False)
+        clear.assert_not_called()

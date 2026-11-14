@@ -32888,9 +32888,8 @@ async def api_favourites_refresh(payload: dict = Body(...)):
         return JSONResponse({"error": "id required"}, status_code=400)
     scrape = payload.get("scrape_aliases", True)
     only_missing = bool(payload.get("only_missing", False))
-    if _favourite_images_locked(row_id):
-        return {"ok": True, "id": row_id, "skipped": True}
-    if not only_missing:
+    # Locked identities still refresh aliases from their existing linked IDs.
+    if not only_missing and not _favourite_images_locked(row_id):
         favourites_clear_image_disk_cache(row_id)
     return favourites_refresh_entity_row(
         row_id,
@@ -32906,11 +32905,8 @@ def _favourites_refresh_all_loop(rows: list) -> None:
         _favourites_progress_update(nm, done)
         try:
             rid = int(row["id"])
-            if _favourite_images_locked(rid):
-                done += 1
-                _favourites_progress_update(nm, done)
-                continue
-            favourites_clear_image_disk_cache(rid)
+            if not _favourite_images_locked(rid):
+                favourites_clear_image_disk_cache(rid)
             favourites_refresh_entity_row(
                 rid,
                 scrape_aliases=True,
