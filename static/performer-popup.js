@@ -1916,9 +1916,9 @@
     if (embedHost && typeof window.unmountEmbeddedProwlarrSearch === 'function') {
       window.unmountEmbeddedProwlarrSearch(embedHost);
     }
-    el._searchReleaseName = (selectedName) => {
+    el._searchReleaseName = (selectedName, {activate = true} = {}) => {
       if (!selectedName || !embedHost || !window.mountEmbeddedProwlarrSearch) return;
-      _setFilmsPanelTab(panel, 'prowlarr');
+      if (activate) _setFilmsPanelTab(panel, 'prowlarr');
       el.closest('.performer-popup-overlay')?.querySelectorAll('[data-release-name]').forEach(btn => {
         const selected = btn.dataset.releaseName === selectedName;
         btn.setAttribute('aria-pressed', String(selected));
@@ -1930,10 +1930,9 @@
       }).then(() => wirePpScrollAffordance(el));
     };
     wireReleaseKeywordFilter(embedHost);
-    let releasesLoaded = false;
-    panel.querySelector('[data-pp-films-tab="prowlarr"]').addEventListener('click', () => {
-      if (!releasesLoaded) { releasesLoaded = true; el._searchReleaseName(name); }
-    });
+    // Start alongside filmography without switching the visible tab. Tab clicks
+    // only reveal the existing results; explicit alias searches still activate it.
+    el._searchReleaseName(name, {activate: false});
     wirePpScrollAffordance(el);
   }
 
