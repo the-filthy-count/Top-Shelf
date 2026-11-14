@@ -84,3 +84,64 @@ class LinkedAliasesTests(unittest.TestCase):
         ns['_favourites_refresh_all_loop']([{'id': 1, 'folder_name': 'Strawberry Poppy'}])
         refresh.assert_called_once_with(1, scrape_aliases=True, only_missing=False)
         clear.assert_not_called()
+
+    def test_link_confirmation_syncs_selected_source_before_return(self):
+        import ast
+        import asyncio
+        from pathlib import Path
+        from unittest.mock import Mock
+        tree = ast.parse((Path(__file__).resolve().parents[1] / 'main.py').read_text())
+        names = {'api_favourites_set_match', 'api_favourites_match'}
+        functions = [n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name in names]
+        for fn in functions:
+            fn.decorator_list = []
+        row = {'id': 1, 'kind': 'performer', 'matches_locked': 1}
+        fake_db = Mock()
+        fake_db.favourite_get.return_value = row
+        events = []
+        def save(rid, **fields):
+            row.update(fields)
+            events.append('save')
+        fake_db.favourite_update_matches.side_effect = save
+        def sync(saved, source):
+            self.assertEqual(saved['match_stashdb_id'], 'linked-id')
+            self.assertEqual(source.casefold(), 'stashdb')
+            events.append('sync')
+        async def run(fn, *args):
+            return fn(*args)
+        ns = {'Body': lambda *a, **kw: None, 'db': fake_db, 'run_in_threadpool': run,
+              '_sync_linked_performer_aliases': sync,
+              '_favourite_find_local_poster_file': lambda p: False,
+              '_favourite_performer_sort_birth_date': Mock(),
+              '_submit_enrichment': Mock(), '_enrich_performer_ext_links_bg': Mock(),
+              '_performer_popup_cache_invalidate_row': Mock()}
+        exec(compile(ast.Module(body=functions, type_ignores=[]), 'main.py', 'exec'), ns)
+        for endpoint in names:
+            events.clear()
+            result = asyncio.run(ns[endpoint]({'row_id': 1, 'source': 'StashDB',
+                'id': 'linked-id', 'external_id': 'linked-id', 'name': 'Strawberry Poppy'}))
+            self.assertTrue(result['ok'])
+            self.assertEqual(events, ['save', 'sync'])
+
+    def test_selected_source_sync_does_not_query_other_linked_databases(self):
+        import ast
+        from pathlib import Path
+        from unittest.mock import Mock
+        tree = ast.parse((Path(__file__).resolve().parents[1] / 'main.py').read_text())
+        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == '_sync_linked_performer_aliases')
+        profile = {'id': 'linked-id', '_source': 'StashDB', 'aliases': ['Poppy Palmers']}
+        fetch = Mock(return_value=profile)
+        fake_db = Mock()
+        fake_db.favourite_merge_linked_aliases.return_value = True
+        ns = {'db': fake_db, '_performer_popup_stashbox_bio': fetch,
+              'fetch_performer_detail': Mock(), '_log': Mock(),
+              '_favourites_name_index_bump': Mock(), '_favourites_warm': Mock(),
+              '_performer_popup_cache_invalidate_row': Mock()}
+        exec(compile(ast.Module(body=[fn], type_ignores=[]), 'main.py', 'exec'), ns)
+        row = {'id': 1, 'kind': 'performer', 'match_stashdb_id': 'linked-id',
+               'match_tpdb_id': 'another-id', 'match_fansdb_id': 'other-id'}
+        self.assertTrue(ns['_sync_linked_performer_aliases'](row, 'STASHDB'))
+        fetch.assert_called_once_with('linked-id', False)
+        ns['fetch_performer_detail'].assert_not_called()
+        fake_db.favourite_merge_linked_aliases.assert_called_once_with(1, [('StashDB', profile)])
+        ns['_favourites_name_index_bump'].assert_called_once()

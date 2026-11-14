@@ -11977,13 +11977,15 @@ def _maybe_kick_performer_image_enrichment(row: dict) -> None:
         _submit_enrichment(_enrich_performer_ext_links_bg, row_id)
 
 
-def _sync_linked_performer_aliases(row):
+def _sync_linked_performer_aliases(row, source_filter=None):
     """Refresh names from linked IDs without changing locked identity or artwork."""
     if not row or row.get("kind") != "performer":
         return False
     profiles = []
     for source, field in (("TPDB", "match_tpdb_id"), ("StashDB", "match_stashdb_id"),
                           ("FansDB", "match_fansdb_id"), ("JAVStash", "match_javstash_id")):
+        if source_filter and source.casefold() != source_filter.casefold():
+            continue
         identity = str(row.get(field) or "").strip()
         if not identity:
             continue
@@ -11998,7 +12000,7 @@ def _sync_linked_performer_aliases(row):
         except Exception as exc:
             _log.debug("Linked alias refresh %s/%s: %s", source, identity, exc)
     changed = db.favourite_merge_linked_aliases(int(row["id"]), profiles)
-    if changed:
+    if changed or source_filter:
         _favourites_name_index_bump()
         _favourites_warm.invalidate()
         _performer_popup_cache_invalidate_row(int(row["id"]))
@@ -33978,6 +33980,7 @@ async def api_favourites_set_match(payload: dict = Body(...)):
     else:
         return JSONResponse({"error": f"Unknown source: {source}"}, status_code=400)
     db.favourite_update_matches(row_id, **update)
+    await run_in_threadpool(_sync_linked_performer_aliases, db.favourite_get(row_id), source)
     # Trigger enrichment in background
     _submit_enrichment(_enrich_performer_ext_links_bg, row_id)
     return {"ok": True, "source": source, "id": mid, "name": name}
@@ -34040,6 +34043,7 @@ async def api_favourites_match(payload: dict = Body(...)):
         kw["image_url"] = image
     db.favourite_update_matches(row_id, **kw)
     row = db.favourite_get(row_id)
+    await run_in_threadpool(_sync_linked_performer_aliases, row, source)
     if row:
         kind = row.get("kind")
         mt = (row.get("match_tpdb_id") or "").strip() or None
@@ -41145,6 +41149,7 @@ def _watchlist_create_library(row, destination):
     if confirmed and confirmed.get('source') in ('TPDB','StashDB','FansDB','JAVStash'):
         prefix={'TPDB':'tpdb','StashDB':'stashdb','FansDB':'fansdb','JAVStash':'javstash'}[confirmed['source']]
         db.favourite_update_matches(rid,**{f'match_{prefix}_id':confirmed['id'],f'match_{prefix}_name':confirmed['name']})
+        _sync_linked_performer_aliases(db.favourite_get(rid), confirmed['source'])
     db.performer_bio_set_many(rid,{k:v for k,v in details.items() if k in db.PERFORMER_BIO_FIELDS})
     with db.get_conn() as c:
         c.execute('UPDATE performer_watchlist SET library_row_id=? WHERE id=?',(rid,row['id']));c.commit()

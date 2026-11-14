@@ -2943,3 +2943,16 @@ body .app .fav-stage {
 #favAlphaBar[popover]:popover-open { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
 #favAlphaBar[popover] .fav-alpha-btn { min-height: 40px; min-width: 0; }
 #favAlphaBar[popover] .fav-alpha-btn--all { grid-column: 1 / -1; }
+
+.watch-search-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 10px 0;
+  font-size: var(--text-small, 12px);
+}
+.watch-search-prompt > span { opacity: .7; }
+.watch-search-prompt button { padding: 8px 12px; }
+.watch-search-prompt button i { margin-right: 6px; }

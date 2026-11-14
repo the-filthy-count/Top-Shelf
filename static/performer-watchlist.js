@@ -268,5 +268,42 @@
     }
     clearInterval(timer);load();timer=setInterval(load,5000);
   }
-  window.PerformerWatchlist={mount};
+  function openAdd(name = '') {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'watch-review watch-editor watch-add-dialog';
+    dialog.setAttribute('aria-label', 'Add to Watchlist');
+    const fields = [
+      ['name', 'Name / alias', 'text', 150],
+      ['aliases', 'Other aliases, comma separated', 'text', null],
+      ['source_url', 'Source link', 'url', 2000],
+      ['notes', 'Notes', 'text', 2000],
+    ];
+    dialog.innerHTML = `<form><header><h2>Add to Watchlist</h2><button type="button" data-close aria-label="Close">×</button></header><div class="watch-editor-fields">${fields.map(([key, label, type, limit]) => `<label class="watch-field"><span>${label}</span><input name="${key}" type="${type}" ${limit ? `maxlength="${limit}"` : ''} ${key === 'name' ? 'required' : ''}></label>`).join('')}</div><footer><span role="status" aria-live="polite"></span><button type="submit" title="Add to Watchlist" aria-label="Add to Watchlist"><i class="fa-solid fa-circle-plus" aria-hidden="true"></i></button></footer></form>`;
+    const form = dialog.querySelector('form');
+    form.elements.name.value = String(name).trim().slice(0, 150);
+    dialog.querySelector('[data-close]').onclick = () => dialog.close();
+    dialog.addEventListener('close', () => dialog.remove(), {once: true});
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const button = form.querySelector('[type=submit]');
+      if (button.disabled) return;
+      const data = Object.fromEntries(new FormData(form));
+      data.name = data.name.trim();
+      if (!data.name) { form.elements.name.focus(); return; }
+      data.aliases = data.aliases.split(',').map(value => value.trim()).filter(Boolean);
+      button.disabled = true;
+      try {
+        await api('', 'POST', data);
+        dialog.close();
+        window.toast?.('Added to Watchlist');
+      } catch (error) {
+        form.querySelector('[role=status]').textContent = error.message;
+        button.disabled = false;
+      }
+    };
+    document.body.appendChild(dialog);
+    dialog.showModal();
+    form.elements.name.focus();
+  }
+  window.PerformerWatchlist={mount,openAdd};
 })();

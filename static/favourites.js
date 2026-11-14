@@ -716,6 +716,7 @@
   };
 
   function setView(kind, options = {}) {
+    document.querySelectorAll('.watch-search-prompt').forEach(el => el.remove());
     _view = kind;
     _favPage = options.page || 1;
     _syncFavPageUrl(options.history !== "replace");
@@ -1190,8 +1191,28 @@
     return 'var(--accent)';
   }
 
+  function offerWatchlistSearch(anchor, query) {
+    const id = anchor.id + '-watchlist-prompt';
+    document.getElementById(id)?.remove();
+    const name = String(query || '').trim();
+    if (!name || !document.getElementById('performerWatchlist')) return;
+    const prompt = document.createElement('div');
+    prompt.id = id;
+    prompt.className = 'watch-search-prompt';
+    const label = document.createElement('span');
+    label.textContent = 'Can’t find the performer?';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.title = 'Add “' + name + '” to Watchlist';
+    button.innerHTML = '<i class="fa-solid fa-circle-plus" aria-hidden="true"></i> Add to Watchlist';
+    button.onclick = () => window.PerformerWatchlist.openAdd(name);
+    prompt.append(label, button);
+    anchor.before(prompt);
+  }
+
   function renderSearchResultsList() {
     const box = document.getElementById('searchResults');
+    offerWatchlistSearch(box, _searchKind === 'performer' ? _lastSearchQuery : '');
     if (_searchKind === 'movie') {
       renderMovieSearchResultsList();
       return;
@@ -2546,6 +2567,7 @@
     const list = _kindListFor(_view);
     const filtered = list.filter(r => rowPassesFilters(r));
     const grid = document.getElementById('favGrid');
+    offerWatchlistSearch(grid, _view === 'performer' ? document.getElementById('favFilter')?.value : '');
     const total = list.length;
     const kindLabel = _view === 'studio' ? 'studios'
                     : _view === 'movie'  ? 'movies'
