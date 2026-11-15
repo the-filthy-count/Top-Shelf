@@ -2179,6 +2179,19 @@
       el.innerHTML = `<div class="pp-scenes-grid" style="--pp-scene-columns:${MIN_TILES / 2}">${placeholders}</div>`;
     }
     let merged = [];
+    const failures = [];
+    const showRetry = () => {
+      const message = document.createElement('div');
+      message.className = 'pp-error';
+      message.textContent = 'Could not load scenes from ' + [...new Set(failures)].join(', ') + '. ';
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'btn';
+      retry.textContent = 'Retry';
+      retry.addEventListener('click', () => renderCarousel(el, data, signal));
+      message.appendChild(retry);
+      el.prepend(message);
+    };
     if (hasAnyId) {
       try {
         // Fire all plan items in parallel and union the buckets. Each
@@ -2197,8 +2210,13 @@
             javstash_id: p.srcKey === 'javstash' ? p.id : '',
           });
           return fetch('/api/scenes/recent?' + params.toString(), { credentials: 'same-origin', signal })
-            .then((r) => r.json())
-            .catch(() => ({}));
+            .then(async (r) => {
+              if (!r.ok) throw new Error('Scene request failed');
+              const body = await r.json();
+              if (body.error || body.errors || (!body.sources && !Array.isArray(body.scenes))) failures.push(p.source);
+              return body;
+            })
+            .catch(() => { failures.push(p.source); return {}; });
         }));
         for (const d of responses) {
           const buckets = (d && d.sources) || {};
@@ -2217,6 +2235,11 @@
     // a name match. Strict-ID mode shouldn't produce them, but a stale
     // cache entry from before this guard could still carry them.
     merged = merged.filter(s => s && s.match !== 'name');
+    if (!merged.length && failures.length) {
+      el.innerHTML = '';
+      showRetry();
+      return;
+    }
     // Dedupe across buckets (id-first; falls back to date+thumb, then
     // title+studio+date — works cross-source).
     let scenes = dedupePerformerPopupScenes(merged);
@@ -2326,6 +2349,7 @@
     const cards = padded.map(renderTile).join('');
     el.innerHTML = `
       <div class="pp-scenes-grid" style="--pp-scene-columns:${padded.length / 2}">${cards}</div>`;
+    if (failures.length) showRetry();
     window.tsProfileOwnershipFilters?.(el, scenes);
     wirePpScrollAffordance(el);
   }

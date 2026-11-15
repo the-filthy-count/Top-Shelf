@@ -3690,14 +3690,13 @@
       if (mySeq === _qOpenSearchSeq) { _qDetailsLoading = false; document.getElementById('qSearchLeftCol').inert = false; }
     }
     if (mySeq !== _qOpenSearchSeq) return;
-    // If the queue row carries a stored DB match, fold its plot +
-    // image into the merged modal's manual-extras so a "File manually"
-    // fallback ships with proper metadata. Runs async, parallel to
-    // the auto-search below, and skips if a newer open has already
-    // taken over.
+    // Restore the full saved scene before searching or saving the form,
+    // including its source-specific cast IDs. A newer selection or user
+    // edits made during this lookup must not be overwritten.
     if (queueFile.match_external_id && queueFile.match_source) {
+      const initialFields = JSON.stringify(_qSearchFields());
       _mRenderMatchBanner(queueFile.match_source, queueFile.match_external_id, 'Loading scene details…');
-      (async () => {
+      await (async () => {
         const matchSeq = mySeq;
         try {
           const r = await window.tsModalFetch('qSearchOverlay', `/api/queue/match-scene?filename=${encodeURIComponent(filename)}`);
@@ -3705,7 +3704,7 @@
           const d = await r.json();
           if (matchSeq !== _qOpenSearchSeq) return;
           if (d.found) {
-            if (d.description && !_qSearchRecord?.edited && !document.getElementById('mPlot').value) document.getElementById('mPlot').value = d.description;
+            // The shared scene selection below hydrates metadata and cast IDs.
             if (d.image_url) {
               document.getElementById('mImageUrl').value = d.image_url;
               mThumbMode = 'url';
@@ -3728,7 +3727,15 @@
               _stored:     true,
             };
             _qsRenderStoredMatchIfIdle();
-            _mRenderMatchBanner(queueFile.match_source, queueFile.match_external_id, '');
+            if (d.scene && !_qConfirmScene) {
+              await useThisScene(-1, undefined, {
+                row: _qsBuildStoredMatchResult(),
+                isCurrent: () => matchSeq === _qOpenSearchSeq && !_qConfirmScene,
+                preserveFields: () => Boolean(_qSearchRecord?.edited) || JSON.stringify(_qSearchFields()) !== initialFields,
+              });
+              if (matchSeq !== _qOpenSearchSeq) return;
+              _qDetailsStatus('Loaded saved database match · ready to edit');
+            }
           } else {
             _mRenderMatchBanner(queueFile.match_source, queueFile.match_external_id, d.error ? `Lookup failed: ${d.error}` : 'Scene not reachable on source');
           }
@@ -3741,7 +3748,7 @@
     }
     // Modal frame was opened up-top before any awaits. Kick off the
     // search now that the form fields are filled.
-    if (!action.edit_details) runQueueSearch();
+    if (mySeq === _qOpenSearchSeq && !action.edit_details) runQueueSearch();
   }
 
   //: Parent node the qSearchPanel was created in — restored on
@@ -4121,9 +4128,10 @@
   //: user hand-edits so we stop auto-rewriting it on scene picks.
   let _qConfirmBaseTitle = '';
   let _qConfirmTitleEdited = false;
-  async function useThisScene(idx, sceneOverride) {
+  async function useThisScene(idx, sceneOverride, storedMatch) {
     if (!_qSelectedFile) { window.toast('No file selected'); return; }
-    const scene = window._qSearchResults[idx]?._raw;
+    const selectedRow = storedMatch?.row || window._qSearchResults[idx];
+    const scene = selectedRow?._raw;
     if (!scene) return;
 
     // IAFD search results ship without a cast or a breakdown (the
@@ -4180,6 +4188,11 @@
       enrichNote = 'IAFD lists the full movie cast — tick only the performers in this scene.';
     }
 
+    // Load the library before applying the match so a slow response cannot
+    // overwrite a newer selection or edits made while the lookup runs.
+    try { if (typeof _mPerfLoadLibrary === 'function') await _mPerfLoadLibrary(); } catch {}
+    if (storedMatch && !storedMatch.isCurrent()) return;
+    const preserveFields = storedMatch?.preserveFields();
     _qConfirmScene = scene;
     _qConfirmPerformers = (scene.performers || []).map(p => ({
       ...(p.performer || p),
@@ -4189,6 +4202,7 @@
     _qConfirmScenes = breakdowns;
     _qConfirmSceneIdx = -1;
     _qConfirmBaseTitle = String(scene.title || '').trim();
+    if (preserveFields) return;
     _qConfirmTitleEdited = false;
 
     // Populate the left filter fields with the picked scene's metadata
@@ -4208,7 +4222,6 @@
     if (typeof _perfPillsSet === 'function') {
       // Make sure the library index is loaded so the pills know which
       // names route to existing folders (green) vs. free-text (purple).
-      try { if (typeof _mPerfLoadLibrary === 'function') await _mPerfLoadLibrary(); } catch {}
       _perfPillsSet(_qConfirmPerformers.map(p => p.name));
     }
     //: Different upstream DBs use different field names for the
@@ -4244,7 +4257,7 @@
     //: payload may also have `images[0].url`, `poster`, or `thumb`
     //: depending on source. Falling back through them gives us a hit
     //: on every database.
-    const row = window._qSearchResults[idx] || {};
+    const row = selectedRow || {};
     let posterUrl = (row.image || '').trim();
     if (!posterUrl) {
       const imgs = scene.images || [];

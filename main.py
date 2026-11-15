@@ -8222,11 +8222,13 @@ def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: s
         # Final performer filing requires verified database identity. Filename
         # pre-sorting is only a hint; neither names, aliases nor folder weights
         # may introduce a performer absent from the matched scene's IDs.
-        candidates = _find_performer_dir_via_library_index(performers, source)
-        # Manual filing explicitly selects names; never enable this fallback
-        # for automatic fingerprint/scene matches or aliases.
+        identity_source = scene.get("_source") if source == "Manual" else source
+        candidates = _find_performer_dir_via_library_index(performers, identity_source or source)
+        # Explicit manual names remain a fallback, but must not replace a
+        # verified ID match when the library display name has changed.
         if source == "Manual":
-            candidates = find_performer_dir(performers, performer_dirs)
+            if not candidates:
+                candidates = find_performer_dir(performers, performer_dirs)
         result = None
         if candidates:
             # Highest weight wins; ties resolved by the original order
@@ -41785,10 +41787,10 @@ def get_scenes_recent_cached_or_compute(
                 resp = requests.get(url, params={"page": 1, "per_page": 60},
                                     headers=_tpdb_headers(), timeout=15)
                 if resp.status_code != 200:
-                    continue
+                    raise RuntimeError(f"TPDB returned HTTP {resp.status_code}")
                 data_raw = resp.json().get("data")
                 if not isinstance(data_raw, list):
-                    continue
+                    raise RuntimeError("TPDB returned an invalid scene list")
                 out = []
                 for s in data_raw:
                     genders = _extract_movie_genders(s)
@@ -41865,7 +41867,7 @@ def get_scenes_recent_cached_or_compute(
                     })
                 return out
         except Exception:
-            pass
+            raise
         return []
 
     def _fetch_stashbox_scenes(endpoint: str, api_key: str, *, allow_name_fallback: bool = True):
@@ -41947,8 +41949,12 @@ def get_scenes_recent_cached_or_compute(
                 headers={"ApiKey": api_key, "Content-Type": "application/json"},
                 timeout=15)
             if r2.status_code != 200:
-                return []
-            scenes_data = (r2.json().get("data") or {}).get("queryScenes", {}).get("scenes") or []
+                raise RuntimeError(f"Scene provider returned HTTP {r2.status_code}")
+            body = r2.json()
+            query_result = (body.get("data") or {}).get("queryScenes")
+            if body.get("errors") or not isinstance(query_result, dict) or not isinstance(query_result.get("scenes"), list):
+                raise RuntimeError("Scene provider returned an invalid scene list")
+            scenes_data = query_result["scenes"]
             out = []
             src_label = (
                 "JAVStash" if endpoint == JAVSTASH_ENDPOINT else
@@ -41997,7 +42003,7 @@ def get_scenes_recent_cached_or_compute(
                 out.append(row)
             return out
         except Exception:
-            pass
+            raise
         return []
 
     # Fetch from all sources in parallel. In strict-id mode, only run
@@ -42006,6 +42012,7 @@ def get_scenes_recent_cached_or_compute(
     # honors strict mode: if the caller supplied per-source IDs at all,
     # we trust those exclusively.
     result = {"tpdb": [], "stashdb": [], "fansdb": [], "javstash": []}
+    errors = {}
     if strict_id_mode:
         run_tpdb     = bool(explicit_ids["tpdb"])
         run_stashdb  = bool(explicit_ids["stashdb"])
@@ -42040,8 +42047,11 @@ def get_scenes_recent_cached_or_compute(
         for key, future in futures.items():
             try:
                 result[key] = future.result()
-            except Exception:
-                pass
+            except Exception as exc:
+                # Never cache a failed lookup as a successful empty result.
+                errors[key] = "Could not load scenes. Please retry."
+                detail = str(exc) if isinstance(exc, RuntimeError) else exc.__class__.__name__
+                emit(f"Recent scenes: {key} performer/studio {explicit_ids.get(key, id)} lookup failed: {detail}")
 
     # For backward compat, also return flat "scenes" from first non-empty source
     scenes = (
@@ -42049,6 +42059,9 @@ def get_scenes_recent_cached_or_compute(
     )
     payload = {"scenes": scenes, "sources": result}
     _discover_rewrite_scene_thumbs_in_payload(payload)
+    if errors:
+        payload["errors"] = errors
+        return payload
     with _SCENES_RECENT_CACHE_LOCK:
         if len(_SCENES_RECENT_CACHE) > _SCENES_RECENT_CACHE_MAX:
             cutoff = sorted(_SCENES_RECENT_CACHE.items(), key=lambda kv: kv[1][0])
@@ -42089,7 +42102,7 @@ async def scenes_recent(
     )
     return JSONResponse(
         content=data,
-        headers={"Cache-Control": "private, max-age=120"},
+        headers={"Cache-Control": "no-store" if data.get("errors") else "private, max-age=120"},
     )
 
 
