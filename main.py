@@ -35046,23 +35046,23 @@ def movies_tpdb_detail(movie_id: str):
             posters_obj = m.get("posters") or {}
             if isinstance(posters_obj, dict):
                 poster = posters_obj.get("full") or posters_obj.get("large")
-        # Dedup on a case-insensitive name key so TPDB records that list
-        # the same performer twice (happens on older / merged entries)
-        # don't surface a duplicate tag in the detail popup.
+        # Deduplicate by provider identity; distinct people may share a name.
+        # Name-only cast entries still deduplicate by case-insensitive name.
         performers = []
         performer_links = []
         seen_perf_keys: set[str] = set()
-        def _register_perf(name_s: str, url: str = "", image: str = "", gender: str = "") -> None:
+        def _register_perf(name_s: str, url: str = "", image: str = "", gender: str = "", tpdb_id: str = "") -> None:
             s = (name_s or "").strip()
             if not s:
                 return
-            k = s.lower()
+            k = "id:" + tpdb_id if tpdb_id else "name:" + s.lower()
             if k in seen_perf_keys:
                 return
             seen_perf_keys.add(k)
             performers.append(s)
             performer_links.append({
                 "name":   s,
+                "tpdb_id": tpdb_id,
                 "url":    url,
                 "image":  image,
                 "gender": (gender or "").strip().lower(),
@@ -35117,7 +35117,8 @@ def movies_tpdb_detail(movie_id: str):
                     url = f"https://theporndb.net/performers/{slug}"
                 elif perf.get("url"):
                     url = str(perf.get("url"))
-                _register_perf(name, url, _perf_image(perf), _perf_gender(perf, p))
+                _register_perf(name, url, _perf_image(perf), _perf_gender(perf, p),
+                               str(perf.get("id") or perf.get("_id") or ""))
             elif isinstance(p, str):
                 _register_perf(p)
         scenes = []

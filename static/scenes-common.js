@@ -2171,7 +2171,7 @@
         const badge = genderBadge(p.gender);
         // Click → universal popup (gender-gated). External profile is
         // surfaced via the popup's own link pills.
-        const attrs = window.performerLinkAttrs(nameRaw, { gender: p.gender, stashId: p.id || p.stash_id });
+        const attrs = window.performerLinkAttrs(nameRaw, { gender: p.gender, tpdbId: p.tpdb_id, stashId: p.stash_id });
         return `<span class="movie-perf-tag${attrs ? ' perf-name-link' : ''}"${attrs ? ' ' + attrs : ''}>${name}${badge}</span>`;
       }).join('');
       const perfs = perfLinks || (m.performers||[]).map(p => {

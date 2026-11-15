@@ -255,7 +255,7 @@
           const name = ESC(nameRaw);
           const badge = _genderBadge(p.gender);
           const attrs = (typeof window.performerLinkAttrs === 'function')
-            ? window.performerLinkAttrs(nameRaw, { gender: p.gender, stashId: p.id || p.stash_id })
+            ? window.performerLinkAttrs(nameRaw, { gender: p.gender, tpdbId: p.tpdb_id, stashId: p.stash_id })
             : '';
           return `<span class="movie-perf-tag${attrs ? ' perf-name-link' : ''}"${attrs ? ' ' + attrs : ''}>${name}${badge}</span>`;
         })
