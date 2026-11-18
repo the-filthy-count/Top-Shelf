@@ -42020,12 +42020,17 @@ def get_scenes_recent_cached_or_compute(
         run_javstash = bool(explicit_ids["javstash"])
     else:
         run_tpdb = run_stashdb = run_fansdb = run_javstash = True
+    for bucket, requested in (("tpdb", run_tpdb), ("stashdb", run_stashdb),
+                              ("fansdb", run_fansdb), ("javstash", run_javstash)):
+        if requested and not settings.get(f"api_key_{bucket}"):
+            errors[bucket] = "API key is not configured. Add it in Settings and retry."
+    # Missing credentials are errors, not successful empty lookups.
     # Name-fallback hard-disabled everywhere — scenes come only from
     # linked profiles (per-source IDs). Same-name performers across
     # DBs no longer leak scenes into the wrong bucket.
     with ThreadPoolExecutor(max_workers=4) as pool:
         futures = {}
-        if run_tpdb:
+        if run_tpdb and "tpdb" not in errors:
             futures["tpdb"] = pool.submit(
                 _fetch_tpdb_scenes, allow_name_fallback=False,
             )

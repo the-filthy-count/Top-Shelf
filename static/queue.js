@@ -4128,11 +4128,16 @@
   //: user hand-edits so we stop auto-rewriting it on scene picks.
   let _qConfirmBaseTitle = '';
   let _qConfirmTitleEdited = false;
+  let _qSceneSelectionSeq = 0;
   async function useThisScene(idx, sceneOverride, storedMatch) {
     if (!_qSelectedFile) { window.toast('No file selected'); return; }
+    const selection = ++_qSceneSelectionSeq;
+    const openSequence = _qOpenSearchSeq;
+    const filename = _qSelectedFile;
+    const isCurrent = () => selection === _qSceneSelectionSeq && openSequence === _qOpenSearchSeq && filename === _qSelectedFile;
     const selectedRow = storedMatch?.row || window._qSearchResults[idx];
-    const scene = selectedRow?._raw;
-    if (!scene) return;
+    if (!selectedRow?._raw) return;
+    const scene = {...selectedRow._raw, _source: selectedRow._raw._source || selectedRow.source};
 
     // IAFD search results ship without a cast or a breakdown (the
     // search page only has title/year/studio). Fetch the movie's
@@ -4162,6 +4167,7 @@
         }
       } catch(e) { if (e?.name === 'AbortError') return; /* best-effort — picker still shows with what we have */ }
     }
+    if (!isCurrent()) return;
     // Multi-scene IAFD movie + no pre-chosen scene: open the picker
     // popup so the user narrows the cast to one scene before the
     // manual form populates. Picker re-enters this function with
@@ -4191,14 +4197,14 @@
     // Load the library before applying the match so a slow response cannot
     // overwrite a newer selection or edits made while the lookup runs.
     try { if (typeof _mPerfLoadLibrary === 'function') await _mPerfLoadLibrary(); } catch {}
-    if (storedMatch && !storedMatch.isCurrent()) return;
+    if (!isCurrent() || (storedMatch && !storedMatch.isCurrent())) return;
     const preserveFields = storedMatch?.preserveFields();
     _qConfirmScene = scene;
     _qConfirmPerformers = (scene.performers || []).map(p => ({
       ...(p.performer || p),
     })).filter(p => p.name);
     _qConfirmChecked = _qConfirmPerformers.map(() => false);
-    _qConfirmFilename = _qSelectedFile;
+    _qConfirmFilename = filename;
     _qConfirmScenes = breakdowns;
     _qConfirmSceneIdx = -1;
     _qConfirmBaseTitle = String(scene.title || '').trim();
@@ -5416,7 +5422,7 @@
         const d = await r.json();
         if (!Array.isArray(d.performers)) throw new Error('Invalid performer response');
         _mPerfLibrary = d.performers.map(p => ({
-          id: p.id, name: p.folder_name || '',
+          ...p, id: p.id, name: p.folder_name || '',
           aliases: Array.isArray(p.aliases) ? p.aliases : [], image_url: p.image_url || '',
         })).filter(p => p.name);
         return _mPerfLibrary;
@@ -5784,6 +5790,23 @@
    * Reads from the left srchTitle field and uses qSearchManualFileBtn
    * as the busy/restore target. Called from submitManual() when a
    * scene result is loaded into the inline UI. */
+  function _qScenePerformerForName(name) {
+    const key = value => String(value || '').trim().toLowerCase();
+    const cast = _qConfirmPerformers;
+    const exact = cast.filter(p => key(p.name) === key(name));
+    if (exact.length === 1) return {...exact[0], name};
+    const source = _qsNormalizeMatchSource(_qConfirmScene?._source || _qConfirmScene?.source);
+    const field = {TPDB:'match_tpdb_id', StashDB:'match_stashdb_id', FansDB:'match_fansdb_id', JAVStash:'match_javstash_id'}[source];
+    const rows = (_mPerfLibrary || []).filter(p => [p.name, ...(p.aliases || [])].some(n => key(n) === key(name)));
+    // Only a unique library identity may translate an alias back to cast IDs.
+    if (field && rows.length === 1 && rows[0][field]) {
+      const id = key(rows[0][field]);
+      const matches = cast.filter(p => key(p.id) === id || (source === 'TPDB' && key(p.parent?.id || p.parent?._id) === id));
+      if (matches.length === 1) return {...matches[0], name};
+    }
+    return {id:'', name};
+  }
+
   async function _submitScenePick(btn, origHtml) {
     if (!_qConfirmScene || !_qConfirmFilename) return;
     //: Pills replaced the per-row tick-list — read names off the pill
@@ -5796,14 +5819,7 @@
       window.toast('Add at least one star pill before filing');
       return;
     }
-    const perfByName = new Map();
-    for (const p of _qConfirmPerformers) {
-      perfByName.set((p.name || '').toLowerCase().trim(), p);
-    }
-    const chosen = pillNames.map(name => {
-      const hit = perfByName.get(name.toLowerCase().trim());
-      return { performer: { ...(hit || {}), id: (hit && hit.id) || '', name } };
-    });
+    const chosen = pillNames.map(name => ({performer: _qScenePerformerForName(name)}));
     const titleEl = document.getElementById('srchTitle');
     const finalTitle = (titleEl ? titleEl.value : '').trim() || _qConfirmBaseTitle;
     // Overlay the user's edits in the Plot textarea + Tags pills onto
@@ -5817,6 +5833,10 @@
     const scene = Object.assign({}, _qConfirmScene, {
       performers: chosen,
       title: finalTitle,
+      release_date: document.getElementById('srchDate').value.trim(),
+      studio: document.getElementById('srchStudio').value.trim() === (_qConfirmScene.studio?.name || '')
+        ? _qConfirmScene.studio
+        : {name: document.getElementById('srchStudio').value.trim()},
       _plot: finalPlot,
       _tags: formTags,
     });
@@ -7142,24 +7162,21 @@
           <button type="button" onclick="_dismissAcceptError('${fnAttr}')" title="Dismiss" style="background:transparent;border:1px solid rgba(248,113,113,0.45);color:#fca5a5;border-radius:6px;width:26px;height:26px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center"><i class="fa-solid fa-xmark" style="font-size:11px"></i></button>
         </div>`
       : '';
-    // Weak-match banner — when every candidate scored below ~70 % the
-    // numbers are barely a signal; promote a Manual Search shortcut so
-    // the user doesn't have to close this modal and hunt the file down
-    // in the queue list. Counts a missing candidate list as weak too
-    // (so the "rescan returned nothing" case offers the same out).
     const cArr = f.candidates || [];
-    const topScore = cArr.length ? Math.round((cArr[0].score || 0) * 100) : 0;
+    const topScore = Math.max(0, Math.min(100, Math.round(Math.max(0, ...cArr.map(c => Number(c.score) || 0)) * 100)));
     const isWeak = !cArr.length || topScore < 70;
-    const weakBanner = isWeak ? `
-      <div class="suggestion-weak-banner" style="display:flex;align-items:center;gap:12px;padding:10px 14px;margin-bottom:14px;border-radius:8px;border:1px solid rgba(251,191,36,0.45);background:rgba(251,191,36,0.10);color:#fcd34d;font-size:var(--text-small);line-height:1.4">
-        <i class="fa-solid fa-circle-info" style="font-size:14px;opacity:0.85"></i>
-        <div style="flex:1;min-width:0">
-          ${cArr.length
-            ? `Weak matches — top score is <strong style="color:#fde68a">${topScore}%</strong>. Manual search will let you pin the right scene.`
-            : `No candidates surfaced for this file. Try a manual search to pin it directly.`}
+    const weakBanner = `
+      <div class="suggestion-score-banner">
+        <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+        <div class="suggestion-score-copy">${cArr.length
+          ? (isWeak ? 'Weak matches — use manual search to pin the right scene.' : 'Review the suggested matches before accepting.')
+          : 'No candidates surfaced for this file. Try a manual search.'}</div>
+        <div class="suggestion-score-meter" role="meter" aria-label="Top match score" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${topScore}">
+          <span class="suggestion-score-track"><span class="suggestion-score-fill" style="clip-path:inset(0 ${100 - topScore}% 0 0)"></span></span>
+          <strong>${topScore}%</strong>
         </div>
-        <button type="button" onclick="(window.closeSuggestionsModal||(()=>{}))();(window.openManualSearch||(()=>{}))('${fnAttr}')" title="Open manual search" style="background:rgba(251,191,36,0.18);border:1px solid rgba(251,191,36,0.55);border-radius:6px;color:#fde68a;padding:6px 12px;cursor:pointer;font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;display:inline-flex;align-items:center;gap:6px;white-space:nowrap" onmouseenter="this.style.background='rgba(251,191,36,0.28)';this.style.borderColor='rgba(251,191,36,0.80)'" onmouseleave="this.style.background='rgba(251,191,36,0.18)';this.style.borderColor='rgba(251,191,36,0.55)'"><i class="fa-solid fa-magnifying-glass" style="font-size:10px"></i> Manual search</button>
-      </div>` : '';
+        <button type="button" class="btn" onclick="(window.closeSuggestionsModal||(()=>{}))();(window.openManualSearch||(()=>{}))('${fnAttr}')" title="Open manual search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Manual search</button>
+      </div>`;
     return `
       <div class="suggestion-file" data-filename="${fnameSafe}">
         ${errBanner}

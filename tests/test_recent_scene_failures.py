@@ -16,7 +16,7 @@ class RecentSceneFailuresTests(unittest.TestCase):
         self.ns = {
             'time': time, 'threading': threading,
             'requests': Mock(get=Mock(return_value=self.response)),
-            'db': SimpleNamespace(get_settings=lambda: {}), '_tpdb_headers': lambda: {},
+            'db': SimpleNamespace(get_settings=lambda: {'api_key_tpdb':'test'}), '_tpdb_headers': lambda: {},
             '_SCENES_RECENT_CACHE': {}, '_SCENES_RECENT_CACHE_LOCK': threading.Lock(),
             '_SCENES_RECENT_CACHE_TTL': 1800, '_SCENES_RECENT_CACHE_MAX': 400,
             '_discover_rewrite_scene_thumbs_in_payload': lambda payload: None, 'emit': Mock(),
@@ -49,3 +49,11 @@ class RecentSceneFailuresTests(unittest.TestCase):
         self.assertEqual(self.fetch()['scenes'], [])
         self.fetch()
         self.ns['requests'].get.assert_called_once()
+
+    def test_missing_credentials_are_errors_for_every_source(self):
+        self.ns['db'] = SimpleNamespace(get_settings=lambda: {})
+        for source in ('TPDB', 'StashDB', 'FansDB', 'JAVStash'):
+            result = self.ns['get_scenes_recent_cached_or_compute'](source, 'id')
+            self.assertIn(source.lower(), result['errors'])
+            self.assertFalse(self.ns['_SCENES_RECENT_CACHE'])
+        self.ns['requests'].get.assert_not_called()

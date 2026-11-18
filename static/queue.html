@@ -3709,6 +3709,20 @@
     .suggestion-candidates > * { flex-basis: 100%; }
   }
 
+
+.suggestion-score-banner {
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding:10px 14px; margin-bottom:14px; border-radius:8px;
+  border:1px solid rgba(var(--brand-purple-rgb),.3);
+  background:rgba(255,255,255,.04); color:var(--text);
+  font-size:var(--text-small); line-height:1.4;
+}
+.suggestion-score-copy { flex:1; min-width:180px; }
+.suggestion-score-meter { display:flex; align-items:center; gap:10px; }
+.suggestion-score-track { position:relative; display:block; width:180px; height:10px; border-radius:5px; overflow:hidden; background:rgba(255,255,255,.1); }
+.suggestion-score-fill { position:absolute; inset:0; background:linear-gradient(to right,#ef4444 0%,#f97316 33%,#facc15 66%,#22c55e 100%); }
+.suggestion-score-meter strong { min-width:4ch; text-align:right; font-variant-numeric:tabular-nums; }
+.suggestion-score-banner .btn { display:inline-flex; align-items:center; gap:8px; white-space:nowrap; }
 </style>
 <link rel="stylesheet" href="/static/mobile.css?v=20260930-desktop-scale">
 <link rel="stylesheet" href="/static/design-system.css?v=20261011-toggle-layer-fix">
@@ -4286,7 +4300,7 @@
 <link rel="stylesheet" href="/static/queue-history.css?v=20261103">
 <script defer src="/static/queue-history.js?v=20261103"></script>
 <script defer src="/static/queue-changes.js?v=1"></script>
-<script defer src="/static/queue.js?v=20261115-stored-match"></script>
+<script defer src="/static/queue.js?v=20261117-match-score"></script>
 
 <!-- Queue duplicates modal — same phash grouping / keeper rules as Library Health. -->
 <style>
