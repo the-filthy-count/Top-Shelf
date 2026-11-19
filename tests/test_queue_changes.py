@@ -191,3 +191,42 @@ class QueueChangesTests(unittest.TestCase):
         self.assertEqual(command['payload']['_change_revision'],revision)
         self.assertEqual(command['payload']['scene']['id'],'saved')
         self.assertEqual(db.manual_job_list_active(),[])
+
+    def test_presort_preserves_pending_processing_and_backoff(self):
+        from unittest.mock import patch
+        fid = self.asset()
+        with db.get_conn() as c:
+            changes.request(c, fid, 'process', {'operation':'match_and_file'})
+            c.execute('UPDATE queue_changes SET attempts=2,available_at=12345 WHERE file_id=?', (fid,))
+        with patch.dict(changes._handlers, {'relocate': lambda fid, payload: {'status':'completed'}}):
+            changes.execute(fid, 'relocate', {'filename':'test.mp4'}, lambda: None)
+        with db.get_conn() as c:
+            row = c.execute('SELECT action,state,attempts,available_at FROM queue_changes WHERE file_id=?', (fid,)).fetchone()
+            self.assertEqual(tuple(row), ('process','pending',2,12345))
+            self.assertEqual(c.execute("SELECT state FROM queue_change_history WHERE file_id=? AND action='relocate'", (fid,)).fetchone()[0], 'completed')
+
+    def test_presort_does_not_override_manual_or_running_work(self):
+        fid = self.asset()
+        for action, running in [('file_scene',False), ('process',True)]:
+            with db.get_conn() as c:
+                c.execute('DELETE FROM queue_changes WHERE file_id=?',(fid,))
+                c.execute('DELETE FROM queue_change_history WHERE file_id=?',(fid,))
+                revision = changes.request(c,fid,action,{})
+                if running: changes.claim(c,fid,revision)
+            with self.assertRaisesRegex(ValueError,'pending change'):
+                changes.execute(fid,'relocate',{},lambda:None)
+
+    def test_presort_moves_file_and_processing_tracks_new_path(self):
+        from pathlib import Path
+        fid = self.asset()
+        root = Path(self.tmp.name)
+        original = root / 'test.mp4'
+        original.write_bytes(b'video fixture')
+        target = root / 'Performer' / original.name
+        with db.get_conn() as c:
+            changes.request(c, fid, 'process', {'operation':'match_and_file'})
+        changes.relocate('test.mp4', 'Performer/test.mp4', [(original,target)])
+        self.assertFalse(original.exists())
+        self.assertEqual(target.read_bytes(), b'video fixture')
+        self.assertEqual(db.file_identity('Performer/test.mp4')['id'],fid)
+        self.assertIn('Performer/test.mp4', db.processing_jobs_ready())

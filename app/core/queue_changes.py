@@ -81,6 +81,17 @@ def finish(conn, file_id, revision, state, result=None, error=None):
         error=CASE WHEN revision=? THEN ? ELSE error END,updated_at=?
         WHERE file_id=? AND running_revision=?''', (revision,state,revision,result_json,revision,error,now,file_id,revision))
 
+    # Pre-sorting may temporarily precede a queued automatic lookup. Restore
+    # it atomically with completion so a restart cannot lose the pending job.
+    if state in ('completed', 'failed'):
+        current = conn.execute('SELECT action,desired_json,revision,running_revision FROM queue_changes WHERE file_id=?', (file_id,)).fetchone()
+        if current and current[0] == 'relocate' and current[2] == revision and current[3] is None:
+            resume = json.loads(current[1]).get('_resume_process')
+            if resume:
+                next_revision = request(conn, file_id, 'process', resume['desired'])
+                conn.execute('UPDATE queue_changes SET attempts=?,available_at=? WHERE file_id=? AND revision=?',
+                             (resume['attempts'], resume['available_at'], file_id, next_revision))
+
 
 _handlers = {}
 
@@ -131,8 +142,13 @@ def execute(file_id, action, desired, callback):
         raise ValueError('No registered worker for '+action)
     with db.get_conn() as conn:
         conn.execute('BEGIN IMMEDIATE')
-        row = conn.execute('SELECT state,running_revision FROM queue_changes WHERE file_id=?',(file_id,)).fetchone()
-        if row and (row[0] == 'running' or (row[0] == 'pending' and action != 'recover') or row[1] is not None):
+        row = conn.execute('SELECT state,running_revision,action,desired_json,attempts,available_at FROM queue_changes WHERE file_id=?',(file_id,)).fetchone()
+        presort = bool(row and action == 'relocate' and row[0] == 'pending'
+                       and row[1] is None and row[2] == 'process')
+        if presort:
+            desired = {**desired, '_resume_process': {
+                'desired': json.loads(row[3]), 'attempts': row[4], 'available_at': row[5]}}
+        if row and (row[0] == 'running' or (row[0] == 'pending' and action != 'recover' and not presort) or row[1] is not None):
             raise ValueError('This file already has a pending change')
         revision = request(conn,file_id,action,desired)
     from app.core.action_commands import execute_saved
