@@ -51672,7 +51672,9 @@ for _action_name in (
     '_remove_client_jobs_matching_watch_folder', '_remove_client_jobs_after_import',
     '_background_performer_poster_gap_fill', '_sync_entity_library_images',
     '_recoverable_performer_merge',
-    '_maintain_queue_paths', '_sync_vice_folders',
+    # The recurring queue sweep must rerun after restart. Individual
+    # relocations are durable commands; the sweep itself is orchestration.
+    '_sync_vice_folders',
     '_library_delete_folder_on_disk', '_library_delete_favourite_from_disk',
     '_library_delete_vice_from_disk', '_library_remove_favourite_row',
     '_library_remove_vice', 'run_library_index_job', 'run_phash3_rescan_job',
