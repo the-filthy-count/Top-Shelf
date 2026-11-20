@@ -4042,14 +4042,30 @@ def media_file_signature(video: Path) -> str:
 
 
 def validate_media_cache(filename: str, video: Path) -> str:
-    """Invalidate filename-keyed media caches when the underlying file changes."""
+    """Reuse analysis across renames; invalidate on identity/size/mtime changes.
+
+    Keep the full signature for in-flight mutation checks. Only cache reuse
+    ignores ctime: renaming or chmod changes it without changing video bytes.
+    Existing five-element signatures remain compatible without a rehash.
+    """
     signature = media_file_signature(video)
+    current = json.loads(signature)
     with get_conn() as conn:
-        conn.execute(
-            "UPDATE processed_files SET phash=NULL, media_duration=NULL, media_size_bytes=NULL, media_codec=NULL, media_width=NULL, media_height=NULL, media_signature=? "
-            "WHERE filename=? AND (media_signature IS NULL OR media_signature != ?)",
-            (signature, filename, signature),
-        )
+        row = conn.execute('SELECT media_signature FROM processed_files WHERE filename=?', (filename,)).fetchone()
+        if row is not None:
+            try:
+                previous = json.loads(row[0])
+            except (ValueError, TypeError):
+                previous = None
+            reusable = isinstance(previous, list) and len(previous) == 5 and previous[:4] == current[:4]
+            if reusable:
+                if row[0] != signature:
+                    conn.execute('UPDATE processed_files SET media_signature=? WHERE filename=?', (signature, filename))
+            else:
+                conn.execute(
+                    "UPDATE processed_files SET phash=NULL, media_duration=NULL, media_size_bytes=NULL, media_codec=NULL, media_width=NULL, media_height=NULL, media_signature=? WHERE filename=?",
+                    (signature, filename),
+                )
         conn.commit()
     return signature
 

@@ -39,6 +39,26 @@ class MatchingSafetyTests(unittest.TestCase):
             conn.execute("UPDATE processed_files SET phash='valid',media_duration=60")
             validate('clip.mp4',video)
             self.assertEqual(conn.execute('SELECT phash FROM processed_files').fetchone()[0],'valid')
+            # Real pre-sort: rename the video and rekey its existing DB record.
+            import os
+            grouped = video.parent / 'Performer' / 'renamed.mp4'
+            grouped.parent.mkdir()
+            video.rename(grouped)
+            video = grouped
+            conn.execute("UPDATE processed_files SET filename='Performer/renamed.mp4',media_codec='h264',media_width=1920,media_height=1080,media_size_bytes=3")
+            validate('Performer/renamed.mp4',video)
+            self.assertEqual(conn.execute('SELECT phash,media_duration,media_codec,media_width,media_height,media_size_bytes FROM processed_files').fetchone(),
+                             ('valid',60,'h264',1920,1080,3))
+            video.chmod(0o600)
+            validate('Performer/renamed.mp4',video)
+            self.assertEqual(conn.execute('SELECT phash FROM processed_files').fetchone()[0],'valid')
+            # Same-size edits still invalidate when modification time changes.
+            before = video.stat()
+            video.write_bytes(b'edit'[:3])
+            os.utime(video, ns=(before.st_atime_ns,before.st_mtime_ns+1_000_000_000))
+            validate('Performer/renamed.mp4',video)
+            self.assertEqual(conn.execute('SELECT phash,media_duration FROM processed_files').fetchone(),(None,None))
+            conn.execute("UPDATE processed_files SET phash='valid',media_duration=60,filename='clip.mp4'")
             replacement=video.with_suffix('.new');replacement.write_bytes(b'new');replacement.replace(video)
             validate('clip.mp4',video)
             self.assertEqual(conn.execute('SELECT phash,media_duration FROM processed_files').fetchone(),(None,None))
