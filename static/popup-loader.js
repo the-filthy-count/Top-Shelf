@@ -28,8 +28,8 @@
 
   /** Per-popup script lists. link-modals.js is shared by both. */
   var SCRIPTS = {
-    'performer-popup': '/static/performer-popup.js?v=20261115-scene-errors',
-    'studio-popup':    '/static/studio-popup.js?v=' + V,
+    'performer-popup': '/static/performer-popup.js?v=20261122-monitor',
+    'studio-popup':    '/static/studio-popup.js?v=20261122-monitor',
     'link-modals':     '/static/link-modals.js?v=20261122-coomer-search',
     'poster-roles':    '/static/poster-role-picker.js?v=' + V,
   };

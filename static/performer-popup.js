@@ -271,7 +271,21 @@
       if (!rowId || btn.disabled) return;
       btn.disabled = true;
       try {
-        if (action === 'favourite') {
+        if (action === 'monitored') {
+          const on = btn.getAttribute('aria-pressed') !== 'true';
+          const response = await fetch('/api/favourites/monitored', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: rowId, is_monitored: on }),
+          });
+          if (!response.ok) throw new Error('Could not save monitoring');
+          btn.setAttribute('aria-pressed', String(on));
+          btn.classList.toggle('is-on', on);
+          btn.title = on ? 'Monitored — stop monitoring' : 'Not monitored — monitor';
+          btn.setAttribute('aria-label', btn.title);
+          btn.querySelector('i').className = `fa-solid fa-${on ? 'eye' : 'eye-slash'}`;
+          if (_activeData?.library_status) _activeData.library_status.is_monitored = on;
+          document.dispatchEvent(new CustomEvent('library-row-updated', {detail:{rowId, kind:'performer'}}));
+        } else if (action === 'favourite') {
           const on = !btn.classList.contains('is-on');
           const response = await fetch('/api/favourites/star', {
             method: 'POST',
@@ -1434,7 +1448,11 @@
     if (lib.in_library) {
       const fav = lib.is_favourite;
       const locked = lib.matches_locked;
+      const monitored = lib.is_monitored !== false && lib.is_monitored !== 0;
       nameIcons = `
+        <button class="pp-name-action${monitored ? ' is-on' : ''}" data-action="monitored" data-row-id="${ESC(lib.row_id)}" aria-pressed="${monitored}" title="${monitored ? 'Monitored — stop monitoring' : 'Not monitored — monitor'}" aria-label="Monitor new releases">
+          <i class="fa-solid fa-${monitored ? 'eye' : 'eye-slash'}"></i>
+        </button>
         <button type="button" class="pp-name-action${fav ? ' is-on' : ''}"
                 data-action="favourite" data-row-id="${ESC(lib.row_id)}"
                 title="${fav ? 'Unfavourite' : 'Favourite'}" aria-label="Favourite">

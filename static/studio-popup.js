@@ -54,6 +54,7 @@
             <button type="button" class="pp-name-action pp-name-action--add" id="studioPopupAddBtn" aria-label="Add to library" title="Add to library" style="display:none">
               <i class="fa-regular fa-bookmark"></i>
             </button>
+            <button type="button" class="pp-name-action" id="studioPopupMonitorBtn" aria-label="Monitor new releases"><i class="fa-solid fa-eye"></i></button>
             <button type="button" class="pp-name-action" id="studioPopupFavBtn" aria-label="Favourite" title="Favourite">
               <i class="fa-solid fa-heart"></i>
             </button>
@@ -125,6 +126,7 @@
     if (refreshBtn) refreshBtn.addEventListener('click', refreshFromLinkedDbs);
     const lockBtn = div.querySelector('#studioPopupLockBtn');
     if (lockBtn) lockBtn.addEventListener('click', toggleMatchesLock);
+    div.querySelector('#studioPopupMonitorBtn').addEventListener('click', toggleMonitored);
     const favBtn = div.querySelector('#studioPopupFavBtn');
     if (favBtn) favBtn.addEventListener('click', toggleFavourite);
     const addBtn = div.querySelector('#studioPopupAddBtn');
@@ -952,6 +954,16 @@
   }
 
   function syncFavButton(row) {
+    const monitor = document.getElementById('studioPopupMonitorBtn');
+    if (monitor) {
+      const on = row?.is_monitored !== false && row?.is_monitored !== 0;
+      monitor.style.display = row?.id ? '' : 'none';
+      monitor.classList.toggle('is-on', on);
+      monitor.setAttribute('aria-pressed', String(on));
+      monitor.title = on ? 'Monitored — stop monitoring' : 'Not monitored — monitor';
+      monitor.setAttribute('aria-label', monitor.title);
+      monitor.querySelector('i').className = `fa-solid fa-${on ? 'eye' : 'eye-slash'}`;
+    }
     const btn = document.getElementById('studioPopupFavBtn');
     if (!btn) return;
     const on = !!(row && row.is_favourite);
@@ -959,6 +971,27 @@
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
     btn.title = on ? 'Unfavourite' : 'Favourite';
     btn.setAttribute('aria-label', btn.title);
+  }
+
+  async function toggleMonitored() {
+    if (!_activeRowId) return;
+    const btn = document.getElementById('studioPopupMonitorBtn');
+    const rowId = _activeRowId;
+    const on = _activeRow?.is_monitored === false || _activeRow?.is_monitored === 0;
+    btn.disabled = true;
+    try {
+      const response = await fetch('/api/favourites/monitored', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({id: rowId, is_monitored: on}),
+      });
+      if (!response.ok) throw new Error('Could not save monitoring');
+      if (_activeRowId === rowId) {
+        _activeRow.is_monitored = on;
+        syncFavButton(_activeRow);
+      }
+      document.dispatchEvent(new CustomEvent('library-row-updated', {detail:{rowId, kind:'studio'}}));
+    } catch (e) { toast(e.message); }
+    finally { btn.disabled = false; }
   }
 
   async function toggleFavourite() {

@@ -1064,6 +1064,10 @@
       });
     });
   }
+  document.addEventListener('library-row-updated', () => {
+    _feedCache.clear();
+    if (['performers', 'studios'].includes(_scenesFeedMode)) loadFeed();
+  });
   const _feedCache = new Map();  // key -> { data, ts, title }
 
   function _feedCacheKey() {

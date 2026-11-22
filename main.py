@@ -28589,6 +28589,7 @@ async def api_performer_popup(
                 cached["library_status"].update({
                     "in_library": bool(live_row),
                     "is_favourite": bool(live_row and live_row.get("is_favourite")),
+                    "is_monitored": bool(live_row and live_row.get("is_monitored", 1)),
                     "matches_locked": bool(live_row and live_row.get("matches_locked")),
                 })
             return JSONResponse(cached)
@@ -28984,6 +28985,7 @@ async def api_performer_popup(
         "folder_name": row.get("folder_name") if row else "",
         "folder_path": row.get("path") if row else "",
         "is_favourite": bool(row and row.get("is_favourite")),
+        "is_monitored": bool(row and row.get("is_monitored", 1)),
         "matches_locked": bool(row and row.get("matches_locked")),
         "is_group":    bool(row and int(row.get("is_group") or 0)),
         "video_count": int(video_count),
@@ -32985,6 +32987,22 @@ async def api_favourites_star(payload: dict = Body(...)):
         return JSONResponse({"error": "id required"}, status_code=400)
     db.favourite_set_star(row_id, bool(payload.get("is_favourite")))
     return {"ok": True}
+
+
+@app.post("/api/favourites/monitored")
+async def api_favourites_monitored(payload: dict = Body(...)):
+    try:
+        row_id = int(payload.get("id") or 0)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "Invalid id"}, status_code=400)
+    monitored = payload.get("is_monitored")
+    if not isinstance(monitored, bool):
+        return JSONResponse({"error": "is_monitored must be boolean"}, status_code=400)
+    row = db.favourite_get(row_id)
+    if not row or row.get("kind") not in ("performer", "studio"):
+        return JSONResponse({"error": "Star or studio not found"}, status_code=404)
+    db.favourite_set_monitored(row_id, monitored)
+    return {"ok": True, "is_monitored": monitored}
 
 
 @app.post("/api/favourites/set-weight")
@@ -42952,15 +42970,8 @@ def _fetch_tpdb_feed(limit: int = 24) -> list[dict]:
     if not api_key:
         return []
 
-    # Gather performer names from library directories
-    performer_dirs = db.get_directories("performer")
-    performer_names = []
-    for entry in performer_dirs:
-        base = Path((entry.get("path") or "").strip()).expanduser()
-        if not base.is_dir():
-            continue
-        for folder in iter_performer_folders(base, bool(entry.get("bucket_by_letter"))):
-            performer_names.append(folder.name)
+    performer_names = [r["folder_name"] for r in db.favourite_list()
+                       if r.get("kind") == "performer" and r.get("is_monitored", 1)]
 
     if not performer_names:
         emit("FEED no performer folders found in library")
@@ -44586,7 +44597,7 @@ def _library_performer_name_keys() -> set[str]:
     except Exception:
         return keys
     for r in rows:
-        if r.get("kind") != "performer":
+        if r.get("kind") != "performer" or not r.get("is_monitored", 1):
             continue
         for field in (
             "folder_name",
@@ -44638,11 +44649,10 @@ def _scene_credit_names(scene: dict) -> list[str]:
 
 def _filter_scenes_to_library_performers(scenes: list[dict]) -> list[dict]:
     """Drop scenes whose credits don't intersect the library performer set.
-    No-op when the library is empty (avoids returning an empty grid for a
-    fresh install)."""
+    An empty monitored library produces an empty feed."""
     lib = _library_performer_name_keys()
     if not lib:
-        return scenes
+        return []
     out: list[dict] = []
     for s in scenes or []:
         for n in _scene_credit_names(s):
@@ -44658,7 +44668,7 @@ def _library_stashdb_performer_ids() -> list[str]:
     seen: set[str] = set()
     try:
         for r in db.favourite_list():
-            if r.get("kind") != "performer":
+            if r.get("kind") != "performer" or not r.get("is_monitored", 1):
                 continue
             pid = str(r.get("match_stashdb_id") or "").strip()
             if not pid or pid in seen:
@@ -44676,7 +44686,7 @@ def _library_stashdb_studio_ids() -> list[str]:
     seen: set[str] = set()
     try:
         for r in db.favourite_list():
-            if r.get("kind") != "studio":
+            if r.get("kind") != "studio" or not r.get("is_monitored", 1):
                 continue
             sid = str(r.get("match_stashdb_id") or "").strip()
             if not sid or sid in seen:
@@ -44698,7 +44708,7 @@ def _library_javstash_performer_ids() -> list[str]:
     seen: set[str] = set()
     try:
         for r in db.favourite_list():
-            if r.get("kind") != "performer":
+            if r.get("kind") != "performer" or not r.get("is_monitored", 1):
                 continue
             pid = str(r.get("match_javstash_id") or "").strip()
             if not pid or pid in seen:
@@ -44716,7 +44726,7 @@ def _library_fansdb_performer_ids() -> list[str]:
     seen: set[str] = set()
     try:
         for r in db.favourite_list():
-            if r.get("kind") != "performer":
+            if r.get("kind") != "performer" or not r.get("is_monitored", 1):
                 continue
             pid = str(r.get("match_fansdb_id") or "").strip()
             if not pid or pid in seen:
@@ -46010,7 +46020,12 @@ async def scenes_feed(mode: str = "studios", tag_ids: str = "", refresh: int = 0
     source DBs have changed (e.g. image URL fixes that the cached payload
     still serves stale).
     """
-    fk = _content_filters_fingerprint()
+    # Include monitor settings in both RAM and durable pool fingerprints.
+    # In-flight fetches using an older selection cannot become valid cache hits.
+    fk = (_content_filters_fingerprint(), tuple(sorted(
+        (int(r["id"]), bool(r.get("is_monitored", 1)))
+        for r in db.favourite_list() if r.get("kind") in ("performer", "studio")
+    )))
     if refresh:
         # Clear every layer the studios / vices feed reads from so the
         # user gets fresh source-DB payloads on the next request:

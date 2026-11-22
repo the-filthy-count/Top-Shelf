@@ -853,6 +853,7 @@ def init_db() -> None:
                 path             TEXT NOT NULL UNIQUE,
                 root_label       TEXT,
                 is_favourite     INTEGER NOT NULL DEFAULT 0,
+                is_monitored     INTEGER NOT NULL DEFAULT 1,
                 image_url        TEXT,
                 aliases_json     TEXT,
                 match_tpdb_id    TEXT,
@@ -935,6 +936,10 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE favourite_entities ADD COLUMN group_ids_json TEXT"
             )
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE favourite_entities ADD COLUMN is_monitored INTEGER NOT NULL DEFAULT 1")
         except sqlite3.OperationalError:
             pass
         # Manual per-performer weight override for the scene-filing router.
@@ -3283,6 +3288,15 @@ def favourite_set_star(row_id: int, is_favourite: bool) -> None:
         conn.commit()
 
 
+def favourite_set_monitored(row_id: int, monitored: bool) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE favourite_entities SET is_monitored = ?, updated_at = ? WHERE id = ?",
+            (int(monitored), datetime.now(timezone.utc).isoformat(), row_id),
+        )
+        conn.commit()
+
+
 def favourite_set_weight(row_id: int, weight: int | None) -> None:
     """Manual router weight for the scene-filing performer picker.
 
@@ -3579,6 +3593,7 @@ def favourite_studios_with_tpdb_ids() -> list[dict]:
             SELECT kind, folder_name, match_tpdb_id
             FROM favourite_entities
             WHERE kind = 'studio'
+              AND is_monitored = 1
               AND match_tpdb_id IS NOT NULL
               AND trim(COALESCE(match_tpdb_id, '')) != ''
             """
@@ -3594,6 +3609,7 @@ def favourite_starred_with_tpdb_ids() -> list[dict]:
             SELECT kind, folder_name, match_tpdb_id
             FROM favourite_entities
             WHERE COALESCE(is_favourite, 0) = 1
+              AND is_monitored = 1
               AND match_tpdb_id IS NOT NULL
               AND trim(COALESCE(match_tpdb_id, '')) != ''
               AND kind IN ('performer', 'studio')
