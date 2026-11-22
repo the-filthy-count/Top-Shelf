@@ -5008,6 +5008,27 @@ def _library_guess_from_release_name(
     empty = {"studio": None, "performers": []}
     if not release_name:
         return empty
+    # A URL is not a release title: hostnames, share IDs and query tokens
+    # must never supply cast names. Keep descriptive path slugs/filenames
+    # so useful early matching remains available before download completes.
+    from urllib.parse import urlsplit, unquote
+    if re.match(r"(?i)^https?://", release_name.strip()):
+        try:
+            parts = urlsplit(release_name.strip())
+        except ValueError:
+            return empty
+        descriptive = []
+        for segment in parts.path.split('/'):
+            segment = unquote(segment)
+            if not segment:
+                continue
+            is_video = Path(segment).suffix.lower() in {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.webm', '.mpg', '.mpeg'}
+            words = re.findall(r"[^\W\d_]{2,}", segment, re.UNICODE)
+            if is_video or (re.search(r"[ _-]", segment) and len(words) >= 2):
+                descriptive.append(segment)
+        release_name = '/'.join(descriptive)
+        if not release_name:
+            return empty
     release_key = _normalize_release_for_match(release_name)
     if not release_key:
         return empty
@@ -5284,7 +5305,16 @@ def _tokenize_for_match(name: str, *, release: bool = True) -> list[str]:
             if ext.lower() in {"mp4", "mkv", "avi", "mov", "wmv", "m4v", "webm", "ts", "mpg", "mpeg"}:
                 s = stem
         s = _RELEASE_TAG_RE.sub(" ", s)
-    parts = _TOKEN_SPLIT_RE.split(s)
+    # Keep mixed letter/digit identifiers intact. Splitting XCLK2T2 into
+    # XCLK / 2 / T / 2 invents a standalone performer alias from a share ID.
+    parts = []
+    for component in re.split(r"[^A-Za-z0-9]+", s):
+        if not component:
+            continue
+        if any(c.isdigit() for c in component):
+            parts.append(component)
+        else:
+            parts.extend(_TOKEN_SPLIT_RE.split(component))
     return [p.lower() for p in parts if p]
 
 

@@ -83,7 +83,7 @@
     javstash: 'JAVStash',
   };
 
-  const EXT_SEARCH_SITES = new Set(['iafd', 'freeones', 'tmdb', 'javdatabase']);
+  const EXT_SEARCH_SITES = new Set(['iafd', 'freeones', 'tmdb', 'javdatabase', 'coomer']);
 
   function extSiteApiKey(site) {
     return String(site || '').toLowerCase().replace(/\s+/g, '');
@@ -267,8 +267,7 @@
     document.getElementById('tsLinkExtResults').innerHTML = '';
     document.getElementById('tsLinkExtModal').classList.add('open');
     setTimeout(() => input.focus(), 60);
-    // Some ext sites have no search backend (Coomer); the
-    // user can still paste a URL directly into the bottom input.
+    // Search supported providers; direct profile URLs can also be pasted.
     const lc = extSiteApiKey(site);
     if (name && EXT_SEARCH_SITES.has(lc)) runExtSearch();
   }

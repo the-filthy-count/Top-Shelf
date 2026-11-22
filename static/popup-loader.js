@@ -30,7 +30,7 @@
   var SCRIPTS = {
     'performer-popup': '/static/performer-popup.js?v=20261115-scene-errors',
     'studio-popup':    '/static/studio-popup.js?v=' + V,
-    'link-modals':     '/static/link-modals.js?v=' + V,
+    'link-modals':     '/static/link-modals.js?v=20261122-coomer-search',
     'poster-roles':    '/static/poster-role-picker.js?v=' + V,
   };
 

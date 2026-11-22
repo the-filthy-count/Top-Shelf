@@ -13681,17 +13681,17 @@ def _coomer_profile_url(value: str) -> str | None:
     """Validate a profile identity without guessing its service or creator ID."""
     try:
         parsed = urlparse((value or "").strip())
-        if parsed.scheme.lower() not in ("http", "https") or parsed.hostname not in ("coomer.st", "www.coomer.st"):
+        if parsed.scheme.lower() not in ("http", "https") or parsed.hostname not in ("coomer.st", "www.coomer.st", "site1.coomer.com.co"):
             return None
         if parsed.username or parsed.password or parsed.port not in (None, 80, 443):
             return None
-        match = re.fullmatch(r"/(onlyfans|fansly)/user/([^/]+)/?", parsed.path)
+        match = re.fullmatch(r"/(onlyfans|fansly|candfans)/user/([^/]+)/?", parsed.path)
         if not match:
             return None
         creator = unquote(match.group(2)).strip()
         if not creator or creator in (".", "..") or any(c in creator for c in "/\\?#") or any(c.isspace() for c in creator):
             return None
-        return f"https://coomer.st/{match.group(1)}/user/{quote(creator, safe='')}"
+        return f"https://site1.coomer.com.co/{match.group(1)}/user/{quote(creator, safe='')}"
     except (ValueError, TypeError):
         return None
 
@@ -26868,6 +26868,13 @@ async def api_performers_search_ext_link(payload: dict = Body(...)):
             for o in opts
             if o.get("urls")
         ]
+    elif site == "coomer":
+        from app.core.performer_watchlist import search_external
+        hits, status = await run_maint(search_external, "Coomer", [name])
+        if status != "Checked":
+            return JSONResponse({"error": status, "results": []}, status_code=503)
+        results = [{"name": hit.get("name") or name, "url": hit["url"],
+                    "thumb_url": hit.get("image") or None} for hit in hits if hit.get("url")]
     elif site == "freeones":
         try:
             results = await run_maint(_freeones_performer_search, name)
@@ -26888,7 +26895,7 @@ async def api_performers_search_ext_link(payload: dict = Body(...)):
         results = await run_in_threadpool(_javdatabase_search_merged, qnames)
     else:
         return JSONResponse(
-            {"error": "site must be tmdb, iafd, freeones, or javdatabase"},
+            {"error": "site must be tmdb, iafd, freeones, coomer, or javdatabase"},
             status_code=400,
         )
     return {"results": results}
@@ -28234,7 +28241,7 @@ def _normalize_ext_link_store(site: str, url: str) -> str:
     if s == "coomer":
         norm = _coomer_profile_url(raw)
         if not norm:
-            raise ValueError("Coomer link must be a coomer.st/onlyfans/user/… or coomer.st/fansly/user/… profile URL")
+            raise ValueError("Coomer link must be an OnlyFans, Fansly, or CandFans creator profile URL")
         return norm
     if s in ("iafd", "freeones"):
         if not re.match(r"^https?://", raw, re.I):
