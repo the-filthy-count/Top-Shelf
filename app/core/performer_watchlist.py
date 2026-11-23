@@ -86,7 +86,19 @@ def rows():
         fields = {'TPDB': 'match_tpdb_id', 'StashDB': 'match_stashdb_id',
                   'FansDB': 'match_fansdb_id', 'JAVStash': 'match_javstash_id'}
         library = set()
-        for entity in c.execute("SELECT match_tpdb_id,match_stashdb_id,match_fansdb_id,match_javstash_id,is_group,group_ids_json FROM favourite_entities WHERE kind='performer'"):
+        library_names = set()
+        for record in c.execute("SELECT * FROM favourite_entities WHERE kind='performer'"):
+            entity = dict(record)
+            names = [entity.get('folder_name')]
+            names.extend(entity.get(field.replace('_id', '_name')) for field in fields.values())
+            try:
+                aliases = json.loads(entity.get('aliases_json') or '[]')
+            except (ValueError, TypeError):
+                aliases = []
+            if isinstance(aliases, list):
+                names.extend(a.get('name') if isinstance(a, dict) else a
+                             for a in aliases if isinstance(a, (str, dict)))
+            library_names.update(name_key(n) for n in names if isinstance(n, str) and name_key(n))
             for source, field in fields.items():
                 if entity[field] and str(entity[field]).strip():
                     library.add(library_identity(source, entity[field]))
@@ -101,6 +113,8 @@ def rows():
                         if not isinstance(entries, list):
                             continue
                         for entry in entries:
+                            if isinstance(entry, dict) and entry.get('name'):
+                                library_names.add(name_key(entry['name']))
                             identity = db._entry_id(entry)
                             if identity:
                                 library.add(library_identity(source, identity))
@@ -112,7 +126,10 @@ def rows():
         r['checks'] = {k: v for k, v in r['checks'].items() if k in (*SOURCES, *EXTERNAL_SOURCES)}
         confirmed = r.get('confirmed') or {}
         r['profile_image'] = profile_image(r)
-        r['in_library'] = bool(r.get('library_row_id')) or library_identity(confirmed.get('source'), confirmed.get('id')) in library
+        r['in_library'] = (bool(r.get('library_row_id'))
+                           or library_identity(confirmed.get('source'), confirmed.get('id')) in library
+                           or any(name_key(n) in library_names
+                                  for n in [r['name']] + (r['aliases'] or []) if name_key(n)))
     return result
 
 def search_source(source, names, settings):

@@ -12,7 +12,7 @@ class WatchlistAPITests(unittest.TestCase):
         self.conn=sqlite3.connect(':memory:')
         self.conn.row_factory=sqlite3.Row
         watch.install(self.conn)
-        self.conn.execute("CREATE TABLE favourite_entities(kind TEXT,is_group INTEGER DEFAULT 0,match_tpdb_id TEXT,match_stashdb_id TEXT,match_fansdb_id TEXT,match_javstash_id TEXT,group_ids_json TEXT)")
+        self.conn.execute("CREATE TABLE favourite_entities(kind TEXT,is_group INTEGER DEFAULT 0,match_tpdb_id TEXT,match_stashdb_id TEXT,match_fansdb_id TEXT,match_javstash_id TEXT,group_ids_json TEXT,folder_name TEXT,aliases_json TEXT,match_tpdb_name TEXT,match_stashdb_name TEXT,match_fansdb_name TEXT,match_javstash_name TEXT)")
         self.patch=patch.object(watch.db,'get_conn',return_value=self.conn);self.patch.start()
     def tearDown(self):
         self.patch.stop();self.conn.close()
@@ -50,6 +50,24 @@ class WatchlistAPITests(unittest.TestCase):
         self.assertFalse(row['in_library'])
         api.confirm(identity, hits[0])
         self.assertTrue(api.listing()['items'][0]['in_library'])
+
+    def test_library_badge_matches_saved_aliases(self):
+        api.add({'name': 'Stage_Alias'})
+        self.conn.execute("INSERT INTO favourite_entities(kind,folder_name,aliases_json) VALUES('performer','Canonical Name',?)", ('["Stage Alias"]',))
+        row = api.listing()['items'][0]
+        self.assertTrue(row['in_library'])
+        self.assertIsNone(row['confirmed'])
+
+    def test_watchlist_alias_matches_library_name(self):
+        api.add({'name': 'Other Name', 'aliases': ['Canonical Name']})
+        self.conn.execute("INSERT INTO favourite_entities(kind,folder_name) VALUES('performer','Canonical Name')")
+        self.assertTrue(api.listing()['items'][0]['in_library'])
+
+    def test_partial_names_and_studios_do_not_match(self):
+        api.add({'name': 'Stage Alias'})
+        self.conn.execute("INSERT INTO favourite_entities(kind,folder_name,aliases_json) VALUES('performer','Stage','invalid json')")
+        self.conn.execute("INSERT INTO favourite_entities(kind,folder_name) VALUES('studio','Stage Alias')")
+        self.assertFalse(api.listing()['items'][0]['in_library'])
 
     def test_group_members_have_library_badges(self):
         identity = api.add({'name': 'Bella'})['id']
