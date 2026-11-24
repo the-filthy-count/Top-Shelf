@@ -30460,11 +30460,25 @@ def _sync_vice_folders() -> None:
                 if not name:
                     continue
                 folder = _ensure_vice_folder(name, vices_dir)
-                if folder:
-                    _ensure_vice_nfo_and_art(name, folder, settings)
-                # Per-vice metadata folder + link JSON — parallel to studios.
-                _write_vice_metadata_info(vice)
+                if not folder:
+                    _log.warning("vice-sync: cannot create folder for %r under %s", name, vices_dir)
+    # Create every library and inbox folder before optional metadata/art work.
+    # A failed artwork request must not prevent later vices getting folders.
     _sync_vice_download_folders(settings)
+    if vices_dir_raw:
+        for vice in _load_vices():
+            name = (vice.get("name") or "").strip()
+            folder_name = _vice_folder_name(name)
+            if not folder_name:
+                continue
+            folder = Path(vices_dir_raw).expanduser() / folder_name
+            if not folder.is_dir():
+                continue
+            try:
+                _ensure_vice_nfo_and_art(name, folder, settings)
+                _write_vice_metadata_info(vice)
+            except Exception:
+                _log.exception("vice-sync: metadata/art failed for %s", folder)
 
 
 def _sync_vice_download_folders(settings: dict | None = None) -> None:
@@ -51678,6 +51692,8 @@ _refresh_news_rss_cache = _singleflight(_refresh_news_rss_cache)
 _refresh_tag_scene_pools = _singleflight(_refresh_tag_scene_pools)
 
 
+# Vice folder sync is repeatable mkdir/metadata reconciliation, not a one-shot
+# command: an interrupted run must never block future additions.
 # All entry points (HTTP, watcher, scheduler and boot) resolve these same
 # service functions. Each submits a named durable command before any effects.
 from app.core.action_commands import command as _durable_command
@@ -51686,7 +51702,6 @@ for _action_name in (
     '_process_download_entry', '_process_stage_entry_to_queue',
     '_process_vice_download_entry', '_process_jav_download_entry',
     '_process_vice_stage_entry', '_process_jav_stage_entry',
-    '_sync_vice_download_folders',
     '_reshelve_performer_root', '_backfill_studio_posters',
     '_library_change_directory', '_library_clean_removed',
     'write_library_scene_nfo_and_thumb', '_write_minimal_nfo_from_filename',
@@ -51696,7 +51711,6 @@ for _action_name in (
     '_recoverable_performer_merge',
     # The recurring queue sweep must rerun after restart. Individual
     # relocations are durable commands; the sweep itself is orchestration.
-    '_sync_vice_folders',
     '_library_delete_folder_on_disk', '_library_delete_favourite_from_disk',
     '_library_delete_vice_from_disk', '_library_remove_favourite_row',
     '_library_remove_vice', 'run_library_index_job', 'run_phash3_rescan_job',
