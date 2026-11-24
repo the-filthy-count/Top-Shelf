@@ -217,7 +217,7 @@ def annotate(file_id, **fields):
 
 def schedule_processing(conn, file_id):
     row = conn.execute('SELECT action,state FROM queue_changes WHERE file_id=?',(file_id,)).fetchone()
-    if row and row[1] == 'cancelled':
+    if row and (row[1] == 'cancelled' or (row[0] != 'process' and row[1] in ('blocked', 'failed'))):
         return False
     if row and row[1] in ('pending','running','draft'):
         return row[0] == 'process'

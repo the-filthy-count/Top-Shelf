@@ -4687,7 +4687,7 @@ def get_retry_files() -> list[str]:
                  AND NOT EXISTS (
                    SELECT 1 FROM file_assets a JOIN queue_changes q ON q.file_id=a.id
                    WHERE a.queue_table='processed_files' AND a.queue_id=processed_files.id
-                     AND (q.running_revision IS NOT NULL OR q.state='cancelled' OR q.state IN ('pending','running','draft') AND q.action != 'process')
+                     AND (q.running_revision IS NOT NULL OR q.state='cancelled' OR q.state IN ('pending','running','draft','blocked','failed') AND q.action != 'process')
                  )
                ORDER BY processed_at ASC"""
         )

@@ -3625,12 +3625,15 @@
     .q-details-bar { align-items: start; flex-wrap: wrap; }
   }
 
-  #qSearchOverlay.q-details-edit { padding: 24px; align-items: center; justify-content: center; }
+  #qSearchOverlay.q-details-edit { padding: 12px; align-items: center; justify-content: center; }
   #qSearchOverlay.q-details-edit .q-search-shell {
-    flex: 0 1 auto !important; width: min(900px,100%); height: min(820px,90vh);
+    flex: 0 1 auto !important; width: 100%; height: calc(100dvh - 24px); max-height: none !important;
     border: 1px solid rgba(var(--brand-accent-rgb),.3) !important; border-radius: 14px !important;
   }
   #qSearchOverlay.q-details-edit #qSearchTopRow { max-height: none !important; flex: 1 1 auto !important; }
+  #qSearchOverlay.q-details-edit #qSearchBody { display: block !important; overflow-y: auto !important; min-height: 0; overscroll-behavior: contain; }
+  #qSearchOverlay.q-details-edit #qSearchTopRow,
+  #qSearchOverlay.q-details-edit #qSearchLeftCol { height: auto !important; overflow: visible !important; }
   #qSearchOverlay.q-details-edit #qSearchRightCol,
   #qSearchOverlay.q-details-edit #qSearchResultsWrap,
   #qSearchOverlay.q-details-edit #qSearchManualFileBtn,
@@ -3646,7 +3649,7 @@
   #qSearchOverlay.q-details-edit #searchFrameStrip > div > img { object-fit: contain !important; }
   @media(max-width:600px) {
     #qSearchOverlay.q-details-edit { padding: 8px; }
-    #qSearchOverlay.q-details-edit .q-search-shell { height: 94vh; }
+    #qSearchOverlay.q-details-edit .q-search-shell { height: calc(100dvh - 16px); }
   }
   #qSearchOverlay.q-details-edit .q-details-actions {
     position: sticky; bottom: 0; z-index: 4; padding: 10px 0;

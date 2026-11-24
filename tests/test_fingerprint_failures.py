@@ -45,8 +45,15 @@ class FingerprintFailureTests(unittest.TestCase):
             self.assertEqual(self.run_case({'fansdb':[]},async_,{'fansdb':'key'}),([], 'none'))
             with self.assertRaisesRegex(RuntimeError,'No fingerprint'):
                 self.run_case({},async_,{})
+    def test_ambiguous_source_does_not_hide_later_match(self):
+        for async_ in (False, True):
+            result = self.run_case(dict(stashdb=[{'id':'a'},{'id':'b'}],tpdb=[{'id':'clear'}]),async_)
+            self.assertEqual(result,([{'id':'clear'}],'TPDB'))
+            result = self.run_case(dict(stashdb=[{'id':'a'},{'id':'b'}],tpdb=[],fansdb=[],javstash=[]),async_)
+            self.assertEqual(result[1],'StashDB')
+
     def test_malformed_results_raise(self):
-        for payload in ({}, {'data':{}}, {'data':{'findScenesBySceneFingerprints':None}}):
+        for payload in ({}, {'data':{}}, *({'data':{'findScenesBySceneFingerprints':value}} for value in (None, [None], [{}], [{'id':''}], [[], None], [[None]]))):
             response=SimpleNamespace(status_code=200,json=lambda:payload)
             fn=load('main.py','query_stashbox',{'requests':SimpleNamespace(post=lambda *a,**k:response)})
             with self.assertRaisesRegex(RuntimeError,'Invalid fingerprint'):

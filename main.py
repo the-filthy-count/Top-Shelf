@@ -3382,12 +3382,17 @@ def query_stashbox(phash_hex, endpoint, api_key, query, fingerprint_var):
         # on StashDB / FansDB returns [Scene] (flat). Detect by sniffing
         # the first element type rather than trusting the variant flag.
         if raw and isinstance(raw[0], list):
-            scenes = [s for group in raw for s in (group or [])]
+            if any(not isinstance(group, list) for group in raw):
+                raise RuntimeError("Invalid fingerprint response: malformed scene group")
+            scenes = [s for group in raw for s in group]
         else:
             scenes = list(raw)
     # Opportunistically persist any fingerprints the stash-box gave us
     # so the /api/library/scenes-in lookup has them on hand. Source is
     # inferred from the endpoint URL (stashdb / fansdb / tpdb).
+    if any(not isinstance(scene, dict) or not isinstance(scene.get("id"), str)
+           or not scene["id"].strip() for scene in scenes):
+        raise RuntimeError("Invalid fingerprint response: malformed scene entry")
     if scenes:
         if "stashdb" in endpoint:
             src = "stashdb"
@@ -3414,6 +3419,8 @@ def query_stashbox(phash_hex, endpoint, api_key, query, fingerprint_var):
 def query_with_fallback(phash_hex):
     api_keys = get_api_keys()
     report = emit
+    from app.core.fingerprint_selection import select_scene
+    ambiguous = None
     failures = []
     configured = 0
     for key, label, endpoint, query in (
@@ -3429,10 +3436,16 @@ def query_with_fallback(phash_hex):
         try:
             matches = query_stashbox(phash_hex, endpoint, api_key, query, "scene")
             if matches:
-                return matches, label
+                if select_scene(matches, phash_hex) is not None:
+                    return matches, label
+                if ambiguous is None:
+                    ambiguous = (matches, label)
+                report(f"  {label}: ambiguous fingerprints; checking remaining databases")
         except Exception as exc:
             failures.append(f"{label}: {exc}")
             report(f"  WARNING: {label} lookup failed ({exc}); continuing fallback")
+    if ambiguous is not None:
+        return ambiguous
     if not configured:
         raise RuntimeError("No fingerprint search databases configured")
     if failures:
@@ -6548,22 +6561,12 @@ def _find_performer_dir_with_aliases(performers: list, performer_dirs: list) -> 
 
 
 def _performer_objects_in_match_order(performers: list) -> list:
-    """Same gender priority as find_performer_dir; returns performer dicts from scene."""
-    female = []
-    for p in performers:
-        pf = p.get("performer") or {}
-        if (pf.get("gender") or "").upper() in ("FEMALE", "TRANSGENDER_FEMALE"):
-            female.append(pf)
-    if female:
-        return female
-    unk = []
-    for p in performers:
-        pf = p.get("performer") or {}
-        if not (pf.get("gender") or "").strip():
-            unk.append(pf)
-    if unk:
-        return unk
-    return [p.get("performer") or {} for p in performers]
+    """Prefer female and unknown credits without dropping other verified cast."""
+    cast = [p.get("performer") or {} for p in performers]
+    def priority(p):
+        gender = (p.get("gender") or "").strip().upper()
+        return 0 if gender in ("FEMALE", "TRANSGENDER_FEMALE") else (1 if not gender else 2)
+    return sorted(cast, key=priority)
 
 
 def _performer_crosswalk_ids(pf: dict, source: str) -> tuple[str, str, str, str]:
@@ -8036,7 +8039,36 @@ def _group_video_into_hint_subfolder(
     return dest, new_filename
 
 
-def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: str) -> dict:
+def _presort_library_performer(video: Path | None, settings: dict, kind: str = "performer"):
+    """Resolve queue ancestors uniquely; these are local routing hints, not credits."""
+    root = (settings.get("source_dir") or "").strip()
+    if video is None or not root:
+        return None
+    try:
+        relative = video.resolve().relative_to(Path(root).expanduser().resolve())
+    except (ValueError, OSError):
+        return None
+    library = db.favourite_list()
+    for parent in relative.parents:
+        if parent == Path('.'):
+            break
+        rows = [row for row in library
+                if row.get("kind") == kind
+                and parent.name.casefold() in {str(row.get("folder_name") or "").strip().casefold(),
+                                              _sanitize_fs_component(row.get("folder_name") or "").casefold()}]
+        if not rows:
+            continue
+        if len(rows) != 1:
+            return {"status": "error", "error": f"Pre-sort {kind} folder {parent.name!r} matches multiple library entries; choose a destination manually"}
+        row = rows[0]
+        path = Path(row.get("path") or "")
+        if not row.get("path") or not path.is_dir():
+            return {"status": "error", "error": f"Pre-sort {kind} destination for {parent.name!r} is unavailable; restore the folder or choose a destination manually"}
+        return path, row["folder_name"]
+    return None
+
+
+def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: str, source_video: Path | None = None) -> dict:
     """
     Resolve studio/performer route and naming for a stash-box-shaped scene.
     Returns status ok | error | no_dir (no database side effects).
@@ -8047,7 +8079,19 @@ def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: s
     date       = scene.get("release_date") or ""
     studio_obj = scene.get("studio") or {}
     studio     = studio_obj.get("name") or ""
+    vice_routing = scene.get("_scope") == "vice" or bool(scene.get("_force_vice"))
+    presort_studio = None if vice_routing else _presort_library_performer(source_video, settings, kind="studio")
+    if isinstance(presort_studio, dict):
+        return presort_studio
+    if presort_studio:
+        studio = presort_studio[1]
+        emit(f"  Pre-sort series override → {studio}")
     performers = scene.get("performers") or []
+    presort_performer = None
+    if not performers and not presort_studio and not vice_routing:
+        presort_performer = _presort_library_performer(source_video, settings)
+        if isinstance(presort_performer, dict):
+            return presort_performer
     images     = scene.get("images") or []
     perf_names = [p["performer"]["name"] for p in performers]
     plot_text, tag_names = _scene_extract_plot_and_tags(scene)
@@ -8204,8 +8248,8 @@ def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: s
 
     cross_on = _library_index_queue_matching_enabled(settings)
 
-    studio_dir = None
-    if cross_on:
+    studio_dir = presort_studio[0] if presort_studio else None
+    if cross_on and studio_dir is None:
         st_tp, st_st, st_fn = _studio_crosswalk_ids(studio_obj, source)
         row_st = db.favourite_find_studio_folder_by_crosswalk(st_tp, st_st, st_fn)
         if row_st:
@@ -8248,6 +8292,10 @@ def _scene_filing_plan(scene: dict, settings: dict, source: str, video_suffix: s
                 emit(f"  Performer scoring ({len(candidates)} candidates): {score_summary}")
                 emit(f"  Picked: {best_name} (weight {_performer_weight(best_fav)})")
             result = (best_path, best_name)
+        if not result and not performers:
+            result = presort_performer
+            if result:
+                emit(f"  Pre-sort folder → {result[1]} (local routing hint; cast unknown)")
         if not result:
             # Fallback: if the scene's tags match any Vice's assigned tags,
             # file under that vice's folder. Keeps matched-but-orphan scenes
@@ -8664,7 +8712,7 @@ def _file_scene_from_match_impl(video: Path, scene: dict, source: str = "") -> d
             scene["_scope"] = db.get_file_scope(filename) or ""
         except Exception:
             scene["_scope"] = ""
-    plan = _scene_filing_plan(scene, settings, source, video.suffix)
+    plan = _scene_filing_plan(scene, settings, source, video.suffix, source_video=video)
     from app.core.queue_changes import annotate_current
     destination = str(plan['dest_season'] / (plan['base_name'] + video.suffix)) if plan.get('dest_season') and plan.get('base_name') else None
     annotate_current(destination=destination, scene=scene, source=source)

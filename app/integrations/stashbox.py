@@ -108,10 +108,15 @@ async def query_stashbox(client: httpx.AsyncClient, phash_hex, endpoint, api_key
         # variant flag, since the field name is shared but signatures
         # differ across sources.
         if raw and isinstance(raw[0], list):
-            scenes = [s for group in raw for s in (group or [])]
+            if any(not isinstance(group, list) for group in raw):
+                raise RuntimeError("Invalid fingerprint response: malformed scene group")
+            scenes = [s for group in raw for s in group]
         else:
             scenes = list(raw)
         
+    if any(not isinstance(scene, dict) or not isinstance(scene.get("id"), str)
+           or not scene["id"].strip() for scene in scenes):
+        raise RuntimeError("Invalid fingerprint response: malformed scene entry")
     if scenes:
         src = ""
         if "stashdb" in endpoint:
@@ -137,6 +142,8 @@ async def query_stashbox(client: httpx.AsyncClient, phash_hex, endpoint, api_key
 async def query_with_fallback(phash_hex, api_keys, emit_cb=None):
     def report(message):
         (emit_cb or logger.info)(message)
+    from app.core.fingerprint_selection import select_scene
+    ambiguous = None
     failures = []
     configured = 0
     async with await get_async_client() as client:
@@ -153,10 +160,16 @@ async def query_with_fallback(phash_hex, api_keys, emit_cb=None):
             try:
                 matches = await query_stashbox(client, phash_hex, endpoint, api_key, query, "scene")
                 if matches:
-                    return matches, label
+                    if select_scene(matches, phash_hex) is not None:
+                        return matches, label
+                    if ambiguous is None:
+                        ambiguous = (matches, label)
+                    report(f"  {label}: ambiguous fingerprints; checking remaining databases")
             except Exception as exc:
                 failures.append(f"{label}: {exc}")
                 report(f"  WARNING: {label} lookup failed ({exc}); continuing fallback")
+    if ambiguous is not None:
+        return ambiguous
     if not configured:
         raise RuntimeError("No fingerprint search databases configured")
     if failures:
