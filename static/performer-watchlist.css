@@ -156,3 +156,17 @@ a.watch-db:hover {background:rgba(var(--brand-accent-rgb),.18);}
 .watch-photo-dialog button {position:absolute;right:8px;top:8px;width:36px;height:36px;padding:0;background:var(--bg);font-size:24px;}
 
 .watch-add-dialog {width:min(680px,calc(100vw - 32px));}
+
+/* One status selector, with native radio keyboard navigation. */
+.watch-status-toggle {display:inline-flex;padding:3px;gap:2px;border-radius:22px;background:rgba(0,0,0,.28);border:1px solid var(--border);}
+.watch-status-toggle label,.watch-library-toggle {position:relative;cursor:pointer;}
+.watch-status-toggle input,.watch-library-toggle input {position:absolute;opacity:0;width:1px;height:1px;}
+.watch-status-toggle label span {display:flex;align-items:center;justify-content:center;width:38px;height:32px;border-radius:18px;color:var(--dim);transition:background .15s,color .15s,box-shadow .15s;}
+.watch-status-toggle input:checked + span {background:var(--accent);color:#102123;box-shadow:0 2px 6px #0005;}
+.watch-status-toggle input:focus-visible + span,.watch-library-toggle input:focus-visible + span {outline:2px solid var(--accent);outline-offset:3px;}
+.watch-library-toggle {display:inline-flex;align-items:center;gap:9px;padding:6px 10px;}
+.watch-list-filters .watch-library-toggle img {width:78px;height:22px;}
+.watch-switch-track {width:32px;height:18px;border-radius:12px;background:#64696c;transition:background .15s;}
+.watch-switch-track::after {content:"";display:block;width:14px;height:14px;margin:2px;border-radius:50%;background:#fff;transition:transform .15s;}
+.watch-library-toggle input:checked + .watch-switch-track {background:var(--accent);}
+.watch-library-toggle input:checked + .watch-switch-track::after {transform:translateX(14px);}
