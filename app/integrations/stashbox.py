@@ -91,7 +91,12 @@ async def query_stashbox(client: httpx.AsyncClient, phash_hex, endpoint, api_key
     if "errors" in data:
         raise RuntimeError(f"Stash-box error: {data['errors']}")
         
-    result = data.get("data", {})
+    if not isinstance(data, dict) or not isinstance(data.get("data"), dict):
+        raise RuntimeError("Invalid fingerprint response: missing data")
+    result = data["data"]
+    field = next((key for key in ("findScenesByFullFingerprints", "findScenesBySceneFingerprints") if key in result), None)
+    if field is None or not isinstance(result[field], list):
+        raise RuntimeError("Invalid fingerprint response: missing scene results")
     scenes: list = []
     if "findScenesByFullFingerprints" in result:
         scenes = result["findScenesByFullFingerprints"] or []
@@ -130,38 +135,30 @@ async def query_stashbox(client: httpx.AsyncClient, phash_hex, endpoint, api_key
     return scenes
 
 async def query_with_fallback(phash_hex, api_keys, emit_cb=None):
-    def _emit(msg):
-        if emit_cb:
-            emit_cb(msg)
-        else:
-            logger.info(msg)
-
+    def report(message):
+        (emit_cb or logger.info)(message)
+    failures = []
+    configured = 0
     async with await get_async_client() as client:
-        try:
-            m = await query_stashbox(client, phash_hex, STASHDB_ENDPOINT, api_keys["stashdb"], STASHDB_QUERY, "scene")
-            if m: return m, "StashDB"
-        except Exception as e:
-            _emit(f"  WARNING: StashDB failed ({e}), trying TPDB...")
-            
-        try:
-            m = await query_stashbox(client, phash_hex, TPDB_ENDPOINT, api_keys["tpdb"], TPDB_QUERY, "scene")
-            if m: return m, "TPDB"
-        except Exception as e:
-            _emit(f"  WARNING: TPDB failed ({e}), trying FansDB...")
-            
-        try:
-            m = await query_stashbox(client, phash_hex, FANSDB_ENDPOINT, api_keys["fansdb"], STASHDB_QUERY, "scene")
-            if m: return m, "FansDB"
-        except Exception as e:
-            _emit(f"  WARNING: FansDB failed ({e}), trying JAVStash...")
-            
-        try:
-            # JAVStash uses TPDB's nested fingerprints shape but with
-            # stricter non-null validation — see JAVSTASH_QUERY.
-            m = await query_stashbox(client, phash_hex, JAVSTASH_ENDPOINT, api_keys["javstash"], JAVSTASH_QUERY, "scene")
-            if m: return m, "JAVStash"
-        except Exception as e:
-            _emit(f"  WARNING: JAVStash failed ({e})")
-            raise RuntimeError(f"All fallback databases failed. Last error: JAVStash failed ({e})") from e
-            
+        for key, label, endpoint, query in (
+            ("stashdb", "StashDB", STASHDB_ENDPOINT, STASHDB_QUERY),
+            ("tpdb", "TPDB", TPDB_ENDPOINT, TPDB_QUERY),
+            ("fansdb", "FansDB", FANSDB_ENDPOINT, STASHDB_QUERY),
+            ("javstash", "JAVStash", JAVSTASH_ENDPOINT, JAVSTASH_QUERY),
+        ):
+            api_key = (api_keys.get(key) or "").strip()
+            if not api_key:
+                continue
+            configured += 1
+            try:
+                matches = await query_stashbox(client, phash_hex, endpoint, api_key, query, "scene")
+                if matches:
+                    return matches, label
+            except Exception as exc:
+                failures.append(f"{label}: {exc}")
+                report(f"  WARNING: {label} lookup failed ({exc}); continuing fallback")
+    if not configured:
+        raise RuntimeError("No fingerprint search databases configured")
+    if failures:
+        raise RuntimeError("Fingerprint search incomplete; retry required. " + "; ".join(failures))
     return [], "none"

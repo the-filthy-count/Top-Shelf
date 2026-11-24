@@ -284,6 +284,7 @@ class ProcessingPipeline:
                     result = {"status": "deferred"}
                 except Exception as exc:
                     self.emit(f"  File failed: {video.name}: {exc}")
+                    await asyncio.to_thread(db.update_file, filename, status="error", error=str(exc))
                     result = {"status": "error", "error": str(exc)}
                 st = (result or {}).get("status", "error")
                 await asyncio.to_thread(db.processing_job_finish, self.job_id, st, (result or {}).get("error"))

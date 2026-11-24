@@ -3809,6 +3809,12 @@
         <div class="q-panel-header">
           <div class="header-actions">
             <input id="queueFilter" class="queue-filter" type="text" placeholder="Filter queue..." oninput="filterActiveQueue()" spellcheck="false">
+            <select id="queueSort" class="queue-filter" aria-label="Sort unmatched files" title="Sort files within the current folder" onchange="setQueueSort(this.value)" style="width:auto">
+              <option value="name-asc">Name A–Z</option><option value="name-desc">Name Z–A</option>
+              <option value="size-desc">Largest first</option><option value="size-asc">Smallest first</option>
+              <option value="duration-desc">Longest first</option><option value="duration-asc">Shortest first</option>
+              <option value="status">Status</option>
+            </select>
             <button class="btn-secondary" onclick="refreshActiveQueue()" title="Refresh" style="border:1px solid var(--border);color:var(--dim);padding:6px 10px;border-radius:6px;background:none;cursor:pointer;transition:border-color 0.15s,color 0.15s"><i class="fa-solid fa-arrows-rotate"></i></button>
             <button id="btnQueueMatchedOnly" class="btn-secondary queue-matched-toggle" onclick="toggleQueueMatchedOnly()" title="Matched only" aria-pressed="false"><i class="fa-solid fa-circle-check"></i></button>
             <button id="btnQueueVicesOnly" class="btn-secondary queue-matched-toggle" onclick="toggleQueueVicesOnly()" title="Vice matches" aria-pressed="false"><i class="ts-icon-vices" aria-hidden="true"></i></button>
@@ -4300,7 +4306,7 @@
 <link rel="stylesheet" href="/static/queue-history.css?v=20261103">
 <script defer src="/static/queue-history.js?v=20261103"></script>
 <script defer src="/static/queue-changes.js?v=1"></script>
-<script defer src="/static/queue.js?v=20261117-match-score"></script>
+<script defer src="/static/queue.js?v=20261124-sorting"></script>
 
 <!-- Queue duplicates modal — same phash grouping / keeper rules as Library Health. -->
 <style>

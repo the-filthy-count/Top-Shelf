@@ -4677,12 +4677,18 @@ def get_retry_files() -> list[str]:
     on the retry cadence instead of sitting forever with no phash and
     no fingerprint icon on the queue — Watchdog won't re-fire on them
     (no new create event) and the poll-fallback in ``_check_pending_files``
-    skips rows that already exist in history.
+    skips rows that already exist in history. Stale processing rows are
+    included, but active work and pending manual actions are left alone.
     """
     with get_conn() as conn:
         cur = conn.execute(
             """SELECT filename FROM processed_files
-               WHERE status IN ('unmatched', 'no_dir', 'error', 'pending')
+               WHERE status IN ('unmatched', 'no_dir', 'error', 'pending', 'processing')
+                 AND NOT EXISTS (
+                   SELECT 1 FROM file_assets a JOIN queue_changes q ON q.file_id=a.id
+                   WHERE a.queue_table='processed_files' AND a.queue_id=processed_files.id
+                     AND (q.running_revision IS NOT NULL OR q.state='cancelled' OR q.state IN ('pending','running','draft') AND q.action != 'process')
+                 )
                ORDER BY processed_at ASC"""
         )
         return [r["filename"] for r in cur.fetchall()]

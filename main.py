@@ -3366,7 +3366,12 @@ def query_stashbox(phash_hex, endpoint, api_key, query, fingerprint_var):
     data = resp.json()
     if "errors" in data:
         raise RuntimeError(f"Stash-box error: {data['errors']}")
-    result = data.get("data", {})
+    if not isinstance(data, dict) or not isinstance(data.get("data"), dict):
+        raise RuntimeError("Invalid fingerprint response: missing data")
+    result = data["data"]
+    field = next((key for key in ("findScenesByFullFingerprints", "findScenesBySceneFingerprints") if key in result), None)
+    if field is None or not isinstance(result[field], list):
+        raise RuntimeError("Invalid fingerprint response: missing scene results")
     scenes: list = []
     if "findScenesByFullFingerprints" in result:
         scenes = result["findScenesByFullFingerprints"] or []
@@ -3407,30 +3412,31 @@ def query_stashbox(phash_hex, endpoint, api_key, query, fingerprint_var):
 
 
 def query_with_fallback(phash_hex):
-    keys = get_api_keys()
-    try:
-        m = query_stashbox(phash_hex, STASHDB_ENDPOINT, keys["stashdb"], STASHDB_QUERY, "scene")
-        if m: return m, "StashDB"
-    except Exception as e:
-        emit(f"  WARNING: StashDB failed ({e}), trying TPDB...")
-    try:
-        m = query_stashbox(phash_hex, TPDB_ENDPOINT, keys["tpdb"], TPDB_QUERY, "scene")
-        if m: return m, "TPDB"
-    except Exception as e:
-        emit(f"  WARNING: TPDB failed ({e}), trying FansDB...")
-    try:
-        m = query_stashbox(phash_hex, FANSDB_ENDPOINT, keys["fansdb"], STASHDB_QUERY, "scene")
-        if m: return m, "FansDB"
-    except Exception as e:
-        emit(f"  WARNING: FansDB failed ({e}), trying JAVStash...")
-    try:
-        # JAVStash uses TPDB's nested fingerprints shape but with stricter
-        # non-null inner-list/item validation — see JAVSTASH_QUERY.
-        m = query_stashbox(phash_hex, JAVSTASH_ENDPOINT, keys["javstash"], JAVSTASH_QUERY, "scene")
-        if m: return m, "JAVStash"
-    except Exception as e:
-        emit(f"  WARNING: JAVStash failed ({e})")
-        raise RuntimeError(f"All fallback databases failed. Last error: JAVStash failed ({e})") from e
+    api_keys = get_api_keys()
+    report = emit
+    failures = []
+    configured = 0
+    for key, label, endpoint, query in (
+        ("stashdb", "StashDB", STASHDB_ENDPOINT, STASHDB_QUERY),
+        ("tpdb", "TPDB", TPDB_ENDPOINT, TPDB_QUERY),
+        ("fansdb", "FansDB", FANSDB_ENDPOINT, STASHDB_QUERY),
+        ("javstash", "JAVStash", JAVSTASH_ENDPOINT, JAVSTASH_QUERY),
+    ):
+        api_key = (api_keys.get(key) or "").strip()
+        if not api_key:
+            continue
+        configured += 1
+        try:
+            matches = query_stashbox(phash_hex, endpoint, api_key, query, "scene")
+            if matches:
+                return matches, label
+        except Exception as exc:
+            failures.append(f"{label}: {exc}")
+            report(f"  WARNING: {label} lookup failed ({exc}); continuing fallback")
+    if not configured:
+        raise RuntimeError("No fingerprint search databases configured")
+    if failures:
+        raise RuntimeError("Fingerprint search incomplete; retry required. " + "; ".join(failures))
     return [], "none"
 
 
@@ -18598,6 +18604,7 @@ def _build_queue_snapshot() -> dict:
             "filename":         rel,
             "display_name":     f_stem,
             "size_mb":          round(f.stat().st_size / 1024 / 1024, 1),
+            "media_duration":   hrow.get("media_duration"),
             "has_phash":        bool(_row_phash),
             "phash":            _row_phash,
             "previously_filed": prev_status == "filed",
@@ -35522,6 +35529,7 @@ def _build_movies_queue_snapshot() -> dict:
             "filename": rel,
             "display_name": disp,
             "size_mb": round(f.stat().st_size / 1024 / 1024, 1),
+            "media_duration": (row or {}).get("media_duration"),
             "has_phash": False,
             "previously_filed": prev_status == "filed",
             "prev_status": prev_status,

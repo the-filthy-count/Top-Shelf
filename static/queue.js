@@ -1006,14 +1006,34 @@
     _renderQueueStatusChip();
   }
 
-  // Alphabetical sort on the file's display name (or raw filename
-  // fallback), case-insensitive, using localeCompare so accented
-  // characters order naturally. `numeric: true` keeps "scene 2" before
-  // "scene 10" instead of the lexicographic "scene 10 < scene 2".
+  const queueSortOptions = ['name-asc','name-desc','size-desc','size-asc','duration-desc','duration-asc','status'];
+  let queueSort = 'name-asc';
+  try { queueSort = localStorage.getItem('queueSort') || queueSort; } catch (_) {}
+  if (!queueSortOptions.includes(queueSort)) queueSort = 'name-asc';
+  const queueSortControl = document.getElementById('queueSort');
+  if (queueSortControl) queueSortControl.value = queueSort;
+  window.setQueueSort = value => {
+    queueSort = queueSortOptions.includes(value) ? value : 'name-asc';
+    try { localStorage.setItem('queueSort', queueSort); } catch (_) {}
+    (window._queueFiles || []).sort(_cmpQueueFiles);
+    _queuePage = 0;
+    _recomputeQueueFilter();
+    _renderQueuePage();
+  };
   function _cmpQueueFiles(a, b) {
     const an = (a.display_name || a.filename || '').toLowerCase();
     const bn = (b.display_name || b.filename || '').toLowerCase();
-    return an.localeCompare(bn, undefined, { numeric: true, sensitivity: 'base' });
+    const name = an.localeCompare(bn, undefined, { numeric: true, sensitivity: 'base' });
+    if (queueSort === 'name-desc') return -name;
+    if (queueSort === 'status') return String(a.prev_status || a.status || '').localeCompare(String(b.prev_status || b.status || '')) || name;
+    if (queueSort.startsWith('size-') || queueSort.startsWith('duration-')) {
+      const field = queueSort.startsWith('size-') ? 'size_mb' : 'media_duration';
+      const av = Number(a[field]), bv = Number(b[field]);
+      const ak = Number.isFinite(av) && av > 0, bk = Number.isFinite(bv) && bv > 0;
+      if (ak !== bk) return ak ? -1 : 1;
+      if (ak && bk) return (queueSort.endsWith('-desc') ? bv - av : av - bv) || name;
+    }
+    return name;
   }
 
   //: Parent posix path (or '') for a queue rel-path key. `Jane Smith/scene.mp4`
