@@ -69,6 +69,15 @@ class WatchlistAPITests(unittest.TestCase):
         self.conn.execute("INSERT INTO favourite_entities(kind,folder_name) VALUES('studio','Stage Alias')")
         self.assertFalse(api.listing()['items'][0]['in_library'])
 
+    def test_confirm_url_match_with_different_name(self):
+        identity = api.add({'name':'Alias', 'source_url':'https://www.onlyfans.com/person/trial/abc'})['id']
+        hit = {'source':'FansDB','id':'123','name':'Different', 'urls':['https://onlyfans.com/person/']}
+        self.conn.execute('UPDATE performer_watchlist SET candidates=? WHERE id=?', (json.dumps([hit]),identity))
+        self.conn.commit()
+        self.assertEqual(len(api.listing()['items'][0]['candidates']),1)
+        api.confirm(identity, hit)
+        self.assertEqual(api.listing()['items'][0]['confirmed']['id'],'123')
+
     def test_group_members_have_library_badges(self):
         identity = api.add({'name': 'Bella'})['id']
         hits = [{'source': source, 'id': 'member', 'name': 'Bella'}

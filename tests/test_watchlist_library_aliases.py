@@ -6,6 +6,7 @@ import re
 import sqlite3
 from types import SimpleNamespace
 import unicodedata
+from urllib.parse import urlparse, parse_qsl, urlencode
 import unittest
 
 class LibraryAliasTests(unittest.TestCase):
@@ -14,12 +15,12 @@ class LibraryAliasTests(unittest.TestCase):
         conn = sqlite3.connect(':memory:')
         self.addCleanup(conn.close)
         conn.row_factory = sqlite3.Row
-        ns = dict(json=json, re=re, unicodedata=unicodedata,
+        ns = dict(json=json, re=re, unicodedata=unicodedata, urlparse=urlparse, parse_qsl=parse_qsl, urlencode=urlencode,
                   db=SimpleNamespace(get_conn=lambda:conn, _entry_id=lambda e:e.get('id') if isinstance(e,dict) else e),
                   SOURCES={'TPDB':None,'StashDB':None,'FansDB':None,'JAVStash':None}, EXTERNAL_SOURCES=('Coomer','IAFD'),
                   profile_image=lambda row:'')
         for node in tree.body:
-            if isinstance(node, ast.FunctionDef) and node.name in {'install','name_key','matches_names','library_identity','rows'}:
+            if isinstance(node, ast.FunctionDef) and node.name in {'install','name_key','matches_names','library_identity','rows','matches_profile','profile_urls','profile_url_key','watchlist_urls'}:
                 exec(compile(ast.Module(body=[node],type_ignores=[]),'watchlist.py','exec'),ns)
         ns['install'](conn)
         conn.execute('CREATE TABLE favourite_entities(kind TEXT, folder_name TEXT, aliases_json TEXT, match_tpdb_id TEXT, match_stashdb_id TEXT, match_fansdb_id TEXT, match_javstash_id TEXT, is_group INTEGER, group_ids_json TEXT)')

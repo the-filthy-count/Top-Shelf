@@ -61,11 +61,11 @@ def check(identity:int):
 def confirm(identity:int,payload:dict=Body(...)):
     with db.get_conn() as c:
         c.execute('BEGIN IMMEDIATE')
-        row=c.execute('SELECT candidates,name,aliases,origin_sources,linked_profiles FROM performer_watchlist WHERE id=?',(identity,)).fetchone()
+        row=c.execute('SELECT candidates,name,aliases,origin_sources,linked_profiles,source_url,details FROM performer_watchlist WHERE id=?',(identity,)).fetchone()
         if not row: raise HTTPException(404,'Entry not found')
         candidate=next((h for h in json.loads(row[0]) if h['source']==payload.get('source') and h['id']==payload.get('id')),None)
         if candidate and candidate.get('source') not in (*watch.SOURCES, *watch.EXTERNAL_SOURCES): candidate = None
-        if candidate and not watch.matches_names(candidate, [row[1]] + json.loads(row[2])): candidate = None
+        if candidate and not watch.matches_profile(candidate, [row[1]] + json.loads(row[2]), watch.watchlist_urls(dict(row))): candidate = None
         if not candidate: raise HTTPException(409,'Candidate changed; check again')
         origins=sorted(set(json.loads(row[3])) | {candidate['source']})
         links=json.loads(row[4]);links[candidate['source']]=candidate

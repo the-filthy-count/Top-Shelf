@@ -6,7 +6,7 @@ import time
 import re
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import urlparse, quote, unquote
+from urllib.parse import urlparse, quote, unquote, parse_qsl, urlencode
 import requests
 import database as db
 
@@ -66,6 +66,66 @@ def matches_names(hit, names):
     recorded = [hit.get('name') or ''] + [a.get('name', '') if isinstance(a, dict) else a for a in aliases]
     return any(name_key(name) in wanted for name in recorded)
 
+def profile_url_key(value):
+    """Comparison only: retain original URLs for display and navigation."""
+    value = str(value or '').strip()
+    if not value:
+        return ''
+    try:
+        parsed = urlparse(value if '://' in value else 'https://' + value)
+        if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username:
+            return ''
+        host = parsed.hostname.lower().removeprefix('www.')
+        if '.' not in host:
+            return ''
+        port = parsed.port
+        if port and port not in (80, 443):
+            host += ':' + str(port)
+        path = parsed.path.rstrip('/')
+        # OnlyFans profile names are case-insensitive. Trial links belong
+        # to the same profile, but other paths must not be collapsed.
+        if host == 'onlyfans.com':
+            parts = path.strip('/').split('/')
+            if len(parts) >= 2 and parts[1].lower() == 'trial':
+                path = '/' + parts[0]
+            path = path.lower()
+            query = []
+        else:
+            # Keep identity-bearing query parameters on unknown sites.
+            query = [(k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+                     if not k.lower().startswith('utm_')
+                     and k.lower() not in ('fbclid', 'gclid', 'ref', 'referrer')]
+        return host + path + ('?' + urlencode(sorted(query)) if query else '')
+    except (ValueError, TypeError):
+        return ''
+
+
+def profile_urls(value):
+    if isinstance(value, str):
+        value = value.splitlines()
+    if not isinstance(value, list):
+        return []
+    return [u.get('url', '') if isinstance(u, dict) else u
+            for u in value if isinstance(u, (str, dict))]
+
+
+def matches_profile(hit, names, urls=()):
+    if matches_names(hit, names):
+        return True
+    wanted = {profile_url_key(u) for u in urls} - {''}
+    return bool(wanted.intersection(profile_url_key(u) for u in profile_urls(hit.get('urls'))))
+
+
+def watchlist_urls(row):
+    details = row.get('details') or {}
+    if isinstance(details, str):
+        try:
+            details = json.loads(details)
+        except (ValueError, TypeError):
+            details = {}
+    return [row.get('source_url') or ''] + profile_urls(details.get('urls'))
+
+
 def search_terms(names):
     terms = []
     for name in names:
@@ -120,7 +180,7 @@ def rows():
                                 library.add(library_identity(source, identity))
     for r in result:
         for k in ('aliases','candidates','checks','confirmed','details','origin_sources','linked_profiles'): r[k] = json.loads(r[k]) if r[k] else None
-        r['candidates'] = [h for h in r['candidates'] if h.get('source') in (*SOURCES, *EXTERNAL_SOURCES) and matches_names(h, [r['name']] + (r['aliases'] or []))]
+        r['candidates'] = [h for h in r['candidates'] if h.get('source') in (*SOURCES, *EXTERNAL_SOURCES) and matches_profile(h, [r['name']] + (r['aliases'] or []), watchlist_urls(r))]
         for hit in r['candidates']:
             hit['in_library'] = library_identity(hit.get('source'), hit.get('id')) in library
         r['checks'] = {k: v for k, v in r['checks'].items() if k in (*SOURCES, *EXTERNAL_SOURCES)}
@@ -132,16 +192,17 @@ def rows():
                                   for n in [r['name']] + (r['aliases'] or []) if name_key(n)))
     return result
 
-def search_source(source, names, settings):
+def search_source(source, names, settings, urls=()):
     key, endpoint = SOURCES[source]
     if not settings.get(key): return [], 'Not configured'
     hits = {}
     try:
-        for name in search_terms(names):
+        url_terms = ['https://' + key for key in dict.fromkeys(profile_url_key(u) for u in urls) if key]
+        for name in list(dict.fromkeys(search_terms(names) + url_terms)):
             if source == 'TPDB':
                 response = requests.get(endpoint, params={'q': name}, headers={'Authorization': 'Bearer '+settings[key]}, timeout=15)
             else:
-                query = 'query($name: String!) { searchPerformer(term: $name, limit: 25) { id name aliases images { url } } }'
+                query = 'query($name: String!) { searchPerformer(term: $name, limit: 25) { id name aliases images { url } urls { url } } }'
                 response = requests.post(endpoint, json={'query': query, 'variables': {'name': name}}, headers={'ApiKey': settings[key]}, timeout=15)
             response.raise_for_status()
             body = response.json()
@@ -149,7 +210,7 @@ def search_source(source, names, settings):
             data = body.get('data') if source == 'TPDB' else (body.get('data') or {}).get('searchPerformer')
             if not isinstance(data, list): raise ValueError('Unexpected database response')
             for item in data:
-                if not matches_names(item, names): continue
+                if not matches_profile(item, names, urls): continue
                 identity = str(item.get('id') or '')
                 if not identity: continue
                 images = item.get('posters') or item.get('images') or []
@@ -157,7 +218,8 @@ def search_source(source, names, settings):
                 if isinstance(image, dict): image = image.get('url') or ''
                 if urlparse(str(image)).scheme not in ('http','https'): image = ''
                 hits[identity] = {'source':source,'id':identity,'name':str(item.get('name') or name),
-                                  'image':image,'aliases':item.get('aliases') or []}
+                                  'image':image,'aliases':item.get('aliases') or [],
+                                  'urls':profile_urls(item.get('urls'))}
         return list(hits.values()), 'Checked'
     except Exception:
         # Never turn a failed request into a definitive "not found".
@@ -211,7 +273,7 @@ def check_entry(row):
     settings = db.get_settings()
     with ThreadPoolExecutor(max_workers=4) as pool:
         sources = list(SOURCES) + list(EXTERNAL_SOURCES)
-        results = list(pool.map(lambda source: search_source(source, names, settings) if source in SOURCES else search_external(source, names), sources))
+        results = list(pool.map(lambda source: search_source(source, names, settings, watchlist_urls(row)) if source in SOURCES else search_external(source, names), sources))
     candidates = [hit for hits, _ in results for hit in hits]
     checks = dict(zip(sources, (status for _, status in results)))
     with db.get_conn() as c:
