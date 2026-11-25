@@ -1807,9 +1807,11 @@ def run_retry_pipeline():
         return
     s = db.get_settings()
     source_dir = Path(s.get("source_dir", ""))
+    vice_raw = (s.get("vice_download_watch_dir") or "").strip()
+    vice_root = Path(vice_raw).expanduser() if vice_raw else None
     candidates = db.get_retry_files()
     # Only retry files that still exist on disk (DB key may be stem or full basename)
-    to_retry = [f for f in candidates if db.resolve_source_video_path(source_dir, f) is not None]
+    to_retry = [f for f in candidates if db.resolve_source_video_path(source_dir, f, vice_dl_root=vice_root) is not None]
     if not to_retry:
         return
     run_pipeline(to_retry)
@@ -3341,6 +3343,8 @@ def _health_video_has_sidecar_nfo(video_path: Path, library_root_str: str) -> bo
 # ---------------------------------------------------------------------------
 
 def query_stashbox(phash_hex, endpoint, api_key, query, fingerprint_var):
+    from app.integrations import fingerprint_cooldown
+    fingerprint_cooldown.check(endpoint)
     if fingerprint_var == "full":
         variables = {"fingerprints": [{"hash": phash_hex, "algorithm": "PHASH"}]}
     else:
@@ -3354,6 +3358,8 @@ def query_stashbox(phash_hex, endpoint, api_key, query, fingerprint_var):
     # field 'X' on type 'Y'"). raise_for_status() throws an HTTPError
     # that hides the body, so unwrap it first and surface the
     # `errors[].message` so the caller's emit() picks up the real cause.
+    if resp.status_code == 429:
+        fingerprint_cooldown.rate_limited(endpoint, resp.headers.get("Retry-After"))
     if resp.status_code >= 400:
         try:
             err_body = resp.json()

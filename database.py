@@ -4200,6 +4200,9 @@ def update_file(filename, status, phash=None, match_source=None, match_title=Non
                 destination=None, error=None, match_external_id=None, media_duration=None):
     fst, _ = _filename_stem_ext(filename)
     fields = {"status": status, "processed_at": datetime.now().isoformat(timespec="seconds")}
+    # Match the movie updater: each status write carries its current error,
+    # rather than retaining an obsolete failure from an earlier attempt.
+    fields["error"] = error
     for k, v in [("phash", phash), ("match_source", match_source),
                  ("match_title", match_title), ("match_studio", match_studio),
                  ("match_date", match_date), ("performers", performers),
