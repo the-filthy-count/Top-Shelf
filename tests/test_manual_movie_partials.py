@@ -3,11 +3,14 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from download_safety import require_complete_queue_video, PartialDownloadPending
 from test_duplicate_filing_safety import load
 
 class ManualMoviePartialTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch('app.core.queue_media.read',return_value={'phash':'cached'}))
+
     def test_partial_protection_in_both_inboxes(self):
         for kind in ('movies_source_dir','jav_download_watch_dir'):
             for case in ('nested','related','unrelated','resumed'):

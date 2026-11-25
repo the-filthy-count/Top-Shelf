@@ -11,12 +11,12 @@ class CollisionSafetyTests(unittest.TestCase):
             src=Path(tmp)/'nested'/'same.mp4';src.parent.mkdir();src.write_bytes(b'new')
             dst=Path(tmp)/'same.mp4';dst.write_bytes(b'original')
             compute=Mock(return_value='hash');cached=Mock(side_effect=AssertionError('basename cache used'))
-            env={'Path':Path,'compute_phash':compute,'db':SimpleNamespace(get_phash=cached,notification_add=Mock()),
+            env={'Path':Path,'compute_phash':compute,'db':SimpleNamespace(get_phash=cached,notification_add=Mock(),queue_file_key=lambda p,s:'nested/same.mp4',get_settings=lambda:{}),
                  '_phash_for_library_destination':lambda p:'hash','_phash_hamming_distance':lambda *a:0,
-                 '_PHASH_SAME_SCENE_BITS':4,'_video_quality_score':lambda p:(2,3,2) if p==src else (1,3,1),
+                 '_PHASH_SAME_SCENE_BITS':4,'_video_quality_score':lambda p,**kw:(2,3,2) if p==src else (1,3,1),
                  'emit':Mock(),'safe_move':Mock(side_effect=OSError('disk full'))}
             move=load('main.py','_quality_gate_move',env)
-            with patch('app.core.filing_recovery.replace', side_effect=OSError('disk full')):
+            with patch('app.core.filing_recovery.replace', side_effect=OSError('disk full')), patch('app.core.queue_media.read',side_effect=lambda key,path,**kw:{'phash':kw['phash_probe'](path)}):
                 with self.assertRaises(OSError):move(src,dst)
             self.assertEqual(dst.read_bytes(),b'original');self.assertTrue(src.exists())
             compute.assert_called_once_with(src);cached.assert_not_called()

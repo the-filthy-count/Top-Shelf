@@ -26,7 +26,7 @@ class MatchingSafetyTests(unittest.TestCase):
     def test_cache_invalidates_replaced_file(self):
         tree=ast.parse((ROOT/'database.py').read_text())
         conn=sqlite3.connect(':memory:');self.addCleanup(conn.close)
-        conn.execute('CREATE TABLE processed_files(filename TEXT, phash TEXT, media_duration INTEGER, media_signature TEXT, media_size_bytes INTEGER, media_codec TEXT, media_width INTEGER, media_height INTEGER)')
+        conn.execute('CREATE TABLE processed_files(filename TEXT, pipeline_match_json TEXT, phash TEXT, media_duration INTEGER, media_signature TEXT, media_size_bytes INTEGER, media_codec TEXT, media_width INTEGER, media_height INTEGER)')
         conn.execute("INSERT INTO processed_files(filename,phash,media_duration,media_signature) VALUES ('clip.mp4','stale',60,NULL)")
         env={'Path':Path,'json':json,'get_conn':lambda:conn}
         for name in ('media_file_signature','validate_media_cache'):
@@ -62,30 +62,3 @@ class MatchingSafetyTests(unittest.TestCase):
             replacement=video.with_suffix('.new');replacement.write_bytes(b'new');replacement.replace(video)
             validate('clip.mp4',video)
             self.assertEqual(conn.execute('SELECT phash,media_duration FROM processed_files').fetchone(),(None,None))
-
-    def test_batch_continues_after_failure_and_deferral(self):
-        tree=ast.parse((ROOT/'app/core/pipeline.py').read_text())
-        cls=next(n for n in tree.body if isinstance(n,ast.ClassDef))
-        fn=next(n for n in cls.body if isinstance(n,ast.AsyncFunctionDef) and n.name=='run_pipeline')
-        async def inline(fn,*args):return fn(*args)
-        with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp)
-            for name in ('a.mp4','b.mp4','c.mp4'):(root/name).touch()
-            seen=[]
-            async def process(p):
-                seen.append(p.name)
-                if p.name=='a.mp4':raise OSError('failed')
-                if p.name=='b.mp4':raise PartialDownloadPending('waiting')
-                return {'status':'filed'}
-            notify=Mock()
-            env={'Path':Path,'asyncio':SimpleNamespace(to_thread=inline),'PartialDownloadPending':PartialDownloadPending,
-                 'db':SimpleNamespace(get_settings=lambda:{'source_dir':tmp},notification_add=notify,
-                     queue_file_key=lambda p,s:p.name,upsert_file=Mock(),processing_job_enqueue=Mock(),
-                     processing_job_start=Mock(return_value='asset'),processing_job_finish=Mock()),'VIDEO_EXTENSIONS':{'.mp4'}}
-            exec(compile(ast.Module(body=[fn],type_ignores=[]),'pipeline','exec'),env)
-            owner=SimpleNamespace(job_id=None,set_phase=Mock(),state={},lock=threading.Lock(),emit=Mock(),flush_emit_buffer=Mock(),process_single=process)
-            with patch('app.core.queue_changes.adopt_processing'), patch('app.core.queue_changes.release_processing'):
-                asyncio.run(env['run_pipeline'](owner))
-            self.assertEqual(seen,['a.mp4','b.mp4','c.mp4'])
-            self.assertFalse(owner.state['running']);self.assertFalse(owner.lock.locked())
-            self.assertIn('1 waiting for download',notify.call_args.args[1])

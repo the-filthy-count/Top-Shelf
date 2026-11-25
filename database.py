@@ -4079,7 +4079,7 @@ def validate_media_cache(filename: str, video: Path) -> str:
                     conn.execute('UPDATE processed_files SET media_signature=? WHERE filename=?', (signature, filename))
             else:
                 conn.execute(
-                    "UPDATE processed_files SET phash=NULL, media_duration=NULL, media_size_bytes=NULL, media_codec=NULL, media_width=NULL, media_height=NULL, media_signature=? WHERE filename=?",
+                    "UPDATE processed_files SET pipeline_match_json=NULL, phash=NULL, media_duration=NULL, media_size_bytes=NULL, media_codec=NULL, media_width=NULL, media_height=NULL, media_signature=? WHERE filename=?",
                     (signature, filename),
                 )
         conn.commit()
@@ -4690,7 +4690,7 @@ def get_retry_files() -> list[str]:
                  AND NOT EXISTS (
                    SELECT 1 FROM file_assets a JOIN queue_changes q ON q.file_id=a.id
                    WHERE a.queue_table='processed_files' AND a.queue_id=processed_files.id
-                     AND (q.running_revision IS NOT NULL OR q.state='cancelled' OR q.state IN ('pending','running','draft','blocked','failed') AND q.action != 'process')
+                     AND (q.running_revision IS NOT NULL OR q.state='cancelled' OR (q.state IN ('blocked','failed') AND q.action='process' AND (json_extract(q.desired_json,'$._review_required')=1 OR COALESCE(json_extract(q.desired_json,'$.operation'),'') NOT IN ('match_and_file','suggestions'))) OR q.state IN ('pending','running','draft','blocked','failed') AND q.action != 'process')
                  )
                ORDER BY processed_at ASC"""
         )
@@ -7985,13 +7985,13 @@ def file_identity(filename: str, table: str = 'processed_files') -> dict | None:
         return dict(row) if row else None
 
 
-def processing_job_enqueue(filename: str, table: str = "processed_files"):
+def processing_job_enqueue(filename: str, table: str = "processed_files", *, options=None):
     from app.core.jobs import enqueue
     asset = file_identity(filename, table)
     if asset:
         with get_conn() as conn:
             from app.core.queue_changes import schedule_processing
-            if schedule_processing(conn, asset['id']):
+            if schedule_processing(conn, asset['id'], options):
                 enqueue(conn, asset['id'])
             conn.commit()
 
@@ -8003,14 +8003,18 @@ def file_identity_map():
             "UNION ALL SELECT a.*,p.filename FROM file_assets a JOIN processed_movies p ON p.id=a.queue_id WHERE a.queue_table='processed_movies'")}
 
 
-def processing_job_start(filename: str, table: str = "processed_files") -> str | None:
+def processing_job_start(filename: str, table: str = "processed_files", *, expected_file_id=None, expected_revision=None) -> str | None:
     from app.core import jobs
     from app.core.queue_changes import start_processing
     asset = file_identity(filename, table)
-    if not asset:
+    if not asset or (expected_file_id is not None and asset['id'] != expected_file_id):
         return None
     with get_conn() as conn:
         conn.execute('BEGIN IMMEDIATE')
+        if expected_revision is not None:
+            current = conn.execute('SELECT revision FROM queue_changes WHERE file_id=?', (asset['id'],)).fetchone()
+            if not current or current[0] != expected_revision:
+                return None
         if not start_processing(conn, asset['id']):
             return None
         jobs.enqueue(conn, asset['id'])
@@ -8046,6 +8050,31 @@ def processing_jobs_ready(limit=20, table="processed_files"):
             WHERE j.action='process' AND j.state='pending' AND j.running_revision IS NULL
             AND j.available_at<=? AND p.status NOT IN ('filed','removed') ORDER BY j.updated_at LIMIT ?""",
             (table, time.time(), max(1, min(int(limit), 100))))]
+
+
+def processing_work_result(file_id):
+    with get_conn() as conn:
+        asset = conn.execute('SELECT queue_table,queue_id FROM file_assets WHERE id=?', (file_id,)).fetchone()
+        if not asset or asset[0] not in ('processed_files','processed_movies'):
+            return {'status':'busy'}
+        row = conn.execute(f'SELECT status,error FROM {asset[0]} WHERE id=?', (asset[1],)).fetchone()
+        return dict(row) if row else {'status':'busy'}
+
+
+def processing_work_ready(limit=100):
+    """The single automatic work list. Legacy processing_jobs is display only."""
+    with get_conn() as conn:
+        rows = conn.execute("""SELECT COUNT(*) OVER() AS ready_count,j.file_id,j.revision,j.desired_json,j.updated_at,
+            a.queue_table,p.filename FROM queue_changes j
+            JOIN file_assets a ON a.id=j.file_id
+            JOIN (SELECT id,filename,status,'processed_files' AS queue_table FROM processed_files
+                  UNION ALL SELECT id,filename,status,'processed_movies' FROM processed_movies) p
+              ON p.id=a.queue_id AND p.queue_table=a.queue_table
+            WHERE j.action='process' AND j.state='pending' AND j.running_revision IS NULL
+              AND j.available_at<=? AND p.status!='removed'
+            ORDER BY CASE WHEN json_extract(j.desired_json,'$.operation')='suggestions' THEN 1 ELSE 0 END,
+                     j.updated_at,j.file_id LIMIT ?""", (time.time(),max(1,int(limit)))).fetchall()
+    return [dict(row) for row in rows]
 
 
 def queue_search_record(filename):

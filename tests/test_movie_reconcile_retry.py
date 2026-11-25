@@ -21,25 +21,12 @@ class MovieReconcileRetryTests(unittest.TestCase):
             self.assertEqual(reconcile(movies,jav),1)
             self.assertEqual(dict(conn.execute('SELECT filename,status FROM processed_movies').fetchall()),{'movie.mp4':'unmatched','jav.mp4':'unmatched','gone.mp4':'removed'})
 
-    def test_deferred_retries_after_delay_without_new_event(self):
+    def test_movie_admission_uses_shared_dispatcher_and_does_not_reset_watch_deadline(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp);video=root/'movie.mp4';video.touch();clock=SimpleNamespace(now=100)
-            settings={'movies_source_dir':str(root),'folder_watch_hold_secs':'0'}
-            process=Mock(side_effect=[{'status':'deferred'},{'status':'filed'}])
-            env={'Path':Path,'time':SimpleNamespace(time=lambda:clock.now),'db':SimpleNamespace(get_settings=lambda:settings,get_movie_terminal_filenames=lambda:set(),rename_movie=Mock(),update_movie=Mock(),upsert_movie=Mock(),processing_job_enqueue=Mock()),
-                '_movie_pipeline_lock':threading.Lock(),'_pending_lock':threading.Lock(),'_pending_movie_files':{},'_movie_poll_seen':set(),
-                'processing_state':{'running':False},'emit':Mock(),'process_movie_file':process,
-                '_movie_source_video_relpaths':lambda *a:[('movie.mp4',video)],'_clean_and_rename_on_disk':lambda root,rel,**kw:rel}
-            load('main.py','run_movie_pipeline',env)
-            poll=load('main.py','_check_pending_movies',env)
-            poll();self.assertEqual(process.call_count,1);self.assertEqual(env['_pending_movie_files'],{'movie.mp4':130})
-            clock.now=129;poll();self.assertEqual(process.call_count,1)
-            clock.now=130;poll();self.assertEqual(process.call_count,2);self.assertEqual(env['_pending_movie_files'],{})
-
-    def test_retry_preserves_later_event_deadline(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            env={'Path':Path,'time':SimpleNamespace(time=lambda:100),'db':SimpleNamespace(get_settings=lambda:{'movies_source_dir':tmp},upsert_movie=Mock(),processing_job_enqueue=Mock()),
-                '_movie_pipeline_lock':threading.Lock(),'_pending_lock':threading.Lock(),'_pending_movie_files':{'movie.mp4':500},
-                'processing_state':{'running':False},'emit':Mock(),'process_movie_file':lambda *a:{'status':'deferred'}}
+            enqueue=Mock();run=Mock()
+            env={'Path':Path,'db':SimpleNamespace(get_settings=lambda:{'movies_source_dir':tmp},upsert_movie=Mock(),processing_job_enqueue=enqueue),
+                '_pending_movie_files':{'movie.mp4':500},'run_pipeline':run}
             load('main.py','run_movie_pipeline',env)(['movie.mp4'])
+            enqueue.assert_called_once_with('movie.mp4','processed_movies')
+            run.assert_called_once_with([])
             self.assertEqual(env['_pending_movie_files']['movie.mp4'],500)

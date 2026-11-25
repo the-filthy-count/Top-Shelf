@@ -8,6 +8,9 @@ from test_duplicate_filing_safety import load
 from download_safety import require_complete_queue_video
 
 class MovieMetadataTransactionTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch('app.core.queue_media.read',return_value={'phash':'cached'}))
+
     def test_metadata_failures_preserve_source_and_incumbent_nfo(self):
         for stage in ('prepare','publish','success','rollback_failure'):
             with self.subTest(stage=stage),tempfile.TemporaryDirectory() as tmp:

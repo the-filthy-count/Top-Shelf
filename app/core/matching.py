@@ -329,18 +329,13 @@ def _build_file_meta(filename: str) -> dict:
 
     meta: dict = {"duration_s": 0, "year": 0, "cast_hint": 0, "scene_index": None}
     try:
-        cached_dur = db.get_media_duration(filename)
-        if cached_dur is not None:
-            meta["duration_s"] = int(cached_dur)
-        else:
-            settings = db.get_settings()
-            src_root = (settings.get("source_dir") or "").strip()
-            if src_root:
-                path = Path(src_root) / filename
-                if path.is_file():
-                    dur = get_video_duration(path) or 0
-                    meta["duration_s"] = int(dur)
-                    db.cache_media_duration(filename, meta["duration_s"])
+        from app.core.queue_media import read
+        settings = db.get_settings()
+        vice = (settings.get("vice_download_watch_dir") or "").strip()
+        path = db.resolve_source_video_path(Path(settings.get("source_dir") or ""), filename,
+            vice_dl_root=Path(vice).expanduser() if vice else None)
+        if path:
+            meta["duration_s"] = int(read(filename, path, duration_probe=get_video_duration).get("media_duration") or 0)
     except Exception:
         pass
     try:

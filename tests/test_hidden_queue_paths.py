@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from test_filename_identity import load_function
 import database as db
 from download_safety import require_complete_queue_video, PartialDownloadPending
-from app.core.movie_jobs import run
+
 
 class HiddenQueueTests(unittest.TestCase):
     def test_walk_omits_dotfiles_and_entire_hidden_subtrees(self):
@@ -28,11 +28,10 @@ class HiddenQueueTests(unittest.TestCase):
             require_complete_queue_video(root/'Actor/scene.mp4',{'source_dir':str(root)})
 
     def test_direct_movie_processing_cannot_process_hidden_paths(self):
-        process=Mock()
+        run=load_function('main.py','process_movie_file',{'Path':Path,'db':db})
         with patch.object(db,'get_settings',side_effect=AssertionError('must skip before touching DB')):
             for name in ['.hidden.mp4','Folder/.cache/file.mp4']:
-                self.assertEqual(run(name,None,None,process)['status'],'skipped')
-        process.assert_not_called()
+                self.assertEqual(run(name,None,None)['status'],'skipped')
 
     def test_empty_hidden_directories_are_preserved(self):
         sweep=load_function('main.py','_sweep_empty_queue_subdirs',{'Path':Path,'os':os})

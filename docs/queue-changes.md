@@ -71,3 +71,52 @@ remain in force. HTTP error responses retain their status and record failure.
 The list provides history, cancellation and revision-checked retry for these
 commands as well as file commands. Authentication, settings edits, read-only
 queries and caches are outside the media-action queue.
+
+## One automatic matching pipeline
+
+`ProcessingPipeline` is the only automatic matching dispatcher. Scene and movie
+watchers, vice/JAV imports, retry schedules and suggestion requests register work
+against the stable file ID, then wake this dispatcher. They do not own separate
+matching loops or suggestion-search pools.
+
+The worker reads `queue_changes` joined to `file_assets` and the observed video
+record. After every job it reads the list again, so new work, renames and newer
+requests take effect without rebuilding an in-memory batch. Claims verify both
+the file ID and revision. The shared pipeline lock serializes matching and filing
+with existing manual filing and maintenance operations.
+
+For each video, the work order is:
+
+1. Resolve the current path and confirm the download is complete.
+2. Reuse validated media observations; probe or fingerprint only missing data.
+3. Check the library for an existing copy.
+4. Reuse a verified saved match, otherwise resolve the grab identity or search
+   the appropriate scene/movie databases.
+5. File verified matches. Persist suggestion searches as the next job for misses;
+   these run after ready matching jobs, using the saved search fields.
+
+Scenes, movies, JAV and vices use the same work list. Their provider queries and
+filing destinations remain distinct. `processing_jobs` is a progress projection,
+not a second scheduling authority. Watcher hold timers only govern admission of
+new downloads; durable retry delays live in `queue_changes`.
+
+`queue_media.read` is shared by matching, scoring, metadata displays, filmstrip
+and preview generation, and source collision checks. Observations and verified
+match snapshots are invalidated when device/inode, size or modification time
+changes. Rename/chmod-only ctime changes retain analysis. Movie fingerprints are
+now stored too, and automatic movie filing reuses them after the move. A new
+explicit match selection clears an older automatic match checkpoint.
+
+Deferred downloads and temporary failures retain their next operation and
+options across retries. A service rate limit waits and retries the current
+fingerprint request. Restart recovery resumes safe lookup/suggestion work while
+interrupted filesystem effects still require review. Per-job import cleanup
+options prevent an import batch from suppressing cleanup for unrelated work.
+
+Before storing a lookup or beginning filing, the worker verifies that its claimed
+revision is still current. Beginning automatic filesystem effects is fenced in a
+transaction: a newer choice wins before that boundary; after it, requests must
+wait for filing to finish. Interrupted fenced effects require review on restart.
+Match checkpoints require the original lookup signature, even if another reader
+has refreshed the record meanwhile. Each successful probe is committed separately
+before hashing, and progress counts all ready jobs rather than the read window.

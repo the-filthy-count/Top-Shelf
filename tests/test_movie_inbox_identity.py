@@ -3,7 +3,7 @@ import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from test_duplicate_filing_safety import load
 from download_safety import PartialDownloadPending
 
@@ -13,10 +13,11 @@ class MovieInboxIdentityTests(unittest.TestCase):
             root=Path(tmp);movies=root/'movies';jav=root/'jav';movies.mkdir();jav.mkdir()
             for folder in (movies,jav):(folder/'clip.mp4').touch()
             upsert=Mock();compare=Mock(return_value={'status':'removed'})
-            env={'Path':Path,'db':SimpleNamespace(get_settings=lambda:{'movies_source_dir':str(movies),'jav_download_watch_dir':str(jav)},upsert_movie=upsert,update_movie=Mock(),media_file_signature=lambda p:'stable'),
+            env={'get_video_duration':Mock(),'json':__import__('json'),'Path':Path,'db':SimpleNamespace(get_settings=lambda:{'movies_source_dir':str(movies),'jav_download_watch_dir':str(jav)},upsert_movie=upsert,update_movie=Mock(),media_file_signature=lambda p:'stable'),
                 'require_complete_queue_video':lambda *a:None,'PartialDownloadPending':PartialDownloadPending,'emit':Mock(),'compute_phash':lambda p:'hash','_queue_resolve_phash_vs_indexed_library':compare}
             process=load('main.py','_process_movie_file_impl',env)
-            process('clip.mp4',src=movies);process('clip.mp4',src=jav)
+            with patch('app.core.queue_media.read',return_value={'phash':'hash','media_signature':'stable'}):
+                process('clip.mp4',src=movies);process('clip.mp4',src=jav)
             self.assertEqual([c.args[0] for c in upsert.call_args_list],['clip.mp4','jav://clip.mp4'])
             self.assertEqual([c.args[1] for c in compare.call_args_list],['clip.mp4','jav://clip.mp4'])
 

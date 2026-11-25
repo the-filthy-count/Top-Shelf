@@ -307,7 +307,6 @@ _pending_jav_stage_downloads: dict = {}   # path -> scheduled time (jav stage �
 _pending_lock    = threading.Lock()
 _download_lock   = threading.Lock()
 _pipeline_lock   = threading.Lock()
-_movie_pipeline_lock = threading.Lock()
 _content_cache_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
@@ -1248,8 +1247,6 @@ def _check_pending_files():
         cleaned_ready = [_clean_and_rename_on_disk(source_dir, f) for f in ready]
         to_run = [f for f in cleaned_ready if (source_dir / f).is_file()]
         if to_run:
-            for filename in to_run:
-                _prewarm_queue_thumbs_async(filename)
             run_pipeline(to_run)
 
 
@@ -2458,13 +2455,19 @@ query SearchStudio($term: String!, $limit: Int) {
 """
 
 
-def _stashbox_post(endpoint: str, api_key: str, query: str, variables: dict) -> dict:
-    resp = requests.post(
-        endpoint,
-        json={"query": query, "variables": variables},
-        headers={"Content-Type": "application/json", "ApiKey": api_key},
-        timeout=30,
-    )
+def _stashbox_post(endpoint: str, api_key: str, query: str, variables: dict, *, retry_rate_limit=False) -> dict:
+    def send_request():
+        return requests.post(
+            endpoint,
+            json={"query": query, "variables": variables},
+            headers={"Content-Type": "application/json", "ApiKey": api_key},
+            timeout=30,
+        )
+    if retry_rate_limit:
+        from app.integrations.fingerprint_cooldown import send
+        resp = send(endpoint, send_request)
+    else:
+        resp = send_request()
     # GraphQL servers frequently return 4xx with a JSON body that still
     # carries meaningful errors (e.g. 422 on mutations with missing
     # non-null fields). Try to parse the body before falling back to
@@ -3144,17 +3147,10 @@ def _prefetch_suggestion_breakdowns_async(filename: str, candidates: list[dict])
 
 
 def _run_name_search_async(filename: str) -> None:
-    """Fire a name-search for an unmatched file on a background thread
-    so the phash pipeline doesn't block on it.
-
-    Excludes IAFD — this is the post-phash automatic hook, and routine
-    IAFD scraping was tripping the 403 cooldown for the install. Manual
-    suggestion re-runs (``/api/queue/suggestions/run``) still include
-    IAFD because the user opted in by clicking the button."""
-    if not filename:
-        return
-    _suggestion_jobs.submit_once(("search", filename), _run_name_search_for_file,
-                                 filename, include_iafd=False)
+    """Persist the suggestion step for the single matching worker."""
+    from app.core.queue_changes import schedule_suggestions
+    if filename:
+        schedule_suggestions(filename)
 
 
 #: How many unmatched files the trickle job scans per tick. Keeps quota
@@ -3183,15 +3179,9 @@ def _suggestions_trickle_job() -> None:
         return
     if not names:
         return
-    emit(f"Suggestions trickle: warming {len(names)} unmatched file(s)")
     for name in names:
-        try:
-            #: Routine background warm — IAFD off. The trickle fires
-            #: every 5 minutes, so any IAFD 403 streak from the scraper
-            #: would otherwise resurface here on the next tick.
-            _run_name_search_for_file(name, include_iafd=False)
-        except Exception as e:
-            _log.warning("suggestions trickle %r failed: %s", name, e)
+        _run_name_search_async(name)
+    run_pipeline([])
 
 
 # ---------------------------------------------------------------------------
@@ -5025,45 +5015,26 @@ def _process_vice_download_entry(entry: Path, scene_source_dir: Path, s: dict, *
         except Exception as ex:
             emit(f"  Vice scope tag failed for {v.name}: {ex}")
     emit(f"  Vice entry {entry.name}: {len(videos)} video(s) — processing in place")
-    # Share the scene pipeline's lock + running state so the UI
-    # indicator animates while vice imports process and concurrent
-    # scene-pipeline runs wait their turn (rather than racing DB
-    # writes and log emits). Skip cleanly when the lock is already
-    # held — the vice entries stay in _pending_vice_downloads only if
-    # re-queued; we've already popped them, so re-seed on the next
-    # scheduler tick via _seed_pending_vice_downloads' back-scan on
-    # future observer restarts, or the user hits Process All Downloads.
-    if not _pipeline_lock.acquire(blocking=False):
-        emit(f"  Vice entry {entry.name}: scene pipeline busy — deferring")
-        with _download_lock:
-            _pending_vice_downloads[str(entry)] = time.time() + 30
-        return False
+    registered = []
+    for v in videos:
+        filename = db.queue_file_key(v, s)
+        db.upsert_file(filename)
+        db.processing_job_enqueue(filename, options={"defer_client_cleanup":True})
+        asset = db.file_identity(filename)
+        registered.append((v, asset['id'], signature(v)))
     cleanup_token = _defer_client_cleanup.set(True)
     all_filed = True
     retry_needed = False
     try:
-        processing_state["running"] = True
-        processing_state["pipeline_total"] = len(videos)
-        processing_state["pipeline_done"] = 0
-        for i, v in enumerate(videos):
-            processing_state["current_file"] = v.name
-            try:
-                before = signature(v)
-                result = process_single(v)
-                status = (result or {}).get("status")
-                if status not in ("filed", "removed") or v.exists():
-                    all_filed = False
-                if status == "deferred":
-                    retry_needed = True
-                remember(db, v, before, result)
-            except PartialDownloadPending as ex:
+        results = run_pipeline([]) or {}
+        for v, file_id, before in registered:
+            result = results.get(file_id) or db.processing_work_result(file_id)
+            status = result.get("status")
+            if status not in ("filed", "removed") or v.exists():
                 all_filed = False
+            if status in ("deferred", "busy"):
                 retry_needed = True
-                emit(f"  Download deferred: {ex}")
-            except Exception as ex:
-                all_filed = False
-                emit(f"  Vice pipeline error for {v.name}: {ex}")
-            processing_state["pipeline_done"] = i + 1
+            remember(db, v, before, result)
         if retry_needed:
             _retry_partial_download(str(entry), _pending_vice_downloads, s)
         # Do not hide failures, deferred files, or files skipped on startup.
@@ -5074,11 +5045,6 @@ def _process_vice_download_entry(entry: Path, scene_source_dir: Path, s: dict, *
             _remove_client_jobs_matching_watch_folder(entry.name, s)
     finally:
         _defer_client_cleanup.reset(cleanup_token)
-        processing_state["running"] = False
-        processing_state["current_file"] = None
-        processing_state["pipeline_total"] = 0
-        processing_state["pipeline_done"] = 0
-        _pipeline_lock.release()
     # Do NOT rmtree(entry) — the per-vice inbox folder stays so future
     # drops land in the same place. Files that were successfully filed
     # already moved out via safe_move; anything left is either
@@ -5175,55 +5141,30 @@ def _process_jav_download_entry(entry: Path, s: dict, *, startup_only=False) -> 
         cleaned_videos.append(v)
     videos = cleaned_videos
     emit(f"  JAV entry {entry.name}: {len(videos)} video(s) registered")
-    # Kick the movie pipeline in place — jav_dl_root is passed as src so
-    # process_movie_file resolves each video without a hop through
-    # movies_source_dir. Shares _movie_pipeline_lock with feature-film
-    # imports (they serialise cleanly).
     jdl_raw = (s.get("jav_download_watch_dir") or "").strip()
     jdl_root = Path(jdl_raw).expanduser() if jdl_raw else None
     if not jdl_root or not jdl_root.is_dir():
         return
-    if not _movie_pipeline_lock.acquire(blocking=False):
-        emit(f"  JAV entry {entry.name}: movie pipeline busy — deferring")
-        with _download_lock:
-            _pending_jav_downloads[str(entry)] = time.time() + 30
-        return False
+    registered = []
+    for v in videos:
+        filename = "jav://" + v.relative_to(jdl_root).as_posix()
+        db.upsert_movie(filename)
+        db.processing_job_enqueue(filename, "processed_movies", options={"defer_client_cleanup":True})
+        asset = db.file_identity(filename, "processed_movies")
+        registered.append((v, asset['id'], signature(v)))
     cleanup_token = _defer_client_cleanup.set(True)
     all_filed = True
     retry_needed = False
     try:
-        processing_state["running"] = True
-        processing_state["pipeline_total"] = len(videos)
-        processing_state["pipeline_done"] = 0
-        for i, v in enumerate(videos):
-            try:
-                rel = v.relative_to(jdl_root).as_posix()
-            except ValueError:
-                rel = v.name
-            processing_state["current_file"] = rel
-            try:
-                # JAV inbox: query every movie DB (TMDB → TPDB →
-                # JAVStash), but always route the filed video to jav_dir
-                # since the file's presence in the JAV inbox is what
-                # defines it as JAV, not the source of the metadata.
-                # The queue snapshot reads JAV rows from processed_movies
-                # directly, so there's no processed_files row to sync.
-                before = signature(v)
-                result = process_movie_file(rel, src=jdl_root, dest_kind="jav")
-                status = (result or {}).get("status")
-                if status not in ("filed", "removed") or v.exists():
-                    all_filed = False
-                if status == "deferred":
-                    retry_needed = True
-                remember(db, v, before, result)
-            except PartialDownloadPending as ex:
+        results = run_pipeline([]) or {}
+        for v, file_id, before in registered:
+            result = results.get(file_id) or db.processing_work_result(file_id)
+            status = result.get("status")
+            if status not in ("filed", "removed") or v.exists():
                 all_filed = False
+            if status in ("deferred", "busy"):
                 retry_needed = True
-                emit(f"  Download deferred: {ex}")
-            except Exception as ex:
-                all_filed = False
-                emit(f"  JAV pipeline error for {rel}: {ex}")
-            processing_state["pipeline_done"] = i + 1
+            remember(db, v, before, result)
         if retry_needed:
             _retry_partial_download(str(entry), _pending_jav_downloads, s)
         # Do not hide failures, deferred files, or files skipped on startup.
@@ -5234,11 +5175,6 @@ def _process_jav_download_entry(entry: Path, s: dict, *, startup_only=False) -> 
             _remove_client_jobs_matching_watch_folder(entry.name, s)
     finally:
         _defer_client_cleanup.reset(cleanup_token)
-        processing_state["running"] = False
-        processing_state["current_file"] = None
-        processing_state["pipeline_total"] = 0
-        processing_state["pipeline_done"] = 0
-        _movie_pipeline_lock.release()
     # Do NOT rmtree(entry) — leaving the folder means future re-drops
     # land in the same place. Filed videos already moved out via
     # safe_move; anything left is unmatched or errored and stays
@@ -7117,7 +7053,14 @@ def _flush_activity_batch() -> None:
 # safe_move imported from app.utils.fs
 
 
-def _video_quality_score(path: Path) -> tuple[int, int, int]:
+def _cached_queue_media(video: Path, filename: str | None = None, *, stream: bool = False):
+    from app.core.queue_media import read
+    key = filename or db.queue_file_key(video, db.get_settings())
+    return read(key, video, duration_probe=get_video_duration,
+                stream_probe=probe_video_stream_meta if stream else None)
+
+
+def _video_quality_score(path: Path, queue_filename: str | None = None) -> tuple[int, int, int]:
     """Return (pixels, file_size_bytes, height) for quality ranking.
 
     Higher tuple = better quality.  pixels = width * height gives the
@@ -7129,7 +7072,12 @@ def _video_quality_score(path: Path) -> tuple[int, int, int]:
         size = path.stat().st_size
     except OSError:
         size = 0
-    _, w, h = probe_video_stream_meta(path)
+    if queue_filename:
+        from app.core.queue_media import read
+        media = read(queue_filename, path, stream_probe=probe_video_stream_meta)
+        w, h = media.get("media_width"), media.get("media_height")
+    else:
+        _, w, h = probe_video_stream_meta(path)
     if w and h:
         return (w * h, size, h)
     return (0, size, 0)
@@ -7204,7 +7152,9 @@ def _quality_gate_move(src: Path, dst: Path, label: str = "Video", queue_filenam
     # Collision decisions must use this file's contents, never a basename
     # cache entry that may belong to another queue folder.
     try:
-        src_phash = compute_phash(src) or ""
+        from app.core.queue_media import read
+        key = queue_filename or db.queue_file_key(src, db.get_settings())
+        src_phash = read(key, src, phash_probe=compute_phash).get("phash") or ""
     except Exception:
         src_phash = ""
     dst_phash = _phash_for_library_destination(dst)
@@ -7236,7 +7186,7 @@ def _quality_gate_move(src: Path, dst: Path, label: str = "Video", queue_filenam
         # Same scene (within threshold) — fall through to quality gate.
 
     inc_score = _video_quality_score(dst)
-    new_score = _video_quality_score(src)
+    new_score = _video_quality_score(src, queue_filename=queue_filename)
 
     inc_px, inc_sz, inc_h = inc_score
     new_px, new_sz, new_h = new_score
@@ -8935,186 +8885,50 @@ def _file_scene_from_match_impl(video: Path, scene: dict, source: str = "") -> d
 # ---------------------------------------------------------------------------
 
 
-def process_single(video: Path) -> dict:
-    settings = db.get_settings()
-    require_complete_queue_video(video, settings)
-    filename = db.queue_file_key(video, settings)
-    db.upsert_file(filename)
-    signature = db.validate_media_cache(filename, video)
-    db.queue_search_record(filename)
-    db.queue_observe_media(filename, video)
-    emit(f"FILE {filename}")
-
-    settings = db.get_settings()
-    performer_dirs = db.get_directories("performer")
-
-    # Duration - check cache first, then probe once and store
-    duration = db.get_media_duration(filename)
-    if duration:
-        emit(f"  Duration: cached ({int(duration)}s)")
-    else:
-        try:
-            duration = get_video_duration(video)
-            db.update_file(filename, status="processing", media_duration=int(duration))
-            emit(f"  Duration: {int(duration)}s")
-        except Exception as e:
-            emit(f"  Duration: FAILED - {e}")
-            duration = 0
-
-    # Phash - check database first, compute and store if missing
-    cached = db.get_phash(filename)
-    if cached:
-        phash = cached
-        emit(f"  Phash: cached ({phash})")
-    else:
-        try:
-            emit("  Phash: computing...")
-            phash = compute_phash(video, duration=duration)
-            emit(f"  Phash: done ({phash})")
-        except Exception as e:
-            emit(f"  Phash: FAILED - {e}")
-            db.update_file(filename, status="error", error=str(e))
-            return {"status": "error", "error": str(e)}
-
-    if db.media_file_signature(video) != signature:
-        raise PartialDownloadPending(f"File changed during fingerprinting: {video.name}")
-    require_complete_queue_video(video, settings)
-    db.update_file(filename, status="processing", phash=phash)
-
-    early = _queue_resolve_phash_vs_indexed_library(video, filename, phash)
-    if early is not None:
-        return early
-
-    # Auto-file short-circuit: if this file carries the Top-Shelf
-    # `[ts-XXXXXXXX]` tag we injected at grab time, look up the
-    # `scene_grab_log` row by that uid (bulletproof — survives any
-    # client rename). The tag may live on:
-    #   • the filename itself
-    #   • a parent directory (NZBGet/SAB typically create a job-named
-    #     folder and put the unpacked .mkv inside; only the folder
-    #     carries the tag)
-    #   • a grandparent (qBittorrent + category sub-dirs, etc.)
-    # so we walk up to 3 levels looking for the tag before falling
-    # back to filename-based lookup. Only honoured for `kind = scene`
-    # so a multi-file Movie release doesn't get every file written
-    # under the parent movie's metadata. On full miss (or
-    # movie-kind), fall through to the standard phash-based query
-    # below.
+@contextlib.contextmanager
+def _matching_job_context(desired):
+    token = _defer_client_cleanup.set(bool(desired.get("defer_client_cleanup")))
     try:
-        ts_uid = ""
-        for candidate in (
-            video.name,
-            video.parent.name if video.parent else "",
-            video.parent.parent.name if video.parent and video.parent.parent else "",
-            video.parent.parent.parent.name if video.parent and video.parent.parent and video.parent.parent.parent else "",
-        ):
-            if not candidate:
-                continue
-            _, found = _strip_ts_uid(candidate)
-            if found:
-                ts_uid = found
-                break
-        grab = db.lookup_scene_grab_by_ts_uid(ts_uid) if ts_uid else None
-        if not grab:
-            grab = db.lookup_scene_grab_for_filename(filename)
-    except Exception as exc:
-        emit(f"  Grab tag: lookup error ({exc})")
-        grab = None
-    if grab and (grab.get("kind") or "scene").lower() == "scene":
-        if grab.get("source_id") and grab.get("source_title"):
-            label = _stashbox_normalize_match_source(grab.get("source_db") or "")
-            emit(f"  Grab tag: matched {label}/{grab.get('source_id')} — auto-filing without phash lookup")
-            try:
-                scene = _fetch_grab_scene_for_filing(grab)
-            except Exception as exc:
-                scene = None
-                emit(f"  Grab tag: scene retrieval failed ({exc}), falling back to phash")
-            if scene:
-                # Filing may relocate the source even when no library folder
-                # is available. Never reuse the old path or replace this match.
-                result = file_scene_from_match(video, scene, source=label)
-                if result.get("status") == "filed":
-                    db.mark_scene_grab_consumed(grab.get("id"))
-                return result
-            emit("  Grab tag: authoritative scene unavailable, falling back to phash")
-
-    # Lookup
-    try:
-        emit("  Lookup: querying databases...")
-        matches, source = query_with_fallback(phash)
-    except Exception as e:
-        emit(f"  Lookup: FAILED - {e}")
-        db.update_file(filename, status="error", error=str(e))
-        return {"status": "error", "error": str(e)}
-
-    if not matches:
-        emit("  Lookup: no match found")
-        # Unconfirmed filename hints must not move files into identity folders.
-        db.update_file(filename, status="unmatched")
-        #: Pre-warm the queue thumbnail filmstrip so when the user
-        #: opens this row to investigate, the frames are already on
-        #: disk. FFmpeg is still warm on this file from the phash
-        #: pass, so the marginal cost is small.
-        thumb_key = filename
-        vice_root = (settings.get("vice_download_watch_dir") or "").strip()
-        if vice_root:
-            try:
-                thumb_key = "Vices/" + video.relative_to(Path(vice_root).expanduser()).as_posix()
-            except ValueError:
-                pass
-        _prewarm_queue_thumbs_async(thumb_key)
-        #: Phash missed → try a name-based search in the background so
-        #: the user gets accept/reject candidates in the Suggestions
-        #: panel without an extra click.
-        _run_name_search_async(filename)
-        return {"status": "unmatched"}
-
-    from app.core.fingerprint_selection import select_scene, save_review
-    selected_scene = select_scene(matches, phash)
-    if selected_scene is None:
-        emit('  Lookup: competing fingerprint matches — saved for review')
-        save_review(db, filename, matches, source, phash)
-        return {"status": "unmatched", "review_required": True}
-
-    # Import-folder hint: file dropped under a per-vice inbox
-    # (`<vice_download_watch_dir>/<Vice>/…`) forces filing under that
-    # vice regardless of the phash-matched scene's own tags. Mirrors
-    # what the ProcessingPipeline callbacks do for run_pipeline flows.
-    try:
-        import_vice = _resolve_import_vice_dir(video)
-    except Exception:
-        import_vice = None
-    if import_vice:
-        emit(f"  Import folder → vice '{import_vice}'")
-        if isinstance(selected_scene, dict):
-            selected_scene["_force_vice"] = import_vice
-    return file_scene_from_match(video, selected_scene, source=source)
+        yield
+    finally:
+        _defer_client_cleanup.reset(token)
 
 
-def run_pipeline(filenames: list = None) -> None:
-    async def _run():
-        pipeline = ProcessingPipeline(
-            processing_state=processing_state,
-            emit_cb=emit,
-            flush_emit_buffer_cb=flush_emit_buffer,
-            pipeline_lock=_pipeline_lock,
-            callbacks={
-                "queue_resolve_phash": _queue_resolve_phash_vs_indexed_library,
-                "file_scene_from_match": file_scene_from_match,
-                "fetch_grab_scene": _fetch_grab_scene_for_filing,
-                "prewarm_queue_thumbs": _prewarm_queue_thumbs_async,
-                "run_name_search_async": _run_name_search_async,
-                "resolve_import_vice_dir": _resolve_import_vice_dir,
-                "group_video_into_hint_subfolder": _group_video_into_hint_subfolder,
-            }
-        )
-        await pipeline.run_pipeline(filenames)
+def _matching_pipeline():
+    return ProcessingPipeline(
+        processing_state=processing_state, emit_cb=emit,
+        flush_emit_buffer_cb=flush_emit_buffer, pipeline_lock=_pipeline_lock,
+        callbacks={
+            "queue_resolve_phash": _queue_resolve_phash_vs_indexed_library,
+            "file_scene_from_match": file_scene_from_match,
+            "fetch_grab_scene": _fetch_grab_scene_for_filing,
+            "prewarm_queue_thumbs": _prewarm_queue_thumbs_async,
+            "queue_suggestions": _run_name_search_async,
+            "search_suggestions": _run_name_search_for_file,
+            "resolve_import_vice_dir": _resolve_import_vice_dir,
+            "process_movie": _process_movie_file_impl,
+            "job_context": _matching_job_context,
+        })
 
+
+def run_pipeline(filenames: list = None):
+    async def run():
+        return await _matching_pipeline().run_pipeline(filenames)
     try:
         loop = asyncio.get_running_loop()
-        loop.create_task(_run())
     except RuntimeError:
-        asyncio.run(_run())
+        return asyncio.run(run())
+    return loop.create_task(run())
+
+
+def process_single(video: Path) -> dict:
+    """Compatibility entry point: register work, then use the one dispatcher."""
+    filename = db.queue_file_key(video, db.get_settings())
+    db.upsert_file(filename)
+    asset = db.file_identity(filename)
+    results = run_pipeline([filename])
+    return (results or {}).get(asset['id']) or db.processing_work_result(asset['id'])
+
 
 # ---------------------------------------------------------------------------
 # TMDB movie search and filing
@@ -9152,8 +8966,9 @@ def search_tmdb(query: str, year: str = None) -> list[dict]:
     params = {"query": query, "include_adult": "true", "language": "en-US", "page": 1}
     if year:
         params["year"] = year
-    resp = requests.get(f"{TMDB_BASE}/search/movie", params=params,
-                        headers=get_tmdb_headers(), timeout=15)
+    from app.integrations.fingerprint_cooldown import send
+    resp = send(TMDB_BASE, lambda: requests.get(f"{TMDB_BASE}/search/movie", params=params,
+                        headers=get_tmdb_headers(), timeout=15))
     resp.raise_for_status()
     results = resp.json().get("results", [])
     # Prioritise adult-flagged results — this app is an adult media
@@ -9174,9 +8989,10 @@ def search_tmdb(query: str, year: str = None) -> list[dict]:
 
 
 def get_tmdb_movie(tmdb_id: str) -> dict:
-    resp = requests.get(f"{TMDB_BASE}/movie/{tmdb_id}",
+    from app.integrations.fingerprint_cooldown import send
+    resp = send(TMDB_BASE, lambda: requests.get(f"{TMDB_BASE}/movie/{tmdb_id}",
                         params={"append_to_response": "credits"},
-                        headers=get_tmdb_headers(), timeout=15)
+                        headers=get_tmdb_headers(), timeout=15))
     resp.raise_for_status()
     data = resp.json()
     cast = [m["name"] for m in data.get("credits", {}).get("cast", [])[:10]]
@@ -9314,7 +9130,8 @@ def file_movie(
     the match came from TMDB or TPDB, since the file is a JAV release
     by virtue of its inbox.
     """
-    from app.core.queue_changes import annotate_current
+    from app.core.queue_changes import annotate_current, begin_effects
+    begin_effects()
     annotate_current(movie=movie,source=match_source,operation='file_movie',tpdb_id=tpdb_id,javstash_id=javstash_id,dest_kind=dest_kind)
     with _track_filing_in_progress(video.name):
         return _file_movie_impl(
@@ -9367,6 +9184,10 @@ def _file_movie_impl(
         emit(f"  ERROR: {root_key} missing")
         return {"status": "no_dir"}
 
+    from app.core.queue_media import read
+    cache_key = filename if filename.startswith("jav://") else "movie://" + filename
+    source_phash = read(cache_key, video).get("phash")
+
     title = movie["title"]
     year = movie.get("year") or "0000"
     base_name = _movie_filing_stem(movie)
@@ -9417,7 +9238,7 @@ def _file_movie_impl(
         require_complete_queue_video(video, guard_settings)
         from app.core.queue_changes import annotate_current
         annotate_current(destination=str(movie_dest),operation='file_movie')
-        actual_movie_dest = _quality_gate_move(video, movie_dest, label="Movie", queue_filename=filename)
+        actual_movie_dest = _quality_gate_move(video, movie_dest, label="Movie", queue_filename=cache_key)
         if actual_movie_dest is None:
             tid = str(movie.get("id") or "").strip() or None
             db.update_movie(
@@ -9504,10 +9325,12 @@ def _file_movie_impl(
 
     from library_reconcile import signature as filed_signature
     movie_signature = filed_signature(destination)
-    try:
-        ph_mv = compute_phash(Path(destination))
-    except Exception:
-        ph_mv = None
+    ph_mv = source_phash
+    if not ph_mv:
+        try:
+            ph_mv = compute_phash(Path(destination))
+        except Exception:
+            ph_mv = None
     _health_register_filed_movie(destination, ph_mv, known_signature=movie_signature)
 
     # Auto-clear matching wanted-list entry once the file lands in the library.
@@ -9614,8 +9437,9 @@ def search_tpdb_movie_first_hit(query: str, year: str | None) -> dict | None:
     params: dict = {"parse": query.strip(), "limit": 10}
     if year:
         params["year"] = year
+    from app.integrations.fingerprint_cooldown import send
     try:
-        resp = requests.get(
+        resp = send("https://api.theporndb.net/movies", lambda: requests.get(
             "https://api.theporndb.net/movies",
             params=params,
             headers={
@@ -9623,13 +9447,14 @@ def search_tpdb_movie_first_hit(query: str, year: str | None) -> dict | None:
                 "Authorization": f"Bearer {s.get('api_key_tpdb', '')}",
             },
             timeout=15,
-        )
-        if resp.status_code != 200:
-            return None
-        data = (resp.json() or {}).get("data") or []
+        ))
+        resp.raise_for_status()
+        data = resp.json().get("data")
+        if not isinstance(data, list):
+            raise RuntimeError("Invalid TPDB movie search response")
         return _verified_movie_candidate(data, query, year)
     except Exception:
-        return None
+        raise
 
 
 def _tpdb_detail_as_movie_filing_dict(m: dict) -> dict:
@@ -9701,8 +9526,17 @@ def _movie_queue_relpaths_after_download(moved: list[Path], dest_queue: Path) ->
 
 
 def process_movie_file(filename: str, src: Path | None = None, dest_kind: str | None = None) -> dict:
-    from app.core.movie_jobs import run
-    return run(filename, src, dest_kind, _process_movie_file_impl)
+    if any(part.startswith(".") for part in Path(filename).parts):
+        return {"status": "skipped", "reason": "Hidden queue path"}
+    settings = db.get_settings()
+    jav = (settings.get("jav_download_watch_dir") or "").strip()
+    is_jav = bool(src and jav and Path(src).resolve() == Path(jav).expanduser().resolve())
+    key = "jav://" + filename if is_jav else filename
+    db.upsert_movie(key)
+    db.processing_job_enqueue(key, "processed_movies")
+    asset = db.file_identity(key, "processed_movies")
+    results = run_pipeline([])
+    return (results or {}).get(asset['id']) or db.processing_work_result(asset['id'])
 
 
 def _process_movie_file_impl(
@@ -9735,19 +9569,16 @@ def _process_movie_file_impl(
     except PartialDownloadPending as exc:
         emit(f"  Movie deferred: {exc}")
         return {"status": "deferred"}
-    # A file present in the inbox is new work, even when that filename
-    # belonged to a previously filed download. Recompute its fingerprint.
     db.upsert_movie(history_filename)
     db.update_movie(history_filename, status="processing")
+    from app.core.queue_media import read
+    cache_key = history_filename if is_jav_inbox else "movie://" + history_filename
     try:
-        emit("  Phash: computing...")
-        media_signature = db.media_file_signature(video)
-        phash = compute_phash(video)
-        emit(f"  Phash: done ({phash})")
-    except Exception as e:
-        emit(f"  Phash: FAILED - {e}")
-        db.update_movie(history_filename, status="error", error=str(e))
-        return
+        media = read(cache_key, video, duration_probe=get_video_duration, fingerprint_probe=compute_phash)
+    except PartialDownloadPending as exc:
+        return {"status": "deferred", "error": str(exc)}
+    phash = media["phash"]
+    media_signature = media["media_signature"]
     try:
         require_complete_queue_video(video, guard_settings)
         if db.media_file_signature(video) != media_signature:
@@ -9758,55 +9589,69 @@ def _process_movie_file_impl(
     early = _queue_resolve_phash_vs_indexed_library(video, history_filename, phash, movie=True)
     if early is not None:
         return early
-    title_guess, year_guess = guess_movie_query_from_filename(filename)
-    movie_dict: dict | None = None
-    tpdb_id_used: str | None = None
-    javstash_id_used: str | None = None
-    match_src = "tmdb"
+    saved = json.loads(media.get("pipeline_match_json") or "null")
+    if saved:
+        movie_dict, match_src = saved["movie"], saved["source"]
+        tpdb_id_used, javstash_id_used = saved.get("tpdb_id"), saved.get("javstash_id")
+    else:
+        title_guess, year_guess = guess_movie_query_from_filename(filename)
+        movie_dict: dict | None = None
+        tpdb_id_used: str | None = None
+        javstash_id_used: str | None = None
+        match_src = "tmdb"
 
-    tmdb_results = None
-    try:
-        if (settings.get("api_key_tmdb") or "").strip():
-            tmdb_results = search_tmdb(title_guess, year_guess)
-    except Exception:
+        failures = []
         tmdb_results = None
-    tmdb_hit = _verified_movie_candidate(tmdb_results or [], title_guess, year_guess)
-    if tmdb_hit:
         try:
-            detail = get_tmdb_movie(tmdb_hit["id"])
-            movie_dict = _verified_movie_candidate([detail], title_guess, year_guess)
-            match_src = "tmdb"
-        except Exception:
-            movie_dict = None
-    if not movie_dict:
-        hit = search_tpdb_movie_first_hit(title_guess, year_guess)
-        if hit:
-            mid = str(hit.get("_id") or hit.get("id") or "")
-            detail = _fetch_tpdb_movie_detail(mid) if mid else {}
-            merged = {**hit, **detail} if detail else hit
-            verified = _verified_movie_candidate([merged], title_guess, year_guess)
-            movie_dict = _tpdb_detail_as_movie_filing_dict(verified) if verified else None
-            tpdb_id_used = (movie_dict.pop("_tpdb_id", None) or mid) if movie_dict else None
-            match_src = "tpdb"
-    if not movie_dict:
-        jk = (settings.get("api_key_javstash") or "").strip()
-        if jk:
-            jscene = _javstash_movie_search_first_scene_for_pipeline(title_guess, year_guess)
-            if jscene:
-                movie_dict = _javstash_scene_as_movie_filing_dict(jscene)
-                javstash_id_used = movie_dict.pop("_javstash_id", None) or str(
-                    (jscene.get("id") or "")
-                ).strip()
-                match_src = "javstash"
-                tpdb_id_used = None
-    if not movie_dict:
-        db.update_movie(
-            history_filename,
-            status="unmatched",
-            error="No TMDB, TPDB, or JAVStash match for parsed title",
-        )
-        emit("  No TMDB/TPDB/JAVStash match")
-        return {"status": "unmatched"}
+            if (settings.get("api_key_tmdb") or "").strip():
+                tmdb_results = search_tmdb(title_guess, year_guess)
+        except Exception as exc:
+            failures.append(f"TMDB: {exc}")
+        tmdb_hit = _verified_movie_candidate(tmdb_results or [], title_guess, year_guess)
+        if tmdb_hit:
+            try:
+                detail = get_tmdb_movie(tmdb_hit["id"])
+                movie_dict = _verified_movie_candidate([detail], title_guess, year_guess)
+                match_src = "tmdb"
+            except Exception as exc:
+                failures.append(f"TMDB detail: {exc}")
+        if not movie_dict:
+            try:
+                hit = search_tpdb_movie_first_hit(title_guess, year_guess)
+                if hit:
+                    mid = str(hit.get("_id") or hit.get("id") or "")
+                    detail = _fetch_tpdb_movie_detail(mid, strict=True) if mid else {}
+                    merged = {**hit, **detail} if detail else hit
+                    verified = _verified_movie_candidate([merged], title_guess, year_guess)
+                    movie_dict = _tpdb_detail_as_movie_filing_dict(verified) if verified else None
+                    tpdb_id_used = (movie_dict.pop("_tpdb_id", None) or mid) if movie_dict else None
+                    match_src = "tpdb"
+            except Exception as exc:
+                failures.append(f"TPDB: {exc}")
+        if not movie_dict:
+            jk = (settings.get("api_key_javstash") or "").strip()
+            if jk:
+                try:
+                    jscene = _javstash_movie_search_first_scene_for_pipeline(title_guess, year_guess)
+                    if jscene:
+                        movie_dict = _javstash_scene_as_movie_filing_dict(jscene)
+                        javstash_id_used = movie_dict.pop("_javstash_id", None) or str(
+                            (jscene.get("id") or "")
+                        ).strip()
+                        match_src = "javstash"
+                        tpdb_id_used = None
+                except Exception as exc:
+                    failures.append(f"JAVStash: {exc}")
+        if not movie_dict and failures:
+            raise RuntimeError("Movie lookup failed: " + "; ".join(failures))
+        if not movie_dict:
+            db.update_movie(
+                history_filename,
+                status="unmatched",
+                error="No TMDB, TPDB, or JAVStash match for parsed title",
+            )
+            emit("  No TMDB/TPDB/JAVStash match")
+            return {"status": "unmatched"}
     try:
         require_complete_queue_video(video, guard_settings)
         if db.media_file_signature(video) != media_signature:
@@ -9814,6 +9659,9 @@ def _process_movie_file_impl(
     except (PartialDownloadPending, OSError) as exc:
         emit(f"  Movie deferred: {exc}")
         return {"status": "deferred"}
+    from app.core.queue_media import save_match
+    save_match(cache_key, video, {"movie": movie_dict, "source": match_src,
+        "tpdb_id": tpdb_id_used, "javstash_id": javstash_id_used}, expected_signature=media_signature)
     result = file_movie(
         video,
         movie_dict,
@@ -9828,55 +9676,21 @@ def _process_movie_file_impl(
 
 
 def run_movie_pipeline(filenames: list[str] | None = None) -> None:
-    with _movie_pipeline_lock:
-        if processing_state["running"]:
-            return
-        settings = db.get_settings()
-        if not (settings.get("movies_source_dir") or "").strip():
-            emit("MOVIE PIPELINE: movies_source_dir not configured")
-            return
-        src = Path((settings.get("movies_source_dir") or "").strip()).expanduser()
-        if not src.exists():
-            emit("MOVIE PIPELINE: movies_source_dir not configured or missing")
-            return
-        if filenames is None:
-            terminal = db.get_movie_terminal_filenames()
-            filenames = []
-            for rel, _f in _movie_source_video_relpaths(src, settings):
-                if rel not in terminal:
-                    filenames.append(rel)
-        if not filenames:
-            emit("MOVIE PIPELINE: nothing to process")
-            return
-        for filename in filenames:
-            db.upsert_movie(filename)
-            db.processing_job_enqueue(filename, "processed_movies")
-        processing_state["running"] = True
-        processing_state["pipeline_total"] = len(filenames)
-        processing_state["pipeline_done"] = 0
-        try:
-            emit("PIPELINE MOVIES START")
-            for idx, fn in enumerate(filenames):
-                processing_state["current_file"] = fn
-                emit(f"FILE {fn}")
-                try:
-                    result = process_movie_file(fn, src)
-                    if (result or {}).get("status") == "deferred":
-                        fire_at = time.time() + max(30, int(settings.get("folder_watch_hold_secs", "60")))
-                        with _pending_lock:
-                            _pending_movie_files[fn] = max(_pending_movie_files.get(fn, 0), fire_at)
-                        emit(f"  Movie deferred: retry scheduled for {fn}")
-                except Exception as e:
-                    db.update_movie(fn, status="error", error=str(e))
-                    emit(f"  ERROR: {e}")
-                emit("---")
-                processing_state["pipeline_done"] = idx + 1
-            emit("PIPELINE MOVIES COMPLETE")
-        finally:
-            processing_state["running"] = False
-            processing_state["current_file"] = None
-            processing_state["pipeline_total"] = 0
-            processing_state["pipeline_done"] = 0
+    settings = db.get_settings()
+    raw = (settings.get("movies_source_dir") or "").strip()
+    if not raw:
+        return
+    src = Path(raw).expanduser()
+    if not src.is_dir():
+        return
+    if filenames is None:
+        terminal = db.get_movie_terminal_filenames()
+        filenames = [rel for rel, _ in _movie_source_video_relpaths(src, settings) if rel not in terminal]
+    for filename in filenames:
+        db.upsert_movie(filename)
+        db.processing_job_enqueue(filename, "processed_movies")
+    return run_pipeline([])
+
 
 
 # ---------------------------------------------------------------------------
@@ -10176,7 +9990,7 @@ def _tpdb_scene_breakdowns(scene_id: str) -> list[dict]:
     return norm
 
 
-def _fetch_tpdb_movie_detail(movie_id: str) -> dict:
+def _fetch_tpdb_movie_detail(movie_id: str, *, strict=False) -> dict:
     if not movie_id:
         return {}
     now = time.time()
@@ -10201,11 +10015,15 @@ def _fetch_tpdb_movie_detail(movie_id: str) -> dict:
     except Exception:
         pass
     try:
-        resp = requests.get(f"https://api.theporndb.net/movies/{movie_id}", headers=_tpdb_headers(), timeout=15)
-        if resp.status_code != 200:
-            return {}
+        from app.integrations.fingerprint_cooldown import send
+        resp = send("https://api.theporndb.net/movies", lambda: requests.get(f"https://api.theporndb.net/movies/{movie_id}", headers=_tpdb_headers(), timeout=15))
+        resp.raise_for_status()
         data = resp.json().get("data") or {}
+        if strict and (not isinstance(data, dict) or not data):
+            raise RuntimeError("Invalid TPDB movie detail response")
     except Exception:
+        if strict:
+            raise
         return {}
     with _TPDB_MOVIE_DETAIL_CACHE_LOCK:
         if len(_TPDB_MOVIE_DETAIL_CACHE) > _TPDB_MOVIE_DETAIL_CACHE_MAX:
@@ -18226,44 +18044,10 @@ def _sweep_empty_queue_subdirs(root: Path) -> int:
 def _resume_file_jobs() -> None:
     if processing_state["running"]:
         return
-    settings = db.get_settings()
-    if settings.get("retry_enabled", "true").lower() != "true":
+    if db.get_settings().get("retry_enabled", "true").lower() != "true":
         return
-    root = Path(settings.get("source_dir", ""))
-    vice_raw = (settings.get("vice_download_watch_dir") or "").strip()
-    vice_root = Path(vice_raw).expanduser() if vice_raw else None
-    filenames = []
-    for filename in db.processing_jobs_ready():
-        if db.resolve_source_video_path(root, filename, vice_dl_root=vice_root) is not None:
-            filenames.append(filename)
-        else:
-            job_id = db.processing_job_start(filename)
-            if job_id:
-                db.processing_job_finish(job_id, "error", "Source file unavailable")
-    if filenames:
-        run_pipeline(filenames)
-    if processing_state["running"]:
-        return
-    for name in db.processing_jobs_ready(table="processed_movies"):
-        try:
-            if name.startswith("jav://"):
-                raw = (settings.get("jav_download_watch_dir") or "").strip()
-                if raw:
-                    process_movie_file(name[6:], src=Path(raw).expanduser(), dest_kind="jav")
-                else:
-                    job_id = db.processing_job_start(name, "processed_movies")
-                    if job_id:
-                        db.processing_job_finish(job_id, "error", "JAV inbox is not configured")
-            else:
-                raw = (settings.get("movies_source_dir") or "").strip()
-                if raw:
-                    process_movie_file(name)
-                else:
-                    job_id = db.processing_job_start(name, "processed_movies")
-                    if job_id:
-                        db.processing_job_finish(job_id, "error", "Movie inbox is not configured")
-        except Exception as exc:
-            emit(f"Movie retry deferred: {exc}")
+    if db.processing_work_ready(limit=1):
+        run_pipeline([])
 
 
 @app.get("/api/files/{file_id}/history")
@@ -20871,7 +20655,7 @@ def _ensure_queue_thumbs(filename: str, *, interactive: bool = False) -> list[Pa
         return paths
     dest_dir.mkdir(parents=True, exist_ok=True)
     try:
-        duration = get_video_duration(video)
+        duration = _cached_queue_media(video, filename).get("media_duration")
     except Exception as exc:
         try: emit(f"queue thumbs: ffprobe duration failed for {filename!r}: {exc}")
         except Exception: pass
@@ -21127,7 +20911,7 @@ def queue_tile_preview(filename: str, kind: str = "scene"):
     index = len(QUEUE_THUMB_PERCENTS) - 2
     frame = _queue_thumb_path(cache_key, index)
     if not frame.is_file() or not frame.stat().st_size:
-        duration = get_video_duration(video)
+        duration = _cached_queue_media(video, cache_key).get("media_duration")
         if not duration or duration <= 0:
             raise HTTPException(404, "Preview unavailable")
         frame.parent.mkdir(parents=True, exist_ok=True)
@@ -35872,42 +35656,14 @@ async def queue_file_mtime(filename: str):
 
 @app.get("/api/queue/file-probe")
 async def queue_file_probe(filename: str):
-    """Lightweight metadata probe for a queue file. Used by the Scene
-    Search modal header to surface resolution + duration so the user
-    can sanity-check what they're matching against. Two ffprobe
-    invocations: one for the first video stream's codec/dimensions
-    (`probe_video_stream_meta`) and one for duration
-    (`get_video_duration`). Both already exist as helpers; this just
-    wraps them in a JSON response. Errors are swallowed and reported
-    as `null` so the modal can render "Unknown" gracefully."""
-    settings = db.get_settings()
-    source_dir = Path(settings.get("source_dir", ""))
-    video = db.resolve_source_video_path(source_dir, filename)
+    """Read validated stored metadata; probe only missing observations."""
+    video = _resolve_queue_file_path(filename, db.get_settings())
     if video is None or not video.is_file():
         return JSONResponse({"error": "File not found"}, status_code=404)
-
-    codec = width = height = None
-    try:
-        codec, width, height = await run_in_threadpool(probe_video_stream_meta, video)
-    except Exception:
-        pass
-
-    duration_s: float | None = None
-    try:
-        duration_s = await run_in_threadpool(get_video_duration, video)
-    except Exception:
-        pass
-
-    from app.core.queue_records import observe_media
-    await run_in_threadpool(observe_media, filename, video, codec, width, height, duration_s)
-    return {
-        "filename": filename,
-        "codec":    codec,
-        "width":    width,
-        "height":   height,
-        "duration": duration_s,
-        "size_mb":  round(video.stat().st_size / 1024 / 1024, 1),
-    }
+    values = await run_in_threadpool(_cached_queue_media, video, filename, stream=True)
+    return {"filename": filename, "codec": values.get("media_codec"),
+            "width": values.get("media_width"), "height": values.get("media_height"),
+            "duration": values.get("media_duration"), "size_mb": round(video.stat().st_size / 1024 / 1024, 1)}
 
 
 @app.post("/api/file/manual/vice")
@@ -40361,14 +40117,6 @@ async def api_queue_suggestions_count():
     return {"count": int(n)}
 
 
-#: Per-file source-meta cache. Probing ffprobe + duration takes a
-#: couple hundred ms; the suggestions modal pages through dozens of
-#: files but each one is shown multiple times during a session, so
-#: cache-on-first-read keeps the UI snappy.
-_SOURCE_META_CACHE: dict[str, dict] = {}
-_SOURCE_META_CACHE_LOCK = threading.Lock()
-
-
 @app.get("/api/queue/suggestions/iafd-cast")
 async def api_queue_suggestions_iafd_cast(source_id: str):
     """Return the IAFD title-page cast for a cached suggestion. Used
@@ -40397,43 +40145,13 @@ async def api_queue_suggestions_iafd_cast(source_id: str):
 
 @app.get("/api/queue/suggestions/source-meta")
 async def api_queue_suggestions_source_meta(filename: str):
-    """Resolution + runtime for one queue file, used by the
-    Suggestions modal's file-row caption (replaces the static
-    'Source video · 5-frame preview' text). Cached in-process so
-    re-renders of the same file are instant."""
-    fn = (filename or "").strip()
-    if not fn:
+    """Use the persistent video record, validated against the current file."""
+    video = _resolve_queue_file_path(filename, db.get_settings())
+    if video is None or not video.is_file():
         return {"width": None, "height": None, "duration_sec": None}
-    with _SOURCE_META_CACHE_LOCK:
-        hit = _SOURCE_META_CACHE.get(fn)
-        if hit is not None:
-            return hit
-
-    def _probe() -> dict:
-        settings = db.get_settings()
-        source_dir = Path(settings.get("source_dir", "") or "")
-        video = db.resolve_source_video_path(source_dir, fn)
-        if video is None or not video.is_file():
-            return {"width": None, "height": None, "duration_sec": None}
-        codec, w, h = probe_video_stream_meta(video)
-        try:
-            dur = get_video_duration(video) or 0
-        except Exception:
-            dur = 0
-        from app.core.queue_records import observe_media
-        observe_media(fn, video, codec, w, h, dur or None)
-        return {
-            "width": int(w) if w else None,
-            "height": int(h) if h else None,
-            "duration_sec": int(dur) if dur else None,
-        }
-
-    meta = await run_in_threadpool(_probe)
-    with _SOURCE_META_CACHE_LOCK:
-        if len(_SOURCE_META_CACHE) >= 2048:
-            _SOURCE_META_CACHE.pop(next(iter(_SOURCE_META_CACHE)))
-        _SOURCE_META_CACHE[fn] = meta
-    return meta
+    values = await run_in_threadpool(_cached_queue_media, video, filename, stream=True)
+    return {"width": values.get("media_width"), "height": values.get("media_height"),
+            "duration_sec": values.get("media_duration")}
 
 
 @app.get("/api/queue/suggestions/data18-profile")
@@ -40455,7 +40173,7 @@ async def import_data18_profile(file: UploadFile = File(...)):
 
 
 @app.post("/api/queue/suggestions/run")
-async def api_queue_suggestions_run(payload: dict = Body(default={})):
+async def api_queue_suggestions_run(background_tasks: BackgroundTasks, payload: dict = Body(default={})):
     """Manual re-run of the name search for one file (or every
     unmatched file when ``filename`` is omitted)."""
     filename = (payload or {}).get("filename") or ""
@@ -40467,24 +40185,28 @@ async def api_queue_suggestions_run(payload: dict = Body(default={})):
                 raise ValueError("Suggestion search requires a scene file")
         except ValueError as exc:
             return JSONResponse({"error": str(exc)}, status_code=409)
-    if filename:
-        n = await run_in_threadpool(_run_name_search_for_file, filename)
-        return {"ok": True, "filename": filename, "added": int(n)}
-    # All-unmatched mode — fan out one thread per file. Capped via the
-    # internal pool so a thousand-file backlog doesn't all hit the
-    # source DBs at once.
-    def _run_all() -> dict:
-        with db.get_conn() as conn:
-            rows = conn.execute(
-                "SELECT filename FROM processed_files WHERE status = 'unmatched'"
-            ).fetchall()
-        names = [r["filename"] for r in rows]
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            list(pool.map(_run_name_search_for_file, names))
-        return {"scanned": len(names)}
-    res = await run_in_threadpool(_run_all)
-    return {"ok": True, **res}
+    def submit():
+        from app.core.queue_changes import schedule_suggestions
+        if filename:
+            names = [filename]
+        else:
+            with db.get_conn() as conn:
+                names = [r[0] for r in conn.execute("SELECT filename FROM processed_files WHERE status='unmatched'")]
+        queued = [name for name in names if schedule_suggestions(name, include_iafd=True)]
+        pending = False
+        if filename and not queued:
+            asset = db.file_identity(filename)
+            if asset:
+                with db.get_conn() as conn:
+                    row = conn.execute("SELECT action,state FROM queue_changes WHERE file_id=?", (asset['id'],)).fetchone()
+                pending = bool(row and row[0] == 'process' and row[1] in ('pending','running'))
+            if not pending:
+                return {"error": "File is unavailable or has another saved action; review it before searching again"}
+        return {"ok": True, "filename": filename, "added": 0, "queued": len(queued), "pending": pending}
+    result = await run_in_threadpool(submit)
+    if result.get("queued"):
+        background_tasks.add_task(run_pipeline, [])
+    return result
 
 
 @app.post("/api/queue/suggestions/reject")
@@ -43671,7 +43393,7 @@ def _fetch_javstash_feed_scenes(limit: int = 24) -> list[dict]:
         return []
 
 
-def _javstash_scenes_for_movie_search(q: str, year: str, *, limit: int = 18) -> list[dict]:
+def _javstash_scenes_for_movie_search(q: str, year: str, *, limit: int = 18, strict=False) -> list[dict]:
     """JAVStash ``queryScenes`` hits for the /discover (and /scenes) movie title search.
 
     Merged into ``GET /api/movies/search`` as ``jav_scenes`` — same feed-card
@@ -43719,7 +43441,10 @@ def _javstash_scenes_for_movie_search(q: str, year: str, *, limit: int = 18) -> 
             key,
             gql,
             {"input": input_obj},
+            retry_rate_limit=strict,
         )
+        if strict and (body.get("errors") or not body):
+            raise RuntimeError("JAVStash lookup failed")
         if body.get("errors"):
             emit(f"movies_search javstash GraphQL: {str(body.get('errors'))[:200]}")
         raw = ((body.get("queryScenes") or {}).get("scenes")) or []
@@ -43732,6 +43457,8 @@ def _javstash_scenes_for_movie_search(q: str, year: str, *, limit: int = 18) -> 
                 out.append(card)
         return out
     except Exception as e:
+        if strict:
+            raise
         emit(f"movies_search javstash: {e}")
         return []
 
@@ -43769,7 +43496,7 @@ query SceneInfo($id: ID!) {
 """
 
 
-def _fetch_javstash_scene_for_filing(scene_id: str) -> dict | None:
+def _fetch_javstash_scene_for_filing(scene_id: str, *, strict=False) -> dict | None:
     sid = str(scene_id or "").strip()
     if not sid:
         return None
@@ -43782,7 +43509,10 @@ def _fetch_javstash_scene_for_filing(scene_id: str) -> dict | None:
             key,
             JAVSTASH_FIND_SCENE_FILING_GQL,
             {"id": sid},
+            retry_rate_limit=strict,
         )
+        if strict and (body.get("errors") or not body):
+            raise RuntimeError("JAVStash lookup failed")
         if body.get("errors"):
             emit(f"javstash findScene: {str(body.get('errors'))[:180]}")
         sc = body.get("findScene") or {}
@@ -43790,6 +43520,8 @@ def _fetch_javstash_scene_for_filing(scene_id: str) -> dict | None:
             return sc
         return None
     except Exception as e:
+        if strict:
+            raise
         emit(f"javstash findScene {sid!r}: {e}")
         return None
 
@@ -44114,13 +43846,13 @@ def _javstash_scene_as_movie_filing_dict(sc: dict) -> dict:
 
 def _javstash_movie_search_first_scene_for_pipeline(query: str, year: str | None) -> dict | None:
     """First JAVStash scene hit for movie-queue auto-match (title + optional year)."""
-    cards = _javstash_scenes_for_movie_search(query or "", (year or "").strip(), limit=8)
+    cards = _javstash_scenes_for_movie_search(query or "", (year or "").strip(), limit=8, strict=True)
     verified = []
     for card in cards or []:
         cid = str((card or {}).get("id") or "").strip()
         if not cid:
             continue
-        raw = _fetch_javstash_scene_for_filing(cid)
+        raw = _fetch_javstash_scene_for_filing(cid, strict=True)
         if raw:
             verified.append(raw)
     return _verified_movie_candidate(verified, query, year)

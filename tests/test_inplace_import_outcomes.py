@@ -18,15 +18,15 @@ class ImportOutcomeTests(unittest.TestCase):
             cleanup=Mock();retry=Mock()
             def process(*args,**kwargs):
                 self.assertTrue(env['_defer_client_cleanup'].get())
-                if status=='exception':raise PartialDownloadPending('download resumed')
-                if status=='error':raise OSError('failed')
+                if status=='exception':return {'asset':{'status':'deferred'}}
+                if status=='error':return {'asset':{'status':'error'}}
                 if status in ('filed','removed'):video.unlink()
-                return {'status':status}
+                return {'asset':{'status':status}}
             env={'_defer_client_cleanup':ContextVar('test_cleanup',default=False),'Path':Path,'require_complete_download':require_complete_download,'VIDEO_EXTENSIONS':{'.mp4'},
                  '_clean_release_filename':lambda n:n,'emit':Mock(),'PartialDownloadPending':PartialDownloadPending,
-                 'db':SimpleNamespace(upsert_file=Mock(),queue_file_key=lambda v,s:v.name),
+                 'db':SimpleNamespace(processing_job_enqueue=Mock(),upsert_movie=Mock(),file_identity=lambda *a:{'id':'asset'},upsert_file=Mock(),queue_file_key=lambda v,s:v.name),
                  '_pipeline_lock':threading.Lock(),'_movie_pipeline_lock':threading.Lock(),
-                 'processing_state':{},'process_single':process,'process_movie_file':process,
+                 'processing_state':{'running':False},'run_pipeline':process,
                  '_remove_client_jobs_matching_watch_folder':cleanup,'_retry_partial_download':retry,
                  '_pending_vice_downloads':{},'_pending_jav_downloads':{}}
             fn=load('main.py',f'_process_{kind}_download_entry',env)

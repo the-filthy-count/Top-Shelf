@@ -16,7 +16,7 @@ SOURCE_FIELDS = {'TPDB':'match_tpdb_id','StashDB':'match_stashdb_id',
 def install(conn):
     for table in ('processed_files', 'processed_movies'):
         columns = {r[1] for r in conn.execute(f'PRAGMA table_info({table})')}
-        for column, kind in [('media_duration','INTEGER'),('media_size_bytes','INTEGER'),('media_codec','TEXT'),('media_width','INTEGER'),('media_height','INTEGER')]:
+        for column, kind in [('pipeline_match_json','TEXT'),('phash','TEXT'),('media_signature','TEXT'),('media_duration','INTEGER'),('media_size_bytes','INTEGER'),('media_codec','TEXT'),('media_width','INTEGER'),('media_height','INTEGER')]:
             if column not in columns:
                 conn.execute(f'ALTER TABLE {table} ADD COLUMN {column} {kind}')
     conn.execute("""CREATE TABLE IF NOT EXISTS queue_search_details (

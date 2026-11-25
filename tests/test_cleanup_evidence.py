@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from test_duplicate_filing_safety import load
 
 class CleanupEvidenceTests(unittest.TestCase):
@@ -32,7 +32,9 @@ class CleanupEvidenceTests(unittest.TestCase):
             env={'Path':Path,'db':db,'emit':Mock(),'require_complete_queue_video':lambda *a:None,
                  'PartialDownloadPending':type('PartialDownloadPending',(Exception,),{}),'compute_phash':compute,
                  '_queue_resolve_phash_vs_indexed_library':lambda *a,**k:{'status':'removed'}}
-            result=load('main.py','_process_movie_file_impl',env)('movie.mp4',src=root)
+            env.update(get_video_duration=Mock(),json=__import__('json'))
+            with patch('app.core.queue_media.read',side_effect=lambda key,path,**kw:{'phash':kw['fingerprint_probe'](path),'media_signature':'stable'}):
+                result=load('main.py','_process_movie_file_impl',env)('movie.mp4',src=root)
             self.assertEqual(result,{'status':'removed'})
             compute.assert_called_once_with(video)
             db.update_movie.assert_called_once_with('movie.mp4',status='processing')

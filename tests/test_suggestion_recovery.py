@@ -19,7 +19,7 @@ class SuggestionRecoveryTests(unittest.TestCase):
         cache=load('database.py','cache_media_duration',{'get_conn':lambda:conn})
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp)/'clip.mp4').touch()
-            with patch.object(matching.db,'get_media_duration',return_value=None),patch.object(matching.db,'get_settings',return_value={'source_dir':tmp}),patch.object(matching.db,'cache_media_duration',cache),patch('app.core.phash.get_video_duration',return_value=600),patch.object(matching,'_split_query_for_search',return_value=('','','','',[])):
+            with patch.object(matching.db,'get_media_duration',return_value=None),patch.object(matching.db,'get_settings',return_value={'source_dir':tmp}),patch('app.core.queue_media.read',side_effect=lambda key,path,**kw: (cache(key,600) or {'media_duration':600})),patch('app.core.phash.get_video_duration',return_value=600),patch.object(matching,'_split_query_for_search',return_value=('','','','',[])):
                 matching._build_file_meta('clip.mp4')
         row=conn.execute('SELECT * FROM processed_files').fetchone()
         self.assertEqual((row['status'],row['processed_at'],row['media_duration']),('unmatched','original',600))
@@ -41,7 +41,7 @@ class SuggestionRecoveryTests(unittest.TestCase):
 
     def test_dates_removed_but_volume_numbers_retained(self):
         scene={'title':'Private Lesson 2','performers':[{'name':'Jane Doe'}],'release_date':'2026-10-14'}
-        with patch.object(matching.db,'_library_guess_from_release_name',return_value={'performers':['Jane Doe'],'studio':'Example Studio'}):
+        with patch.object(matching.db,'get_settings',return_value=matching.db.DEFAULTS), patch.object(matching.db,'_library_guess_from_release_name',return_value={'performers':['Jane Doe'],'studio':'Example Studio'}):
             for date in ('20261014','2026-10-14','14.10.2026','26.10.14'):
                 full,title,perf,studio,cast=matching._split_query_for_search(f'Example Studio Jane Doe {date} Private Lesson 2.mp4')
                 self.assertEqual(title,'Private Lesson 2')

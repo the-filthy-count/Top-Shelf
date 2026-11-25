@@ -1,11 +1,12 @@
 import asyncio
-import threading
+from contextlib import nullcontext
 from pathlib import Path
 import database as db
 from download_safety import require_complete_queue_video, PartialDownloadPending, VIDEO_EXTENSIONS
 from app.core.phash import compute_phash, get_video_duration
 from app.core.matching import _strip_ts_uid, _release_name_with_folders
 from app.integrations.stashbox import query_with_fallback
+from app.core.queue_changes import assert_current, SupersededWork
 
 
 import json
@@ -40,6 +41,7 @@ class ProcessingPipeline:
             db.processing_job_checkpoint(self.job_id, phase)
 
     async def process_single(self, video: Path) -> dict:
+        from app.core.queue_changes import assert_current
         self.set_phase("Reading media")
         settings = db.get_settings()
         # DB filename key = posix path relative to source_dir when the
@@ -50,56 +52,22 @@ class ProcessingPipeline:
         filename = db.queue_file_key(video, settings)
         await asyncio.to_thread(require_complete_queue_video, video, settings)
         db.upsert_file(filename)
-        signature = await asyncio.to_thread(db.validate_media_cache, filename, video)
         await asyncio.to_thread(db.queue_search_record, filename)
-        await asyncio.to_thread(db.queue_observe_media, filename, video)
+        from app.core.queue_media import read, save_match, assert_signature
         self.emit(f"FILE {filename}")
-        api_keys = {
-            "stashdb": settings.get("api_key_stashdb", ""),
-            "tpdb":    settings.get("api_key_tpdb", ""),
-            "fansdb":  settings.get("api_key_fansdb", ""),
-            "javstash": (settings.get("api_key_javstash") or "").strip(),
-        }
-
-        # Duration. ffprobe is sync and blocks for a real interval per
-        # file — offload it so the FastAPI event loop can keep answering
-        # /api/status, /api/queue, button-click POSTs, etc.
-        duration = db.get_media_duration(filename)
-        if duration:
-            self.emit(f"  Duration: cached ({int(duration)}s)")
-        else:
-            try:
-                duration = await asyncio.to_thread(get_video_duration, video)
-                db.update_file(filename, status="processing", media_duration=int(duration))
-                self.emit(f"  Duration: {int(duration)}s")
-            except Exception as e:
-                self.emit(f"  Duration: FAILED - {e}")
-                duration = 0
-
-        # Phash. compute_phash does 5×ffmpeg seeks + hashing — the
-        # longest sync block in the pipeline. Must run in a thread or
-        # the entire event loop sits frozen for ~5–15s per file.
-        # `_phash_semaphore` (2 concurrent) inside compute_phash still
-        # enforces the seek-concurrency cap.
+        self.set_phase("Reading media")
         self.set_phase("Fingerprinting")
-        cached = db.get_phash(filename)
-        if cached:
-            phash = cached
-            self.emit(f"  Phash: cached ({phash})")
-        else:
-            try:
-                self.emit("  Phash: computing...")
-                phash = await asyncio.to_thread(compute_phash, video, duration=duration)
-                self.emit(f"  Phash: done ({phash})")
-            except Exception as e:
-                self.emit(f"  Phash: FAILED - {e}")
-                db.update_file(filename, status="error", error=str(e))
-                return {"status": "error", "error": str(e)}
-
-        if await asyncio.to_thread(db.media_file_signature, video) != signature:
-            raise PartialDownloadPending(f"File changed during fingerprinting: {video.name}")
+        media = await asyncio.to_thread(read, filename, video,
+            duration_probe=get_video_duration, fingerprint_probe=compute_phash)
+        phash = media.get("phash")
         await asyncio.to_thread(require_complete_queue_video, video, settings)
         db.update_file(filename, status="processing", phash=phash)
+        api_keys = {
+            "stashdb": settings.get("api_key_stashdb", ""),
+            "tpdb": settings.get("api_key_tpdb", ""),
+            "fansdb": settings.get("api_key_fansdb", ""),
+            "javstash": (settings.get("api_key_javstash") or "").strip(),
+        }
 
         # Early-resolve against the indexed library. Touches the
         # filesystem (file delete on dup discard) so off-thread.
@@ -124,6 +92,17 @@ class ProcessingPipeline:
             import_vice = None
         if import_vice:
             self.emit(f"  Import folder → vice '{import_vice}'")
+
+        saved = json.loads(media.get("pipeline_match_json") or "null")
+        if saved:
+            assert_current()
+            assert_signature(video, media["media_signature"])
+            scene = saved["scene"]
+            if import_vice:
+                scene["_force_vice"] = import_vice
+            self.set_phase("Filing saved match")
+            assert_current()
+            return await asyncio.to_thread(self.callbacks["file_scene_from_match"], video, scene, saved["source"])
 
         # Grab tag lookup
         try:
@@ -157,9 +136,11 @@ class ProcessingPipeline:
                     scene = None
                     self.emit(f"  Grab tag: scene retrieval failed ({exc}), falling back to phash")
                 if scene:
+                    await asyncio.to_thread(save_match, filename, video, {"scene": scene, "source": label}, expected_signature=media["media_signature"])
                     if import_vice:
                         scene["_force_vice"] = import_vice
                     self.set_phase("Filing")
+                    assert_current()
                     result = await asyncio.to_thread(
                         self.callbacks.get("file_scene_from_match"),
                         video, scene, label,
@@ -179,15 +160,16 @@ class ProcessingPipeline:
             db.update_file(filename, status="error", error=str(e))
             return {"status": "error", "error": str(e)}
 
+        assert_current()
+        assert_signature(video, media["media_signature"])
         if not matches:
             self.emit("  Lookup: no match found")
             # Unconfirmed filename hints must not move files into identity folders.
             db.update_file(filename, status="unmatched")
-            # These two callbacks fire-and-forget (thumb prewarm + async
-            # name-search), but call them off-thread anyway so any sync
-            # setup inside them doesn't stall the loop.
-            await asyncio.to_thread(self.callbacks.get("prewarm_queue_thumbs"), filename)
-            await asyncio.to_thread(self.callbacks.get("run_name_search_async"), filename)
+            # Persist the next step under this file's stable identity. The
+            # same worker will pick it up after fingerprint work, not a pool.
+            await asyncio.to_thread(self.callbacks["queue_suggestions"], filename)
+            await asyncio.to_thread(self.callbacks["prewarm_queue_thumbs"], filename)
             return {"status": "unmatched"}
 
         from app.core.fingerprint_selection import select_scene, save_review
@@ -196,164 +178,143 @@ class ProcessingPipeline:
             self.emit('  Lookup: competing fingerprint matches — saved for review')
             await asyncio.to_thread(save_review, db, filename, matches, source, phash)
             return {"status": "unmatched", "review_required": True}
+        await asyncio.to_thread(save_match, filename, video, {"scene": matched_scene, "source": source}, expected_signature=media["media_signature"])
         if import_vice and isinstance(matched_scene, dict):
             matched_scene["_force_vice"] = import_vice
         # File move + image download + NFO write — sync I/O off-thread.
         self.set_phase("Filing")
+        assert_current()
         return await asyncio.to_thread(
             self.callbacks.get("file_scene_from_match"),
             video, matched_scene, source,
         )
 
-    async def run_pipeline(self, filenames: list = None) -> None:
-        # Queue maintenance briefly shares this lock. The HTTP handler
-        # has already marked the request running; dropping it here would leave
-        # that flag set forever without an actual matching worker.
-        # Poll asynchronously rather than blocking the event loop or occupying
-        # an executor thread needed by the current lock owner.
-        while not self.lock.acquire(blocking=False):
-            await asyncio.sleep(.25)
-
+    async def run_job(self, job):
+        """Claim one current master-list record; never execute a stale path list."""
+        from app.core.queue_changes import adopt_processing, release_processing
+        filename, table = job["filename"], job["queue_table"]
+        self.job_id = await asyncio.to_thread(db.processing_job_start, filename, table,
+            expected_file_id=job["file_id"], expected_revision=job["revision"])
+        if not self.job_id:
+            return {"status": "busy"}
+        adopt_processing(self.job_id)
+        result = {"status": "error", "error": "Worker interrupted before completion"}
         try:
-            self.set_phase("Scanning files")
-            self.state["pipeline_total"] = 0
-            self.state["pipeline_done"] = 0
-            self.state["running"] = True
-            self.state["log"] = []
-            settings = db.get_settings()
-            source_dir = Path(settings.get("source_dir", ""))
-            vdl_raw = (settings.get("vice_download_watch_dir") or "").strip()
-            vdl_root = Path(vdl_raw).expanduser() if vdl_raw else None
-
-            def collect_videos():
-                if filenames:
-                    return [
-                        p for f in filenames
-                        if (p := db.resolve_source_video_path(source_dir, f, vice_dl_root=vdl_root)) is not None
-                    ]
+            settings = await asyncio.to_thread(db.get_settings)
+            if table == "processed_movies":
+                jav = filename.startswith("jav://")
+                relative = filename[6:] if jav else filename
+                raw = (settings.get("jav_download_watch_dir" if jav else "movies_source_dir") or "").strip()
+                if not raw:
+                    raise ValueError("Movie inbox is not configured")
+                root = Path(raw).expanduser().resolve()
+                video = root / relative
+                if root not in video.resolve().parents:
+                    raise ValueError("Movie path escapes inbox")
+            else:
+                raw = (settings.get("vice_download_watch_dir") or "").strip()
+                video = await asyncio.to_thread(db.resolve_source_video_path,
+                    Path(settings.get("source_dir") or ""), filename,
+                    vice_dl_root=Path(raw).expanduser() if raw else None)
+            if not video or not video.is_file():
+                observed = await asyncio.to_thread(db.processing_work_result, self.job_id)
+                if observed.get("status") == "filed":
+                    result = {"status": "completed"}
+                    return result
+                raise FileNotFoundError("Source file unavailable")
+            self.state["current_file"] = filename
+            # Read the claimed revision, including the actual next step, from
+            # the saved list. A concurrent request must not change this job.
+            with db.get_conn() as conn:
+                row = conn.execute("SELECT desired_json FROM queue_change_history WHERE file_id=? AND state='running' ORDER BY revision DESC LIMIT 1", (self.job_id,)).fetchone()
+            desired = json.loads(row[0]) if row else {}
+            with self.callbacks.get("job_context", lambda _: nullcontext())(desired):
+                if desired.get("operation") == "suggestions":
+                    self.set_phase("Searching suggestions")
+                    await asyncio.to_thread(require_complete_queue_video, video, settings)
+                    count = await asyncio.to_thread(self.callbacks["search_suggestions"], filename,
+                        include_iafd=bool(desired.get("include_iafd")))
+                    result = {"status": "completed", "added": count, "video_result": db.processing_work_result(self.job_id)}
+                elif table == "processed_movies":
+                    self.set_phase("Matching movie")
+                    result = await asyncio.to_thread(self.callbacks["process_movie"], relative,
+                        src=root, dest_kind="jav" if jav else None)
+                    if not result:
+                        with db.get_conn() as conn:
+                            row = conn.execute("SELECT status,error FROM processed_movies WHERE filename=?", (filename,)).fetchone()
+                        result = {"status": row[0] if row else "error", "error": row[1] if row else "Movie record disappeared"}
                 else:
-                    # "Run all" — walk recursively so files nested under
-                    # performer- or studio-named folders (e.g.
-                    # ``Jane Smith/scene.mp4``) are picked up alongside
-                    # root-level files. Vice download inbox is walked too
-                    # so vice-scope files stuck in ``<vice_dl>/<Vice>/…``
-                    # process on Run All alongside everything in source_dir.
-                    collected: list[Path] = []
-                    if source_dir.exists() and source_dir.is_dir():
-                        for p in source_dir.rglob("*"):
-                            if not any(part.startswith(".") for part in p.relative_to(source_dir).parts) and p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS:
-                                collected.append(p)
-                    if vdl_root and vdl_root.exists() and vdl_root.is_dir():
-                        for p in vdl_root.rglob("*"):
-                            if not any(part.startswith(".") for part in p.relative_to(vdl_root).parts) and p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS:
-                                if "sample" in p.name.lower():
-                                    continue
-                                collected.append(p)
-                    return sorted(collected)
-
-            video_files = await asyncio.to_thread(collect_videos)
-
-            # Keep durable queue writes off the event loop, especially on NAS storage.
-            def register_work():
-                for video in video_files:
-                    filename = db.queue_file_key(video, settings)
-                    db.upsert_file(filename)
-                    db.processing_job_enqueue(filename)
-
-            await asyncio.to_thread(register_work)
-            n = len(video_files)
-            self.state["pipeline_total"] = n
-            self.state["pipeline_done"] = 0
-            self.emit(f"PIPELINE START - {n} file(s)")
-            self.emit("---")
-            
-            outcomes = {"filed": 0, "unmatched": 0, "no_dir": 0, "error": 0, "deferred": 0}
-            for i, video in enumerate(video_files):
-                self.state["current_file"] = video.name
-                filename = db.queue_file_key(video, settings)
-                self.job_id = await asyncio.to_thread(db.processing_job_start, filename)
-                if not self.job_id:
-                    self.state["pipeline_done"] = i + 1
-                    continue
-                from app.core.queue_changes import adopt_processing, release_processing
-                adopt_processing(self.job_id)
-                try:
                     result = await self.process_single(video)
-                except PartialDownloadPending as exc:
-                    self.emit(f"  Deferred: {exc}")
-                    result = {"status": "deferred"}
-                except Exception as exc:
-                    self.emit(f"  File failed: {video.name}: {exc}")
-                    await asyncio.to_thread(db.update_file, filename, status="error", error=str(exc))
-                    result = {"status": "error", "error": str(exc)}
-                st = (result or {}).get("status", "error")
-                await asyncio.to_thread(db.processing_job_finish, self.job_id, st, (result or {}).get("error"))
+        except SupersededWork as exc:
+            result = {"status": "superseded", "error": str(exc)}
+        except PartialDownloadPending as exc:
+            self.emit(f"  Deferred: {exc}")
+            result = {"status": "deferred", "error": str(exc)}
+        except Exception as exc:
+            self.emit(f"  File failed: {filename}: {exc}")
+            update = db.update_movie if table == "processed_movies" else db.update_file
+            await asyncio.to_thread(update, filename, status="error", error=str(exc))
+            result = {"status": "error", "error": str(exc)}
+        finally:
+            try:
+                await asyncio.to_thread(db.processing_job_finish, self.job_id,
+                    result.get("status", "error"), result.get("error"))
+            finally:
                 release_processing()
                 self.job_id = None
-                if st in outcomes:
-                    outcomes[st] += 1
-                self.state["pipeline_done"] = i + 1
+        return result
+
+    async def run_pipeline(self, filenames: list = None) -> dict:
+        # Discovery only registers files. All execution below reads the same
+        # durable work list, including jobs added while this worker is running.
+        def register_work():
+            settings = db.get_settings()
+            root = Path(settings.get("source_dir") or "")
+            raw = (settings.get("vice_download_watch_dir") or "").strip()
+            vice = Path(raw).expanduser() if raw else None
+            if filenames is not None:
+                videos = [p for f in filenames if (p := db.resolve_source_video_path(root, f, vice_dl_root=vice)) is not None]
+            else:
+                videos = []
+                for directory in (root if settings.get("source_dir") else None, vice):
+                    if directory and directory.is_dir():
+                        videos.extend(p for p in directory.rglob("*") if p.is_file()
+                            and p.suffix.lower() in VIDEO_EXTENSIONS
+                            and not any(part.startswith(".") for part in p.relative_to(directory).parts)
+                            and not (directory == vice and "sample" in p.name.lower()))
+            for video in sorted(set(videos)):
+                filename = db.queue_file_key(video, settings)
+                db.upsert_file(filename)
+                db.processing_job_enqueue(filename)
+
+        await asyncio.to_thread(register_work)
+        while not self.lock.acquire(blocking=False):
+            await asyncio.sleep(.25)
+        outcomes = {}
+        results = {}
+        try:
+            self.state.update(running=True, pipeline_total=0, pipeline_done=0, log=[])
+            self.emit("PIPELINE START")
+            while True:
+                ready = await asyncio.to_thread(db.processing_work_ready)
+                if not ready:
+                    break
+                self.state["pipeline_total"] = self.state["pipeline_done"] + ready[0]["ready_count"]
+                # Refresh after every job: a rename, new manual action, or
+                # newly registered download must take effect immediately.
+                result = await self.run_job(ready[0])
+                results[ready[0]["file_id"]] = result.get("video_result") or result
+                status = result.get("status", "error")
+                outcomes[status] = outcomes.get(status, 0) + 1
+                self.state["pipeline_done"] += 1
                 self.emit("---")
                 self.flush_emit_buffer()
-                
             self.emit("PIPELINE COMPLETE")
-            self.flush_emit_buffer()
-
-            try:
-                n_files = len(video_files)
-                if n_files == 1:
-                    sole = video_files[0].name
-                    if outcomes["filed"]:
-                        msg = f"Sorted: {sole}"
-                    elif outcomes["no_dir"]:
-                        msg = f"No directory for {sole}"
-                    elif outcomes["deferred"]:
-                        msg = f"Waiting for download: {sole}"
-                    elif outcomes["unmatched"]:
-                        msg = f"Unmatched: {sole}"
-                    else:
-                        msg = f"Failed: {sole}"
-                    db.notification_add("pipeline", msg, ttl_seconds=240)
-                elif n_files > 1:
-                    parts = []
-                    if outcomes["filed"]:
-                        parts.append(f"{outcomes['filed']} sorted")
-                    if outcomes['unmatched']:
-                        parts.append(f"{outcomes['unmatched']} unmatched")
-                    if outcomes["no_dir"]:
-                        parts.append(f"{outcomes['no_dir']} no-dir")
-                    if outcomes["error"]:
-                        parts.append(f"{outcomes['error']} errors")
-                    if outcomes["deferred"]:
-                        parts.append(f"{outcomes['deferred']} waiting for download")
-                    summary = " · ".join(parts) if parts else "no changes"
-                    db.notification_add(
-                        "pipeline",
-                        f"{n_files} files processed · {summary}",
-                        ttl_seconds=240,
-                    )
-            except Exception:
-                pass
-        except Exception as e:
-            self.emit(f"PIPELINE ERROR: {e}")
-            try:
-                db.notification_add("error", f"Sorting error: {e}", ttl_seconds=400)
-            except Exception:
-                pass
-            self.flush_emit_buffer()
+            if outcomes:
+                summary = " · ".join(f"{n} {('waiting for download' if s == 'deferred' else s)}" for s,n in outcomes.items())
+                await asyncio.to_thread(db.notification_add, "pipeline", summary, ttl_seconds=240)
+            return results
         finally:
-            if self.job_id:
-                try:
-                    await asyncio.to_thread(db.processing_job_finish, self.job_id, "error", "Worker interrupted before completion")
-                except Exception as exc:
-                    self.emit(f"Could not persist interrupted job: {exc}")
-                finally:
-                    from app.core.queue_changes import release_processing
-                    release_processing()
-                    self.job_id = None
-            self.state["pipeline_phase"] = None
-            self.state["running"] = False
-            self.state["current_file"] = None
-            self.state["pipeline_total"] = 0
-            self.state["pipeline_done"] = 0
+            self.flush_emit_buffer()
+            self.state.update(pipeline_phase=None, running=False, current_file=None, pipeline_total=0, pipeline_done=0)
             self.lock.release()

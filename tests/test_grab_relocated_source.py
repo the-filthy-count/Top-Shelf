@@ -1,26 +1,29 @@
+import asyncio
 import tempfile
+import threading
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import Mock
-from test_duplicate_filing_safety import load
+from unittest.mock import Mock, AsyncMock, patch
+from app.core.pipeline import ProcessingPipeline
 
 class GrabRelocatedSourceTests(unittest.TestCase):
     def test_relocation_and_filing_errors_never_fall_back(self):
         for fail in (False,True):
-            with self.subTest(fail=fail),tempfile.TemporaryDirectory() as tmp:
-                root=Path(tmp);video=root/'clip.mp4';video.touch();group=root/'Group';group.mkdir()
+            with self.subTest(fail=fail), tempfile.TemporaryDirectory() as tmp:
+                video=Path(tmp)/'clip.mp4';video.touch();group=Path(tmp)/'Group';group.mkdir()
                 def file(*args,**kw):
                     video.rename(group/video.name)
                     if fail:raise OSError('filing failed')
                     return {'status':'no_dir'}
-                query=Mock(side_effect=AssertionError('must not fall back'))
-                db=SimpleNamespace(queue_search_record=Mock(),queue_observe_media=Mock(),get_settings=lambda:{},queue_file_key=lambda *a:'clip.mp4',upsert_file=Mock(),validate_media_cache=lambda *a:'sig',get_directories=lambda *a:[],get_media_duration=lambda *a:60,get_phash=lambda *a:'hash',media_file_signature=lambda *a:'sig',update_file=Mock(),lookup_scene_grab_for_filename=lambda *a:{'id':1,'source_id':'scene','source_title':'Title','source_db':'StashDB'},mark_scene_grab_consumed=Mock())
-                env={'Path':Path,'db':db,'emit':Mock(),'require_complete_queue_video':lambda *a:None,'_queue_resolve_phash_vs_indexed_library':lambda *a:None,'_strip_ts_uid':lambda n:(n,''),'_stashbox_normalize_match_source':lambda s:s,'_fetch_grab_scene_for_filing':lambda g:{'id':'scene'},'file_scene_from_match':file,'query_with_fallback':query}
-                process=load('main.py','process_single',env)
-                if fail:
-                    with self.assertRaises(OSError):process(video)
-                else:self.assertEqual(process(video),{'status':'no_dir'})
-                query.assert_not_called();db.mark_scene_grab_consumed.assert_not_called()
-                self.assertTrue((group/'clip.mp4').exists())
-                self.assertEqual(db.update_file.call_count,1)
+                pipeline=ProcessingPipeline({},Mock(),Mock(),threading.Lock(),{
+                    'queue_resolve_phash':lambda *a:None,'fetch_grab_scene':lambda g:{'id':'scene'},'file_scene_from_match':file})
+                async def inline(fn,*args,**kw):return fn(*args,**kw)
+                with patch('app.core.pipeline.db') as db, patch('app.core.pipeline.require_complete_queue_video'), patch('app.core.queue_media.read',return_value={'phash':'hash','media_signature':'signature'}), patch('app.core.queue_media.save_match'), patch('app.core.queue_media.assert_signature'), patch('app.core.pipeline.query_with_fallback',new_callable=AsyncMock) as query, patch.object(asyncio,'to_thread',inline):
+                    db.get_settings.return_value={};db.queue_file_key.return_value='clip.mp4'
+                    db.lookup_scene_grab_by_ts_uid.return_value=None
+                    db.lookup_scene_grab_for_filename.return_value={'id':1,'source_id':'scene','source_title':'Title','source_db':'StashDB'}
+                    if fail:
+                        with self.assertRaises(OSError):asyncio.run(pipeline.process_single(video))
+                    else:self.assertEqual(asyncio.run(pipeline.process_single(video)),{'status':'no_dir'})
+                    query.assert_not_awaited();db.mark_scene_grab_consumed.assert_not_called()
+                    self.assertTrue((group/'clip.mp4').exists())

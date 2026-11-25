@@ -29,12 +29,22 @@ def install(conn):
 
 
 def request(conn, file_id, action, desired, *, approved=True, expected_revision=None):
+    if not conn.in_transaction:
+        conn.execute("BEGIN IMMEDIATE")
     if not conn.execute('SELECT 1 FROM file_assets WHERE id=?', (file_id,)).fetchone() and not conn.execute('SELECT 1 FROM command_subjects WHERE id=?',(file_id,)).fetchone():
         raise ValueError('Unknown queue file identity')
-    old = conn.execute('SELECT revision,state FROM queue_changes WHERE file_id=?', (file_id,)).fetchone()
+    old = conn.execute('SELECT revision,state,action,desired_json FROM queue_changes WHERE file_id=?', (file_id,)).fetchone()
+    if old and old[1] == 'running' and old[2] == 'process' and json.loads(old[3]).get('_effects_started'):
+        raise ValueError('Filing has already started; wait for it to finish before changing this file')
+    if action == 'process':
+        desired = {k:v for k,v in desired.items() if k not in ('_effects_started', '_review_required')}
     previous = old[0] if old else 0
     if expected_revision is not None and previous != expected_revision:
         raise ValueError('This file has newer changes; refresh before saving')
+    if action in ('file_scene', 'desired_scene', 'desired_movie', 'desired_movie_snapshot'):
+        asset = conn.execute('SELECT queue_table,queue_id FROM file_assets WHERE id=?', (file_id,)).fetchone()
+        if asset and asset[0] in ('processed_files', 'processed_movies'):
+            conn.execute(f'UPDATE {asset[0]} SET pipeline_match_json=NULL WHERE id=?', (asset[1],))
     revision, now = previous + 1, time.time()
     state = 'pending' if approved else 'draft'
     payload = json.dumps(desired, sort_keys=True)
@@ -133,6 +143,7 @@ def dispatch(file_id, revision):
 def execute(file_id, action, desired, callback):
     """Nested effects belong to their owner; top-level effects load saved inputs."""
     if _current_owner() and _current_owner()[0] == file_id:
+        begin_effects()
         if action in ('relocate','recover'):
             annotate(file_id,last_effect={'action':action,'desired':desired})
         else:
@@ -201,6 +212,39 @@ def owner(file_id, revision):
         _owner.reset(token)
 
 
+class SupersededWork(RuntimeError):
+    """A newer choice owns the file; stop without retrying the older work."""
+
+
+def assert_current(conn=None):
+    active = _current_owner()
+    if not active:
+        return
+    if conn is None:
+        with db.get_conn() as connection:
+            return assert_current(connection)
+    row = conn.execute('SELECT revision,running_revision,state FROM queue_changes WHERE file_id=?', (active[0],)).fetchone()
+    if not row or row[0] != active[1] or row[1] != active[1] or row[2] != 'running':
+        raise SupersededWork('A newer request superseded this work')
+
+
+def begin_effects():
+    """Atomically fence automatic filing against a newer user choice."""
+    active = _current_owner()
+    if not active:
+        return
+    with db.get_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        assert_current(conn)
+        row = conn.execute('SELECT action,desired_json FROM queue_changes WHERE file_id=?', (active[0],)).fetchone()
+        if row[0] == 'process':
+            desired = json.loads(row[1])
+            desired['_effects_started'] = True
+            encoded = json.dumps(desired)
+            conn.execute('UPDATE queue_changes SET desired_json=? WHERE file_id=? AND revision=?', (encoded,*active))
+            conn.execute('UPDATE queue_change_history SET desired_json=? WHERE file_id=? AND revision=?', (encoded,*active))
+
+
 def annotate(file_id, **fields):
     active = _current_owner()
     if not active or active[0] != file_id:
@@ -215,13 +259,22 @@ def annotate(file_id, **fields):
         conn.execute('UPDATE queue_changes SET desired_json=? WHERE file_id=? AND revision=?',(encoded,*active))
 
 
-def schedule_processing(conn, file_id):
-    row = conn.execute('SELECT action,state FROM queue_changes WHERE file_id=?',(file_id,)).fetchone()
+def schedule_processing(conn, file_id, options=None):
+    row = conn.execute('SELECT action,state,desired_json FROM queue_changes WHERE file_id=?',(file_id,)).fetchone()
     if row and (row[1] == 'cancelled' or (row[0] != 'process' and row[1] in ('blocked', 'failed'))):
         return False
+    if row and row[0] == 'process' and row[1] in ('blocked', 'failed'):
+        desired = json.loads(row[2] or '{}')
+        if desired.get('_review_required') or desired.get('operation') not in ('match_and_file', 'suggestions'):
+            return False
     if row and row[1] in ('pending','running','draft'):
+        if options and row[0] == 'process' and row[1] == 'pending':
+            current = conn.execute('SELECT revision,desired_json FROM queue_changes WHERE file_id=?', (file_id,)).fetchone()
+            encoded = json.dumps({**json.loads(current[1]), **options})
+            conn.execute('UPDATE queue_changes SET desired_json=? WHERE file_id=?', (encoded,file_id))
+            conn.execute('UPDATE queue_change_history SET desired_json=? WHERE file_id=? AND revision=?', (encoded,file_id,current[0]))
         return row[0] == 'process'
-    request(conn,file_id,'process',{'operation':'match_and_file'})
+    request(conn,file_id,'process',{'operation':'match_and_file', **(options or {})})
     return True
 
 
@@ -239,14 +292,14 @@ def finish_processing(conn, file_id, outcome, error):
     active = _current_owner()
     if not active or active[0] != file_id:
         return
-    row = conn.execute('SELECT attempts,revision FROM queue_changes WHERE file_id=?', (file_id,)).fetchone()
+    row = conn.execute('SELECT attempts,revision,desired_json FROM queue_changes WHERE file_id=?', (file_id,)).fetchone()
     attempts = row[0] if row else 0
-    state = 'completed' if outcome in ('filed','complete','completed') else ('failed' if outcome in ('error','failed') else 'blocked')
+    state = 'cancelled' if outcome == 'superseded' else 'completed' if outcome in ('filed','complete','completed') else ('failed' if outcome in ('error','failed') else 'blocked')
     finish(conn,file_id,active[1],state,{'status':outcome},error or (None if state=='completed' else outcome))
     if row and row[1] == active[1] and (outcome == 'deferred' or (outcome == 'error' and attempts < 3)):
         delay = 300 if outcome == 'deferred' else min(900,60*max(1,attempts)**2)
         next_attempts = max(0,attempts-1) if outcome == 'deferred' else attempts
-        revision = request(conn,file_id,'process',{'operation':'match_and_file'})
+        revision = request(conn,file_id,'process',json.loads(row[2]))
         conn.execute('UPDATE queue_changes SET attempts=?,available_at=? WHERE file_id=? AND revision=?',
                      (next_attempts,time.time()+delay,file_id,revision))
     _owner.set(None)
@@ -257,13 +310,17 @@ def recover(conn):
     now = time.time()
     for row in conn.execute('SELECT * FROM queue_changes WHERE running_revision IS NOT NULL').fetchall():
         desired = json.loads(row['desired_json'])
-        safe = row['action'] == 'process' and desired.get('operation') == 'match_and_file'
+        safe = (row['action'] == 'process' and not desired.get('_effects_started')
+                and desired.get('operation') in ('match_and_file', 'suggestions'))
         state = 'pending' if safe else 'blocked'
         error = 'Interrupted before effects; retry scheduled' if safe else 'Interrupted; inspect the current file before retrying'
         conn.execute('UPDATE queue_change_history SET state=?,error=?,updated_at=? WHERE file_id=? AND revision=?',
                      (state,error,now,row['file_id'],row['running_revision']))
         conn.execute('UPDATE queue_changes SET state=CASE WHEN revision=running_revision THEN ? ELSE state END,running_revision=NULL,error=?,updated_at=? WHERE file_id=?',
                      (state,error,now,row['file_id']))
+        if not safe and row['revision'] == row['running_revision']:
+            desired['_review_required'] = True
+            conn.execute('UPDATE queue_changes SET desired_json=? WHERE file_id=?', (json.dumps(desired), row['file_id']))
         if not safe:
             conn.execute("UPDATE processing_jobs SET state='failed',error=? WHERE file_id=?",(error,row['file_id']))
     if conn.execute("SELECT 1 FROM sqlite_master WHERE name='file_assets'").fetchone():
@@ -378,3 +435,23 @@ def run_claimed(file_id, revision):
     if not row:
         raise ValueError('Command is no longer running')
     return _handlers[row[0]](file_id,json.loads(row[1]))
+
+
+def schedule_suggestions(filename, *, include_iafd=False):
+    """Queue a next step without replacing manual work or a matching request."""
+    asset = db.file_identity(filename)
+    if not asset:
+        return False
+    with db.get_conn() as conn:
+        conn.execute('BEGIN IMMEDIATE')
+        row = conn.execute('SELECT action,state,running_revision,revision,desired_json FROM queue_changes WHERE file_id=?', (asset['id'],)).fetchone()
+        active = _current_owner()
+        owns = bool(active and active[0] == asset['id'] and row and row[2] == active[1] and row[3] == active[1])
+        if row and not owns and (row[1] in ('pending','running','draft','cancelled') or row[0] != 'process'):
+            return False
+        if row and not owns and row[1] in ('blocked', 'failed'):
+            desired = json.loads(row[4] or '{}')
+            if desired.get('_review_required') or desired.get('operation') not in ('match_and_file', 'suggestions'):
+                return False
+        request(conn, asset['id'], 'process', {'operation':'suggestions', 'include_iafd':bool(include_iafd)})
+    return True

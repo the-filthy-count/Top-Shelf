@@ -23,7 +23,7 @@ class GrabFlowTests(unittest.IsolatedAsyncioTestCase):
                 lookup_scene_grab_for_filename=lambda _:{'id':10,'kind':'scene','source_id':'scene-id','source_title':'Title','source_db':'StashDB'},
                 mark_scene_grab_consumed=Mock())
             query=AsyncMock(return_value=([scene],'StashDB'))
-            env={'require_complete_queue_video':lambda *a:None,'Path':Path,'asyncio':asyncio,'db':db,'_strip_ts_uid':lambda s:(s,''),'query_with_fallback':query}
+            env={'json':__import__('json'),'get_video_duration':Mock(),'compute_phash':Mock(),'require_complete_queue_video':lambda *a:None,'Path':Path,'asyncio':asyncio,'db':db,'_strip_ts_uid':lambda s:(s,''),'query_with_fallback':query}
             exec(compile(ast.Module(body=[method],type_ignores=[]),'pipeline.py','exec'),env)
             file_scene=Mock(return_value={'status':status})
             owner=SimpleNamespace(state={},set_phase=Mock(),emit=Mock(),callbacks={
@@ -32,7 +32,7 @@ class GrabFlowTests(unittest.IsolatedAsyncioTestCase):
                 'file_scene_from_match':file_scene})
             # Import only the pure normalization module; never start the app.
             async def direct_thread(fn,*args,**kwargs):return fn(*args,**kwargs)
-            with patch.object(asyncio,'to_thread',direct_thread):
+            with patch.object(asyncio,'to_thread',direct_thread), patch('app.core.queue_media.read',return_value={'phash':'cached','media_duration':60,'media_signature':'signature'}), patch('app.core.queue_media.save_match'), patch('app.core.queue_media.assert_signature'):
                 result=await env['process_single'](owner,video)
             self.assertEqual(result,{'status':status})
             file_scene.assert_called_once_with(video,scene,'StashDB')

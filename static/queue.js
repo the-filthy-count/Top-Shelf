@@ -7809,11 +7809,14 @@
   }
   async function rescanSuggestionFile(filename) {
     try {
-      await fetch('/api/queue/suggestions/run', {
+      const response = await fetch('/api/queue/suggestions/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename }),
       });
+      const result = await response.json();
+      if (!response.ok || result.error) throw new Error(result.error || 'Search failed');
+      if (result.queued || result.pending) _suggestionsToast('Search queued. Results will appear when processing finishes.');
       loadSuggestions();
       loadQueueStats();
     } catch {}
@@ -7822,7 +7825,10 @@
     const btn = document.getElementById('suggestionsRescanBtn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loader loader--btn" role="status" aria-label="Loading"></span> Scanning…'; }
     try {
-      await fetch('/api/queue/suggestions/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const response = await fetch('/api/queue/suggestions/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const result = await response.json();
+      if (!response.ok || result.error) throw new Error(result.error || 'Search failed');
+      if (result.queued) _suggestionsToast(`${result.queued} searches queued.`);
       await loadSuggestions();
       loadQueueStats();
     } finally {
@@ -7849,11 +7855,17 @@
         body: JSON.stringify({ filename }),
       });
       const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.error) throw new Error(d.error || 'Search failed');
       const newlyAdded = Number(d.added || 0);
       // Even if no new suggestions were just added, the file may
       // already have cached candidates from a previous scan that we
       // can show. Check before deciding to open manual search.
       const hasCached = await _suggestionsFileHasCached(filename);
+      if ((d.queued || d.pending) && !hasCached) {
+        _toastBelow('Search queued. Results will appear when processing finishes.');
+        loadQueueStats();
+        return;
+      }
       if (newlyAdded === 0 && !hasCached) {
         // Truly nothing — drop straight into manual search so the
         // user can pivot without an extra click.

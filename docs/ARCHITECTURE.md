@@ -108,10 +108,12 @@ in the shared recovery panel. Missing videos do not cause record deletion.
 
 ## Persistent workers and identity-aware actions
 
-`app/core/movie_jobs.py` wraps movie/JAV processing with durable claims,
-checkpoints, deferred partial-download handling and bounded retries. Batch movie
-work is registered before processing; scheduled recovery handles pending movie
-and JAV work after restart. Scene and movie namespaces remain distinct.
+`app/core/pipeline.py` dispatches scene, movie/JAV, vice and suggestion work
+from the shared desired-state list. Discovery registers stable file identities;
+the worker claims the next saved revision and reuses validated media and match
+checkpoints. Deferred work and retries retain their operation across restart.
+Scene and movie namespaces remain distinct; there is no separate movie worker.
+See [Queue changes](queue-changes.md#one-automatic-matching-pipeline).
 
 Queue deletion, suggestion acceptance/rejection and manual movie selection carry
 file identities. Manual movie actions resolve them again when the worker starts.
