@@ -7,7 +7,7 @@ import sqlite3
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, AsyncMock, patch
 from app.integrations import fingerprint_cooldown as cooldown
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -35,23 +35,46 @@ class MatchingAuditFixes(unittest.TestCase):
             header=format_datetime(datetime.fromtimestamp(1120,timezone.utc),usegmt=True)
             with self.assertRaisesRegex(RuntimeError,'120 seconds'):cooldown.rate_limited('https://one.test',header)
             with self.assertRaisesRegex(RuntimeError,'300 seconds'):cooldown.rate_limited('https://two.test','invalid')
-    def test_sync_lookup_stops_network_during_cooldown(self):
-        response=SimpleNamespace(status_code=429,headers={'Retry-After':'60'})
-        post=Mock(return_value=response)
+    def test_sync_lookup_waits_and_retries_same_request(self):
+        clock=[100.0]
+        limited=SimpleNamespace(status_code=429,headers={'Retry-After':'60'},close=Mock())
+        success=SimpleNamespace(status_code=200,json=lambda:{'data':{'findScenesBySceneFingerprints':[]}})
+        post=Mock(side_effect=[limited,success])
         fn=load('main.py','query_stashbox',{'requests':SimpleNamespace(post=post)})
-        for _ in range(2):
-            with self.assertRaises(RuntimeError):fn('hash','https://one.test/graphql','key','query','scene')
-        self.assertEqual(post.call_count,1)
-    def test_async_lookup_shares_sync_cooldown(self):
+        def sleep(seconds):
+            self.assertEqual(post.call_count,1)
+            clock[0]+=seconds
+        with patch.object(cooldown.time,'monotonic',side_effect=lambda:clock[0]),patch.object(cooldown.time,'sleep',side_effect=sleep):
+            self.assertEqual(fn('hash','https://one.test/graphql','key','query','scene'),[])
+        self.assertEqual(clock[0],160)
+        self.assertEqual(post.call_args_list[0],post.call_args_list[1])
+        limited.close.assert_called_once()
+
+    def test_async_lookup_shares_cooldown_and_retries_repeated_429(self):
+        clock=[100.0]
         tree=ast.parse((ROOT/'app/integrations/stashbox.py').read_text())
         node=next(n for n in tree.body if isinstance(n,ast.AsyncFunctionDef) and n.name=='query_stashbox')
         ns={'httpx':SimpleNamespace(AsyncClient=object)}
         exec(compile(ast.Module(body=[node],type_ignores=[]),'stashbox.py','exec'),ns)
-        with self.assertRaises(RuntimeError):cooldown.rate_limited('https://one.test/graphql','60')
-        client=SimpleNamespace(post=Mock())
-        with self.assertRaisesRegex(RuntimeError,'rate-limited'):
-            asyncio.run(ns['query_stashbox'](client,'hash','https://one.test/graphql','key','query','scene'))
-        client.post.assert_not_called()
+        limited=SimpleNamespace(status_code=429,headers={'Retry-After':'10'},aclose=AsyncMock())
+        success=SimpleNamespace(status_code=200,json=lambda:{'data':{'findScenesBySceneFingerprints':[]}})
+        client=SimpleNamespace(post=AsyncMock(side_effect=[limited,limited,success]))
+        async def sleep(seconds): clock[0]+=seconds
+        with patch.object(cooldown.time,'monotonic',side_effect=lambda:clock[0]),patch.object(cooldown.asyncio,'sleep',side_effect=sleep):
+            with self.assertRaises(cooldown.RateLimited):cooldown.rate_limited('https://one.test/graphql','60')
+            result=asyncio.run(ns['query_stashbox'](client,'hash','https://one.test/graphql','key','query','scene'))
+        self.assertEqual(result,[])
+        self.assertEqual(clock[0],180)
+        self.assertEqual(client.post.call_count,3)
+        self.assertEqual(client.post.call_args_list[0],client.post.call_args_list[2])
+
+    def test_async_wait_can_be_cancelled(self):
+        request=AsyncMock()
+        async def cancelled(seconds): raise asyncio.CancelledError()
+        with self.assertRaises(cooldown.RateLimited):cooldown.rate_limited('https://one.test/graphql','60')
+        with patch.object(cooldown.asyncio,'sleep',side_effect=cancelled):
+            with self.assertRaises(asyncio.CancelledError):asyncio.run(cooldown.send_async('https://one.test/graphql',request))
+        request.assert_not_called()
 
     def test_retry_includes_separate_vice_inbox(self):
         with tempfile.TemporaryDirectory() as tmp:

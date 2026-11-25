@@ -62,25 +62,22 @@ async def get_async_client():
 
 async def query_stashbox(client: httpx.AsyncClient, phash_hex, endpoint, api_key, query, fingerprint_var):
     from app.integrations import fingerprint_cooldown
-    fingerprint_cooldown.check(endpoint)
     if fingerprint_var == "full":
         variables = {"fingerprints": [{"hash": phash_hex, "algorithm": "PHASH"}]}
     else:
         variables = {"fingerprints": [[{"hash": phash_hex, "algorithm": "PHASH"}]]}
 
-    resp = await client.post(
+    resp = await fingerprint_cooldown.send_async(endpoint, lambda: client.post(
         endpoint,
         json={"query": query, "variables": variables},
         headers={"Content-Type": "application/json", "ApiKey": api_key}
-    )
+    ))
     # GraphQL endpoints return 4xx with a JSON body that pinpoints the
     # broken field (e.g. "Cannot query field 'X' on type 'Y'"). httpx's
     # raise_for_status() loses that body in HTTPStatusError, so the
     # pipeline log just says "422 Unprocessable Entity" with no hint of
     # which field broke. Unwrap errors[] before falling back so the
     # query_with_fallback emit prints the actual cause.
-    if resp.status_code == 429:
-        fingerprint_cooldown.rate_limited(endpoint, resp.headers.get("Retry-After"))
     if resp.status_code >= 400:
         try:
             err_body = resp.json()

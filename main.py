@@ -3344,22 +3344,19 @@ def _health_video_has_sidecar_nfo(video_path: Path, library_root_str: str) -> bo
 
 def query_stashbox(phash_hex, endpoint, api_key, query, fingerprint_var):
     from app.integrations import fingerprint_cooldown
-    fingerprint_cooldown.check(endpoint)
     if fingerprint_var == "full":
         variables = {"fingerprints": [{"hash": phash_hex, "algorithm": "PHASH"}]}
     else:
         variables = {"fingerprints": [[{"hash": phash_hex, "algorithm": "PHASH"}]]}
-    resp = requests.post(endpoint,
+    resp = fingerprint_cooldown.send(endpoint, lambda: requests.post(endpoint,
                          json={"query": query, "variables": variables},
                          headers={"Content-Type": "application/json", "ApiKey": api_key},
-                         timeout=30)
+                         timeout=30))
     # GraphQL endpoints frequently return 4xx with a body that explains
     # exactly which field/argument got rejected (e.g. "Cannot query
     # field 'X' on type 'Y'"). raise_for_status() throws an HTTPError
     # that hides the body, so unwrap it first and surface the
     # `errors[].message` so the caller's emit() picks up the real cause.
-    if resp.status_code == 429:
-        fingerprint_cooldown.rate_limited(endpoint, resp.headers.get("Retry-After"))
     if resp.status_code >= 400:
         try:
             err_body = resp.json()
