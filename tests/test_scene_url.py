@@ -25,20 +25,11 @@ class SceneUrlTests(unittest.TestCase):
             with self.assertRaises(ValueError): validate_url(url)
 
     @patch('app.integrations.scene_url.validate_url', side_effect=lambda url: url)
-    @patch('app.integrations.scene_url.requests.post')
-    def test_stash_scene_names_no_foreign_ids(self, post, validate):
-        post.return_value.json.return_value = {'data': {'scrapeSceneURL': {'title': 'Scene', 'performers': [{'name': 'Liz Jordan', 'stored_id': '123'}]}}}
-        data = scrape('https://example.com/scene', {'stash_url':'http://stash:9999','stash_api_key':'key'})
-        self.assertEqual(data['performers'], ['Liz Jordan'])
-        self.assertEqual(data['provider'], 'Stash scraper')
-        self.assertEqual(post.call_args.kwargs['headers'], {'ApiKey':'key'})
-
-    @patch('app.integrations.scene_url.validate_url', side_effect=lambda url: url)
     @patch('app.integrations.scene_url.fetch_page', return_value={'title': 'Page'})
     @patch('app.integrations.scene_url.requests.post')
-    def test_stash_error_falls_back(self, post, fetch, validate):
-        post.return_value.json.return_value = {'errors':[{'message':'No scraper'}]}
+    def test_generic_scrape_never_calls_local_stash(self, post, fetch, validate):
         self.assertEqual(scrape('https://example.com', {'stash_url':'http://stash'})['provider'], 'Webpage metadata')
+        post.assert_not_called()
         fetch.assert_called_once()
 
     @patch('app.integrations.scene_url.validate_url')

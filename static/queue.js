@@ -3667,8 +3667,8 @@
     dialog.className = 'queue-url-dialog';
     dialog.innerHTML = `<form><h3><i class="fa-solid fa-link"></i> Import scene</h3>
       <label>Webpage URL<input class="field-input" type="url" required placeholder="https://…" aria-label="Webpage URL"></label>
-      <p role="status" aria-live="polite"></p><footer><button type="button" class="btn">Cancel</button>
-      <button type="submit" class="btn"><i class="fa-solid fa-download"></i> Scrape</button></footer></form>`;
+      <p role="status" aria-live="polite"></p><footer><button type="button" class="btn" title="Cancel" aria-label="Cancel"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      <button type="submit" class="btn" title="Scrape webpage" aria-label="Scrape webpage"><i class="fa-solid fa-download" aria-hidden="true"></i></button></footer></form>`;
     const controller = new AbortController();
     const status = dialog.querySelector('[role=status]');
     dialog.querySelector('[type=button]').onclick = () => dialog.close();

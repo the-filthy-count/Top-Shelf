@@ -3541,10 +3541,10 @@
   .queue-section .q-panel-body .queue-item.queue-item-folder > .qi-cell-folder-name-row { top: 32px !important; }
   .queue-section .q-panel-body .queue-item.queue-item-folder > .qi-cell-folder-icon { top: 54px !important; }
 
-  /* The screen and its control tab share one fixed tile footprint. */
+  /* Preserve the screen ratio; the controls extend the tile below it. */
   #queueList .queue-item.queue-file-tile {
-    display: flex; flex-direction: column; gap: 0 !important; padding: 0 !important; height: 290px;
-    min-height: 290px; box-sizing: border-box; isolation: isolate; overflow: hidden;
+    display: flex; flex-direction: column; gap: 0 !important; padding: 0 !important; height: auto;
+    min-height: 0; box-sizing: border-box; isolation: isolate; overflow: hidden;
     border-radius: 8px; background: linear-gradient(#212627,#181a1d) !important;
   }
   #queueList .queue-file-tile::before, #queueList .queue-file-tile::after { display: none; }
@@ -3553,7 +3553,7 @@
     grid-area: auto; width: 100%; min-width: 0; box-sizing: border-box; margin: 0;
   }
   #queueList .qi-crt-screen {
-    flex: 1 1 0; min-height: 0; overflow: hidden; background: #101416 url('/static/img/missing.webp') center/cover;
+    flex: 0 0 auto; aspect-ratio: 16 / 9; min-height: 0; overflow: hidden; background: #101416 url('/static/img/missing.webp') center/cover;
   }
   .qi-crt-frame { width: 100%; height: 100%; object-fit: cover; display: block; }
   .qi-crt-frame[hidden] { display: none; }
@@ -3599,12 +3599,19 @@
     position: static; opacity: 1; visibility: visible; pointer-events: auto;
     flex-wrap: wrap; padding: 8px 0; box-sizing: border-box;
   }
-  .queue-url-dialog { width: min(520px, calc(100vw - 48px)); color: var(--text);
+  .queue-url-dialog { position: fixed; inset: 0; margin: auto; max-height: calc(100dvh - 48px); height: fit-content; box-sizing: border-box; width: min(520px, calc(100vw - 48px)); color: var(--text);
     background: #1b2022; border: 1px solid var(--accent); border-radius: 12px; padding: 24px; }
   .queue-url-dialog::backdrop { background: #000a; backdrop-filter: blur(5px); }
   .queue-url-dialog input { width:100%; box-sizing:border-box; margin:16px 0; }
-  .queue-url-dialog footer { display:flex; justify-content:flex-end; gap:10px; }
+  .queue-url-dialog footer { display:flex; justify-content:center; gap:12px; margin-top:18px; }
   .queue-url-dialog p { overflow-wrap:anywhere; }
+  .queue-url-dialog h3 { display:flex; align-items:center; gap:12px; margin:0 0 18px; }
+  .queue-url-dialog footer button { display:inline-flex; align-items:center; justify-content:center;
+    width:44px; height:44px; padding:12px; flex:none; border-radius:8px;
+    border:1px solid var(--accent); background:#293233; color:var(--text); cursor:pointer; }
+  .queue-url-dialog footer button:disabled { opacity:.45; cursor:wait; }
+  .queue-url-dialog footer button i { font-size:16px; line-height:1; }
+
 
   .queue-section:has(#queueChanges:not([hidden])) :is(#queueList,#queuePager) { display:none !important; }
   .q-details-bar { display: flex; align-items: end; gap: 14px; margin-top: 12px; }
@@ -4319,7 +4326,7 @@
 <link rel="stylesheet" href="/static/queue-history.css?v=20261103">
 <script defer src="/static/queue-history.js?v=20261103"></script>
 <script defer src="/static/queue-changes.js?v=1"></script>
-<script defer src="/static/queue.js?v=20261126-url-import"></script>
+<script defer src="/static/queue.js?v=20261126-direct-scrapers"></script>
 
 <!-- Queue duplicates modal — same phash grouping / keeper rules as Library Health. -->
 <style>

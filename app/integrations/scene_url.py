@@ -1,4 +1,4 @@
-"""Read scene metadata from local Stash scrapers or public page metadata."""
+"""Read scene metadata directly from supported sites or public page metadata."""
 import ipaddress
 import json
 import re
@@ -110,7 +110,7 @@ def fetch_page(url):
                     target = urljoin(url, response.headers.get('Location', ''))
                     target_path = urlsplit(target).path.rstrip('/')
                     if target_path != urlsplit(url).path.rstrip('/') and target_path in ('', '/sfw', '/login', '/signin', '/join'):
-                        raise ValueError('The site redirected to its homepage or login page. Configure its scraper in local Stash.')
+                        raise ValueError('The site redirected to its homepage or login page. No scene details were imported.')
                     url = target
                     continue
                 response.raise_for_status()
@@ -127,24 +127,11 @@ def fetch_page(url):
 
 def scrape(url, settings):
     url = validate_url(url.strip())
-    base = (settings.get('stash_url') or '').rstrip('/')
-    if base and settings.get('stash_enabled', 'true').lower() == 'true':
-        endpoint = base if base.endswith('/graphql') else base + '/graphql'
-        try:
-            response = requests.post(endpoint, headers={'ApiKey': settings.get('stash_api_key') or ''},
-                json={'query': 'query($url:String!){scrapeSceneURL(url:$url){title details date image studio{name} performers{name} tags{name}}}',
-                      'variables': {'url': url}}, timeout=(5, 35))
-            response.raise_for_status()
-            data = (response.json().get('data') or {}).get('scrapeSceneURL')
-            if data and data.get('title'):
-                return {'title': data['title'], 'description': data.get('details') or '',
-                        'date': data.get('date') or '', 'studio': (data.get('studio') or {}).get('name', ''),
-                        'performers': names(data.get('performers') or []), 'tags': names(data.get('tags') or []),
-                        'image': data.get('image') or '', 'url': url, 'provider': 'Stash scraper'}
-        except (requests.RequestException, ValueError):
-            pass
+    from app.integrations import vixen
+    if vixen.identify(url):
+        return vixen.scrape(url)
     data = fetch_page(url)
     if not data['title'] or re.search(r'just a moment|access denied|attention required', data['title'], re.I):
-        raise ValueError('No scene details found. The page may require login or a configured Stash scraper.')
+        raise ValueError('No scene details found. The page may require login or a site-specific scraper.')
     data['provider'] = 'Webpage metadata'
     return data
