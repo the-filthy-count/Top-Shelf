@@ -18,7 +18,7 @@ class GrabRelocatedSourceTests(unittest.TestCase):
                 pipeline=ProcessingPipeline({},Mock(),Mock(),threading.Lock(),{
                     'queue_resolve_phash':lambda *a:None,'fetch_grab_scene':lambda g:{'id':'scene'},'file_scene_from_match':file})
                 async def inline(fn,*args,**kw):return fn(*args,**kw)
-                with patch('app.core.pipeline.db') as db, patch('app.core.pipeline.require_complete_queue_video'), patch('app.core.queue_media.read',return_value={'phash':'hash','media_signature':'signature'}), patch('app.core.queue_media.save_match'), patch('app.core.queue_media.assert_signature'), patch('app.core.pipeline.query_with_fallback',new_callable=AsyncMock) as query, patch.object(asyncio,'to_thread',inline):
+                with patch('app.core.video_matching.engine.Journal'), patch('app.core.pipeline.db') as db, patch('app.core.pipeline.require_complete_queue_video'), patch('app.core.queue_media.read',return_value={'phash':'hash','media_signature':'signature'}), patch('app.core.queue_media.save_match'), patch('app.core.queue_media.assert_signature'), patch('app.core.video_matching.engine.fingerprints',new_callable=AsyncMock) as query, patch.object(asyncio,'to_thread',inline):
                     db.get_settings.return_value={};db.queue_file_key.return_value='clip.mp4'
                     db.lookup_scene_grab_by_ts_uid.return_value=None
                     db.lookup_scene_grab_for_filename.return_value={'id':1,'source_id':'scene','source_title':'Title','source_db':'StashDB'}

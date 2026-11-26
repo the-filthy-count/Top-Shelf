@@ -1,3 +1,4 @@
+from matching_fixtures import load_suggestions
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -57,10 +58,10 @@ class JointCastTests(unittest.TestCase):
                    _score_name_match=m._score_name_match, _SUGGESTION_MIN_SCORE=.5,
                    _required_performers_in_cast=m._required_performers_in_cast,
                    _prefetch_suggestion_breakdowns_async=Mock(),emit=Mock())
-        run = load('main.py','_run_name_search_for_file',env)
+        run = load_suggestions(env)
         self.assertEqual(run('file.mp4'),1)
         self.assertEqual(db.queue_suggestions_add.call_args.args[1][0]['source_id'],'both')
-        env['search_scenes_with_all_performers'].assert_called_once_with(names)
+        env['search_scenes_with_all_performers'].assert_called_once_with(names, saved_ids={})
 
     def test_tpdb_uses_rest_not_stashbox_scene_filter(self):
         from types import SimpleNamespace

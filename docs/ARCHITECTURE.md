@@ -204,3 +204,44 @@ path or filed record cannot replace current results. Partial searches merge;
 complete searches replace atomically and recheck rejections while holding the
 write transaction. A per-file guard is shared by manual suggestion rescans,
 scheduled retries and post-fingerprint suggestion searches.
+
+
+## Replacement video matching engine
+
+Video matching policy and orchestration now live in `app/core/video_matching/`.
+The previous inline scene workflow, movie fallback workflow and suggestion
+ranking loop have been removed. Existing public functions are compatibility
+facades, not alternative matchers. Filename parsing, transport clients, queue
+identity, media analysis and transactional filing remain shared services.
+
+- `engine.py`: analyse saved observations, resolve download identity or provider
+  evidence, validate file/revision, checkpoint the match, then invoke filing.
+  Scene and movie/JAV inputs use their existing separate inbox namespaces.
+- `providers.py`: fingerprint retrieval across configured providers. Independent
+  async requests allow healthy providers to finish and persist responses during
+  another provider's cooldown. Selection follows explicit provider priority,
+  not completion order. Sync library-health callers use the same decision policy.
+- `decisions.py`: deterministic fingerprint ambiguity, full-title/year movie
+  selection, and review-only text ranking. Performer IDs and complete cast
+  membership remain mandatory when those identities are known.
+- `suggestions.py`: source-isolated text queries and ID-based filmography
+  fallback, rejection filtering, ranking, and revision-checked publication.
+- `journal.py`: `video_match_steps`, keyed by permanent file ID, stage and a
+  versioned digest of inputs. Successful results and genuine misses are reused
+  for 24 hours. Errors are recorded separately and never cached as misses.
+  Fingerprint requests depend on content hash and source configuration; text
+  requests depend on effective search fields and linked IDs. Explicit rescans
+  receive a new search generation; retries retain it and reuse successful sources. Renaming alone
+  does not discard fingerprint responses. Credentials are digested, never saved.
+
+Each stage keeps at most eight recent input variants per file; file identity
+removal cascades to its matching journal. Schema installation is additive and
+idempotent. Existing measured media and verified match checkpoints remain
+usable, so upgrading does not force a video rescan. Suggestion rules version 5
+makes existing unmatched records eligible for the replacement policy.
+
+The existing durable queue still owns claims, retry deadlines, cancellation and
+interrupted-filing recovery. A provider failure with no usable match is an error,
+not an unmatched video. Partial suggestion searches merge with existing results;
+complete searches replace them. User edits and file changes invalidate publication
+before any filing action. Opening the UI is not required for any stage to run.

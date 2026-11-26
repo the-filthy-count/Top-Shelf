@@ -33,33 +33,8 @@ def title_query(title, performers=''):
     return query
 
 def _score(title, query):
-    title = normal(title)
-    if not title or not query:
-        return None
-    if title == query:
-        return 1.0
-    qt, tt = query.split(), title.split()
-    qn, tn = set(re.findall(r'\d+', query)), set(re.findall(r'\d+', title))
-    if qn != tn and (qn or tn):
-        return None
-    if title.replace(' ', '') == query.replace(' ', ''):
-        return 1.0
-    significant_q = set(qt) - _STOP
-    significant_t = set(tt) - _STOP
-    if not significant_q or not significant_t:
-        return None
-    # A complete multiword title inside a release string may have a performer prefix.
-    if len(significant_t) >= 2 and (' '+title+' ') in (' '+query+' '):
-        return .96
-    coverage = len(significant_q & significant_t) / len(significant_q)
-    precision = len(significant_q & significant_t) / len(significant_t)
-    if coverage >= .8 and precision >= .65:
-        return .7 + .2 * coverage * precision
-    # Tolerate small spelling differences, not a lone shared word.
-    ratio = SequenceMatcher(None, title, query).ratio()
-    if min(len(significant_q), len(significant_t)) >= 2 and ratio >= .9:
-        return ratio * .9
-    return None
+    from app.core.video_matching.decisions import title_score
+    return title_score(title,query)
 
 def rank_manual_results(rows, query, performers=''):
     query = title_query(query, performers)

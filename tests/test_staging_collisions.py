@@ -1,3 +1,4 @@
+from matching_fixtures import load_movie
 import tempfile
 import threading
 import unittest
@@ -37,6 +38,6 @@ class StagingSafetyTests(unittest.TestCase):
             compute=Mock()
             env={'Path':Path,'db':db,'emit':Mock(),'require_complete_queue_video':require_complete_queue_video,
                  'PartialDownloadPending':PartialDownloadPending,'compute_phash':compute}
-            process=load('main.py','_process_movie_file_impl',env)
-            self.assertEqual(process('album/clip.mp4',src=root,dest_kind='jav'),{'status':'deferred'})
+            process=load_movie(env)
+            self.assertEqual(process('album/clip.mp4',src=root,dest_kind='jav')['status'],'deferred')
             compute.assert_not_called();db.get_movie_by_filename.assert_not_called()

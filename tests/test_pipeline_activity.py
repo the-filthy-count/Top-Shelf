@@ -8,4 +8,6 @@ class PipelineActivityTests(unittest.TestCase):
         calls=[ast.unparse(n) for n in ast.walk(tree) if isinstance(n,ast.Await)]
         self.assertIn('await asyncio.to_thread(register_work)',calls)
         self.assertIn('await asyncio.to_thread(db.processing_work_ready)',calls)
-        self.assertTrue(any('asyncio.to_thread(read,' in c for c in calls))
+        engine=ast.parse((Path(__file__).resolve().parents[1]/'app/core/video_matching/engine.py').read_text())
+        engine_calls=[ast.unparse(n) for n in ast.walk(engine) if isinstance(n,ast.Await)]
+        self.assertTrue(any('asyncio.to_thread(self.analyse,' in c for c in engine_calls))

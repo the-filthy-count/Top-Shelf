@@ -1478,6 +1478,8 @@ def init_db() -> None:
         install_file_history(conn)
         from app.core.queue_records import install as install_queue_records
         install_queue_records(conn)
+        from app.core.video_matching.journal import install as install_video_matching
+        install_video_matching(conn)
         from app.core.queue_changes import install as install_queue_changes
         install_queue_changes(conn)
         from app.core.recovery import install as install_recovery

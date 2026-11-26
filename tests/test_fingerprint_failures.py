@@ -2,6 +2,7 @@ import ast
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch, AsyncMock
 import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -19,7 +20,7 @@ class FingerprintFailureTests(unittest.TestCase):
         for source in ('STASHDB','TPDB','FANSDB','JAVSTASH'):
             ns[source+'_ENDPOINT']=source.lower();ns[source+'_QUERY']='query'
         def query(phash,endpoint,*args):
-            result=outcomes[endpoint]
+            result=outcomes.get(endpoint,[])
             if isinstance(result,Exception):raise result
             return result
         if asynchronous:
@@ -30,9 +31,13 @@ class FingerprintFailureTests(unittest.TestCase):
             async def aq(client,*args):return query(*args)
             ns.update(get_async_client=client,query_stashbox=aq)
             fn=load('app/integrations/stashbox.py','query_with_fallback',ns)
-            return asyncio.run(fn('hash',keys))
+            from app.integrations import stashbox
+            with patch.multiple(stashbox,**{key:value for key,value in ns.items() if key.endswith(('_ENDPOINT','_QUERY')) and hasattr(stashbox,key)}), patch.object(stashbox,'get_async_client',client),patch.object(stashbox,'query_stashbox',aq):
+                return asyncio.run(fn('hash',keys))
         ns['query_stashbox']=query
-        return load('main.py','query_with_fallback',ns)('hash')
+        from app.integrations import stashbox
+        with patch.multiple(stashbox,**{key:value for key,value in ns.items() if key.endswith(('_ENDPOINT','_QUERY')) and hasattr(stashbox,key)}):
+            return load('main.py','query_with_fallback',ns)('hash')
     def test_failures_do_not_turn_into_misses(self):
         for async_ in (False,True):
             with self.subTest(async_=async_),self.assertRaisesRegex(RuntimeError,'incomplete'):

@@ -27,7 +27,7 @@ class UnifiedPipelineTests(unittest.IsolatedAsyncioTestCase):
         self.enterContext(patch('app.core.pipeline.require_complete_queue_video'))
         self.enterContext(patch('app.core.pipeline.get_video_duration', return_value=100))
         self.hash = self.enterContext(patch('app.core.pipeline.compute_phash', return_value='1234567890abcdef'))
-        self.query = self.enterContext(patch('app.core.pipeline.query_with_fallback', new_callable=AsyncMock, return_value=([],'')))
+        self.query = self.enterContext(patch('app.core.video_matching.engine.fingerprints', new_callable=AsyncMock, return_value=([],'')))
         self.enterContext(patch.object(db,'queue_search_record',return_value={}))
         self.events = []
         def movie(name, **kw):

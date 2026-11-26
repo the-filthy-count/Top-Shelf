@@ -2933,169 +2933,14 @@ def _normalize_suggestion(scene: dict, filename: str) -> dict | None:
 _NAME_SEARCH_NON_IAFD_SOURCES = {"StashDB", "TPDB", "FansDB", "JAVStash", "AFDB", "Data18", "EuroPornstar"}
 
 
-def _run_name_search_for_file(filename: str, *, limit: int = 6, include_iafd: bool = True) -> int:
-    """Run a name-based search for one unmatched file and persist the
-    top `limit` un-rejected candidates. Returns the number of
-    suggestions written. Safe to call repeatedly — each pass overwrites
-    the existing rows for that file.
-
-    ``include_iafd=False`` constrains the search to the four stash-box
-    sources. The automatic callers (post-phash unmatched hook, scheduled
-    suggestions trickle) opt out so a 403 streak from IAFD doesn't
-    leak into the background pipeline."""
-    from app.core import suggestion_guard
-    from pathlib import Path
-    if any(part.startswith(".") for part in Path(filename).parts):
-        return 0
-    record = db.queue_search_record(filename)
-    guard_key = record['file_id'] if record else filename
-    if not suggestion_guard.claim(guard_key):
-        return 0
-    search_complete = False
-    try:
-        db.queue_suggestion_mark_attempt(filename)
-        cleaned, title_only, performer, studio, performers = _split_query_for_search(filename)
-        if record:
-            fields = record['fields']
-            title_only, studio = fields['title'] or '', fields['studio'] or ''
-            performers = fields['performers'] or []
-            performer = performers[0] if performers else ''
-            cleaned = ' '.join(filter(None, [*performers, studio, title_only, fields['term']]))
-            if fields['scene_number']:
-                title_only = (title_only + ' Scene ' + str(fields['scene_number'])).strip()
-        perf_names = _suggestion_performer_names(performers, performer)
-        if not cleaned or not (perf_names or studio):
-            search_complete = True
-            db.queue_suggestions_clear(filename)
-            return 0
-        # File-side signals (duration, year, cast count, scene index) shape
-        # the score downstream. Built once per call so the FFmpeg probe and
-        # the library-aware splitter only run a single time, regardless of
-        # how many candidates come back.
-        file_meta = _build_file_meta(filename)
-        if record:
-            file_meta.update(date=fields['date'] or '', year=int(fields['date'][:4]) if fields['date'] else 0,
-                             scene_index=fields['scene_number'], cast_hint=len(performers))
-        saved_ids = db.suggestion_performer_ids(perf_names)
-        if record:
-            from app.core.queue_records import saved_ids as record_ids
-            for name, source_ids in record_ids(record).items():
-                saved_ids.setdefault(name, {}).update(source_ids)
-        # Bare trailing numbers identify volumes; only explicit Scene N is a scene hint.
-        from app.core.title_search_queries import title_search_queries
-        search_queries = [(query, "") for query in title_search_queries(title_only)] if title_only else [("", cleaned)]
-        search_complete = True
-        results: list = []
-        seen_ids: set[tuple[str, str]] = set()
-        search_sources = _NAME_SEARCH_NON_IAFD_SOURCES | {"IAFD"} if include_iafd else _NAME_SEARCH_NON_IAFD_SOURCES
-        for title_q, term_q in search_queries:
-            try:
-                batch = search_all_databases(
-                    title=title_q or None,
-                    performer=performer or None,
-                    studio=studio or None,
-                    term=term_q or None,
-                    sources=search_sources, title_first=True, require_studio=not bool(perf_names),
-                )
-            except Exception as e:
-                search_complete = False
-                emit(f"  Name-search FAILED for {filename!r}: {e}")
-                continue
-            if getattr(batch, "warnings", []):
-                search_complete = False
-            for scene in (batch or []):
-                sid = (scene.get("id") or "").strip()
-                src = (scene.get("_source") or "").strip().lower()
-                if not sid:
-                    continue
-                key = (src, sid)
-                if key in seen_ids:
-                    continue
-                seen_ids.add(key)
-                results.append(scene)
-        if len(perf_names) > 1:
-            cast_results, cast_complete = search_scenes_with_all_performers(perf_names, **({"saved_ids": saved_ids} if record else {}))
-            search_complete = search_complete and cast_complete
-            # A filmography row may carry ID proof missing from the same text hit.
-            # Rank both versions and keep the strongest surviving source record.
-            results.extend(cast_results)
-        rejects = db.queue_suggestion_rejects_for_file(filename)
-        perf_names = _suggestion_performer_names(performers, performer)
-        def rank_candidates(candidates):
-            strict_pool: list[dict] = []
-            for scene in candidates:
-                scene = suggestion_guard.bind_saved_identities(scene, perf_names, saved_ids, record.get('studio_link') if record else None)
-                if scene is None:
-                    continue
-                if len(perf_names) > 1 and not _required_performers_in_cast(perf_names, scene):
-                    continue
-                if not _suggestion_identity_matches(perf_names, studio, scene):
-                    continue
-                if not _scene_passes_settings_filters(scene):
-                    continue
-                sug = _normalize_suggestion(scene, filename)
-                if not sug:
-                    continue
-                if (sug["source_db"], sug["source_id"]) in rejects:
-                    continue
-                is_strict_perf = bool(perf_names and _required_performers_in_cast(perf_names, scene))
-                # Reasons are collected only on the pool the candidate actually
-                # ends up in — strict if the performer matches, loose otherwise
-                # — so the pills the UI shows match the score that's persisted.
-                if is_strict_perf or _suggestion_identity_matches([], studio, scene):
-                    strict_reasons: list[dict] = []
-                    score_strict = _score_name_match(
-                        cleaned, scene,
-                        query_performer=performer,
-                        query_title=title_only or cleaned,
-                        query_performers=performers,
-                        require_performers_in_cast=is_strict_perf,
-                        allow_joint_cast=len(perf_names) > 1,
-                        file_meta=file_meta,
-                        reasons=strict_reasons,
-                    )
-                    if score_strict >= _SUGGESTION_MIN_SCORE:
-                        sug_strict = dict(sug)
-                        sug_strict["score"] = score_strict
-                        sug_strict["payload"] = dict(sug.get("payload") or {})
-                        sug_strict["payload"]["_reasons"] = strict_reasons
-                        strict_pool.append(sug_strict)
-            return strict_pool
-
-        strict_pool = rank_candidates(results)
-        if len(perf_names) == 1 and not any(row["score"] >= 0.8 for row in strict_pool):
-            # Weak title hits should not prevent a stronger filmography hit.
-            cast_results, cast_complete = search_scenes_with_all_performers(perf_names, **({"saved_ids": saved_ids} if record else {}))
-            search_complete = search_complete and cast_complete
-            strict_pool.extend(rank_candidates(cast_results))
-        from app.core.suggestion_rules import date_proximity
-        strict_pool.sort(key=lambda candidate: (
-            candidate['score'], date_proximity((candidate.get('payload') or {}).get('release_date'), file_meta.get('date'))
-        ), reverse=True)
-        unique = {}
-        for candidate in strict_pool:
-            unique.setdefault((candidate['source_db'], candidate['source_id']), candidate)
-        strict_pool = list(unique.values())
-        top = strict_pool[:limit]
-        emit(f"  Name-search {filename!r}: {len(top)} performer/studio match(es)")
-        if not top and not search_complete:
-            return 0
-        saved_count = db.queue_suggestions_add(filename, top, replace=search_complete, expected_record=record)
-        if not top:
-            return 0
-        # Pre-warm the breakdown caches in the background so when the user
-        # eventually clicks Accept on an IAFD or TPDB candidate, the
-        # scene-picker round trip is a memory read instead of two HTTP hops.
-        _prefetch_suggestion_breakdowns_async(filename, top)
-        return saved_count
-    except Exception:
-        search_complete = False
-        raise
-    finally:
-        try:
-            db.queue_suggestion_finish_attempt(filename, complete=search_complete)
-        finally:
-            suggestion_guard.release(guard_key)
+def _run_name_search_for_file(filename: str, *, limit: int = 6, include_iafd: bool = True, search_generation: str = "") -> int:
+    from app.core.video_matching.suggestions import run
+    return run(db,filename,{
+        'sources':_NAME_SEARCH_NON_IAFD_SOURCES,
+        'search':search_all_databases,'cast':search_scenes_with_all_performers,
+        'normalize':_normalize_suggestion,'allowed':_scene_passes_settings_filters,
+        'prewarm':_prefetch_suggestion_breakdowns_async,
+    },limit=limit,include_iafd=include_iafd,search_generation=search_generation)
 
 
 def _prefetch_suggestion_breakdowns_async(filename: str, candidates: list[dict]) -> None:
@@ -3410,40 +3255,8 @@ def query_stashbox(phash_hex, endpoint, api_key, query, fingerprint_var):
 
 
 def query_with_fallback(phash_hex):
-    api_keys = get_api_keys()
-    report = emit
-    from app.core.fingerprint_selection import select_scene
-    ambiguous = None
-    failures = []
-    configured = 0
-    for key, label, endpoint, query in (
-        ("stashdb", "StashDB", STASHDB_ENDPOINT, STASHDB_QUERY),
-        ("tpdb", "TPDB", TPDB_ENDPOINT, TPDB_QUERY),
-        ("fansdb", "FansDB", FANSDB_ENDPOINT, STASHDB_QUERY),
-        ("javstash", "JAVStash", JAVSTASH_ENDPOINT, JAVSTASH_QUERY),
-    ):
-        api_key = (api_keys.get(key) or "").strip()
-        if not api_key:
-            continue
-        configured += 1
-        try:
-            matches = query_stashbox(phash_hex, endpoint, api_key, query, "scene")
-            if matches:
-                if select_scene(matches, phash_hex) is not None:
-                    return matches, label
-                if ambiguous is None:
-                    ambiguous = (matches, label)
-                report(f"  {label}: ambiguous fingerprints; checking remaining databases")
-        except Exception as exc:
-            failures.append(f"{label}: {exc}")
-            report(f"  WARNING: {label} lookup failed ({exc}); continuing fallback")
-    if ambiguous is not None:
-        return ambiguous
-    if not configured:
-        raise RuntimeError("No fingerprint search databases configured")
-    if failures:
-        raise RuntimeError("Fingerprint search incomplete; retry required. " + "; ".join(failures))
-    return [], "none"
+    from app.core.video_matching.providers import sync_fingerprints
+    return sync_fingerprints(phash_hex,get_api_keys(),query_stashbox,emit)
 
 
 # ---------------------------------------------------------------------------
@@ -9406,27 +9219,9 @@ def _favourite_row_sort_birth_date_movie(row: dict) -> str | None:
     return None
 
 
-def _verified_movie_candidate(candidates: list[dict], title: str, year: str | None) -> dict | None:
-    """Require one exact normalized title and, when known, release year."""
-    def normalized(value):
-        return " ".join(re.findall(r"[^\W_]+", str(value or "").casefold()))
-    wanted = normalized(title)
-    if not wanted:
-        return None
-    hits = {}
-    for candidate in candidates or []:
-        if not isinstance(candidate, dict):
-            continue
-        names = (candidate.get("title"), candidate.get("original_title"), candidate.get("name"))
-        if wanted not in {normalized(name) for name in names if name}:
-            continue
-        actual_year = str(candidate.get("year") or candidate.get("release_date") or candidate.get("date") or "")[:4]
-        if year and actual_year != str(year):
-            continue
-        identity = str(candidate.get("id") or candidate.get("_id") or "").strip()
-        if identity:
-            hits[identity] = candidate
-    return next(iter(hits.values())) if len(hits) == 1 else None
+def _verified_movie_candidate(candidates, title, year=None):
+    from app.core.video_matching.decisions import movie
+    return movie(candidates,title,year).candidate
 
 
 def search_tpdb_movie_first_hit(query: str, year: str | None) -> dict | None:
@@ -9539,140 +9334,43 @@ def process_movie_file(filename: str, src: Path | None = None, dest_kind: str | 
     return (results or {}).get(asset['id']) or db.processing_work_result(asset['id'])
 
 
-def _process_movie_file_impl(
-    filename: str,
-    src: Path | None = None,
-    dest_kind: str | None = None,
-) -> None:
-    """Match one movie file across TMDB → TPDB → JAVStash and file it.
-
-    ``dest_kind`` overrides the destination-directory selection in
-    :func:`file_movie`. Pass ``'jav'`` for the JAV /unmatched inbox so
-    every match (even TMDB / TPDB) routes to ``jav_dir``; pass
-    ``'features'`` to force ``features_dir``. Default keeps the legacy
-    behaviour (JAVStash matches → jav_dir, everything else → features_dir).
-    """
-    settings = db.get_settings()
-    if src is None:
-        if not (settings.get("movies_source_dir") or "").strip():
-            return {"status": "error", "error": "Movies source directory is not configured"}
-        src = Path((settings.get("movies_source_dir") or "").strip()).expanduser()
-    video = src / Path(filename)
-    jav_root = (settings.get("jav_download_watch_dir") or "").strip()
-    is_jav_inbox = bool(jav_root) and src.resolve() == Path(jav_root).expanduser().resolve()
-    history_filename = "jav://" + Path(filename).as_posix() if is_jav_inbox else filename
-    if not video.is_file():
-        return
-    guard_settings = {"source_dir": str(src)}
+def _process_movie_file_impl(filename: str, src: Path | None = None, dest_kind: str | None = None) -> dict:
+    from app.core.video_matching.engine import MatchingEngine
+    if src is None and not (db.get_settings().get("movies_source_dir") or "").strip():
+        return {"status":"error","error":"Movies source directory is not configured"}
+    def tmdb(title,year):
+        hit = _verified_movie_candidate(search_tmdb(title,year),title,year)
+        if not hit:
+            return {}
+        detail = _verified_movie_candidate([get_tmdb_movie(hit['id'])],title,year)
+        return {'movie':detail,'source':'tmdb'} if detail else {}
+    def tpdb(title,year):
+        hit = search_tpdb_movie_first_hit(title,year)
+        if not hit:
+            return {}
+        mid = str(hit.get('_id') or hit.get('id') or '')
+        detail = _fetch_tpdb_movie_detail(mid,strict=True)
+        verified = _verified_movie_candidate([{**hit,**detail}],title,year)
+        if not verified:
+            return {}
+        payload = _tpdb_detail_as_movie_filing_dict(verified)
+        return {'movie':payload,'source':'tpdb','tpdb_id':payload.pop('_tpdb_id',None) or mid}
+    def javstash(title,year):
+        scene = _javstash_movie_search_first_scene_for_pipeline(title,year)
+        if not scene:
+            return {}
+        payload = _javstash_scene_as_movie_filing_dict(scene)
+        return {'movie':payload,'source':'javstash','javstash_id':payload.pop('_javstash_id',None) or str(scene['id'])}
+    engine = MatchingEngine(db,{
+        'queue_resolve_phash':_queue_resolve_phash_vs_indexed_library,
+        'movie_query':guess_movie_query_from_filename,
+        'movie_providers':[{'key':'tmdb','search':tmdb},{'key':'tpdb','search':tpdb},{'key':'javstash','search':javstash}],
+        'file_movie':file_movie,'cleanup':_cleanup_superseded_library_copies,
+    },emit=emit,complete=require_complete_queue_video,duration=get_video_duration,phash=compute_phash)
     try:
-        require_complete_queue_video(video, guard_settings)
+        return engine.feature(filename,src,dest_kind)
     except PartialDownloadPending as exc:
-        emit(f"  Movie deferred: {exc}")
-        return {"status": "deferred"}
-    db.upsert_movie(history_filename)
-    db.update_movie(history_filename, status="processing")
-    from app.core.queue_media import read
-    cache_key = history_filename if is_jav_inbox else "movie://" + history_filename
-    try:
-        media = read(cache_key, video, duration_probe=get_video_duration, fingerprint_probe=compute_phash)
-    except PartialDownloadPending as exc:
-        return {"status": "deferred", "error": str(exc)}
-    phash = media["phash"]
-    media_signature = media["media_signature"]
-    try:
-        require_complete_queue_video(video, guard_settings)
-        if db.media_file_signature(video) != media_signature:
-            raise PartialDownloadPending(f"File changed during movie processing: {video.name}")
-    except (PartialDownloadPending, OSError) as exc:
-        emit(f"  Movie deferred: {exc}")
-        return {"status": "deferred"}
-    early = _queue_resolve_phash_vs_indexed_library(video, history_filename, phash, movie=True)
-    if early is not None:
-        return early
-    saved = json.loads(media.get("pipeline_match_json") or "null")
-    if saved:
-        movie_dict, match_src = saved["movie"], saved["source"]
-        tpdb_id_used, javstash_id_used = saved.get("tpdb_id"), saved.get("javstash_id")
-    else:
-        title_guess, year_guess = guess_movie_query_from_filename(filename)
-        movie_dict: dict | None = None
-        tpdb_id_used: str | None = None
-        javstash_id_used: str | None = None
-        match_src = "tmdb"
-
-        failures = []
-        tmdb_results = None
-        try:
-            if (settings.get("api_key_tmdb") or "").strip():
-                tmdb_results = search_tmdb(title_guess, year_guess)
-        except Exception as exc:
-            failures.append(f"TMDB: {exc}")
-        tmdb_hit = _verified_movie_candidate(tmdb_results or [], title_guess, year_guess)
-        if tmdb_hit:
-            try:
-                detail = get_tmdb_movie(tmdb_hit["id"])
-                movie_dict = _verified_movie_candidate([detail], title_guess, year_guess)
-                match_src = "tmdb"
-            except Exception as exc:
-                failures.append(f"TMDB detail: {exc}")
-        if not movie_dict:
-            try:
-                hit = search_tpdb_movie_first_hit(title_guess, year_guess)
-                if hit:
-                    mid = str(hit.get("_id") or hit.get("id") or "")
-                    detail = _fetch_tpdb_movie_detail(mid, strict=True) if mid else {}
-                    merged = {**hit, **detail} if detail else hit
-                    verified = _verified_movie_candidate([merged], title_guess, year_guess)
-                    movie_dict = _tpdb_detail_as_movie_filing_dict(verified) if verified else None
-                    tpdb_id_used = (movie_dict.pop("_tpdb_id", None) or mid) if movie_dict else None
-                    match_src = "tpdb"
-            except Exception as exc:
-                failures.append(f"TPDB: {exc}")
-        if not movie_dict:
-            jk = (settings.get("api_key_javstash") or "").strip()
-            if jk:
-                try:
-                    jscene = _javstash_movie_search_first_scene_for_pipeline(title_guess, year_guess)
-                    if jscene:
-                        movie_dict = _javstash_scene_as_movie_filing_dict(jscene)
-                        javstash_id_used = movie_dict.pop("_javstash_id", None) or str(
-                            (jscene.get("id") or "")
-                        ).strip()
-                        match_src = "javstash"
-                        tpdb_id_used = None
-                except Exception as exc:
-                    failures.append(f"JAVStash: {exc}")
-        if not movie_dict and failures:
-            raise RuntimeError("Movie lookup failed: " + "; ".join(failures))
-        if not movie_dict:
-            db.update_movie(
-                history_filename,
-                status="unmatched",
-                error="No TMDB, TPDB, or JAVStash match for parsed title",
-            )
-            emit("  No TMDB/TPDB/JAVStash match")
-            return {"status": "unmatched"}
-    try:
-        require_complete_queue_video(video, guard_settings)
-        if db.media_file_signature(video) != media_signature:
-            raise PartialDownloadPending(f"File changed during movie processing: {video.name}")
-    except (PartialDownloadPending, OSError) as exc:
-        emit(f"  Movie deferred: {exc}")
-        return {"status": "deferred"}
-    from app.core.queue_media import save_match
-    save_match(cache_key, video, {"movie": movie_dict, "source": match_src,
-        "tpdb_id": tpdb_id_used, "javstash_id": javstash_id_used}, expected_signature=media_signature)
-    result = file_movie(
-        video,
-        movie_dict,
-        tpdb_id=tpdb_id_used if match_src == "tpdb" else None,
-        javstash_id=javstash_id_used if match_src == "javstash" else None,
-        match_source=match_src,
-        dest_kind=dest_kind,
-        history_filename=history_filename,
-    )
-    _cleanup_superseded_library_copies(result, phash)
-    return result
+        return {"status":"deferred","error":str(exc)}
 
 
 def run_movie_pipeline(filenames: list[str] | None = None) -> None:
@@ -40192,7 +39890,7 @@ async def api_queue_suggestions_run(background_tasks: BackgroundTasks, payload: 
         else:
             with db.get_conn() as conn:
                 names = [r[0] for r in conn.execute("SELECT filename FROM processed_files WHERE status='unmatched'")]
-        queued = [name for name in names if schedule_suggestions(name, include_iafd=True)]
+        queued = [name for name in names if schedule_suggestions(name, include_iafd=True, refresh=True)]
         pending = False
         if filename and not queued:
             asset = db.file_identity(filename)

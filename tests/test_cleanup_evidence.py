@@ -1,3 +1,4 @@
+from matching_fixtures import load_movie
 import sqlite3
 import tempfile
 import unittest
@@ -34,7 +35,7 @@ class CleanupEvidenceTests(unittest.TestCase):
                  '_queue_resolve_phash_vs_indexed_library':lambda *a,**k:{'status':'removed'}}
             env.update(get_video_duration=Mock(),json=__import__('json'))
             with patch('app.core.queue_media.read',side_effect=lambda key,path,**kw:{'phash':kw['fingerprint_probe'](path),'media_signature':'stable'}):
-                result=load('main.py','_process_movie_file_impl',env)('movie.mp4',src=root)
+                result=load_movie(env)('movie.mp4',src=root)
             self.assertEqual(result,{'status':'removed'})
             compute.assert_called_once_with(video)
             db.update_movie.assert_called_once_with('movie.mp4',status='processing')

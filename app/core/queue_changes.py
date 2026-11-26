@@ -437,7 +437,7 @@ def run_claimed(file_id, revision):
     return _handlers[row[0]](file_id,json.loads(row[1]))
 
 
-def schedule_suggestions(filename, *, include_iafd=False):
+def schedule_suggestions(filename, *, include_iafd=False, refresh=False):
     """Queue a next step without replacing manual work or a matching request."""
     asset = db.file_identity(filename)
     if not asset:
@@ -453,5 +453,9 @@ def schedule_suggestions(filename, *, include_iafd=False):
             desired = json.loads(row[4] or '{}')
             if desired.get('_review_required') or desired.get('operation') not in ('match_and_file', 'suggestions'):
                 return False
-        request(conn, asset['id'], 'process', {'operation':'suggestions', 'include_iafd':bool(include_iafd)})
+        desired = {'operation':'suggestions', 'include_iafd':bool(include_iafd)}
+        if refresh:
+            import uuid
+            desired['search_generation'] = uuid.uuid4().hex
+        request(conn, asset['id'], 'process', desired)
     return True

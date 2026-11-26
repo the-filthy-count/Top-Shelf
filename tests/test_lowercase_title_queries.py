@@ -1,3 +1,4 @@
+from matching_fixtures import load_suggestions
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -27,7 +28,7 @@ class LowercaseTitleQueryTests(unittest.TestCase):
                  '_score_name_match':m._score_name_match,'_SUGGESTION_MIN_SCORE':.5,
                  '_required_performers_in_cast':m._required_performers_in_cast,
                  '_prefetch_suggestion_breakdowns_async':Mock(),'emit':lambda s:None}
-            run=load('main.py','_run_name_search_for_file',env)
-            self.assertEqual(run('file.mp4'),int(correct))
+            run=load_suggestions(env)
+            self.assertEqual(run('file.mp4',include_iafd=False),int(correct))
             self.assertEqual([c.kwargs['title'] for c in search.call_args_list],['naughtytherapy','naughty therapy'])
             self.assertEqual(len(db.queue_suggestions_add.call_args.args[1]), int(correct))

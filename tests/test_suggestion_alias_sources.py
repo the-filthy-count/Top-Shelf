@@ -1,3 +1,4 @@
+from matching_fixtures import load_suggestions
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -10,7 +11,7 @@ class SuggestionAliasSourceTests(unittest.TestCase):
         scene={'title':'POV','studio':{'name':'Example Studio'}}
         with patch.object(m.db,'_library_guess_from_release_name',return_value={'performers':[]}),patch.object(m.db,'studio_logo_list_all',return_value=rows):
             for filename in ('ExampleAlias POV.mp4','ExampleAlias/POV.mp4','Example Studio POV.mp4'):
-                full,title,performer,studio,cast=m._split_query_for_search(filename)
+                full,title,performer,studio,cast=m._split_query_from_library(filename)
                 self.assertEqual(title,'POV')
                 self.assertEqual(studio,'Example Studio')
                 self.assertTrue(m._suggestion_identity_matches(cast,studio,scene))
@@ -23,9 +24,10 @@ class SuggestionAliasSourceTests(unittest.TestCase):
              '_split_query_for_search':lambda f:('Studio POV','POV','','Studio',[]),
              '_suggestion_performer_names':lambda *a:[], '_build_file_meta':lambda f:{},
              '_NAME_SEARCH_NON_IAFD_SOURCES':sources, 'search_all_databases':search}
-        run=load('main.py','_run_name_search_for_file',env)
+        run=load_suggestions(env)
         run('file.mp4')
-        self.assertEqual(search.call_args.kwargs['sources'],sources|{'IAFD'})
+        self.assertEqual(set().union(*(c.kwargs['sources'] for c in search.call_args_list)),sources|{'IAFD'})
+        search.reset_mock()
         run('file.mp4',include_iafd=False)
-        self.assertEqual(search.call_args.kwargs['sources'],sources)
+        self.assertEqual(set().union(*(c.kwargs['sources'] for c in search.call_args_list)),sources)
         self.assertNotIn('IAFD',sources)

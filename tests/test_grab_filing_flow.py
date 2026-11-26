@@ -17,7 +17,7 @@ class GrabFlowTests(unittest.IsolatedAsyncioTestCase):
         scene={'id':'scene-id','performers':[{'performer':{'id':'correct-id','name':'Person'}}]}
         with tempfile.TemporaryDirectory() as tmp:
             video=Path(tmp)/'video.mp4';video.touch()
-            db=SimpleNamespace(queue_search_record=Mock(),queue_observe_media=Mock(),queue_file_key=lambda p,s:p.name,get_settings=lambda:{'source_dir':tmp},upsert_file=Mock(),
+            db=SimpleNamespace(file_identity=lambda *a:{"id":"fixture"},queue_search_record=lambda _: {},queue_observe_media=Mock(),queue_file_key=lambda p,s:p.name,get_settings=lambda:{'source_dir':tmp},upsert_file=Mock(),
                 validate_media_cache=lambda *a:'signature', media_file_signature=lambda *a:'signature', get_media_duration=lambda _:60, get_phash=lambda _:'cached',update_file=Mock(),
                 lookup_scene_grab_by_ts_uid=lambda _:None,
                 lookup_scene_grab_for_filename=lambda _:{'id':10,'kind':'scene','source_id':'scene-id','source_title':'Title','source_db':'StashDB'},
@@ -32,7 +32,7 @@ class GrabFlowTests(unittest.IsolatedAsyncioTestCase):
                 'file_scene_from_match':file_scene})
             # Import only the pure normalization module; never start the app.
             async def direct_thread(fn,*args,**kwargs):return fn(*args,**kwargs)
-            with patch.object(asyncio,'to_thread',direct_thread), patch('app.core.queue_media.read',return_value={'phash':'cached','media_duration':60,'media_signature':'signature'}), patch('app.core.queue_media.save_match'), patch('app.core.queue_media.assert_signature'):
+            with patch('app.core.video_matching.engine.Journal'), patch('app.core.video_matching.engine.fingerprints',query), patch.object(asyncio,'to_thread',direct_thread), patch('app.core.queue_media.read',return_value={'phash':'cached','media_duration':60,'media_signature':'signature'}), patch('app.core.queue_media.save_match'), patch('app.core.queue_media.assert_signature'):
                 result=await env['process_single'](owner,video)
             self.assertEqual(result,{'status':status})
             file_scene.assert_called_once_with(video,scene,'StashDB')

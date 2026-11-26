@@ -18,7 +18,7 @@ class SuggestionAdmissionTests(unittest.TestCase):
         with patch('app.core.queue_changes.schedule_suggestions',return_value=True) as schedule:
             result=asyncio.run(env['api_queue_suggestions_run'](background,{'filename':'video.mp4'}))
         self.assertEqual(result['queued'],1)
-        schedule.assert_called_once_with('video.mp4',include_iafd=True)
+        schedule.assert_called_once_with('video.mp4',include_iafd=True,refresh=True)
         background.add_task.assert_called_once_with(worker,[])
         worker.assert_not_called()
 

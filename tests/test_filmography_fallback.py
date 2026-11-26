@@ -1,3 +1,4 @@
+from matching_fixtures import load_suggestions
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -39,7 +40,7 @@ class FilmographyFallbackTests(unittest.TestCase):
                  _suggestion_identity_matches=m._suggestion_identity_matches,_required_performers_in_cast=m._required_performers_in_cast,
                  _scene_passes_settings_filters=lambda _:True,_normalize_suggestion=lambda s,f:dict(source_db='TPDB',source_id=s['id'],payload=s),
                  _score_name_match=m._score_name_match,_SUGGESTION_MIN_SCORE=.5,_prefetch_suggestion_breakdowns_async=Mock(),emit=Mock())
-        return load('main.py','_run_name_search_for_file',env),env
+        return load_suggestions(env),env
 
     def scene(self,id='match',title='Summer Fling',name='Demi Hawks',date='2023-10-13',duration=3600):
         return dict(id=id,title=title,_source='TPDB',performers=[{'name':name}],release_date=date,duration=duration)
@@ -48,7 +49,7 @@ class FilmographyFallbackTests(unittest.TestCase):
         run,env=self.runner([self.scene(title='Unrelated')],[self.scene('older',date='2023-09-13'),self.scene('right'),self.scene('short',duration=600),self.scene('wrong',name='Other Person')])
         self.assertEqual(run('file.mp4'),3)
         self.assertEqual(env['db'].queue_suggestions_add.call_args.args[1][0]['source_id'],'right')
-        env['search_scenes_with_all_performers'].assert_called_once_with(['Demi Hawks'])
+        env['search_scenes_with_all_performers'].assert_called_once_with(['Demi Hawks'], saved_ids={})
 
     def test_source_failure_records_incomplete_attempt_without_clearing_saved_results(self):
         run,env=self.runner([],[])
@@ -91,13 +92,13 @@ class FilmographyFallbackTests(unittest.TestCase):
             return [self.scene()]
         env['search_all_databases'].side_effect = search
         self.assertEqual(run('file.mp4'), 1)
-        self.assertEqual(entered, [0])
+        self.assertEqual(entered, [0, 0])
         self.assertEqual(env['db'].queue_suggestion_mark_attempt.call_count, 1)
         env['db'].queue_suggestion_finish_attempt.side_effect = RuntimeError('write failed')
         with self.assertRaises(RuntimeError):
             run('file.mp4')
-        self.assertTrue(suggestion_guard.claim('file.mp4'))
-        suggestion_guard.release('file.mp4')
+        self.assertTrue(suggestion_guard.claim('fixture'))
+        suggestion_guard.release('fixture')
 
     def test_weak_title_hit_does_not_hide_better_filmography_match(self):
         weak = self.scene('weak',duration=600)

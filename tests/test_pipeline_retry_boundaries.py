@@ -38,7 +38,7 @@ class PipelineRetryBoundaries(UnifiedPipelineTests):
         db.save_settings({'api_key_tmdb':'test-key'})
         sig=db.media_file_signature(video)
         env={'Path':Path,'db':db,'PartialDownloadPending':PartialDownloadPending,
-             'json':__import__('json'),'emit':Mock(),'require_complete_queue_video':Mock(),
+             'file_movie':Mock(),'_cleanup_superseded_library_copies':Mock(),'json':__import__('json'),'emit':Mock(),'require_complete_queue_video':Mock(),
              'get_video_duration':Mock(),'compute_phash':Mock(),
              '_queue_resolve_phash_vs_indexed_library':lambda *a,**kw:None,
              'guess_movie_query_from_filename':lambda name:('Movie',None),

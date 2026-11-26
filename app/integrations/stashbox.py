@@ -1,8 +1,5 @@
 import httpx
-import logging
 import database as db
-
-logger = logging.getLogger(__name__)
 
 STASHDB_ENDPOINT = "https://stashdb.org/graphql"
 TPDB_ENDPOINT    = "https://theporndb.net/graphql"
@@ -141,38 +138,6 @@ async def query_stashbox(client: httpx.AsyncClient, phash_hex, endpoint, api_key
     return scenes
 
 async def query_with_fallback(phash_hex, api_keys, emit_cb=None):
-    def report(message):
-        (emit_cb or logger.info)(message)
-    from app.core.fingerprint_selection import select_scene
-    ambiguous = None
-    failures = []
-    configured = 0
-    async with await get_async_client() as client:
-        for key, label, endpoint, query in (
-            ("stashdb", "StashDB", STASHDB_ENDPOINT, STASHDB_QUERY),
-            ("tpdb", "TPDB", TPDB_ENDPOINT, TPDB_QUERY),
-            ("fansdb", "FansDB", FANSDB_ENDPOINT, STASHDB_QUERY),
-            ("javstash", "JAVStash", JAVSTASH_ENDPOINT, JAVSTASH_QUERY),
-        ):
-            api_key = (api_keys.get(key) or "").strip()
-            if not api_key:
-                continue
-            configured += 1
-            try:
-                matches = await query_stashbox(client, phash_hex, endpoint, api_key, query, "scene")
-                if matches:
-                    if select_scene(matches, phash_hex) is not None:
-                        return matches, label
-                    if ambiguous is None:
-                        ambiguous = (matches, label)
-                    report(f"  {label}: ambiguous fingerprints; checking remaining databases")
-            except Exception as exc:
-                failures.append(f"{label}: {exc}")
-                report(f"  WARNING: {label} lookup failed ({exc}); continuing fallback")
-    if ambiguous is not None:
-        return ambiguous
-    if not configured:
-        raise RuntimeError("No fingerprint search databases configured")
-    if failures:
-        raise RuntimeError("Fingerprint search incomplete; retry required. " + "; ".join(failures))
-    return [], "none"
+    """Public transport facade; all matching policy lives in video_matching."""
+    from app.core.video_matching.providers import fingerprints
+    return await fingerprints(phash_hex,api_keys,emit_cb)

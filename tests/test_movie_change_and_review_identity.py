@@ -1,3 +1,4 @@
+from matching_fixtures import load_movie
 import ast
 import asyncio
 import tempfile
@@ -34,7 +35,7 @@ class MovieAndReviewTests(unittest.TestCase):
                     if path.read_bytes()!=signature:raise PartialDownloadPending('changed during hash')
                     return {'phash':phash,'media_signature':signature}
                 with patch('app.core.queue_media.read',side_effect=read), patch('app.core.queue_media.save_match'):
-                    result=load('main.py','_process_movie_file_impl',env)(video.name,src=video.parent)
+                    result=load_movie(env)(video.name,src=video.parent)
                 self.assertEqual(result['status'],'filed' if stage=='stable' else 'deferred')
                 self.assertEqual(file.call_count,1 if stage=='stable' else 0)
                 self.assertEqual(compare.call_count,0 if stage=='hash' else 1)
