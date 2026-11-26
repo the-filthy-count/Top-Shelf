@@ -333,6 +333,9 @@
   function _renderQueueActivity() {
     const panel = document.getElementById('queueActivity');
     if (!panel) return;
+    const sidebarSlot = document.querySelector('.ts-sidebar__activity-slot');
+    if (sidebarSlot && panel.parentNode !== sidebarSlot) sidebarSlot.prepend(panel);
+    panel.hidden = !sidebarSlot;
     const url = queueMode === 'movies' ? '/api/movies/queue' : '/api/queue';
     const read = _queuePayloadReads.get(url);
     const elapsed = read ? Math.floor((Date.now() - read.started) / 1000) : null;
