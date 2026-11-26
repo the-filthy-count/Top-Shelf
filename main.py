@@ -5758,9 +5758,12 @@ def _favourites_name_index(kind: str) -> dict[str, dict]:
         idx[slug] = tagged
 
     try:
-        for r in db.favourite_list():
-            if (r.get("kind") or "").strip().lower() != kind:
-                continue
+        rows = [r for r in db.favourite_list()
+                if (r.get("kind") or "").strip().lower() == kind]
+        # Seed every primary before any aliases, regardless of row order.
+        for r in rows:
+            _add(normalise(r.get("folder_name") or ""), r, "folder_name")
+        for r in rows:
             # 1. Folder name (always highest priority — already handled
             # by the direct-match path in find_*_dir, but included here
             # so exact-slug hits on folder_name still work when the

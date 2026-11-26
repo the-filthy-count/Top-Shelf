@@ -5253,6 +5253,18 @@ def _build_library_match_indexes() -> tuple[list[tuple[str, str]], list[tuple[tu
                 if not isinstance(a, str):
                     continue
                 _push(a, tier=2, alias_safe=True)
+    # A unique library primary name outranks names/aliases on other rows.
+    # Keep duplicate primaries and shared aliases in the index so the
+    # matcher still rejects genuinely ambiguous identities.
+    primary_owners = {}
+    for tokens, _, row_id, tier in perf_idx_raw:
+        if tier == 0:
+            primary_owners.setdefault("".join(tokens), set()).add(row_id)
+    perf_idx_raw = [
+        item for item in perf_idx_raw
+        if len(primary_owners.get("".join(item[0]), set())) != 1
+        or item[2] in primary_owners["".join(item[0])]
+    ]
     studio_idx.sort(key=lambda x: -len(x[0]))
     # Sort precedence (most important first):
     #   1. Token count desc — "emma rosie" (2) tried before "emma" (1)
