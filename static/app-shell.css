@@ -12384,6 +12384,10 @@ body.ts-has-sidebar .app > .table-panel {
   min-width: 0;
   align-self: end;
 }
+.ts-sidebar-notif__label .fa-play { color: #22c55e; }
+.ts-sidebar-notif__label .fa-lock,
+.ts-sidebar-notif__label .fa-pause { color: #f59e0b; }
+
 .ts-sidebar-notif__bar {
   grid-column: 2;
   grid-row: 2;

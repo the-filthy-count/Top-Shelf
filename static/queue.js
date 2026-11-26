@@ -314,10 +314,11 @@
 
   function _queueActivityView(data, loadingSeconds, offline) {
     const running = !!data?.running;
+    const locked = !!data?.locked;
     const total = Math.max(0, Number(data?.pipeline_total) || 0);
     const done = Math.min(total, Math.max(0, Number(data?.pipeline_done) || 0));
     const waits = running ? (data?.provider_waits || []) : [];
-    const title = !running ? '' : offline ? 'Reconnecting' : waits.length ? 'Waiting' : 'Matching';
+    const title = locked ? 'Locked' : !running ? '' : offline ? 'Reconnecting' : waits.length ? 'Locked' : 'Matching';
     const detail = [];
     let folder = '';
     if (running && data.current_file) {
@@ -336,7 +337,7 @@
     if (!panel) return;
     const sidebarSlot = document.querySelector('.ts-sidebar__footer');
     if (sidebarSlot && panel.parentNode !== sidebarSlot) sidebarSlot.prepend(panel);
-    panel.hidden = !sidebarSlot || !_queueActivity?.running;
+    panel.hidden = !sidebarSlot || !(_queueActivity?.running || _queueActivity?.locked);
     const url = queueMode === 'movies' ? '/api/movies/queue' : '/api/queue';
     const read = _queuePayloadReads.get(url);
     const elapsed = read ? Math.floor((Date.now() - read.started) / 1000) : null;
@@ -347,9 +348,10 @@
     folder.title = view.folder;
     document.getElementById('queueActivityCount').textContent = view.count;
     const stateIcon = document.getElementById('queueActivityState');
-    const paused = view.title === 'Waiting' || view.title === 'Reconnecting';
-    stateIcon.className = 'fa-solid fa-' + (paused ? 'pause' : 'play');
-    stateIcon.setAttribute('aria-label', paused ? 'Paused' : 'Running');
+    const locked = view.title === 'Locked';
+    const paused = view.title === 'Reconnecting';
+    stateIcon.className = 'fa-solid fa-' + (locked ? 'lock' : paused ? 'pause' : 'play');
+    stateIcon.setAttribute('aria-label', locked ? 'Locked' : paused ? 'Paused' : 'Running');
     panel.title = view.tooltip;
     const progress = document.getElementById('queueActivityProgress');
     progress.style.width = (view.percent || 0) + '%';

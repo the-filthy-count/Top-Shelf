@@ -288,7 +288,7 @@ def start_processing(conn, file_id):
     return True
 
 
-def finish_processing(conn, file_id, outcome, error):
+def finish_processing(conn, file_id, outcome, error, retry_after=None):
     active = _current_owner()
     if not active or active[0] != file_id:
         return
@@ -296,9 +296,9 @@ def finish_processing(conn, file_id, outcome, error):
     attempts = row[0] if row else 0
     state = 'cancelled' if outcome == 'superseded' else 'completed' if outcome in ('filed','complete','completed') else ('failed' if outcome in ('error','failed') else 'blocked')
     finish(conn,file_id,active[1],state,{'status':outcome},error or (None if state=='completed' else outcome))
-    if row and row[1] == active[1] and (outcome == 'deferred' or (outcome == 'error' and attempts < 3)):
-        delay = 300 if outcome == 'deferred' else min(900,60*max(1,attempts)**2)
-        next_attempts = max(0,attempts-1) if outcome == 'deferred' else attempts
+    if row and row[1] == active[1] and (outcome in ('deferred','rate_limited') or (outcome == 'error' and attempts < 3)):
+        delay = max(1,float(retry_after or 300)) if outcome in ('deferred','rate_limited') else min(900,60*max(1,attempts)**2)
+        next_attempts = max(0,attempts-1) if outcome in ('deferred','rate_limited') else attempts
         revision = request(conn,file_id,'process',json.loads(row[2]))
         conn.execute('UPDATE queue_changes SET attempts=?,available_at=? WHERE file_id=? AND revision=?',
                      (next_attempts,time.time()+delay,file_id,revision))

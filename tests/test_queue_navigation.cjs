@@ -92,7 +92,7 @@ test('matching shows its phase, current file and real completed count', () => {
 test('provider waits are explicit and stale waits do not make idle work look active', () => {
   const data = {running:true,provider_waits:[{provider:'stashdb.org',seconds:42}]};
   assert.match(activity(data).tooltip, /stashdb.org: retry in 42s/);
-  assert.equal(activity(data).title, 'Waiting');
+  assert.equal(activity(data).title, 'Locked');
   assert.equal(activity({...data,running:false}).title, '');
   assert.equal(activity(data,null,true).title, 'Reconnecting');
 });

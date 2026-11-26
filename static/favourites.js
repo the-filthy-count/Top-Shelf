@@ -1192,22 +1192,25 @@
   }
 
   function offerWatchlistSearch(anchor, query) {
-    const id = anchor.id + '-watchlist-prompt';
-    document.getElementById(id)?.remove();
-    const name = String(query || '').trim();
-    if (!name || !document.getElementById('performerWatchlist')) return;
-    const prompt = document.createElement('div');
-    prompt.id = id;
-    prompt.className = 'watch-search-prompt';
-    const label = document.createElement('span');
-    label.textContent = 'Can’t find the performer?';
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.title = 'Add “' + name + '” to Watchlist';
-    button.innerHTML = '<i class="fa-solid fa-circle-plus" aria-hidden="true"></i> Add to Watchlist';
-    button.onclick = () => window.PerformerWatchlist.openAdd(name);
-    prompt.append(label, button);
-    anchor.before(prompt);
+    // Append after this render has replaced the grid, including empty results.
+    const token = {};
+    anchor._watchlistOffer = token;
+    queueMicrotask(() => {
+      if (!anchor.isConnected || anchor._watchlistOffer !== token) return;
+      const id = anchor.id + '-watchlist-prompt';
+      document.getElementById(id)?.remove();
+      const name = String(query || '').trim();
+      if (!name || !document.getElementById('performerWatchlist')) return;
+      const tile = document.createElement('button');
+      tile.id = id;
+      tile.type = 'button';
+      tile.className = 'fav-cell watch-search-prompt';
+      tile.title = 'Add “' + name + '” to Watchlist';
+      tile.setAttribute('aria-label', tile.title);
+      tile.innerHTML = '<span class="fav-perf-ph watch-search-art"><img src="/static/img/profile.webp" alt="" loading="lazy"><i class="fa-solid fa-circle-plus" aria-hidden="true"></i></span><span class="fav-cell-title">Can’t find them?</span>';
+      tile.onclick = () => window.PerformerWatchlist.openAdd(name);
+      anchor.appendChild(tile);
+    });
   }
 
   function renderSearchResultsList() {

@@ -354,6 +354,7 @@ def _manual_action_snapshot() -> dict:
         return {
             "current":         cur_label,
             "current_display": cur_display,
+            "locked": bool(cur_label and processing_state.get("task_owner") == "automatic"),
             "pending":         [lbl for lbl, _ in _manual_action_pending],
             "pending_display": [disp for _, disp in _manual_action_pending],
             "count":           remaining,
@@ -8735,6 +8736,8 @@ def _matching_pipeline():
             "resolve_import_vice_dir": _resolve_import_vice_dir,
             "process_movie": _process_movie_file_impl,
             "job_context": _matching_job_context,
+            "manual_pending": lambda: threading.current_thread().name != "manual-action-worker" and bool(_manual_action_snapshot()["count"]),
+            "single_job": lambda: threading.current_thread().name == "manual-action-worker",
         })
 
 
@@ -18431,7 +18434,10 @@ async def get_version():
 async def get_status():
     from app.integrations.fingerprint_cooldown import active_waits
     snap = _manual_action_snapshot()
+    with db.get_conn() as conn:
+        locked = conn.execute("SELECT COUNT(*) FROM processing_jobs WHERE state='pending' AND phase='Provider locked' AND available_at>?", (time.time(),)).fetchone()[0]
     return {
+        "locked": bool(locked) and not processing_state["running"],
         "running": processing_state["running"],
         "current_file": processing_state["current_file"],
         "pipeline_phase": processing_state.get("pipeline_phase") or ("Preparing files" if not processing_state.get("pipeline_total") else "Matching"),
@@ -18651,6 +18657,7 @@ async def api_activity_banner():
         "peak":            mq_snap["peak"],
         "current":         mq_snap["current"],
         "current_display": mq_snap["current_display"],
+        "locked":          mq_snap.get("locked", False),
         "remaining":       mq_snap["count"],
     }
     return {

@@ -1,4 +1,6 @@
 """Process-wide fingerprint endpoint cooldown shared by sync and async lookups."""
+from contextvars import ContextVar
+from contextlib import contextmanager
 import asyncio
 import logging
 import math
@@ -14,7 +16,30 @@ _logger = logging.getLogger(__name__)
 
 
 class RateLimited(RuntimeError):
-    pass
+    def __init__(self, message, retry_after=300):
+        super().__init__(message)
+        self.retry_after = max(1, float(retry_after))
+
+_defer = ContextVar('defer_provider_wait', default=False)
+_waits = ContextVar('provider_waits_for_job', default=None)
+
+def deferred_retry():
+    return max((remaining(endpoint) for endpoint in (_waits.get() or [])), default=0)
+
+def _record_wait(endpoint):
+    waits = _waits.get()
+    if waits is not None:
+        waits.append(endpoint)
+
+@contextmanager
+def defer_waits():
+    token = _defer.set(True)
+    wait_token = _waits.set([])
+    try:
+        yield
+    finally:
+        _defer.reset(token)
+        _waits.reset(wait_token)
 
 
 def remaining(endpoint):
@@ -35,6 +60,9 @@ def send(endpoint, request):
     """Keep this lookup in place until the service accepts the request."""
     while True:
         delay = remaining(endpoint)
+        if delay > 0 and _defer.get():
+            _record_wait(endpoint)
+            raise RateLimited('Provider cooling down', delay)
         if delay > 0:
             time.sleep(min(delay, 30))
             continue
@@ -46,6 +74,9 @@ def send(endpoint, request):
         try:
             rate_limited(endpoint, retry_after)
         except RateLimited as exc:
+            if _defer.get():
+                _record_wait(endpoint)
+                raise
             _logger.warning("%s: %s; pausing this lookup", _key(endpoint), exc)
 
 
@@ -53,6 +84,9 @@ async def send_async(endpoint, request):
     """Cancellable wait that leaves the event loop free for the interface."""
     while True:
         delay = remaining(endpoint)
+        if delay > 0 and _defer.get():
+            _record_wait(endpoint)
+            raise RateLimited('Provider cooling down', delay)
         if delay > 0:
             await asyncio.sleep(min(delay, 30))
             continue
@@ -64,6 +98,9 @@ async def send_async(endpoint, request):
         try:
             rate_limited(endpoint, retry_after)
         except RateLimited as exc:
+            if _defer.get():
+                _record_wait(endpoint)
+                raise
             _logger.warning("%s: %s; pausing this lookup", _key(endpoint), exc)
 
 
@@ -96,4 +133,4 @@ def rate_limited(endpoint, retry_after=None):
     with _lock:
         key = _key(endpoint)
         _until[key] = max(_until.get(key, 0), time.monotonic() + delay)
-    raise RateLimited(f"HTTP 429: fingerprint service rate-limited; retry in {math.ceil(delay)} seconds")
+    raise RateLimited(f"HTTP 429: fingerprint service rate-limited; retry in {math.ceil(delay)} seconds", remaining(endpoint))

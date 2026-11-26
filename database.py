@@ -8033,12 +8033,12 @@ def processing_job_checkpoint(file_id: str, phase: str):
         conn.commit()
 
 
-def processing_job_finish(file_id: str, outcome: str, error=None):
+def processing_job_finish(file_id: str, outcome: str, error=None, retry_after=None):
     from app.core.jobs import finish
     with get_conn() as conn:
-        finish(conn, file_id, outcome, error)
+        finish(conn, file_id, outcome, error, retry_after=retry_after)
         from app.core.queue_changes import finish_processing
-        finish_processing(conn,file_id,outcome,error)
+        finish_processing(conn,file_id,outcome,error,retry_after=retry_after)
         conn.commit()
 
 

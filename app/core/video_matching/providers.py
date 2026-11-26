@@ -10,6 +10,7 @@ class Lookup:
     source: str
     rows: list
     error: str = ''
+    retry_after: float = 0
 
 
 async def fingerprints(phash, keys, emit=None, journal=None):
@@ -44,7 +45,7 @@ async def fingerprints(phash, keys, emit=None, journal=None):
                     journal.write(stage,inputs,error=exc)
                 if emit:
                     emit(f'  {label}: lookup unavailable; retry required')
-                return Lookup(label,[],str(exc))
+                return Lookup(label,[],str(exc),getattr(exc,'retry_after',0))
         # A rate-limited provider cannot prevent the other providers' responses
         # from being obtained and saved. Failed providers alone are repeated.
         tasks = [asyncio.create_task(lookup(spec)) for spec in configured]
@@ -70,6 +71,10 @@ async def fingerprints(phash, keys, emit=None, journal=None):
     if review:
         return review
     if failures:
+        delays = [r.retry_after for r in results if r.retry_after]
+        if delays:
+            from app.integrations.fingerprint_cooldown import RateLimited
+            raise RateLimited('; '.join(failures), max(delays))
         raise RuntimeError('Fingerprint search incomplete; retry required. '+'; '.join(failures))
     return [],'none'
 

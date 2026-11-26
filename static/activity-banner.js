@@ -434,8 +434,8 @@
     var state = opts.indeterminate ? "indeterminate" : (opts.state || "loading");
     var pct = Math.max(0, Math.min(100, Number(opts.pct) || 0));
     var label = esc(opts.label || "");
-    if (opts.taskState === 'running' || opts.taskState === 'paused') {
-      label = '<i class="fa-solid fa-' + (opts.taskState === 'paused' ? 'pause' : 'play') + '" aria-label="' + (opts.taskState === 'paused' ? 'Queued or paused' : 'Running') + '"></i> ' + label;
+    if (['running','paused','locked'].includes(opts.taskState)) {
+      label = '<i class="fa-solid fa-' + (opts.taskState === 'locked' ? 'lock' : opts.taskState === 'paused' ? 'pause' : 'play') + '" aria-label="' + (opts.taskState === 'locked' ? 'Locked' : opts.taskState === 'paused' ? 'Queued or paused' : 'Running') + '"></i> ' + label;
     }
     var icon = opts.iconHtml || "";
     var section = opts.section || ({pipeline:'queue',sort_queue:'queue',library_index:'health',
@@ -556,7 +556,7 @@
       var mqLabel = mqDisplay || "Sort";
       _emit("sort_queue", {
         slot: "sort_queue",
-        taskState: mq.current ? "running" : "paused",
+        taskState: mq.locked ? "locked" : mq.current ? "running" : data.running ? "locked" : "paused",
         label: mqLabel,
         // The count IS the icon — square badge that shrinks each
         // time an item finishes and clears the queue.

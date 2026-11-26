@@ -53,15 +53,15 @@ def checkpoint(conn, file_id, phase):
         WHERE file_id=? AND state='running' ''', (phase, time.time(), file_id))
 
 
-def finish(conn, file_id, outcome, error=None):
+def finish(conn, file_id, outcome, error=None, retry_after=None):
     row = conn.execute("SELECT attempts FROM processing_jobs WHERE file_id=? AND state='running'", (file_id,)).fetchone()
     if not row:
         return
     attempts = row[0]
-    deferred = outcome == 'deferred'
+    deferred = outcome in ('deferred','rate_limited')
     retry = deferred or (outcome == 'error' and attempts < MAX_ATTEMPTS)
     if deferred:
-        state, phase, delay = 'pending', 'Waiting for download', 300
+        state, phase, delay = 'pending', ('Provider locked' if outcome == 'rate_limited' else 'Waiting for download'), max(1,float(retry_after or 300))
         attempts = max(0, attempts - 1)
     elif retry:
         state, phase, delay = 'pending', 'Retry scheduled', min(900, 60 * max(1, attempts) ** 2)

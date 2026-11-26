@@ -5,6 +5,7 @@ import database as db
 from download_safety import require_complete_queue_video, PartialDownloadPending, VIDEO_EXTENSIONS
 from app.core.phash import compute_phash, get_video_duration
 from app.core.queue_changes import SupersededWork
+from app.integrations.fingerprint_cooldown import RateLimited, defer_waits, deferred_retry
 
 
 import json
@@ -38,6 +39,8 @@ class ProcessingPipeline:
         if not self.job_id:
             return {"status": "busy"}
         adopt_processing(self.job_id)
+        provider_scope = defer_waits()
+        provider_scope.__enter__()
         result = {"status": "error", "error": "Worker interrupted before completion"}
         try:
             settings = await asyncio.to_thread(db.get_settings)
@@ -87,21 +90,28 @@ class ProcessingPipeline:
                         result = {"status": row[0] if row else "error", "error": row[1] if row else "Movie record disappeared"}
                 else:
                     result = await self.process_single(video)
+        except RateLimited as exc:
+            result = {'status':'rate_limited', 'error':str(exc), 'retry_after':exc.retry_after}
         except SupersededWork as exc:
             result = {"status": "superseded", "error": str(exc)}
         except PartialDownloadPending as exc:
             self.emit(f"  Deferred: {exc}")
             result = {"status": "deferred", "error": str(exc)}
         except Exception as exc:
-            self.emit(f"  File failed: {filename}: {exc}")
-            update = db.update_movie if table == "processed_movies" else db.update_file
-            await asyncio.to_thread(update, filename, status="error", error=str(exc))
-            result = {"status": "error", "error": str(exc)}
+            retry_after = deferred_retry()
+            if retry_after:
+                result = {'status':'rate_limited','error':str(exc),'retry_after':retry_after}
+            else:
+                self.emit(f"  File failed: {filename}: {exc}")
+                update = db.update_movie if table == "processed_movies" else db.update_file
+                await asyncio.to_thread(update, filename, status="error", error=str(exc))
+                result = {"status": "error", "error": str(exc)}
         finally:
             try:
                 await asyncio.to_thread(db.processing_job_finish, self.job_id,
-                    result.get("status", "error"), result.get("error"))
+                    result.get("status", "error"), result.get("error"), retry_after=result.get("retry_after"))
             finally:
+                provider_scope.__exit__(None, None, None)
                 release_processing()
                 self.job_id = None
         return result
@@ -130,27 +140,40 @@ class ProcessingPipeline:
                 db.processing_job_enqueue(filename)
 
         await asyncio.to_thread(register_work)
-        while not self.lock.acquire(blocking=False):
-            await asyncio.sleep(.25)
         outcomes = {}
         results = {}
         try:
-            self.state.update(running=True, pipeline_total=0, pipeline_done=0, log=[])
+            completed = 0
             self.emit("PIPELINE START")
             while True:
                 ready = await asyncio.to_thread(db.processing_work_ready)
                 if not ready:
                     break
-                self.state["pipeline_total"] = self.state["pipeline_done"] + ready[0]["ready_count"]
+                # Give queued manual effects priority before acquiring the file lock.
+                while self.callbacks.get('manual_pending', lambda: False)():
+                    await asyncio.sleep(.1)
+                while not self.lock.acquire(blocking=False):
+                    await asyncio.sleep(.1)
+                if self.callbacks.get('manual_pending', lambda: False)():
+                    self.lock.release()
+                    continue
+                try:
+                    self.state.update(running=True, task_owner='automatic', pipeline_done=completed,
+                        pipeline_total=completed + ready[0]['ready_count'])
+                    result = await self.run_job(ready[0])
+                finally:
+                    self.state.update(running=False, task_owner=None, current_file=None, pipeline_phase=None)
+                    self.lock.release()
                 # Refresh after every job: a rename, new manual action, or
                 # newly registered download must take effect immediately.
-                result = await self.run_job(ready[0])
                 results[ready[0]["file_id"]] = result.get("video_result") or result
                 status = result.get("status", "error")
                 outcomes[status] = outcomes.get(status, 0) + 1
-                self.state["pipeline_done"] += 1
+                completed += 1
                 self.emit("---")
                 self.flush_emit_buffer()
+                if self.callbacks.get('single_job', lambda: False)():
+                    break
             self.emit("PIPELINE COMPLETE")
             if outcomes:
                 summary = " · ".join(f"{n} {('waiting for download' if s == 'deferred' else s)}" for s,n in outcomes.items())
@@ -158,5 +181,3 @@ class ProcessingPipeline:
             return results
         finally:
             self.flush_emit_buffer()
-            self.state.update(pipeline_phase=None, running=False, current_file=None, pipeline_total=0, pipeline_done=0)
-            self.lock.release()

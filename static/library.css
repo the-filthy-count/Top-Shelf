@@ -2945,14 +2945,11 @@ body .app .fav-stage {
 #favAlphaBar[popover] .fav-alpha-btn--all { grid-column: 1 / -1; }
 
 .watch-search-prompt {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 10px 0;
-  font-size: var(--text-small, 12px);
+  display: flex; flex-direction: column; padding: 0; margin: 0;
+  width: 100%; min-width: 0; overflow: hidden; cursor: pointer;
+  color: var(--text); font-family: inherit; text-align: center;
 }
-.watch-search-prompt > span { opacity: .7; }
-.watch-search-prompt button { padding: 8px 12px; }
-.watch-search-prompt button i { margin-right: 6px; }
+.watch-search-art { position: relative; width: 100%; }
+.watch-search-art img { opacity: .35; }
+.watch-search-art > i { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 42px; color: var(--accent); }
+.watch-search-prompt .fav-cell-title { display: block; width: 100%; }
