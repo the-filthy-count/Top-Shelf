@@ -319,13 +319,16 @@
     const waits = running ? (data?.provider_waits || []) : [];
     const title = !running ? '' : offline ? 'Reconnecting' : waits.length ? 'Waiting' : 'Matching';
     const detail = [];
+    let folder = '';
     if (running && data.current_file) {
       const parts = String(data.current_file).replace(/\\/g, '/').split('/').filter(Boolean);
-      detail.push(parts.length > 1 ? parts[parts.length - 2] : 'Unsorted');
+      folder = parts.length > 1 ? parts[parts.length - 2] : 'Unsorted';
+      detail.push(folder);
     }
-    if (running && total) detail.push(done + ' of ' + total);
+    const count = running && total ? done + ' of ' + total : '';
+    if (count) detail.push(count);
     const tooltip = waits.map(wait => wait.provider + ': retry in ' + wait.seconds + 's').join(' · ');
-    return {title, detail: detail.join(' · '), tooltip, percent: running && total ? done / total * 100 : null};
+    return {title, folder, count, detail: detail.join(' · '), tooltip, percent: running && total ? done / total * 100 : null};
   }
 
   function _renderQueueActivity() {
@@ -339,7 +342,10 @@
     const elapsed = read ? Math.floor((Date.now() - read.started) / 1000) : null;
     const view = _queueActivityView(_queueActivity, elapsed, _queueActivityError);
     document.getElementById('queueActivityTitle').textContent = view.title;
-    document.getElementById('queueActivityDetail').textContent = view.detail;
+    const folder = document.getElementById('queueActivityDetail');
+    folder.textContent = view.folder;
+    folder.title = view.folder;
+    document.getElementById('queueActivityCount').textContent = view.count;
     panel.title = view.tooltip;
     const progress = document.getElementById('queueActivityProgress');
     progress.style.width = (view.percent || 0) + '%';

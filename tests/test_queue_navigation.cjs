@@ -97,7 +97,7 @@ test('provider waits are explicit and stale waits do not make idle work look act
   assert.equal(activity(data,null,true).title, 'Reconnecting');
 });
 test('inactive queue reads cannot replace the active queue loading status', () => {
-  const nodes = Object.fromEntries(['queueActivity','queueActivityTitle','queueActivityDetail','queueActivityProgress','queueActivityHeader'].map(id=>[id,{style:{},dataset:{}}]));
+  const nodes = Object.fromEntries(['queueActivity','queueActivityTitle','queueActivityDetail','queueActivityCount','queueActivityProgress','queueActivityHeader'].map(id=>[id,{style:{},dataset:{}}]));
   const ctx={document:{getElementById:id=>nodes[id],querySelector:()=>null},queueMode:'scenes',_queuePayloadReads:new Map([['/api/movies/queue',{started:0}]]),_queueActivity:{running:false},_queueActivityError:false};
   vm.createContext(ctx);
   vm.runInContext(extract('_queueActivityView')+'\n'+extract('_renderQueueActivity'),ctx);

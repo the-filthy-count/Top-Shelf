@@ -3729,7 +3729,9 @@
   .queue-activity { box-sizing: border-box; flex: 0 0 auto; width: calc(100% + 16px); margin: 0 -8px 6px; padding: 10px; min-width: 0; font-size: 11px; line-height: 1.5; border: 1px solid var(--border); border-radius: 0; border-left: 0; border-right: 0; background: rgba(0,0,0,.2); }
   .queue-activity .ts-sidebar-notif { padding: 0 0 10px; border-bottom: 1px solid var(--border); border-radius: 0; }
   .queue-activity .ts-sidebar-notif__label { white-space: normal; overflow-wrap: anywhere; }
-  .queue-activity p { margin: 10px 0 0; overflow-wrap: anywhere; color: var(--dim); }
+  .queue-activity p { margin: 10px 0 0; color: var(--dim); }
+  #queueActivityDetail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #queueActivityCount { margin-top: 3px; white-space: nowrap; }
   .ts-sidebar:has(#queueActivity) #tsActivityBanner [data-slot="pipeline"] { display: none; }
 </style>
 <link rel="stylesheet" href="/static/mobile.css?v=20260930-desktop-scale">
@@ -3840,7 +3842,8 @@
             <div id="queueActivityTitle" class="ts-sidebar-notif__label" role="status">Connecting to matching service…</div>
             <div class="ts-sidebar-notif__bar"><span class="ts-sidebar-notif__bar-track" aria-hidden="true"></span><span id="queueActivityProgress" class="ts-sidebar-notif__bar-fill" aria-hidden="true"></span></div>
           </div>
-          <p id="queueActivityDetail">Loading queue snapshot…</p>
+          <p id="queueActivityDetail"></p>
+          <p id="queueActivityCount"></p>
         </section>
         <section id="queueChanges" hidden style="padding:16px;overflow:auto">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><strong>File changes</strong>
@@ -4322,7 +4325,7 @@
 <link rel="stylesheet" href="/static/queue-history.css?v=20261103">
 <script defer src="/static/queue-history.js?v=20261103"></script>
 <script defer src="/static/queue-changes.js?v=1"></script>
-<script defer src="/static/queue.js?v=20261126-sidebar-minimal"></script>
+<script defer src="/static/queue.js?v=20261126-sidebar-lines"></script>
 
 <!-- Queue duplicates modal — same phash grouping / keeper rules as Library Health. -->
 <style>
