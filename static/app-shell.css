@@ -12234,7 +12234,7 @@ body.ts-has-sidebar .app > .table-panel {
  * notification icons vertically, bottom-up (newest at the bottom, next
  * to the version pill) via column-reverse. */
 .ts-sidebar__activity-slot {
-  padding: 12px 12px 8px;
+  padding: 12px 2px 8px;
   /* Fills every pixel between Logout and the version pill (natural
    * column footer, slot has flex:1, version has flex:0). Cards render
    * top-down inside; scrolls internally if the stack ever exceeds the

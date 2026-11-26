@@ -18,7 +18,7 @@
      <wa-*> elements, and the bundled localize.js / chunk module
      ships a self-referencing import cycle that throws on load. -->
 <script src="/static/theme-init.js?v=20260614c"></script>
-<link rel="stylesheet" href="/static/app-shell.css?v=20261126-alert-icons">
+<link rel="stylesheet" href="/static/app-shell.css?v=20261126-task-width">
 <script src="/static/ts-utils.js?v=20261014-navigation-2"></script>
 <script src="/static/lib-entity-actions.js?v=20261103-library-recovery"></script>
 <script src="/static/popup-loader.js?v=20261014-primary-search-name"></script>
@@ -3839,7 +3839,7 @@
         <section id="queueActivity" class="queue-activity" hidden aria-label="Queue activity">
           <div id="queueActivityHeader" style="--bar-color:#f59e0b;--bar-glow:rgba(245,158,11,.35)" class="ts-sidebar-notif" data-state="indeterminate">
             <div class="ts-sidebar-notif__icon"><span class="ts-sidebar-notif__symbol"><i class="ts-nav-icon ts-nav-icon--queue" style="background-color:currentColor" aria-hidden="true"></i></span></div>
-            <div id="queueActivityTitle" class="ts-sidebar-notif__label" role="status">Connecting to matching service…</div>
+            <div class="ts-sidebar-notif__label" role="status"><i id="queueActivityState" class="fa-solid fa-play" aria-label="Running"></i> <span id="queueActivityTitle"></span></div>
             <div class="ts-sidebar-notif__bar"><span class="ts-sidebar-notif__bar-track" aria-hidden="true"></span><span id="queueActivityProgress" class="ts-sidebar-notif__bar-fill" aria-hidden="true"></span></div>
           </div>
           <p id="queueActivityDetail"></p>
@@ -4325,7 +4325,7 @@
 <link rel="stylesheet" href="/static/queue-history.css?v=20261103">
 <script defer src="/static/queue-history.js?v=20261103"></script>
 <script defer src="/static/queue-changes.js?v=1"></script>
-<script defer src="/static/queue.js?v=20261126-sidebar-lines"></script>
+<script defer src="/static/queue.js?v=20261126-sidebar-task-state"></script>
 
 <!-- Queue duplicates modal — same phash grouping / keeper rules as Library Health. -->
 <style>
@@ -4391,7 +4391,7 @@
   </div>
 </div>
 
-<script defer src="/static/activity-banner.js?v=20261126-menu-alerts"></script>
+<script defer src="/static/activity-banner.js?v=20261126-task-state"></script>
 <script defer src="/static/app-shell.js?v=20261014-navigation-2"></script>
 
 

@@ -346,6 +346,10 @@
     folder.textContent = view.folder;
     folder.title = view.folder;
     document.getElementById('queueActivityCount').textContent = view.count;
+    const stateIcon = document.getElementById('queueActivityState');
+    const paused = view.title === 'Waiting' || view.title === 'Reconnecting';
+    stateIcon.className = 'fa-solid fa-' + (paused ? 'pause' : 'play');
+    stateIcon.setAttribute('aria-label', paused ? 'Paused' : 'Running');
     panel.title = view.tooltip;
     const progress = document.getElementById('queueActivityProgress');
     progress.style.width = (view.percent || 0) + '%';

@@ -434,6 +434,9 @@
     var state = opts.indeterminate ? "indeterminate" : (opts.state || "loading");
     var pct = Math.max(0, Math.min(100, Number(opts.pct) || 0));
     var label = esc(opts.label || "");
+    if (opts.taskState === 'running' || opts.taskState === 'paused') {
+      label = '<i class="fa-solid fa-' + (opts.taskState === 'paused' ? 'pause' : 'play') + '" aria-label="' + (opts.taskState === 'paused' ? 'Queued or paused' : 'Running') + '"></i> ' + label;
+    }
     var icon = opts.iconHtml || "";
     var section = opts.section || ({pipeline:'queue',sort_queue:'queue',library_index:'health',
       phash3:'health',health_scan:'health',favourites:'stars',favourites_sync:'stars',download:'downloads'})[opts.slot];
@@ -486,6 +489,7 @@
       // Just completed — clone the last-seen opts as a filled-green card.
       var doneOpts = Object.assign({}, s.opts || {}, {
         pct: 100,
+        taskState: "complete",
         indeterminate: false,
         dismissSlot: slot,
         state: "loading",  // keep the loading (green) colour scheme
@@ -517,6 +521,7 @@
     var cards = [];
 
     function _emit(slot, opts) {
+      opts.taskState = opts.taskState || 'running';
       _sidebarNoteRunning(slot, opts);
       cards.push(_sidebarNotifCardHtml(opts));
     }
@@ -551,6 +556,7 @@
       var mqLabel = mqDisplay || "Sort";
       _emit("sort_queue", {
         slot: "sort_queue",
+        taskState: mq.current ? "running" : "paused",
         label: mqLabel,
         // The count IS the icon — square badge that shrinks each
         // time an item finishes and clears the queue.
@@ -622,7 +628,7 @@
     var sync = (data && data.favourites_sync) || {};
     if (sync.running) {
       cards.push(_sidebarNotifCardHtml({
-        slot: "favourites_sync", label: "Favourites sync",
+        slot: "favourites_sync", taskState: "running", label: "Favourites sync",
         iconHtml: '<i class="fa-solid fa-arrows-rotate"></i>',
         indeterminate: true,
         tooltip: "Syncing " + (sync.source || "databases") + " · " + (sync.done || 0) + " / " + (sync.total || 0) + " databases complete",
@@ -646,6 +652,7 @@
           : '<i class="fa-solid fa-download"></i>';
         cards.push(_sidebarNotifCardHtml({
           slot: "download",
+          taskState: "running",
           label: String(it.label || "Download") || "Download",
           iconHtml: icon,
           pct: itPct,
