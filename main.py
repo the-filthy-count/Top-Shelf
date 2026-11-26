@@ -18452,6 +18452,7 @@ async def get_version():
 
 @app.get("/api/status")
 async def get_status():
+    from app.integrations.fingerprint_cooldown import active_waits
     snap = _manual_action_snapshot()
     return {
         "running": processing_state["running"],
@@ -18459,6 +18460,7 @@ async def get_status():
         "pipeline_phase": processing_state.get("pipeline_phase") or ("Preparing files" if not processing_state.get("pipeline_total") else "Matching"),
         "pipeline_total": int(processing_state.get("pipeline_total") or 0),
         "pipeline_done": int(processing_state.get("pipeline_done") or 0),
+        "provider_waits": active_waits(),
         "manual_queue_pending": len(snap["pending"]),
         "manual_queue_current": snap["current"],
         "version": VERSION,

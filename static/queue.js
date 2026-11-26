@@ -309,6 +309,41 @@
   /** Bumped on `pagehide` so async queue work skips DOM writes after navigate away. */
   const _queuePayloadReads = new Map();
 
+  let _queueActivity = null;
+  let _queueActivityError = false;
+
+  function _queueActivityView(data, loadingSeconds, offline) {
+    const running = !!data?.running;
+    const total = Math.max(0, Number(data?.pipeline_total) || 0);
+    const done = Math.min(total, Math.max(0, Number(data?.pipeline_done) || 0));
+    const waits = running ? (data?.provider_waits || []) : [];
+    const title = offline ? 'Status unavailable — reconnecting…' : running
+      ? (waits.length ? 'Waiting for search services' : (data.pipeline_phase || 'Preparing matching'))
+      : data ? 'Matching idle' : 'Connecting to matching service…';
+    const detail = [];
+    if (running && data.current_file) detail.push(data.current_file);
+    if (running && total) detail.push(done + ' / ' + total + ' files processed');
+    if (!running && data && !offline) detail.push('Use ▶ to start matching.');
+    for (const wait of waits) detail.push(wait.provider + ': retry in ' + wait.seconds + 's');
+    if (loadingSeconds !== null) detail.push('Loading queue snapshot · ' + loadingSeconds + 's' +
+      (loadingSeconds >= 30 ? ' · Still waiting for the server; matching status is shown separately.' : ''));
+    return {title, detail: detail.join(' · '), percent: running && total ? done / total * 100 : null};
+  }
+
+  function _renderQueueActivity() {
+    const panel = document.getElementById('queueActivity');
+    if (!panel) return;
+    const url = queueMode === 'movies' ? '/api/movies/queue' : '/api/queue';
+    const read = _queuePayloadReads.get(url);
+    const elapsed = read ? Math.floor((Date.now() - read.started) / 1000) : null;
+    const view = _queueActivityView(_queueActivity, elapsed, _queueActivityError);
+    document.getElementById('queueActivityTitle').textContent = view.title;
+    document.getElementById('queueActivityDetail').textContent = view.detail;
+    const progress = document.getElementById('queueActivityProgress');
+    progress.hidden = view.percent === null;
+    progress.value = view.percent || 0;
+  }
+
   function _cancelQueuePayloadReads() {
     for (const read of _queuePayloadReads.values()) read.controller.abort();
     _queuePayloadReads.clear();
@@ -319,7 +354,7 @@
     if (existing) return existing.promise;
     const controller = new AbortController();
     let timeout;
-    const read = { controller };
+    const read = { controller, started: Date.now() };
     read.promise = (async () => {
       try {
         for (;;) {
@@ -335,14 +370,17 @@
             if (!Array.isArray(payload.files)) throw new Error('Invalid queue response');
             return payload;
           }
+          _renderQueueActivity();
           await new Promise(resolve => setTimeout(resolve, 500));
         }
       } finally {
         clearTimeout(timeout);
         if (_queuePayloadReads.get(url) === read) _queuePayloadReads.delete(url);
+        _renderQueueActivity();
       }
     })();
     _queuePayloadReads.set(url, read);
+    _renderQueueActivity();
     return read.promise;
   }
 
@@ -539,7 +577,12 @@
     try {
       const r = await fetch('/api/status', ctrl ? { signal: ctrl.signal } : undefined);
       if (mountGen !== _queueLoadGen) return;
+      if (!r.ok) throw new Error('Status request failed: ' + r.status);
       const d = await r.json();
+      if (mountGen !== _queueLoadGen) return;
+      _queueActivity = d;
+      _queueActivityError = false;
+      _renderQueueActivity();
       if (!_appVersionWritten && d && d.version) {
         const verEl = document.getElementById('appVersion');
         if (verEl) verEl.textContent = 'v' + d.version;
@@ -577,6 +620,10 @@
         _qIsRunning = false;
       }
     } catch (e) {
+      if (mountGen === _queueLoadGen) {
+        _queueActivityError = true;
+        _renderQueueActivity();
+      }
       // AbortError fires on intentional teardown — silently ignore. Other
       // errors usually mean a transient network blip; the next 5 s tick
       // will re-try, so don't toast on every poll failure.

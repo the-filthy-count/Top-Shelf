@@ -22,6 +22,15 @@ def remaining(endpoint):
         return max(0, _until.get(_key(endpoint), 0) - time.monotonic())
 
 
+def active_waits():
+    """Public host names and remaining seconds only; never expose credentials."""
+    with _lock:
+        now = time.monotonic()
+        return [{"provider": urlsplit("//" + host).hostname or "Search service",
+                 "seconds": math.ceil(until - now)}
+                for host, until in _until.items() if until > now]
+
+
 def send(endpoint, request):
     """Keep this lookup in place until the service accepts the request."""
     while True:

@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../static/queue.js'), 'utf8');
 const extract = name => source.match(new RegExp('  (?:async )?function '+name+'\\([^]*?\\n  }'))[0];
 function setup(fetch) {
-  const ctx = {fetch, AbortController, setTimeout, clearTimeout, _queuePayloadReads:new Map()};
+  const ctx = {_renderQueueActivity(){}, fetch, AbortController, setTimeout, clearTimeout, _queuePayloadReads:new Map()};
   vm.createContext(ctx);
   vm.runInContext(['_readQueuePayload','_cancelQueuePayloadReads'].map(extract).join('\n'),ctx);
   return ctx;
@@ -68,4 +68,39 @@ test('successful loading polls renew the request deadline instead of timing out 
   assert.deepEqual((await ctx._readQueuePayload('/api/queue')).files,['ready']);
   assert.equal(calls,5);
   assert.equal(timers.size,0);
+});
+
+function activity(data, elapsed = null, offline = false) {
+  const ctx = {}; vm.createContext(ctx);
+  vm.runInContext(extract('_queueActivityView'), ctx);
+  return ctx._queueActivityView(data, elapsed, offline);
+}
+test('queue loading is separate from idle matching, with a long wait explanation', () => {
+  const view = activity({running:false}, 45);
+  assert.equal(view.title, 'Matching idle');
+  assert.match(view.detail, /Loading queue snapshot · 45s/);
+  assert.match(view.detail, /Still waiting for the server/);
+  assert.equal(view.percent, null);
+});
+test('matching shows its phase, current file and real completed count', () => {
+  const view = activity({running:true,pipeline_phase:'Searching fingerprints',current_file:'example.mp4',pipeline_done:2,pipeline_total:8});
+  assert.equal(view.title, 'Searching fingerprints');
+  assert.match(view.detail, /example.mp4/);
+  assert.match(view.detail, /2 \/ 8 files processed/);
+  assert.equal(view.percent, 25);
+});
+test('provider waits are explicit and stale waits do not make idle work look active', () => {
+  const data = {running:true,provider_waits:[{provider:'stashdb.org',seconds:42}]};
+  assert.match(activity(data).detail, /stashdb.org: retry in 42s/);
+  assert.equal(activity(data).title, 'Waiting for search services');
+  assert.equal(activity({...data,running:false}).title, 'Matching idle');
+  assert.equal(activity(data,null,true).title, 'Status unavailable — reconnecting…');
+});
+test('inactive queue reads cannot replace the active queue loading status', () => {
+  const nodes = Object.fromEntries(['queueActivity','queueActivityTitle','queueActivityDetail','queueActivityProgress'].map(id=>[id,{}]));
+  const ctx={document:{getElementById:id=>nodes[id]},queueMode:'scenes',_queuePayloadReads:new Map([['/api/movies/queue',{started:0}]]),_queueActivity:{running:false},_queueActivityError:false};
+  vm.createContext(ctx);
+  vm.runInContext(extract('_queueActivityView')+'\n'+extract('_renderQueueActivity'),ctx);
+  ctx._renderQueueActivity();
+  assert.doesNotMatch(nodes.queueActivityDetail.textContent,/Loading queue/);
 });
