@@ -5518,14 +5518,14 @@ def stash_resolve_local_entity_url(kind: str, source: str, external_id: str) -> 
     def _try_filter(filt: dict) -> str | None:
         if k == "performer":
             query = (
-                "query($f: PerformerFilterType!) { findPerformers(performer_filter: $f, filter: { per_page: 1 }) "
+                "query($f: PerformerFilterType!) { findPerformers(performer_filter: $f, filter: { per_page: 2 }) "
                 "{ performers { id } } }"
             )
             key_rows = "findPerformers"
             key_list = "performers"
         else:
             query = (
-                "query($f: StudioFilterType!) { findStudios(studio_filter: $f, filter: { per_page: 1 }) "
+                "query($f: StudioFilterType!) { findStudios(studio_filter: $f, filter: { per_page: 2 }) "
                 "{ studios { id } } }"
             )
             key_rows = "findStudios"
@@ -5543,7 +5543,7 @@ def stash_resolve_local_entity_url(kind: str, source: str, external_id: str) -> 
             if data.get("errors"):
                 return None
             rows = ((data.get("data") or {}).get(key_rows) or {}).get(key_list) or []
-            if not rows:
+            if len(rows) != 1:
                 return None
             lid = rows[0].get("id")
             if not lid:
@@ -29334,14 +29334,14 @@ def api_favourites_list(kind: str | None = None, kinds: str | None = None):
 
 
 @app.get("/api/stash/local-entity-url")
-async def api_stash_local_entity_url(kind: str, source: str, external_id: str):
+def api_stash_local_entity_url(kind: str, source: str, external_id: str):
     """Resolve local Stash performer/studio page URL from a stash-box external id (TPDB / StashDB / FansDB)."""
     url = stash_resolve_local_entity_url(kind, source, external_id)
     return {"url": url}
 
 
 @app.get("/api/stash/local-entity-from-favourite")
-async def api_stash_local_entity_from_favourite(row_id: int):
+def api_stash_local_entity_from_favourite(row_id: int):
     """Open local Stash using the first linked stash-box id on this library row (TPDB, then StashDB, then FansDB)."""
     row = db.favourite_get(row_id)
     if not row:

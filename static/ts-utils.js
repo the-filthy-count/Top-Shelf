@@ -3392,3 +3392,41 @@ if (!customElements.get('ts-custom-link')) {
     }
   });
 }
+
+
+// Local Stash IDs are resolved from linked database IDs, never from a name.
+if (!customElements.get('ts-local-stash')) {
+  customElements.define('ts-local-stash', class extends HTMLElement {
+    async connectedCallback() {
+      this.hidden = true;
+      this.controller?.abort();
+      const controller = this.controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60000);
+      try {
+        const rowId = this.getAttribute('row-id');
+        const urls = rowId ? ['/api/stash/local-entity-from-favourite?row_id=' + encodeURIComponent(rowId)] :
+          ['tpdb', 'stashdb', 'fansdb'].filter(source => this.getAttribute(source)).map(source =>
+            '/api/stash/local-entity-url?' + new URLSearchParams({kind:this.getAttribute('kind'), source, external_id:this.getAttribute(source)}));
+        for (const url of urls) {
+          const response = await fetch(url, {signal:controller.signal});
+          if (!response.ok) continue;
+          const data = await response.json();
+          if (!this.isConnected || controller.signal.aborted) return;
+          if (!data.url) continue;
+          const target = new URL(data.url);
+          if (!['http:', 'https:'].includes(target.protocol)) return;
+          const link = document.createElement('a');
+          link.className = 'pp-profile-pill is-linked';
+          link.href = target.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
+          link.title = 'Open in your Stash'; link.setAttribute('aria-label', link.title);
+          const logo = document.createElement('img');
+          logo.src = '/static/logos/yourstash.webp'; logo.alt = 'Your Stash'; logo.className = 'pp-src-logo';
+          link.appendChild(logo); this.replaceChildren(link); this.hidden = false;
+          return;
+        }
+      } catch (_) { /* Unconfigured or unavailable local Stash leaves no broken link. */ }
+      finally { clearTimeout(timeout); }
+    }
+    disconnectedCallback() { this.controller?.abort(); }
+  });
+}

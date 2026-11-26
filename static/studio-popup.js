@@ -859,6 +859,7 @@
         <i class="fa-solid fa-magnifying-glass" style="font-size:9px;opacity:0.7"></i>
       </button>`;
     }).join('') + (rowId ? `<ts-custom-link row-id="${rowId}"></ts-custom-link>` : '');
+    el.insertAdjacentHTML('beforeend', `<ts-local-stash kind="studio" ${rowId ? `row-id="${rowId}"` : ''} tpdb="${ESC(row.match_tpdb_id || '')}" stashdb="${ESC(row.match_stashdb_id || '')}" fansdb="${ESC(row.match_fansdb_id || '')}"></ts-local-stash>`);
     wirePillHandlers(el);
   }
 

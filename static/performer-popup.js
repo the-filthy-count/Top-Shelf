@@ -1407,7 +1407,7 @@
         ${logo}
         <i class="fa-solid fa-magnifying-glass" style="font-size:9px;opacity:0.7"></i>
       </button>`;
-    }).join('');
+    }).join('') + `<ts-local-stash kind="performer" ${rowId ? `row-id="${ESC(rowId)}"` : ''} tpdb="${ESC(id.tpdb_id || '')}" stashdb="${ESC(id.stash_id || '')}" fansdb="${ESC(id.fansdb_id || '')}"></ts-local-stash>`;
   }
 
   //: Compute age from a YYYY-MM-DD birthdate string. Returns null if
