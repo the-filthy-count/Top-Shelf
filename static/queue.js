@@ -321,13 +321,16 @@
       ? (waits.length ? 'Waiting for search services' : (data.pipeline_phase || 'Preparing matching'))
       : data ? 'Matching idle' : 'Connecting to matching service…';
     const detail = [];
-    if (running && data.current_file) detail.push(data.current_file);
-    if (running && total) detail.push(done + ' / ' + total + ' files processed');
+    if (running && data.current_file) {
+      const parts = String(data.current_file).replace(/\\/g, '/').split('/').filter(Boolean);
+      detail.push(parts.length > 1 ? parts[parts.length - 2] : 'Unsorted');
+    }
+    if (running && total) detail.push(done + ' of ' + total);
     if (!running && data && !offline) detail.push('Use ▶ to start matching.');
-    for (const wait of waits) detail.push(wait.provider + ': retry in ' + wait.seconds + 's');
+    const tooltip = waits.map(wait => wait.provider + ': retry in ' + wait.seconds + 's').join(' · ');
     if (loadingSeconds !== null) detail.push('Loading queue snapshot · ' + loadingSeconds + 's' +
       (loadingSeconds >= 30 ? ' · Still waiting for the server; matching status is shown separately.' : ''));
-    return {title, detail: detail.join(' · '), percent: running && total ? done / total * 100 : null};
+    return {title, detail: detail.join(' · '), tooltip, percent: running && total ? done / total * 100 : null};
   }
 
   function _renderQueueActivity() {
@@ -342,9 +345,11 @@
     const view = _queueActivityView(_queueActivity, elapsed, _queueActivityError);
     document.getElementById('queueActivityTitle').textContent = view.title;
     document.getElementById('queueActivityDetail').textContent = view.detail;
+    panel.title = view.tooltip;
     const progress = document.getElementById('queueActivityProgress');
-    progress.hidden = view.percent === null;
-    progress.value = view.percent || 0;
+    progress.style.width = (view.percent || 0) + '%';
+    document.getElementById('queueActivityHeader').dataset.state = _queueActivityError ? 'error'
+      : (!_queueActivity || (_queueActivity.running && view.percent === null) ? 'indeterminate' : 'loading');
   }
 
   function _cancelQueuePayloadReads() {

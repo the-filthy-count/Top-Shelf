@@ -435,6 +435,14 @@
     var pct = Math.max(0, Math.min(100, Number(opts.pct) || 0));
     var label = esc(opts.label || "");
     var icon = opts.iconHtml || "";
+    var section = opts.section || ({pipeline:'queue',sort_queue:'queue',library_index:'health',
+      phash3:'health',health_scan:'health',favourites:'stars',favourites_sync:'stars',download:'downloads'})[opts.slot];
+    var colours = {queue:'#f59e0b',health:'#10b981',stars:'#facc15',studios:'#38bdf8',
+      downloads:'#22c55e',movies:'#2563eb',jav:'#bc002d',scenes:'#a78bfa',library:'#c084fc'};
+    var colour = colours[section];
+    if (colour) icon = '<i class="ts-nav-icon ts-nav-icon--' + section + '" style="background-color:currentColor" aria-hidden="true"></i>';
+    var brandStyle = colour ? ' style="--bar-color:' + colour + ';--bar-glow:color-mix(in srgb,' + colour + ' 35%,transparent)"' : '';
+
     var tip = esc(opts.tooltip || opts.label || "");
     var dismiss = opts.dismissSlot != null
       ? ' data-finished-slot="' + esc(opts.dismissSlot) + '"'
@@ -445,7 +453,7 @@
     // vertically across the full card height.
     return (
       '<div class="ts-sidebar-notif" data-slot="' + esc(opts.slot || "") + '"' +
-      ' data-state="' + esc(state) + '" title="' + tip + '">' +
+      ' data-state="' + esc(state) + '" title="' + tip + '"' + brandStyle + '>' +
         '<div class="ts-sidebar-notif__icon' + (dismiss ? ' ts-sidebar-notif__icon--dismissible' : '') + '"><span class="ts-sidebar-notif__symbol">' + icon + '</span>' + dismissHtml + '</div>' +
         '<div class="ts-sidebar-notif__label">' + label + '</div>' +
         '<div class="ts-sidebar-notif__bar">' +
@@ -670,6 +678,7 @@
       else kindLabel = "Info";
       cards.push(_sidebarNotifCardHtml({
         slot: "notification",
+        section: ({pipeline:"queue",library:"library",download:"downloads",health:"health",performer:"stars",studio:"studios"})[kind],
         label: kindLabel,
         iconHtml: kindIconHtml(kind),
         pct: 100,

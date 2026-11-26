@@ -83,21 +83,22 @@ test('queue loading is separate from idle matching, with a long wait explanation
   assert.equal(view.percent, null);
 });
 test('matching shows its phase, current file and real completed count', () => {
-  const view = activity({running:true,pipeline_phase:'Searching fingerprints',current_file:'example.mp4',pipeline_done:2,pipeline_total:8});
+  const view = activity({running:true,pipeline_phase:'Searching fingerprints',current_file:'Elizabeth Jean/example.mp4',pipeline_done:2,pipeline_total:8});
   assert.equal(view.title, 'Searching fingerprints');
-  assert.match(view.detail, /example.mp4/);
-  assert.match(view.detail, /2 \/ 8 files processed/);
+  assert.match(view.detail, /Elizabeth Jean/);
+  assert.doesNotMatch(view.detail, /example.mp4/);
+  assert.match(view.detail, /2 of 8/);
   assert.equal(view.percent, 25);
 });
 test('provider waits are explicit and stale waits do not make idle work look active', () => {
   const data = {running:true,provider_waits:[{provider:'stashdb.org',seconds:42}]};
-  assert.match(activity(data).detail, /stashdb.org: retry in 42s/);
+  assert.match(activity(data).tooltip, /stashdb.org: retry in 42s/);
   assert.equal(activity(data).title, 'Waiting for search services');
   assert.equal(activity({...data,running:false}).title, 'Matching idle');
   assert.equal(activity(data,null,true).title, 'Status unavailable — reconnecting…');
 });
 test('inactive queue reads cannot replace the active queue loading status', () => {
-  const nodes = Object.fromEntries(['queueActivity','queueActivityTitle','queueActivityDetail','queueActivityProgress'].map(id=>[id,{}]));
+  const nodes = Object.fromEntries(['queueActivity','queueActivityTitle','queueActivityDetail','queueActivityProgress','queueActivityHeader'].map(id=>[id,{style:{},dataset:{}}]));
   const ctx={document:{getElementById:id=>nodes[id],querySelector:()=>null},queueMode:'scenes',_queuePayloadReads:new Map([['/api/movies/queue',{started:0}]]),_queueActivity:{running:false},_queueActivityError:false};
   vm.createContext(ctx);
   vm.runInContext(extract('_queueActivityView')+'\n'+extract('_renderQueueActivity'),ctx);
@@ -112,4 +113,9 @@ test('queue failures retain server reason and HTTP status', async () => {
 test('expired sessions explain that signing in is required', async () => {
   const ctx = setup(async () => ({ok:false,status:401,json:async()=>({error:'Unauthorised'})}));
   await assert.rejects(ctx._readQueuePayload('/api/queue'), /Your session has expired/);
+});
+
+test('root files use Unsorted and nested paths show only their immediate folder', () => {
+  assert.equal(activity({running:true,current_file:'video.mp4',pipeline_done:3,pipeline_total:9}).detail, 'Unsorted · 3 of 9');
+  assert.equal(activity({running:true,current_file:'Vices/Example/video.mp4',pipeline_done:3,pipeline_total:9}).detail, 'Example · 3 of 9');
 });

@@ -3726,10 +3726,11 @@
 .suggestion-score-fill { position:absolute; inset:0; background:linear-gradient(to right,#ef4444 0%,#f97316 33%,#facc15 66%,#22c55e 100%); }
 .suggestion-score-meter strong { min-width:4ch; text-align:right; font-variant-numeric:tabular-nums; }
 .suggestion-score-banner .btn { display:inline-flex; align-items:center; gap:8px; white-space:nowrap; }
-  .queue-activity { margin: 0 0 12px; padding: 10px; min-width: 0; font-size: 11px; line-height: 1.5; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; background: rgba(0,0,0,.2); }
-  .queue-activity strong { display: block; overflow-wrap: anywhere; color: var(--accent); }
-  .queue-activity p { margin: 8px 0 0; overflow-wrap: anywhere; color: var(--dim); }
-  .queue-activity progress { width: 100%; height: 6px; margin-top: 12px; accent-color: var(--accent); }
+  .queue-activity { box-sizing: border-box; width: calc(100% + 24px); margin: 0 -12px 12px; padding: 10px; min-width: 0; font-size: 11px; line-height: 1.5; border: 1px solid var(--border); border-radius: 10px; background: rgba(0,0,0,.2); }
+  .queue-activity .ts-sidebar-notif { padding: 0 0 10px; border-bottom: 1px solid var(--border); border-radius: 0; }
+  .queue-activity .ts-sidebar-notif__label { white-space: normal; overflow-wrap: anywhere; }
+  .queue-activity p { margin: 10px 0 0; overflow-wrap: anywhere; color: var(--dim); }
+  .ts-sidebar__activity-slot:has(#queueActivity) #tsActivityBanner [data-slot="pipeline"] { display: none; }
 </style>
 <link rel="stylesheet" href="/static/mobile.css?v=20260930-desktop-scale">
 <link rel="stylesheet" href="/static/design-system.css?v=20261011-toggle-layer-fix">
@@ -3834,9 +3835,12 @@
           </div>
         </div>
         <section id="queueActivity" class="queue-activity" hidden aria-label="Queue activity">
-          <strong id="queueActivityTitle" role="status">Connecting to matching service…</strong>
+          <div id="queueActivityHeader" style="--bar-color:#f59e0b;--bar-glow:rgba(245,158,11,.35)" class="ts-sidebar-notif" data-state="indeterminate">
+            <div class="ts-sidebar-notif__icon"><span class="ts-sidebar-notif__symbol"><i class="ts-nav-icon ts-nav-icon--queue" style="background-color:currentColor" aria-hidden="true"></i></span></div>
+            <div id="queueActivityTitle" class="ts-sidebar-notif__label" role="status">Connecting to matching service…</div>
+            <div class="ts-sidebar-notif__bar"><span class="ts-sidebar-notif__bar-track" aria-hidden="true"></span><span id="queueActivityProgress" class="ts-sidebar-notif__bar-fill" aria-hidden="true"></span></div>
+          </div>
           <p id="queueActivityDetail">Loading queue snapshot…</p>
-          <progress id="queueActivityProgress" max="100" value="0" hidden aria-label="Matching progress"></progress>
         </section>
         <section id="queueChanges" hidden style="padding:16px;overflow:auto">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px"><strong>File changes</strong>
@@ -4318,7 +4322,7 @@
 <link rel="stylesheet" href="/static/queue-history.css?v=20261103">
 <script defer src="/static/queue-history.js?v=20261103"></script>
 <script defer src="/static/queue-changes.js?v=1"></script>
-<script defer src="/static/queue.js?v=20261126-sidebar-status"></script>
+<script defer src="/static/queue.js?v=20261126-sidebar-header"></script>
 
 <!-- Queue duplicates modal — same phash grouping / keeper rules as Library Health. -->
 <style>
@@ -4384,7 +4388,7 @@
   </div>
 </div>
 
-<script defer src="/static/activity-banner.js?v=20261014-navigation"></script>
+<script defer src="/static/activity-banner.js?v=20261126-menu-alerts"></script>
 <script defer src="/static/app-shell.js?v=20261014-navigation-2"></script>
 
 
