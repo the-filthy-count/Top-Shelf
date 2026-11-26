@@ -317,28 +317,23 @@
     const total = Math.max(0, Number(data?.pipeline_total) || 0);
     const done = Math.min(total, Math.max(0, Number(data?.pipeline_done) || 0));
     const waits = running ? (data?.provider_waits || []) : [];
-    const title = offline ? 'Status unavailable — reconnecting…' : running
-      ? (waits.length ? 'Waiting for search services' : (data.pipeline_phase || 'Preparing matching'))
-      : data ? 'Matching idle' : 'Connecting to matching service…';
+    const title = !running ? '' : offline ? 'Reconnecting' : waits.length ? 'Waiting' : 'Matching';
     const detail = [];
     if (running && data.current_file) {
       const parts = String(data.current_file).replace(/\\/g, '/').split('/').filter(Boolean);
       detail.push(parts.length > 1 ? parts[parts.length - 2] : 'Unsorted');
     }
     if (running && total) detail.push(done + ' of ' + total);
-    if (!running && data && !offline) detail.push('Use ▶ to start matching.');
     const tooltip = waits.map(wait => wait.provider + ': retry in ' + wait.seconds + 's').join(' · ');
-    if (loadingSeconds !== null) detail.push('Loading queue snapshot · ' + loadingSeconds + 's' +
-      (loadingSeconds >= 30 ? ' · Still waiting for the server; matching status is shown separately.' : ''));
     return {title, detail: detail.join(' · '), tooltip, percent: running && total ? done / total * 100 : null};
   }
 
   function _renderQueueActivity() {
     const panel = document.getElementById('queueActivity');
     if (!panel) return;
-    const sidebarSlot = document.querySelector('.ts-sidebar__activity-slot');
+    const sidebarSlot = document.querySelector('.ts-sidebar__footer');
     if (sidebarSlot && panel.parentNode !== sidebarSlot) sidebarSlot.prepend(panel);
-    panel.hidden = !sidebarSlot;
+    panel.hidden = !sidebarSlot || !_queueActivity?.running;
     const url = queueMode === 'movies' ? '/api/movies/queue' : '/api/queue';
     const read = _queuePayloadReads.get(url);
     const elapsed = read ? Math.floor((Date.now() - read.started) / 1000) : null;

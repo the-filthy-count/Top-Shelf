@@ -75,16 +75,15 @@ function activity(data, elapsed = null, offline = false) {
   vm.runInContext(extract('_queueActivityView'), ctx);
   return ctx._queueActivityView(data, elapsed, offline);
 }
-test('queue loading is separate from idle matching, with a long wait explanation', () => {
+test('idle matching has no text even while the queue loads', () => {
   const view = activity({running:false}, 45);
-  assert.equal(view.title, 'Matching idle');
-  assert.match(view.detail, /Loading queue snapshot · 45s/);
-  assert.match(view.detail, /Still waiting for the server/);
+  assert.equal(view.title, '');
+  assert.equal(view.detail, '');
   assert.equal(view.percent, null);
 });
 test('matching shows its phase, current file and real completed count', () => {
   const view = activity({running:true,pipeline_phase:'Searching fingerprints',current_file:'Elizabeth Jean/example.mp4',pipeline_done:2,pipeline_total:8});
-  assert.equal(view.title, 'Searching fingerprints');
+  assert.equal(view.title, 'Matching');
   assert.match(view.detail, /Elizabeth Jean/);
   assert.doesNotMatch(view.detail, /example.mp4/);
   assert.match(view.detail, /2 of 8/);
@@ -93,9 +92,9 @@ test('matching shows its phase, current file and real completed count', () => {
 test('provider waits are explicit and stale waits do not make idle work look active', () => {
   const data = {running:true,provider_waits:[{provider:'stashdb.org',seconds:42}]};
   assert.match(activity(data).tooltip, /stashdb.org: retry in 42s/);
-  assert.equal(activity(data).title, 'Waiting for search services');
-  assert.equal(activity({...data,running:false}).title, 'Matching idle');
-  assert.equal(activity(data,null,true).title, 'Status unavailable — reconnecting…');
+  assert.equal(activity(data).title, 'Waiting');
+  assert.equal(activity({...data,running:false}).title, '');
+  assert.equal(activity(data,null,true).title, 'Reconnecting');
 });
 test('inactive queue reads cannot replace the active queue loading status', () => {
   const nodes = Object.fromEntries(['queueActivity','queueActivityTitle','queueActivityDetail','queueActivityProgress','queueActivityHeader'].map(id=>[id,{style:{},dataset:{}}]));
@@ -104,6 +103,7 @@ test('inactive queue reads cannot replace the active queue loading status', () =
   vm.runInContext(extract('_queueActivityView')+'\n'+extract('_renderQueueActivity'),ctx);
   ctx._renderQueueActivity();
   assert.doesNotMatch(nodes.queueActivityDetail.textContent,/Loading queue/);
+  assert.equal(nodes.queueActivity.hidden, true);
 });
 
 test('queue failures retain server reason and HTTP status', async () => {
