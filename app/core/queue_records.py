@@ -8,7 +8,7 @@ from datetime import date
 import database as db
 from app.core.matching import studio_search_name
 
-FIELDS = ('title', 'performers', 'studio', 'date', 'scene_number', 'term', 'description', 'tags', 'extra_kind')
+FIELDS = ('title', 'performers', 'studio', 'date', 'scene_number', 'term', 'description', 'tags', 'extra_kind', 'image_url')
 SOURCE_FIELDS = {'TPDB':'match_tpdb_id','StashDB':'match_stashdb_id',
                  'FansDB':'match_fansdb_id','JAVStash':'match_javstash_id'}
 
@@ -99,7 +99,7 @@ def read(filename='', file_id=None, *, settings=None, parser_signature=None, lin
             stored = conn.execute('SELECT * FROM queue_search_details WHERE file_id=?', (asset['id'],)).fetchone()
     parsed = json.loads(stored['parsed_json'])
     overrides = json.loads(stored['overrides_json'])
-    effective = dict(description='', tags=[], extra_kind='__auto__')
+    effective = dict(description='', tags=[], extra_kind='__auto__', image_url='')
     effective.update(parsed)
     effective.update(overrides)
     effective["studio"] = studio_search_name(effective.get("studio"))
@@ -125,6 +125,16 @@ def save(filename, file_id, fields, revision, reset=False):
                 if not isinstance(value, list) or len(value) > 100 or any(not isinstance(n, str) or len(n) > 200 for n in value):
                     raise ValueError('Provide a list of names for ' + key)
                 values[key] = list(dict.fromkeys(n.strip() for n in value if n.strip()))
+            elif key == 'image_url':
+                from urllib.parse import urlsplit
+                if not isinstance(value, str) or len(value) > 8192:
+                    raise ValueError('Invalid image URL')
+                value = value.strip()
+                if value:
+                    parsed_url = urlsplit(value)
+                    if parsed_url.scheme not in ('http', 'https') or not parsed_url.hostname or parsed_url.username or parsed_url.password:
+                        raise ValueError('Use an http(s) image URL')
+                values[key] = value
             elif key == 'scene_number':
                 if value in ('', None):
                     values[key] = None

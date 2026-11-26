@@ -25,13 +25,14 @@ class QueueDetailsTests(unittest.TestCase):
 
     def test_corrections_survive_rename_reparse_and_preserve_fingerprint(self):
         original = self.create()
-        fields = dict(original['fields'], title='Correct title', date='', scene_number=2, performers=['Jane Doe'], studio='')
+        fields = dict(original['fields'], title='Correct title', date='', scene_number=2, performers=['Jane Doe'], studio='', image_url='https://example.com/poster.jpg')
         edited = records.save(original['filename'], original['file_id'], fields, original['revision'])
         self.assertEqual(edited['performer_links'][0]['source_ids'], {'StashDB':'person-id'})
         self.assertEqual(edited['technical']['phash'], 'abc123')
         db.rename_file(original['filename'], 'Different Name.mp4')
         current = records.read(file_id=original['file_id'])
         self.assertEqual(current['fields']['title'], 'Correct title')
+        self.assertEqual(current['fields']['image_url'], 'https://example.com/poster.jpg')
         self.assertEqual(current['fields']['date'], '')
         self.assertEqual(current['fields']['scene_number'], 2)
         self.assertEqual(current['filename'], 'Different Name.mp4')

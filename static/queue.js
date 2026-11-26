@@ -3594,6 +3594,7 @@
       scene_number: document.getElementById('srchSceneNumber').value || null,
       term: document.getElementById('srchTerm').value.trim(),
       description: document.getElementById('mPlot').value.trim(),
+      image_url: mThumbMode === 'url' ? document.getElementById('mImageUrl').value.trim() : '',
       tags: [...new Set([_tagPillsValue(), document.getElementById('srchTag').value].filter(Boolean).join(',').split(',').map(n => n.trim()).filter(Boolean))],
       extra_kind: document.getElementById('srchExtraKind').value,
     };
@@ -3608,6 +3609,11 @@
       document.getElementById(id).value = f[key] ?? '';
     }
     document.getElementById('mPlot').value = f.description || '';
+    if (f.image_url) {
+      document.getElementById('mImageUrl').value = f.image_url;
+      mThumbMode = 'url';
+      mThumbPreview(f.image_url);
+    }
     document.getElementById('srchExtraKind').value = f.extra_kind ?? '__auto__';
     _tagPillsSet(f.tags || []);
     document.getElementById('srchTag').value = '';
@@ -3686,7 +3692,7 @@
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Could not read webpage');
         if (!dialog.open) return;
-        await openQueueSearchDetails(filename, action);
+        await openManualSearch(filename, {...action, skip_search: true});
         if (!dialog.open || _qSelectedFile !== filename || !_qSearchRecord || _qDetailsLoading) return;
         for (const [id, key] of [['srchTitle','title'],['srchStudio','studio'],['srchDate','date'],['mPlot','description']]) {
           if (data[key]) document.getElementById(id).value = data[key];
@@ -3845,7 +3851,7 @@
           if (matchSeq !== _qOpenSearchSeq) return;
           if (d.found) {
             // The shared scene selection below hydrates metadata and cast IDs.
-            if (d.image_url) {
+            if (d.image_url && !_qSearchRecord?.fields?.image_url) {
               document.getElementById('mImageUrl').value = d.image_url;
               mThumbMode = 'url';
               mThumbPreview(d.image_url);
@@ -3888,7 +3894,7 @@
     }
     // Modal frame was opened up-top before any awaits. Kick off the
     // search now that the form fields are filled.
-    if (mySeq === _qOpenSearchSeq && !action.edit_details) runQueueSearch();
+    if (mySeq === _qOpenSearchSeq && !action.edit_details && !action.skip_search) runQueueSearch();
   }
 
   //: Parent node the qSearchPanel was created in — restored on

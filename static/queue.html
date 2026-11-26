@@ -3584,20 +3584,21 @@
     height: 24px; flex: none; white-space: nowrap; overflow: hidden;
     font-size: var(--text-small); }
   .qi-crt-info .qi-error-chip { margin-left: 0; }
+  #queueList .qi-crt-state:not(:has(*)) { display: none; }
   .qi-crt-meta { min-width: 0; max-width: 100%; color: var(--dim); }
   #queueList .qi-crt-tab .qi-actions { position: static; transform: none; display: flex; width: 100%;
     justify-content: space-evenly; flex-flow: row nowrap; gap: 3px; padding: 3px 0 0; }
   #queueList .qi-crt-tab .qi-actions > button { flex: 0 1 32px; width: 32px !important; height: 32px !important;
     min-width: 0 !important; min-height: 0 !important; padding: 0 !important; }
   #queueList .qi-crt-tab .qi-edit-details { order: -1; }
-  #queueList .queue-file-tile .qi-crt-tab { min-height: 132px; height: auto; justify-content: center; }
+  #queueList .queue-file-tile .qi-crt-tab { min-height: 0; height: auto; justify-content: flex-start; }
   #queueList .queue-file-tile .qi-crt-title {
     white-space: nowrap; display: block; text-overflow: ellipsis;
     line-height: 1.5; min-height: 1.5em; flex: none; overflow: hidden;
   }
   #queueList .queue-file-tile .qi-crt-tab .qi-actions {
     position: static; opacity: 1; visibility: visible; pointer-events: auto;
-    flex-wrap: wrap; padding: 8px 0; box-sizing: border-box;
+    flex-wrap: wrap; padding: 3px 0; box-sizing: border-box;
   }
   .queue-url-dialog { position: fixed; inset: 0; margin: auto; max-height: calc(100dvh - 48px); height: fit-content; box-sizing: border-box; width: min(520px, calc(100vw - 48px)); color: var(--text);
     background: #1b2022; border: 1px solid var(--accent); border-radius: 12px; padding: 24px; }
@@ -4326,7 +4327,7 @@
 <link rel="stylesheet" href="/static/queue-history.css?v=20261103">
 <script defer src="/static/queue-history.js?v=20261103"></script>
 <script defer src="/static/queue-changes.js?v=1"></script>
-<script defer src="/static/queue.js?v=20261126-direct-scrapers"></script>
+<script defer src="/static/queue.js?v=20261126-import-editor"></script>
 
 <!-- Queue duplicates modal — same phash grouping / keeper rules as Library Health. -->
 <style>
