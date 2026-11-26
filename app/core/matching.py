@@ -167,7 +167,7 @@ def _name_match_tokenize(s: str) -> set[str]:
     return {w for w in words if w and w not in _NAME_SEARCH_NOISE_TOKENS and len(w) > 1}
 
 
-def _split_query_from_library(filename: str) -> tuple[str, str, str, str, list[str]]:
+def _split_query_from_library(filename: str, *, library_indexes=None, studio_logos=None) -> tuple[str, str, str, str, list[str]]:
     """Split a cleaned filename into (full_query, title_only, performer, studio, performers).
 
     Consults the library's performer-folder index for cast names and the
@@ -188,7 +188,7 @@ def _split_query_from_library(filename: str) -> tuple[str, str, str, str, list[s
     performers: list[str] = []
     studio = ""
     try:
-        guess = db._library_guess_from_release_name(release_name)
+        guess = db._library_guess_from_release_name(release_name, *library_indexes) if library_indexes is not None else db._library_guess_from_release_name(release_name)
         performers = [str(p).strip() for p in (guess.get("performers") or []) if str(p).strip()]
         performer = performers[0] if performers else ""
         studio = (guess.get("studio") or "").strip()
@@ -205,7 +205,7 @@ def _split_query_from_library(filename: str) -> tuple[str, str, str, str, list[s
         try:
             release_key = re.sub(r"[^a-z0-9]+", "", release_name.lower())
             best_len = 0
-            for row in db.studio_logo_list_all():
+            for row in (db.studio_logo_list_all() if studio_logos is None else studio_logos):
                 slug_key = re.sub(r"[^a-z0-9]+", "", (row.get("slug") or "").lower())
                 display = row.get("name") or row.get("slug") or ""
                 if compact(display) in performer_keys or slug_key in performer_keys:

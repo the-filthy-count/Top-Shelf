@@ -362,7 +362,12 @@
           // Bound each request, not the full background snapshot build.
           timeout = setTimeout(() => controller.abort(), 30000);
           const response = await fetch(url, { signal: controller.signal });
-          if (!response.ok) throw new Error('Queue request failed: ' + response.status);
+          if (!response.ok) {
+            let reason = '';
+            try { const body = await response.json(); reason = typeof body.error === 'string' ? body.error : ''; } catch (_) {}
+            if (response.status === 401) reason = 'Your session has expired. Sign in again.';
+            throw new Error('HTTP ' + response.status + (reason ? ': ' + reason : ': Queue request failed.'));
+          }
           const payload = await response.json();
           clearTimeout(timeout);
           controller.signal.throwIfAborted();
@@ -1826,7 +1831,10 @@
         window.showToast?.('Could not refresh the queue. Showing previous results.');
         return;
       }
-      document.getElementById('queueList').innerHTML = '<div class="empty">Could not load the movie queue. <button type="button" class="btn-secondary" onclick="loadQueue({force:true})">Retry</button></div>';
+      document.getElementById('queueList').innerHTML = '<div class="empty">Could not load the movie queue.<p id="queueLoadError"></p> <button type="button" class="btn-secondary" onclick="loadQueue({force:true})">Retry</button></div>';
+      document.getElementById('queueLoadError').textContent = error.name === 'AbortError'
+        ? 'The queue request timed out after 30 seconds. Retry or check the server logs.'
+        : (error.message || 'Unable to reach the server.');
       const pager = document.getElementById('queuePager');
       if (pager) pager.style.display = 'none';
     }
@@ -2894,7 +2902,10 @@
         window.showToast?.('Could not refresh the queue. Showing previous results.');
         return;
       }
-      document.getElementById('queueList').innerHTML = '<div class="empty">Could not load the queue. <button type="button" class="btn-secondary" onclick="loadQueue({force:true})">Retry</button></div>';
+      document.getElementById('queueList').innerHTML = '<div class="empty">Could not load the queue.<p id="queueLoadError"></p> <button type="button" class="btn-secondary" onclick="loadQueue({force:true})">Retry</button></div>';
+      document.getElementById('queueLoadError').textContent = error.name === 'AbortError'
+        ? 'The queue request timed out after 30 seconds. Retry or check the server logs.'
+        : (error.message || 'Unable to reach the server.');
       const pager = document.getElementById('queuePager');
       if (pager) pager.style.display = 'none';
     }

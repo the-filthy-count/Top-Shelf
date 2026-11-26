@@ -154,7 +154,7 @@ def _parse_filename_parts(filename: str, settings: dict) -> dict:
 
 
 
-def parse_filename(filename, settings):
+def parse_filename(filename, settings, *, library_indexes=None, studio_logos=None):
     from app.core.matching import _split_query_from_library, _clean_filename_for_search
     from app.core.scene_relevance import split_title_words
     path = Path(filename)
@@ -166,7 +166,8 @@ def parse_filename(filename, settings):
         if word.strip():
             clean_input = re.sub(re.escape(word.strip()), '', clean_input, flags=re.IGNORECASE)
     parsed = _parse_filename_parts(clean_input, settings)
-    full, library_title, _, studio, cast = _split_query_from_library(clean_input)
+    full, library_title, _, studio, cast = (_split_query_from_library(clean_input) if library_indexes is None and studio_logos is None
+        else _split_query_from_library(clean_input, library_indexes=library_indexes, studio_logos=studio_logos))
     structured = bool(parsed['site'] or parsed['performers']) and not folder_tag
     title = parsed['title'] if structured else library_title
     studio = studio or (parsed['site'] if structured else '')

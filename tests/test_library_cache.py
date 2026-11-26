@@ -29,6 +29,33 @@ def load():
     return ns,rows,db,vices
 
 class LibraryCacheTests(unittest.TestCase):
+    def test_slow_build_reports_worker_stack_and_cancels_diagnostic(self):
+        from unittest.mock import patch
+        ns, *_ = load()
+        logger = Mock()
+        ns['_log'] = logger
+        def build():
+            timer.call_args.args[1]()
+            return {'files': []}
+        with patch.object(threading, 'Timer') as timer:
+            cache = ns['_WarmCache']('queue', build, 60)
+            cache._rebuild_locked()
+            timer.return_value.cancel.assert_called_once()
+        self.assertEqual(cache.peek(), {'files': []})
+        logger.warning.assert_called_once()
+        self.assertIn('build', logger.warning.call_args.args[-1])
+
+    def test_failed_build_cancels_diagnostic(self):
+        from unittest.mock import patch
+        ns, *_ = load()
+        ns['_log'] = Mock()
+        with patch.object(threading, 'Timer') as timer:
+            cache = ns['_WarmCache']('queue', Mock(side_effect=ValueError('broken')), 60)
+            cache._rebuild_locked()
+            timer.return_value.cancel.assert_called_once()
+        self.assertEqual(cache._cold_failures, 1)
+        self.assertIsNone(cache.peek())
+
     def test_route_category_isolation_reuse_and_settings(self):
         ns,rows,db,vices=load();route=ns['api_favourites_list']
         result=route(kind='performer')

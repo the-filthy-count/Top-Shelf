@@ -24,6 +24,16 @@ class FolderTagSearchTests(unittest.TestCase):
         self.env = {'Path':Path,'re':re,'datetime':datetime,'timezone':timezone,'_strip_title_noise':lambda text:text}
         exec(compile(ast.Module(body=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in names],type_ignores=[]),'parser','exec'),self.env)
 
+    def test_shared_parser_context_keeps_results_without_reloading_indexes(self):
+        from app.core.filename_parser import parse_filename
+        expected = parse_filename(FILENAME, db.DEFAULTS)
+        logos = db.studio_logo_list_all()
+        with patch.object(db, 'studio_logo_list_all', side_effect=AssertionError('per-file logo scan')), \
+             patch.object(db, '_build_library_match_indexes', side_effect=AssertionError('per-file index build')):
+            actual = parse_filename(FILENAME, db.DEFAULTS, library_indexes=([], []), studio_logos=logos)
+        self.assertEqual(actual, expected)
+        self.assertEqual(db._library_guess_from_release_name.call_args.args[1:], ([], []))
+
     def test_automatic_query_excludes_creator_duplicate_and_real_studio(self):
         _, title, performer, studio, cast = matching._split_query_for_search(FILENAME)
         self.assertEqual((title,performer,studio,cast),(TITLE,'Demi Hawks','FuckPassVR',['Demi Hawks']))

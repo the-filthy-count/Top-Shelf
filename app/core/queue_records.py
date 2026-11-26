@@ -79,7 +79,7 @@ def _links(names, kind, indexes=None):
     return result
 
 
-def read(filename='', file_id=None, *, settings=None, parser_signature=None, link_indexes=None):
+def read(filename='', file_id=None, *, settings=None, parser_signature=None, link_indexes=None, parser_context=None):
     from app.core.filename_parser import parse_filename, cache_signature
     from app.core.matching import _extract_scene_number_from_filename
     filename, asset, technical = _asset(filename, file_id)
@@ -88,7 +88,7 @@ def read(filename='', file_id=None, *, settings=None, parser_signature=None, lin
     with db.get_conn() as conn:
         stored = conn.execute('SELECT * FROM queue_search_details WHERE file_id=?', (asset['id'],)).fetchone()
     if not stored or stored['signature'] != signature:
-        raw = parse_filename(filename, settings)
+        raw = parse_filename(filename, settings, **(parser_context or {}))
         parsed = dict(title=raw['title'], performers=raw['performer_names'], studio=raw['site'],
                       date=raw['date'], scene_number=_extract_scene_number_from_filename(filename), term='', description='', tags=[], extra_kind='__auto__')
         with db.get_conn() as conn:

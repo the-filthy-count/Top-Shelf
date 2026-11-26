@@ -858,6 +858,18 @@ class _WarmCache:
 
     def _rebuild_locked(self, *, publish_if_cold=False) -> None:
         gen_at_start = self._invalidation_gen
+        started = time.monotonic()
+        worker_id = threading.get_ident()
+        def report_slow_build():
+            import sys
+            import traceback
+            frame = sys._current_frames().get(worker_id)
+            stack = ''.join(traceback.format_stack(frame)) if frame else 'Worker stack unavailable'
+            _log.warning("WarmCache[%s] still building after %.0fs; worker stack:\n%s",
+                         self._name, time.monotonic() - started, stack)
+        diagnostic = threading.Timer(60, report_slow_build)
+        diagnostic.daemon = True
+        diagnostic.start()
         try:
             from performance_metrics import measure
             with measure("cache.rebuild." + self._name):
@@ -867,6 +879,8 @@ class _WarmCache:
                 self._cold_failures += 1
             _log.exception("WarmCache[%s] rebuild failed: %s", self._name, e)
             return
+        finally:
+            diagnostic.cancel()
         # If invalidate() fired while we were building, our snapshot is
         # stale relative to the state that triggered the invalidate.
         # Keep the previous snapshot until a subsequent clean build succeeds.
@@ -17930,20 +17944,12 @@ def _build_queue_snapshot() -> dict:
     # batch-resolve headshots in a single library scan at the end —
     # avoids favourite_list() running N times for N files.
     file_perf_names: list[list[str]] = []
-    # Tally of filmstrip pre-warm dispatches in this snapshot so we
-    # can emit a single summary line at the end — silent on a fully
-    # cached queue, audible when ffmpeg work is actually being kicked
-    # off. Helps diagnose "is the prewarm running?" without flooding
-    # the activity panel with per-file lines.
-    _prewarm_dispatched = 0
-    _prewarm_skip_done = 0
-    _prewarm_skip_inflight = 0
-    _prewarm_skip_backoff = 0
     filed_skipped = 0
     from app.core.filename_parser import cache_signature
     parser_signature = cache_signature(settings)
     from app.core.queue_records import _library_links
     link_indexes = {kind: _library_links(kind) for kind in ('performer','studio')}
+    parser_context = {'library_indexes': _ensure_lib_idx(), 'studio_logos': db.studio_logo_list_all()}
     for rel, f in rel_entries:
         if any(part.startswith(".") for part in Path(rel).parts):
             continue
@@ -18032,7 +18038,6 @@ def _build_queue_snapshot() -> dict:
             if (
                 current_lib_gen
                 and stored_gen == current_lib_gen
-                and (stored_studio or stored_perfs)
             ):
                 match_studio = stored_studio
                 performers = stored_perfs
@@ -18076,7 +18081,7 @@ def _build_queue_snapshot() -> dict:
         search_record = None
         try:
             from app.core.queue_records import read as read_queue_record, observe_media
-            search_record = read_queue_record(rel, settings=settings, parser_signature=parser_signature, link_indexes=link_indexes)
+            search_record = read_queue_record(rel, settings=settings, parser_signature=parser_signature, link_indexes=link_indexes, parser_context=parser_context)
             observe_media(rel, f)
             sf = search_record['fields']
             if search_record['edited']:
@@ -18088,26 +18093,8 @@ def _build_queue_snapshot() -> dict:
         except Exception as exc:
             emit(f"parsed-meta build failed for {rel}: {exc}")
             parsed = {}
-        #: Filmstrip pre-warm. Skipped when all 5 frames are
-        #: already cached — first-time files get a background
-        #: ffmpeg run so the user clicks "Manual search" later
-        #: and the strip is already on disk. Files in the
-        #: failure-backoff window are also skipped so a file
-        #: ffmpeg can't decode doesn't get re-dispatched every
-        #: snapshot cycle. Each dispatch is tallied so the
-        #: snapshot can emit a single summary line below.
-        try:
-            if _queue_thumbs_has_all(rel):
-                _prewarm_skip_done += 1
-            elif _queue_thumb_backoff_active(rel):
-                _prewarm_skip_backoff += 1
-            elif _queue_thumb_inflight_active(rel):
-                _prewarm_skip_inflight += 1
-            else:
-                _prewarm_queue_thumbs_async(rel)
-                _prewarm_dispatched += 1
-        except Exception as exc:
-            emit(f"queue thumbs prewarm check failed for {rel}: {exc}")
+        # Filmstrips are requested by /api/queue/thumbs when displayed.
+        # Listing the inbox must not dispatch decodes for every unseen file.
         row_scope = (hrow.get("scope") or "").strip() if hrow else ""
         if not row_scope:
             grow_for_scope = (
@@ -18359,16 +18346,6 @@ def _build_queue_snapshot() -> dict:
             status_counts[ps] += 1
         else:
             status_counts["untracked"] += 1
-    if _prewarm_dispatched or _prewarm_skip_inflight or _prewarm_skip_backoff:
-        # Include skip counts so "dispatched 1" with 49 still in flight
-        # is visible — without that breakdown the log misleads into
-        # thinking the prewarm only ever sees 1 file at a time.
-        emit(
-            f"queue thumbs prewarm: dispatched {_prewarm_dispatched} file(s) "
-            f"(in-flight {_prewarm_skip_inflight}, backoff {_prewarm_skip_backoff}, "
-            f"cached {_prewarm_skip_done}; gated to {_QUEUE_THUMB_CONCURRENCY} "
-            f"concurrent ffmpeg seeks)"
-        )
     return {
         "files": files,
         "source_dir": str(source_dir),
@@ -51183,13 +51160,16 @@ _refresh_news_rss_cache = _singleflight(_refresh_news_rss_cache)
 _refresh_tag_scene_pools = _singleflight(_refresh_tag_scene_pools)
 
 
+# Recurring download cleanup is orchestration: each removal below is already
+# durable. Wrapping the sweep itself leaves every future run blocked after a
+# restart interrupts it. Keep individual interrupted removals protected.
 # Vice folder sync is repeatable mkdir/metadata reconciliation, not a one-shot
 # command: an interrupted run must never block future additions.
 # All entry points (HTTP, watcher, scheduler and boot) resolve these same
 # service functions. Each submits a named durable command before any effects.
 from app.core.action_commands import command as _durable_command
 for _action_name in (
-    '_download_remove_by_id', '_download_retry_by_id', '_retry_download_cleanup',
+    '_download_remove_by_id', '_download_retry_by_id',
     '_process_download_entry', '_process_stage_entry_to_queue',
     '_process_vice_download_entry', '_process_jav_download_entry',
     '_process_vice_stage_entry', '_process_jav_stage_entry',

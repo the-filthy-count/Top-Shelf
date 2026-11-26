@@ -104,3 +104,12 @@ test('inactive queue reads cannot replace the active queue loading status', () =
   ctx._renderQueueActivity();
   assert.doesNotMatch(nodes.queueActivityDetail.textContent,/Loading queue/);
 });
+
+test('queue failures retain server reason and HTTP status', async () => {
+  const ctx = setup(async () => ({ok:false,status:503,json:async()=>({error:'Queue scan failed. Check the server log and retry.'})}));
+  await assert.rejects(ctx._readQueuePayload('/api/queue'), /HTTP 503: Queue scan failed/);
+});
+test('expired sessions explain that signing in is required', async () => {
+  const ctx = setup(async () => ({ok:false,status:401,json:async()=>({error:'Unauthorised'})}));
+  await assert.rejects(ctx._readQueuePayload('/api/queue'), /Your session has expired/);
+});
