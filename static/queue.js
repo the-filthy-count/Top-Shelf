@@ -503,7 +503,7 @@
     }
     const fn = window[fnName];
     if (typeof fn !== 'function') return;
-    if (fnName === 'confirmDeleteQueueFile' || ['openMovieManualSearch', 'openManualSearch', 'openQueueSearchDetails', 'openManual', 'openVice'].includes(fnName)) fn(filename, {file_id:fileId, queue_kind:queueMode === 'movies' ? 'movie' : 'scene'});
+    if (fnName === 'confirmDeleteQueueFile' || ['openMovieManualSearch', 'openManualSearch', 'openQueueUrlImport', 'openQueueSearchDetails', 'openManual', 'openVice'].includes(fnName)) fn(filename, {file_id:fileId, queue_kind:queueMode === 'movies' ? 'movie' : 'scene'});
     else if (arguments.length > 2) fn(filename, extra);
     else fn(filename);
   }
@@ -936,6 +936,7 @@
         ${profileButton}
         <button type="button" class="btn-icon" onclick="_qCall('openQueueFilmstrip', this)" title="Filmstrip"><i class="fa-solid fa-photo-film"></i></button>
         <button type="button" class="btn-icon qi-filing-btn qi-edit-details ${_viceMatchesFilename(f.filename) ? 'is-vice-match' : ''}" onclick="_qCall('openQueueSearchDetails', this)" title="Edit saved search details" aria-label="Edit saved search details"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
+        <button type="button" class="btn-icon" onclick="_qCall('openQueueUrlImport', this)" title="Import scene from URL" aria-label="Import scene from URL"><i class="fa-solid fa-link" aria-hidden="true"></i></button>
         <button type="button" class="btn-icon qi-delete-btn" onclick="_qCall('confirmDeleteQueueFile', this)" title="Delete permanently"><i class="fa-solid fa-trash"></i></button>
         <button type="button" class="btn-run-file" onclick="_qCall('runQueueFile', this)" title="Run"><i class="fa-solid fa-play"></i></button>
       </div></div>
@@ -3661,6 +3662,52 @@
       return false;
     } finally { _qDetailsSaving = false; }
   }
+  window.openQueueUrlImport = function(filename, action = {}) {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'queue-url-dialog';
+    dialog.innerHTML = `<form><h3><i class="fa-solid fa-link"></i> Import scene</h3>
+      <label>Webpage URL<input class="field-input" type="url" required placeholder="https://…" aria-label="Webpage URL"></label>
+      <p role="status" aria-live="polite"></p><footer><button type="button" class="btn">Cancel</button>
+      <button type="submit" class="btn"><i class="fa-solid fa-download"></i> Scrape</button></footer></form>`;
+    const controller = new AbortController();
+    const status = dialog.querySelector('[role=status]');
+    dialog.querySelector('[type=button]').onclick = () => dialog.close();
+    dialog.addEventListener('close', () => { controller.abort(); dialog.remove(); });
+    dialog.querySelector('form').onsubmit = async event => {
+      event.preventDefault();
+      const submit = dialog.querySelector('[type=submit]');
+      submit.disabled = true;
+      status.textContent = 'Reading webpage…';
+      try {
+        const response = await fetch('/api/queue/scrape-url', {
+          method: 'POST', headers: {'Content-Type':'application/json'}, signal: controller.signal,
+          body: JSON.stringify({url: dialog.querySelector('input').value.trim()})
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not read webpage');
+        if (!dialog.open) return;
+        await openQueueSearchDetails(filename, action);
+        if (!dialog.open || _qSelectedFile !== filename || !_qSearchRecord || _qDetailsLoading) return;
+        for (const [id, key] of [['srchTitle','title'],['srchStudio','studio'],['srchDate','date'],['mPlot','description']]) {
+          if (data[key]) document.getElementById(id).value = data[key];
+        }
+        if (data.performers?.length) _perfPillsSet(data.performers);
+        if (data.tags?.length) _tagPillsSet(data.tags);
+        if (/^https?:\/\//i.test(data.image || '') || /^data:image\/(jpeg|png|webp);base64,/i.test(data.image || '')) {
+          document.getElementById('mImageUrl').value = data.image;
+          mThumbMode = 'url'; mThumbPreview(data.image);
+        }
+        _qDetailsStatus('Imported from ' + data.provider + ' · review and save');
+        dialog.close();
+      } catch (error) {
+        if (error.name !== 'AbortError') status.textContent = error.message;
+      } finally { submit.disabled = false; }
+    };
+    document.body.appendChild(dialog);
+    dialog.showModal();
+    dialog.querySelector('input').focus();
+  };
+
   function openQueueSearchDetails(filename, action = {}) {
     return openManualSearch(filename, {...action, edit_details:true});
   }

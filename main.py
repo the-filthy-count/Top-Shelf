@@ -35759,6 +35759,15 @@ def _ensure_parsed_filename(
     return result
 
 
+@app.post("/api/queue/scrape-url")
+def queue_scrape_url(payload: dict):
+    from app.integrations.scene_url import scrape
+    try:
+        return scrape(str(payload.get('url') or ''), db.get_settings())
+    except (ValueError, OSError, requests.RequestException) as exc:
+        return JSONResponse({"error": "Could not scrape webpage: " + str(exc)}, status_code=400)
+
+
 @app.get("/api/queue/search-details")
 def queue_search_details(filename: str = "", file_id: str = ""):
     from app.core.queue_records import read
