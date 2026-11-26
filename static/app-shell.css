@@ -12333,6 +12333,18 @@ body.ts-has-sidebar .app > .table-panel {
   font-size: 22px;
   align-self: center;
 }
+/* Mask icons need dimensions here; menu sizing does not apply to alerts. */
+.ts-sidebar-notif__symbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ts-sidebar-notif__symbol .ts-nav-icon {
+  width: 24px;
+  height: 24px;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
 .ts-sidebar-notif__headshot {
   width: 36px;
   height: 36px;
