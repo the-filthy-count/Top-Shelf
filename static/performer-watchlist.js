@@ -171,7 +171,7 @@
       finally {buttons.forEach(b=>b.disabled=false);actions.querySelector('button:not([data-submit-db])').disabled=true;}
     });
     if(row.confirmed || Object.keys(row.linked_profiles||{}).length){
-      statusEl.textContent='Loading linked profile details…';
+      statusEl.innerHTML = '<span class="loader loader--message" role="status" aria-label="Loading linked profile details…"></span>';
       const edited=new Set();form.addEventListener('input',event=>edited.add(event.target.name));
       api('/'+row.id+'/details','POST').then(result=>{
         if(!dialog.isConnected)return;

@@ -9,14 +9,14 @@
 <link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
 <link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
 <script src="/static/theme-init.js?v=20260614c"></script>
-<link rel="stylesheet" href="/static/app-shell.css?v=20261127-soft-scenes">
+<link rel="stylesheet" href="/static/app-shell.css?v=20261127-loading-animation">
 <!-- Poster-role picker + candidate/preview panes + crop modal all
      use styles that live in library.css. Without this, opening the
      "Manage images" modal on /performer/{id} rendered raw full-size
      candidate images stacked vertically with no chrome. -->
 <link rel="stylesheet" href="/static/library.css?v=20261003-discover-performer">
 <script src="/static/ts-utils.js?v=20261127-stash-button"></script>
-<script src="/static/lib-entity-actions.js?v=20261103-library-recovery"></script>
+<script src="/static/lib-entity-actions.js?v=20261127-loading-animation"></script>
 <script src="/static/popup-loader.js?v=20261126-local-stash"></script>
 <!-- Poster-role picker (headshot click → Manage images modal) is
      usually lazy-loaded by popup-loader.js's ensurePosterRolePicker.
@@ -26,7 +26,7 @@
      the fallback path (`window.location.href = /library?focus=...&manage=images`)
      to fire, which nav'd away from /performer/{id} and left the user
      stranded on /stars after closing the picker. -->
-<script src="/static/poster-role-picker.js?v=20261004-modal-lifecycle"></script>
+<script src="/static/poster-role-picker.js?v=20261127-loading-animation"></script>
 <script defer src="/static/movie-popup.js?v=20261115-cast-identity"></script>
 
 <style>
@@ -74,7 +74,7 @@
   }
 </style>
 <link rel="stylesheet" href="/static/mobile.css?v=20261127-brand-size">
-<link rel="stylesheet" href="/static/design-system.css?v=20261127-folder-arrow">
+<link rel="stylesheet" href="/static/design-system.css?v=20261127-retry-button">
 <link rel="stylesheet" href="/static/ui-polish.css?v=20261127-compact-results">
 </head>
 <body class="ts-has-sidebar ts-entity-page">
@@ -98,7 +98,7 @@
   <div id="entityPagePlaceholder" class="entity-page-placeholder">
     <div class="entity-page-placeholder__inner">
       <span class="loader" role="status" aria-label="Loading"></span>
-      <span id="entityPageStatus">Loading…</span>
+      <span id="entityPageStatus"><span class="loader loader--message" role="status" aria-label="Loading…"></span></span>
     </div>
   </div>
 </div>
@@ -243,7 +243,7 @@
       return showError('Performer viewer failed to load.');
     }
     document.title = opts.name ? `${opts.name} — Top-Shelf` : 'Performer — Top-Shelf';
-    if (status) status.textContent = 'Loading performer…';
+    if (status) status.innerHTML = '<span class="loader loader--message" role="status" aria-label="Loading performer…"></span>';
     const generation = ++_entityOpenGeneration;
     _entityOpening = true;
     Promise.resolve(window.openPerformerPopup(opts)).catch(error => showError(error.message || 'Could not load record.'))
@@ -257,7 +257,7 @@
     if (typeof window.openStudioPopup !== 'function') {
       return showError('Studio viewer failed to load.');
     }
-    if (status) status.textContent = 'Loading studio…';
+    if (status) status.innerHTML = '<span class="loader loader--message" role="status" aria-label="Loading studio…"></span>';
     const generation = ++_entityOpenGeneration;
     _entityOpening = true;
     Promise.resolve(window.openStudioPopup(opts)).catch(error => showError(error.message || 'Could not load record.'))
@@ -271,7 +271,7 @@
     if (typeof window.openMoviePopup !== 'function') {
       return showError('Movie viewer failed to load.');
     }
-    if (status) status.textContent = 'Loading movie…';
+    if (status) status.innerHTML = '<span class="loader loader--message" role="status" aria-label="Loading movie…"></span>';
     const generation = ++_entityOpenGeneration;
     _entityOpening = true;
     Promise.resolve(window.openMoviePopup(tpdbId)).catch(error => showError(error.message || 'Could not load record.'))
@@ -367,7 +367,7 @@
     const openModals = Array.from(document.querySelectorAll('.modal-overlay.open'));
     if (!openModals.length) return false;
     // Highest z-index wins as "topmost". modal-overlay ladder is
-    // declared in app-shell.css?v=20261127-soft-scenes :8021+; posterRoleModal sits above the
+    // declared in app-shell.css?v=20261127-loading-animation :8021+; posterRoleModal sits above the
     // performer popup, so it'll be picked when both are open.
     openModals.sort(function (a, b) {
       return (parseInt(getComputedStyle(b).zIndex, 10) || 0)

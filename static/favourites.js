@@ -1732,7 +1732,7 @@
     modal.querySelector('.modal-box').classList.remove('entity-panel-box--movie', 'entity-panel-box--vice');
     body.className = 'entity-panel-body';
     modal.classList.add('open');
-    body.innerHTML = '<div class="entity-panel-loading">Loading…</div>';
+    body.innerHTML = '<div class="entity-panel-loading"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>';
     try {
       const r = await window.tsModalFetch('entityPanelModal', '/api/favourites/entity-panel?row_id=' + encodeURIComponent(rowId), { credentials: 'same-origin' });
       const d = await r.json();
@@ -1983,7 +1983,7 @@
         <div class="movie-panel-layout">
           <div class="movie-panel-stats-col">
             <div class="bio-stats-list" id="moviePanelStats">
-              <div class="bio-stat-row"><div class="bio-stat-value" style="color:var(--dim);font-style:italic">Loading details…</div></div>
+              <div class="bio-stat-row"><div class="bio-stat-value" style="color:var(--dim);font-style:italic"><span class="loader loader--message" role="status" aria-label="Loading details…"></span></div></div>
             </div>
             <div class="bio-links-block" style="margin-top:auto">
               <div class="bio-section-label">Profiles</div>
@@ -2301,7 +2301,7 @@
     const q = (document.getElementById('entityProwlarrQuery') || {}).value?.trim() || '';
     const el = document.getElementById('entityProwlarrResults');
     if (!q || !el) return;
-    el.innerHTML = '<div class="entity-panel-meta">Searching…</div>';
+    el.innerHTML = '<div class="entity-panel-meta"><span class="loader loader--message" role="status" aria-label="Searching"></span></div>';
     try {
       const r = await window.tsModalFetch('entityPanelModal', '/api/prowlarr/search?q=' + encodeURIComponent(q), { credentials: 'same-origin' });
       const d = await r.json();
@@ -3782,7 +3782,7 @@
   async function loadImagePickCandidates() {
     if (!_imagePickRowId) return;
     const box = document.getElementById('imagePickResults');
-    box.innerHTML = '<div class="empty-tile" style="padding:20px">Loading linked images…</div>';
+    box.innerHTML = '<div class="empty-tile" style="padding:20px"><span class="loader loader--message" role="status" aria-label="Loading linked images…"></span></div>';
     _imagePickSelectedUrl = null;
     document.getElementById('imagePickApplyBtn').disabled = true;
     try {
@@ -3874,7 +3874,7 @@
     if (_searchKind === 'movie') {
       const yearEl = document.getElementById('searchYearInput');
       const year = yearEl ? yearEl.value.trim() : '';
-      box.innerHTML = '<div class="empty-tile" style="padding:20px">Searching…</div>';
+      box.innerHTML = '<div class="empty-tile" style="padding:20px"><span class="loader loader--message" role="status" aria-label="Searching"></span></div>';
       _movieSearchTmdbError = '';
       try {
         const [resTmdb, resTpdb] = await Promise.all([
@@ -3931,7 +3931,7 @@
       }
       return;
     }
-    box.innerHTML = '<div class="empty-tile" style="padding:20px">Searching…</div>';
+    box.innerHTML = '<div class="empty-tile" style="padding:20px"><span class="loader loader--message" role="status" aria-label="Searching"></span></div>';
     const type = _searchKind === 'studio' ? 'studio' : 'performer';
     let searchUrl = '/api/metadata/search?q=' + encodeURIComponent(q) + '&type=' + encodeURIComponent(type);
     if (type === 'performer') {

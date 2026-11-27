@@ -1849,7 +1849,7 @@
         window.showToast?.('Could not refresh the queue. Showing previous results.');
         return;
       }
-      document.getElementById('queueList').innerHTML = '<div class="empty">Could not load the movie queue.<p id="queueLoadError"></p> <button type="button" class="btn-secondary" onclick="loadQueue({force:true})">Retry</button></div>';
+      document.getElementById('queueList').innerHTML = '<div class="empty">Could not load the movie queue.<p id="queueLoadError"></p> <button type="button" class="btn-secondary queue-retry-btn" onclick="loadQueue({force:true})"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i><span>Retry</span></button></div>';
       document.getElementById('queueLoadError').textContent = error.name === 'AbortError'
         ? 'The queue request timed out after 30 seconds. Retry or check the server logs.'
         : (error.message || 'Unable to reach the server.');
@@ -1988,7 +1988,7 @@
     const folder = _queueCurrentFolder;
     const list = document.getElementById('qIafdPerformerList');
     window._iafdPerfEntries = [];
-    list.innerHTML = '<div class="qs-perf-empty">Loading performers…</div>';
+    list.innerHTML = '<div class="qs-perf-empty"><span class="loader loader--message" role="status" aria-label="Loading performers…"></span></div>';
     document.getElementById('qIafdPickerModal').classList.add('open');
     let folderPerformer = '';
     if (folder && !folder.startsWith('@studio:')) {
@@ -2920,7 +2920,7 @@
         window.showToast?.('Could not refresh the queue. Showing previous results.');
         return;
       }
-      document.getElementById('queueList').innerHTML = '<div class="empty">Could not load the queue.<p id="queueLoadError"></p> <button type="button" class="btn-secondary" onclick="loadQueue({force:true})">Retry</button></div>';
+      document.getElementById('queueList').innerHTML = '<div class="empty">Could not load the queue.<p id="queueLoadError"></p> <button type="button" class="btn-secondary queue-retry-btn" onclick="loadQueue({force:true})"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i><span>Retry</span></button></div>';
       document.getElementById('queueLoadError').textContent = error.name === 'AbortError'
         ? 'The queue request timed out after 30 seconds. Retry or check the server logs.'
         : (error.message || 'Unable to reach the server.');
@@ -3583,7 +3583,11 @@
   let _qDetailsSaving = false;
   function _qDetailsStatus(text, error = false) {
     const el = document.getElementById('qDetailsStatus');
-    if (el) { el.textContent = text; el.dataset.error = error ? 'true' : 'false'; }
+    if (el) {
+      if (!error && /^Loading\b/.test(text)) el.innerHTML = '<span class="loader loader--message" role="status" aria-label="' + esc(text) + '"></span>';
+      else el.textContent = text;
+      el.dataset.error = error ? 'true' : 'false';
+    }
   }
   function _qSearchFields() {
     const typed = document.getElementById('srchPerformer').value.trim();
@@ -5227,7 +5231,7 @@
     const year = document.getElementById('movieSrchYear').value.trim();
     const el = document.getElementById('movieSearchResults');
     if (!q) { el.innerHTML = '<div class="empty">Enter a title</div>'; return; }
-    el.innerHTML = '<div class="empty">Searching…</div>';
+    el.innerHTML = '<div class="empty"><span class="loader loader--message" role="status" aria-label="Searching"></span></div>';
     let tmdb = [], tpdbRes = [], javRes = [], iafdRes = [], tmdbErr = '';
     try {
       const [rt, rp] = await Promise.all([
@@ -7026,7 +7030,7 @@
 
   async function refreshQueueDuplicatesModal() {
     const body = document.getElementById('queueDupBody');
-    if (body) body.innerHTML = '<div class="empty" style="padding:24px">Loading…</div>';
+    if (body) body.innerHTML = '<div class="empty" style="padding:24px"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>';
     try {
       const r = await window.tsModalFetch('queueDupOverlay', '/api/queue/duplicates', { credentials: 'same-origin' });
       const d = await r.json();
@@ -7189,7 +7193,7 @@
   });
   async function loadSuggestions() {
     const body = document.getElementById('suggestionsBody');
-    body.innerHTML = '<div style="padding:48px;text-align:center;color:var(--dim);font-size:var(--text-body)"><span class="loader loader--block" role="status" aria-label="Loading"></span>Loading suggestions…</div>';
+    body.innerHTML = '<div style="padding:48px;text-align:center;color:var(--dim);font-size:var(--text-body)"><span class="loader loader--block" role="status" aria-label="Loading"></span></div>';
     try {
       const r = await window.tsModalFetch('suggestionsOverlay', '/api/queue/suggestions');
       const d = await r.json();

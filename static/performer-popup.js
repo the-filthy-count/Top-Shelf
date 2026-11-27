@@ -1114,7 +1114,7 @@
     });
     const nameEl = m.querySelector('.pp-name');
     if (nameEl) {
-      nameEl.innerHTML = '<span class="pp-name-text" style="opacity:0.45">Loading…</span>';
+      nameEl.innerHTML = '<span class="pp-name-text" style="opacity:0.45"><span class="loader loader--message" role="status" aria-label="Loading…"></span></span>';
     }
     const pills = m.querySelector('.pp-profiles-grid--header');
     if (pills) pills.innerHTML = '';
@@ -2000,7 +2000,7 @@
     const externalSources = [['tpdb', 'tpdb_id'], ['stashdb', 'stash_id'], ['fansdb', 'fansdb_id'], ['javstash', 'javstash_id']].filter(([, key]) => data.identity?.[key]);
     const external = externalSources.find(([source]) => source === data.filmographySource) || externalSources[0];
     if (!rowId && !external) { el.textContent = 'No source performer ID is available for this profile.'; return; }
-    el.innerHTML = '<div class="pp-filmography-tools"><span role="status">Loading filmography…</span><button type="button" class="btn-secondary" title="Refresh filmography" aria-label="Refresh filmography"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button></div><div class="pp-filmography-list"></div>';
+    el.innerHTML = '<div class="pp-filmography-tools"><span role="status"><span class="loader loader--message" role="status" aria-label="Loading filmography…"></span></span><button type="button" class="btn-secondary" title="Refresh filmography" aria-label="Refresh filmography"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button></div><div class="pp-filmography-list"></div>';
     const status = el.querySelector('[role="status"]');
     const button = el.querySelector('button');
     const list = el.querySelector('.pp-filmography-list');
@@ -2189,7 +2189,7 @@
             <span class="loader" role="status" aria-label="Loading scene"></span>
           </div>
           <div class="scene-meta" style="padding:6px 4px">
-            <div class="scene-title" style="font-size:var(--text-small);color:rgba(255,255,255,0.35);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Loading…</div>
+            <div class="scene-title" style="font-size:var(--text-small);color:rgba(255,255,255,0.35);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>
             <div style="font-size:var(--text-small);color:rgba(255,255,255,0.25)">&nbsp;</div>
           </div>
         </div>`).join('');

@@ -78,7 +78,8 @@
   async function load(refresh=false){
     controller?.abort();const request=new AbortController();controller=request;
     $('refresh').disabled=true;
-    $('status').textContent=data?'Showing saved statistics from '+new Date(data.generated_at).toLocaleString()+' · Refreshing…':'Loading library statistics…';
+    $('status').textContent=data?'Showing saved statistics from '+new Date(data.generated_at).toLocaleString()+' · ':'';
+    const loading=document.createElement('span');loading.className='loader loader--message';loading.setAttribute('role','status');loading.setAttribute('aria-label',data?'Refreshing statistics':'Loading library statistics');$('status').append(loading);
     try{
       const params=new URLSearchParams();if(refresh)params.set('refresh','true');selectedFolders.forEach(value=>params.append('folder',value));selectedStudios.forEach(value=>params.append('studio',value));
       const response=await fetch('/api/library/insights?'+params,{signal:request.signal,cache:'no-store'});

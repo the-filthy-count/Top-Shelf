@@ -9,14 +9,14 @@
 <link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
 <link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
 <script src="/static/theme-init.js?v=20260614c"></script>
-<link rel="stylesheet" href="/static/app-shell.css?v=20261127-soft-scenes">
+<link rel="stylesheet" href="/static/app-shell.css?v=20261127-loading-animation">
 <script src="/static/ts-utils.js?v=20261127-stash-button"></script>
-<script src="/static/lib-entity-actions.js?v=20261103-library-recovery"></script>
+<script src="/static/lib-entity-actions.js?v=20261127-loading-animation"></script>
 <script src="/static/popup-loader.js?v=20261126-local-stash"></script>
 <link rel="stylesheet" href="/static/ts-help.css?v=20260930-desktop-scale">
 <style>
   :root {
-    /* Colour palette lives in /static/app-shell.css?v=20261127-soft-scenes (themeable via html[data-theme=...]) */
+    /* Colour palette lives in /static/app-shell.css?v=20261127-loading-animation (themeable via html[data-theme=...]) */
     --counter-value-size: clamp(56px, calc(6.5 * var(--ts-unit-vw, 1vw)), 78px);
     --counter-label-size: var(--text-small);
   }
@@ -55,7 +55,7 @@
     backdrop-filter: blur(16px) !important;
     -webkit-backdrop-filter: blur(16px) !important;
   }
-  /* Title typography: global `.ts-page-title` in app-shell.css?v=20261127-soft-scenes (24px + 36px icon). */
+  /* Title typography: global `.ts-page-title` in app-shell.css?v=20261127-loading-animation (24px + 36px icon). */
   body .app .health-page-head .health-scope-seg {
     border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
     border-radius: 8px;
@@ -450,8 +450,8 @@
     -webkit-overflow-scrolling: touch;
   }
   /* Scrollbar inherits the global accent-themed style from
-   * app-shell.css?v=20261127-soft-scenes — earlier 4px / --muted override fought the theme. */
-  /* Issue rows — chrome mirrors .ts-row in app-shell.css?v=20261127-soft-scenes (file-tree look).
+   * app-shell.css?v=20261127-loading-animation — earlier 4px / --muted override fought the theme. */
+  /* Issue rows — chrome mirrors .ts-row in app-shell.css?v=20261127-loading-animation (file-tree look).
    * No negative margin: parent panel uses overflow:hidden which clips the
    * left edge of row content (was eating the leading character of titles). */
   .issue-list { margin: 0; }
@@ -1589,7 +1589,7 @@
     .stats-bar { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   }
   @media (max-width: 760px) {
-    /* font-size handled by global app-shell.css?v=20261127-soft-scenes typography scale */
+    /* font-size handled by global app-shell.css?v=20261127-loading-animation typography scale */
     .stats-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .health-page-head .ts-page-head__row {
       grid-template-columns: 1fr;
@@ -1663,7 +1663,7 @@
      embedded history table hides its chatty columns so tap-to-expand
      via the phash popup is the main interaction mode. */
   @media (max-width: 640px) {
-    /* font-size handled by global app-shell.css?v=20261127-soft-scenes typography scale */
+    /* font-size handled by global app-shell.css?v=20261127-loading-animation typography scale */
     .stat-card { min-height: 76px !important; padding: 8px !important; }
     .stat-card .stat-label { font-size: var(--text-small) !important; letter-spacing: 0.04em; }
     /* Filter chip rows (performer/studio/movies/history) wrap. */
@@ -1739,7 +1739,7 @@
   }
   .history-lib-filter-btn:hover { border-color: var(--muted); color: var(--text); }
   .history-lib-filter-btn.active { border-color: var(--accent); color: var(--accent); }
-  /* Filing-history rows — file-tree chrome (see .ts-row in app-shell.css?v=20261127-soft-scenes
+  /* Filing-history rows — file-tree chrome (see .ts-row in app-shell.css?v=20261127-loading-animation
    * No negative margin: parent panel uses overflow:hidden which clips the
    * left edge of cell content. */
   .history-lib-body {
@@ -2048,12 +2048,12 @@
   .mov-match-result-id { font-size: var(--text-small); color: var(--dim); font-family: var(--mono); }
   .mov-match-error { color: var(--red); font-size: var(--text-small); padding: 6px 2px; }
   /* No width/height override on .ts-flag-jp — the shared hinomaru token
-   * in app-shell.css?v=20261127-soft-scenes is a CSS-drawn round flag (circle + inner red dot
+   * in app-shell.css?v=20261127-loading-animation is a CSS-drawn round flag (circle + inner red dot
    * via ::after). Forcing a non-square box stretches it into an oval. */
   .emb-row-kind-ico i { font-size: 13px; }
 
   /* Tabular row system (Vices / Performers / Studios / Movies) — chrome
-   * mirrors .ts-row in app-shell.css?v=20261127-soft-scenes (file-tree look). Backgrounds live
+   * mirrors .ts-row in app-shell.css?v=20261127-loading-animation (file-tree look). Backgrounds live
    * on <td> because <tr> background is unreliable across nested wraps.
    * No negative inline margin: the panel has `overflow:hidden`, so any
    * negative margin clips the first column's left-padding content (the
@@ -2518,7 +2518,7 @@
 
 </style>
 <link rel="stylesheet" href="/static/mobile.css?v=20261127-brand-size">
-<link rel="stylesheet" href="/static/design-system.css?v=20261127-folder-arrow">
+<link rel="stylesheet" href="/static/design-system.css?v=20261127-retry-button">
 <link rel="stylesheet" href="/static/ui-polish.css?v=20261127-compact-results">
 </head>
 <body class="ts-has-sidebar">
@@ -2737,7 +2737,7 @@
           </tr>
         </thead>
         <tbody id="perfTableBody">
-          <tr><td colspan="10" class="emb-empty">Loading…</td></tr>
+          <tr><td colspan="10" class="emb-empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></td></tr>
         </tbody>
       </table>
     </div>
@@ -2800,7 +2800,7 @@
           </tr>
         </thead>
         <tbody id="stuTableBody">
-          <tr><td colspan="5" class="emb-empty">Loading…</td></tr>
+          <tr><td colspan="5" class="emb-empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></td></tr>
         </tbody>
       </table>
     </div>
@@ -2823,7 +2823,7 @@
       <button class="emb-btn-accent" onclick="stuLogoLoad()" title="Refresh"><i class="fa-solid fa-rotate"></i></button>
     </div>
     <div id="stuLogoGrid" class="stu-logo-grid">
-      <div class="emb-empty">Loading…</div>
+      <div class="emb-empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>
     </div>
     <div class="stu-logo-pager" id="stuLogoPager" style="display:none">
       <button type="button" class="stu-pager-btn" id="stuLogoPagerFirst" onclick="stuLogoPagerGoto(0)" title="First page"><i class="fa-solid fa-angles-left"></i></button>
@@ -2886,7 +2886,7 @@
           </tr>
         </thead>
         <tbody id="vicesTableBody">
-          <tr><td colspan="5" class="emb-empty">Loading…</td></tr>
+          <tr><td colspan="5" class="emb-empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></td></tr>
         </tbody>
       </table>
     </div>
@@ -2926,7 +2926,7 @@
           </tr>
         </thead>
         <tbody id="movTableBody">
-          <tr><td colspan="5" class="emb-empty">Loading…</td></tr>
+          <tr><td colspan="5" class="emb-empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></td></tr>
         </tbody>
       </table>
     </div>
@@ -2943,7 +2943,7 @@
       <button class="btn-secondary" onclick="logLibPrune()" title="Prune old lines" style="border:1px solid var(--border);color:var(--dim);padding:5px 10px;border-radius:6px;background:none;cursor:pointer;font-size:var(--text-body);transition:border-color 0.15s,color 0.15s"><i class="fa-solid fa-broom"></i></button>
       <button class="btn-secondary" onclick="logLibClear()" title="Clear log" style="border:1px solid rgba(var(--brand-purple-rgb),0.4);color:var(--red);padding:5px 10px;border-radius:6px;background:rgba(var(--brand-purple-rgb),0.35);cursor:pointer;font-size:var(--text-body);transition:border-color 0.15s,background 0.15s"><i class="fa-solid fa-trash"></i></button>
     </div>
-    <div class="log-lib-body" id="logLibBody"><div style="color:var(--dim)">Loading…</div></div>
+    <div class="log-lib-body" id="logLibBody"><div style="color:var(--dim)"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div></div>
     <div class="history-lib-pagination" id="logPagination" style="border-top:1px solid rgba(255,255,255,0.06)"></div>
   </div>
 
@@ -2982,7 +2982,7 @@
             <th class="h-sort-active" onclick="histSortBy('processed_at')">Processed <span class="h-sort-ind" data-col="processed_at">↓</span></th>
           </tr>
         </thead>
-        <tbody id="historyTableBody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+        <tbody id="historyTableBody"><tr><td colspan="8" class="empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></td></tr></tbody>
       </table>
     </div>
     <div class="history-lib-pagination" id="historyPagination"></div>
@@ -3140,7 +3140,7 @@
 
 <script src="/static/ts-help.js?v=20260529"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script defer src="/static/health.js?v=20261127-no-decor-art"></script>
+<script defer src="/static/health.js?v=20261127-loading-animation"></script>
 
 <!-- About / Version modal -->
 <div class="modal-overlay" id="aboutModal" onclick="if(event.target===this)closeAboutModal()">

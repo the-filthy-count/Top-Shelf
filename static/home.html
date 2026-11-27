@@ -9,11 +9,11 @@
 <link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
 <link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
 <script src="/static/theme-init.js?v=20260614c"></script>
-<link rel="stylesheet" href="/static/app-shell.css?v=20261127-soft-scenes">
+<link rel="stylesheet" href="/static/app-shell.css?v=20261127-loading-animation">
 <link rel="stylesheet" href="/static/library.css?v=20261003-discover-performer">
 <link rel="stylesheet" href="/static/scenes.css?v=20260930-desktop-scale">
 <script src="/static/ts-utils.js?v=20261127-stash-button"></script>
-<script src="/static/lib-entity-actions.js?v=20261103-library-recovery"></script>
+<script src="/static/lib-entity-actions.js?v=20261127-loading-animation"></script>
 <script src="/static/popup-loader.js?v=20261126-local-stash"></script>
 <script defer src="/static/movie-popup.js?v=20261115-cast-identity"></script>
 
@@ -598,7 +598,7 @@
 }
 </style>
 <link rel="stylesheet" href="/static/mobile.css?v=20261127-brand-size">
-<link rel="stylesheet" href="/static/design-system.css?v=20261127-folder-arrow">
+<link rel="stylesheet" href="/static/design-system.css?v=20261127-retry-button">
 <link rel="stylesheet" href="/static/ui-polish.css?v=20261127-compact-results">
 </head>
 <body class="ts-has-sidebar">
@@ -655,7 +655,7 @@
           <button type="button" class="home-section-mode-btn" data-order="added" title="Recently added first" aria-label="Recently added first" aria-pressed="true"><i class="fa-solid fa-clock" aria-hidden="true"></i></button>
           <button type="button" class="home-section-mode-btn" data-order="release" title="Newest release date first" aria-label="Newest release date first" aria-pressed="false"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i></button>
         </div>
-        <div style="display:flex;align-items:center;gap:10px"><button type="button" class="btn-secondary" id="restoreDiscovered" title="Restore hidden suggestions" aria-label="Restore hidden suggestions"><i class="fa-solid fa-eye" aria-hidden="true"></i></button><div class="home-section__meta" id="homeDiscoveredMeta">Loading…</div></div>
+        <div style="display:flex;align-items:center;gap:10px"><button type="button" class="btn-secondary" id="restoreDiscovered" title="Restore hidden suggestions" aria-label="Restore hidden suggestions"><i class="fa-solid fa-eye" aria-hidden="true"></i></button><div class="home-section__meta" id="homeDiscoveredMeta"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div></div>
       </div>
       <div class="fav-grid fav-grid--perf" id="homeDiscoveredGrid"></div>
     </section>
@@ -674,7 +674,7 @@
           </div>
           <span id="homePerfSectionLabel">Recently added stars</span>
         </div>
-        <div class="home-section__meta" id="homePerfMeta">Loading…</div>
+        <div class="home-section__meta" id="homePerfMeta"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>
       </div>
       <div class="fav-grid fav-grid--perf" id="homePerfGrid"></div>
     </section>
@@ -702,7 +702,7 @@
           </div>
           <span id="homeScenesSectionLabel">Recently downloaded scenes</span>
         </div>
-        <div class="home-section__meta" id="homeScenesMeta">Loading…</div>
+        <div class="home-section__meta" id="homeScenesMeta"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>
       </div>
       <div class="home-scene-grid" id="homeScenesGrid"></div>
     </section>
@@ -721,7 +721,7 @@
           </div>
           <span id="homeMoviesSectionLabel">Recently downloaded movies</span>
         </div>
-        <div class="home-section__meta" id="homeMoviesMeta">Loading…</div>
+        <div class="home-section__meta" id="homeMoviesMeta"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>
       </div>
       <div class="fav-grid fav-grid--perf fav-grid--movie" id="homeMoviesGrid"></div>
     </section>
@@ -740,7 +740,7 @@
           </div>
           <span id="homeJavSectionLabel">Recently downloaded JAV</span>
         </div>
-        <div class="home-section__meta" id="homeJavMeta">Loading…</div>
+        <div class="home-section__meta" id="homeJavMeta"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>
       </div>
       <div class="fav-grid fav-grid--perf fav-grid--movie" id="homeJavGrid"></div>
     </section>
@@ -789,7 +789,7 @@
   <div class="home-movie-popup__card" role="dialog" aria-modal="true" aria-labelledby="homeMoviePopupTitle">
     <button type="button" class="home-movie-popup__close" onclick="closeHomeMoviePopup()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
     <div class="home-movie-popup__body" id="homeMoviePopupBody">
-      <div class="home-movie-popup__loading">Loading…</div>
+      <div class="home-movie-popup__loading"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>
     </div>
   </div>
 </div>
@@ -798,7 +798,7 @@
      #sceneOverlay markup above. bootFeed inside guards on
      #scenesGrid — home page doesn't have one, so the poll loop
      stays inert; only the overlay opener + shared helpers are used. -->
-<script src="/static/scenes-common.js?v=20261115-cast-identity"></script>
+<script src="/static/scenes-common.js?v=20261127-loading-animation"></script>
 <script defer src="/static/activity-banner.js?v=20261126-job-locks"></script>
 <script defer src="/static/app-shell.js?v=20261014-navigation-2"></script>
 <script>
@@ -1383,7 +1383,7 @@
     window.tsCancelModalLoads?.('homeMoviePopup');
     overlay.classList.add('open');
     overlay.hidden = false;
-    body.innerHTML = '<div class="home-movie-popup__loading">Loading…</div>';
+    body.innerHTML = '<div class="home-movie-popup__loading"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>';
     let payload;
     try {
       const r = await window.tsModalFetch('homeMoviePopup', '/api/favourites/entity-panel?row_id=' + encodeURIComponent(rowId), { credentials: 'same-origin' });

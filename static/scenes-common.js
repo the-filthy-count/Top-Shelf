@@ -2703,7 +2703,7 @@
     const picker = popup.querySelector('[data-tag-vice-picker]');
     if (!picker) return;
     picker.style.display = 'flex';
-    picker.innerHTML = '<div style="padding:8px;color:var(--dim);font-style:italic">Loading…</div>';
+    picker.innerHTML = '<div style="padding:8px;color:var(--dim);font-style:italic"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>';
     let vices = [];
     try {
       const r = await fetch('/api/vices', { credentials: 'same-origin' });

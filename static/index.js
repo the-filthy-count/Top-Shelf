@@ -534,7 +534,7 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
         renderRssTiles(_dlProwlarrResults, getDlSearchMode());
       }
     } else if (!_dlRssPaintFromCache(getDlSearchMode())) {
-      el.innerHTML = '<div class="empty" style="padding:32px">Loading feeds…</div>';
+      el.innerHTML = '<div class="empty" style="padding:32px"><span class="loader loader--message" role="status" aria-label="Loading feeds…"></span></div>';
     }
 
     const libPromise = _refreshLibraryStudios();
@@ -595,7 +595,7 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
       el.innerHTML = '<div class="empty" style="padding:16px">Enter a search query.</div>';
       return;
     }
-    el.innerHTML = '<div class="empty" style="padding:16px">Searching…</div>';
+    el.innerHTML = '<div class="empty" style="padding:16px"><span class="loader loader--message" role="status" aria-label="Searching"></span></div>';
     try {
       // Fan out: original query plus a dot-joined variant. Indexers
       // tokenise q= on whitespace so a single phrase often returns
@@ -940,7 +940,7 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
       }
     }
     if (items === null) {
-      sceneListEl.innerHTML = '<div class="empty">Loading…</div>';
+      sceneListEl.innerHTML = '<div class="empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>';
       movieListEl.innerHTML = '';
       try {
         const r = await fetch('/api/wanted' + (force ? '?reconcile=1&refresh=1' : ''));

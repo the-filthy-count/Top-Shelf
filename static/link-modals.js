@@ -159,7 +159,7 @@
       box.innerHTML = '<div class="ts-link-modal-empty">Enter a search term.</div>';
       return;
     }
-    box.innerHTML = '<div class="ts-link-modal-empty">Searching…</div>';
+    box.innerHTML = '<div class="ts-link-modal-empty"><span class="loader loader--message" role="status" aria-label="Searching"></span></div>';
     // strict=0: let TPDB / StashDB / FansDB / JAVStash run their own fuzzy match
     // and show every hit to the user. The previous strict=true added a
     // post-fetch exact-normalised-name filter (main.py search_performers)
@@ -281,7 +281,7 @@
       box.innerHTML = `<div class="ts-link-modal-empty">No search backend for ${ESC(_extSite)} — paste a URL below.</div>`;
       return;
     }
-    box.innerHTML = '<div class="ts-link-modal-empty">Searching…</div>';
+    box.innerHTML = '<div class="ts-link-modal-empty"><span class="loader loader--message" role="status" aria-label="Searching"></span></div>';
     try {
       const r = await window.tsModalFetch('tsLinkExtModal', '/api/performers/search-ext-link', {
         method: 'POST',

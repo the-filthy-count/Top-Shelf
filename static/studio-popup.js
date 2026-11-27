@@ -46,7 +46,7 @@
         <header class="studio-popup-header performer-popup-header" id="studioPopupHeader">
           <h2 class="pp-name">
             <span class="pp-lib-entity-actions" id="studioPopupMenuSlot"></span>
-            <span class="pp-name-text" id="studioPopupTitle">Loading…</span>
+            <span class="pp-name-text" id="studioPopupTitle"><span class="loader loader--message" role="status" aria-label="Loading…"></span></span>
             <span class="pp-name-count" id="studioPopupVideoCount" hidden>
               <span class="pp-name-count-val" id="studioPopupVideoCountVal"></span>
               <i class="fa-solid fa-video pp-name-count-icon" aria-hidden="true"></i>
@@ -96,7 +96,7 @@
           </section>
           <section class="studio-popup-cell studio-popup-latest-cell">
             <div id="studioPopupLatest" class="studio-popup-latest">
-              <div class="studio-popup-empty">Loading latest scene…</div>
+              <div class="studio-popup-empty"><span class="loader loader--message" role="status" aria-label="Loading latest scene…"></span></div>
             </div>
           </section>
           <section class="studio-popup-cell studio-popup-scenes-cell">
@@ -205,7 +205,7 @@
     const results = document.getElementById('studioLogoPickResults');
     const apply = document.getElementById('studioLogoPickApplyBtn');
     document.getElementById('studioLogoPickTitle').textContent = `Pick image — ${_activeName || 'Studio'}`;
-    results.innerHTML = '<div class="ts-link-modal-empty">Loading linked images…</div>';
+    results.innerHTML = '<div class="ts-link-modal-empty"><span class="loader loader--message" role="status" aria-label="Loading linked images…"></span></div>';
     apply.disabled = true;
     apply.textContent = 'Apply';
     document.getElementById('studioLogoPickError').hidden = true;
@@ -416,10 +416,11 @@
     window._studioPopupActiveId = _activeRowId;
 
     // Reset to skeleton state.
-    document.getElementById('studioPopupTitle').textContent = _activeName || 'Loading…';
-    document.getElementById('studioPopupDesc').innerHTML = '<div class="studio-popup-empty">Loading description…</div>';
+    if (_activeName) document.getElementById('studioPopupTitle').textContent = _activeName;
+    else document.getElementById('studioPopupTitle').innerHTML = '<span class="loader loader--message" role="status" aria-label="Loading studio"></span>';
+    document.getElementById('studioPopupDesc').innerHTML = '<div class="studio-popup-empty"><span class="loader loader--message" role="status" aria-label="Loading description…"></span></div>';
     document.getElementById('studioPopupScenes').innerHTML = '';
-    document.getElementById('studioPopupLatest').innerHTML = '<div class="studio-popup-empty">Loading latest scene…</div>';
+    document.getElementById('studioPopupLatest').innerHTML = '<div class="studio-popup-empty"><span class="loader loader--message" role="status" aria-label="Loading latest scene…"></span></div>';
     document.getElementById('studioPopupScenesLabel').style.display = 'none';
     const pillsEl = document.getElementById('studioPopupPills');
     if (pillsEl) pillsEl.innerHTML = '';
@@ -1408,7 +1409,7 @@
         el.innerHTML = `
           <div class="studio-popup-latest-info">
             <div class="studio-popup-latest-kicker">Latest scene</div>
-            <div class="studio-popup-latest-title" style="opacity:0.45">Loading…</div>
+            <div class="studio-popup-latest-title" style="opacity:0.45"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>
             <div class="studio-popup-latest-meta" style="opacity:0.35">&nbsp;</div>
           </div>
           <div class="studio-popup-latest-art is-empty studio-popup-latest-art--loading">
@@ -1483,7 +1484,7 @@
             <span class="loader" role="status" aria-label="Loading scene"></span>
           </div>
           <div class="scene-meta" style="padding:6px 4px">
-            <div class="scene-title" style="font-size:var(--text-small);color:rgba(255,255,255,0.35);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Loading…</div>
+            <div class="scene-title" style="font-size:var(--text-small);color:rgba(255,255,255,0.35);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>
             <div style="font-size:var(--text-small);color:rgba(255,255,255,0.25)">&nbsp;</div>
           </div>
         </div>`).join('');

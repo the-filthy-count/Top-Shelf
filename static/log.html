@@ -9,11 +9,11 @@
 <link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
 <link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
 <script src="/static/theme-init.js?v=20260614c"></script>
-<link rel="stylesheet" href="/static/app-shell.css?v=20261127-soft-scenes">
+<link rel="stylesheet" href="/static/app-shell.css?v=20261127-loading-animation">
 <script src="/static/ts-utils.js?v=20261127-stash-button"></script>
 <style>
   :root {
-    /* Colour palette lives in /static/app-shell.css?v=20261127-soft-scenes (themeable via html[data-theme=...]) */
+    /* Colour palette lives in /static/app-shell.css?v=20261127-loading-animation (themeable via html[data-theme=...]) */
     --glass-panel-bg: linear-gradient(160deg, rgba(var(--panel-hi-rgb),0.48) 0%, rgba(var(--panel-lo-rgb),0.36) 100%);
     --glass-border: rgba(255,255,255,0.12); --glass-blur: 20px;
     --glass-inset: inset 0 1px 0 rgba(255,255,255,0.12);
@@ -143,7 +143,7 @@
   }
 </style>
 <link rel="stylesheet" href="/static/mobile.css?v=20261127-brand-size">
-<link rel="stylesheet" href="/static/design-system.css?v=20261127-folder-arrow">
+<link rel="stylesheet" href="/static/design-system.css?v=20261127-retry-button">
 <link rel="stylesheet" href="/static/ui-polish.css?v=20261127-compact-results">
 </head>
 <body class="ts-has-sidebar">
@@ -189,7 +189,7 @@
         <button type="button" class="btn-secondary" id="logCopyBtn" onclick="copyLogToClipboard()" title="Copy visible log lines"><i class="fa-solid fa-copy"></i> <span class="btn-label">Copy</span></button>
       </div>
     </div>
-    <div class="log-body" id="logBody"><div class="empty" style="color:var(--dim)">Loading…</div></div>
+    <div class="log-body" id="logBody"><div class="empty" style="color:var(--dim)"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div></div>
   </div>
 </div>
 <script>

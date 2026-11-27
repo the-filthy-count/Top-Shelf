@@ -128,7 +128,7 @@
       };
       _moveDismiss = () => done(false);
       modal.querySelector('#libEntityMoveCancel').onclick = _moveDismiss;
-      hint.textContent = 'Loading directories…';
+      hint.innerHTML = '<span class="loader loader--message" role="status" aria-label="Loading directories…"></span>';
       sel.innerHTML = '';
       confirmBtn.disabled = false;
       // Stay above the universal performer popup (modal-overlay defaults to 1200).
@@ -225,7 +225,7 @@
           <div class="lib-entity-rename-section">
             <label class="field-label">Pick an alias</label>
             <div class="lib-entity-rename-aliases" id="libEntityRenameAliases">
-              <div class="lib-entity-rename-empty">Loading…</div>
+              <div class="lib-entity-rename-empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>
             </div>
           </div>
           <div class="lib-entity-rename-section">
@@ -378,7 +378,7 @@
       cancelBtn.onclick = _renameDismiss;
 
       hint.innerHTML = `Renaming <strong>${esc(ctx.name)}</strong>. Pick an alias or type a new name.`;
-      aliasWrap.innerHTML = '<div class="lib-entity-rename-empty">Loading…</div>';
+      aliasWrap.innerHTML = '<div class="lib-entity-rename-empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>';
       customInput.value = '';
       confirmBtn.disabled = true;
       confirmBtn.textContent = 'Rename';
@@ -682,7 +682,7 @@
     }
 
     div.querySelector('#perfMergeSearch').value = '';
-    div.querySelector('#perfMergeStatus').textContent = 'Loading library…';
+    div.querySelector('#perfMergeStatus').innerHTML = '<span class="loader loader--message" role="status" aria-label="Loading library…"></span>';
     div.querySelector('#perfMergeResults').innerHTML = '';
     div.style.display = 'flex';
     div.classList.add('open');

@@ -13259,3 +13259,14 @@ ts-custom-link {display:inline-flex;align-items:center;}
 .dl-tile-source-poster--scene:not(:hover)::after { opacity: .5 !important; }
 .scene-card .scene-info { display: flex; flex-direction: column; gap: 4px; }
 .scene-card .scene-info > .scene-date { order: -1; margin-top: 0; }
+
+/* Inline loading status uses the shared equalizer without a large layout box. */
+.loader--message {
+  transform: scale(.45);
+  transform-origin: center;
+  margin: -13px -23px;
+  vertical-align: middle;
+}
+@media (prefers-reduced-motion: reduce) {
+  .loader--message { animation: none; background-size: 10px 5px, 10px 20px, 10px 35px, 10px 50px, 10px 20px, 10px 5px; }
+}

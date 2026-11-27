@@ -842,7 +842,7 @@
 
   async function loadTree() {
     if (_selectedMetric === 'total_videos') {
-      document.getElementById('detailList').innerHTML = '<div class="empty">Loading tree…</div>';
+      document.getElementById('detailList').innerHTML = '<div class="empty"><span class="loader loader--message" role="status" aria-label="Loading tree…"></span></div>';
     }
     const q = _scopePath ? ('?scope=' + encodeURIComponent(_scopePath)) : '';
     const r = await fetch('/api/health/tree' + q);
@@ -1976,7 +1976,7 @@
       date_from: document.getElementById('libSrchDateFrom').value.trim(),
       date_to: document.getElementById('libSrchDateTo').value.trim(),
     };
-    document.getElementById('libMatchResults').innerHTML = '<div class="empty" style="padding:14px">Searching…</div>';
+    document.getElementById('libMatchResults').innerHTML = '<div class="empty" style="padding:14px"><span class="loader loader--message" role="status" aria-label="Searching"></span></div>';
     try {
       const r = await window.tsModalFetch('libMatchModal', '/api/search', {
         method: 'POST',
@@ -2301,7 +2301,7 @@
         </div>
         <div style="font-size:var(--text-small);color:var(--dim)">${esc(dupModalStatsLine(f))}</div>
         <div style="font-size:var(--text-small);color:var(--muted);margin-top:4px;word-break:break-all">${esc(p)}</div>
-        <div class="dup-db-block" id="dupDb-${fi}">Loading record…</div>
+        <div class="dup-db-block" id="dupDb-${fi}"><span class="loader loader--message" role="status" aria-label="Loading record…"></span></div>
         <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
           <button type="button" class="btn-tiny" data-dup-rec-meta="${fi}" ${canMeta ? '' : 'disabled'}>Recreate metadata</button>
           <button type="button" class="btn-dup-row-delete" data-dup-modal-del="${enc}" data-library-file-id="${Number(f.id) || 0}" title="Delete permanently"><i class="fa-solid fa-xmark"></i></button>
@@ -2884,7 +2884,7 @@
   async function perfLoadStatus() {
     _perfLoaded = true;
     const tbody = document.getElementById('perfTableBody');
-    tbody.innerHTML = '<tr><td colspan="10" class="emb-empty">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="emb-empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></td></tr>';
     try {
       const r = await fetch('/api/performers/enrichment-status');
       const data = await r.json();
@@ -3479,7 +3479,7 @@
   async function stuLoadStatus() {
     _stuLoaded = true;
     const tbody = document.getElementById('stuTableBody');
-    tbody.innerHTML = '<tr><td colspan="5" class="emb-empty">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="emb-empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></td></tr>';
     try {
       const r = await fetch('/api/studios/enrichment-status');
       const data = await r.json();
@@ -3661,7 +3661,7 @@
   async function stuLogoLoad() {
     _stuLogoBuildAlphaBar();
     const grid = document.getElementById('stuLogoGrid');
-    grid.innerHTML = '<div class="emb-empty">Loading…</div>';
+    grid.innerHTML = '<div class="emb-empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>';
     try {
       const r = await fetch('/api/studio-logos/saved');
       const d = await r.json();
@@ -3985,7 +3985,7 @@
   async function vicesLoadStatus() {
     _vicesLoaded = true;
     const tbody = document.getElementById('vicesTableBody');
-    tbody.innerHTML = '<tr><td colspan="4" class="emb-empty">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="emb-empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></td></tr>';
     try {
       const r = await fetch('/api/favourites');
       const data = await r.json();
@@ -4120,7 +4120,7 @@
   async function movLoadMovies() {
     _movLoaded = true;
     const tbody = document.getElementById('movTableBody');
-    tbody.innerHTML = '<tr><td colspan="5" class="emb-empty">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="emb-empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></td></tr>';
     try {
       const r = await fetch('/api/favourites');
       const data = await r.json();
@@ -4405,7 +4405,7 @@
     if (!inp || !out) return;
     const q = (inp.value || '').trim();
     if (!q) { out.innerHTML = '<div class="mov-match-empty">Enter a search term.</div>'; return; }
-    out.innerHTML = '<div class="mov-match-empty">Searching…</div>';
+    out.innerHTML = '<div class="mov-match-empty"><span class="loader loader--message" role="status" aria-label="Searching"></span></div>';
     try {
       let results = [];
       if (src === 'tpdb') {
@@ -4575,7 +4575,7 @@
     const body = document.getElementById('logLibBody');
     const meta = document.getElementById('logLibMeta');
     if (!body) return;
-    body.innerHTML = '<div style="color:var(--dim)">Loading…</div>';
+    body.innerHTML = '<div style="color:var(--dim)"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>';
     const offset = (_logPage - 1) * _LOG_PER_PAGE;
     const q = _currentLogFilter();
     const params = new URLSearchParams({
@@ -4931,7 +4931,7 @@
     if (!q) return;
     const src = document.getElementById('perfSearchSource').value;
     const el = document.getElementById('perfSearchResults');
-    el.innerHTML = '<div class="emb-empty">Searching…</div>';
+    el.innerHTML = '<div class="emb-empty"><span class="loader loader--message" role="status" aria-label="Searching"></span></div>';
     try {
       const r = await fetch(`/api/metadata/search?q=${encodeURIComponent(q)}&type=performer&strict=0`);
       const d = await r.json();
@@ -5360,7 +5360,7 @@ document.addEventListener('click', async event => {
   if (!dialog) { dialog = document.createElement('dialog'); dialog.id='historyFileDetails'; dialog.style.cssText='background:var(--panel,#202223);color:var(--text);border:1px solid var(--accent);border-radius:10px;padding:24px;max-width:min(800px,90vw)'; document.body.appendChild(dialog); }
   dialog.replaceChildren();
   const close=document.createElement('button');close.type='button';close.className='btn-secondary';close.textContent='Close';close.onclick=()=>dialog.close();dialog.appendChild(close);
-  const body=document.createElement('div');body.textContent='Loading…';dialog.appendChild(body);dialog.showModal();
+  const body=document.createElement('div');body.innerHTML = '<span class="loader loader--message" role="status" aria-label="Loading…"></span>';dialog.appendChild(body);dialog.showModal();
   try {
     const r=await fetch('/api/history/file-details?filename='+encodeURIComponent(button.dataset.historyDetails));const d=await r.json();if(!r.ok)throw new Error(d.detail || 'Could not load history');
     body.replaceChildren();

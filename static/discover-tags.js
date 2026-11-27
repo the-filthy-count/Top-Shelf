@@ -69,7 +69,7 @@
         finally { button.disabled = false; }
       };
     }
-    dialog.querySelector('[data-status]').textContent = 'Loading saved tags…';
+    dialog.querySelector('[data-status]').innerHTML = '<span class="loader loader--message" role="status" aria-label="Loading saved tags…"></span>';
     dialog.querySelector('input').value = '';
     dialog.querySelector('input').disabled = true;
     selected = new Map(); excluded = new Map(); paint();

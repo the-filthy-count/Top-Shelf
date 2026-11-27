@@ -9,15 +9,15 @@
 <link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
 <link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
 <script src="/static/theme-init.js?v=20260614c"></script>
-<link rel="stylesheet" href="/static/app-shell.css?v=20261127-soft-scenes">
+<link rel="stylesheet" href="/static/app-shell.css?v=20261127-loading-animation">
 <script src="/static/ts-utils.js?v=20261127-stash-button"></script>
-<script src="/static/lib-entity-actions.js?v=20261103-library-recovery"></script>
+<script src="/static/lib-entity-actions.js?v=20261127-loading-animation"></script>
 <script src="/static/popup-loader.js?v=20261126-local-stash"></script>
 <style>
   /* Universal reset + body baseline — news.html was previously
    * relying on browser defaults (8px body margin) which pushed every
    * element 8px in from the viewport. The header full-bleeds via
-   * negative `--shell-page-padding` margins (set by app-shell.css?v=20261127-soft-scenes
+   * negative `--shell-page-padding` margins (set by app-shell.css?v=20261127-loading-animation
    * but those negative margins resolve from inside `.app`, not from
    * the viewport — so with body's 8px margin still in play the
    * header *and* the body-level `#newsSection` ended up at different
@@ -228,7 +228,7 @@
   .news-tile-foot i { font-size: 10px; transition: transform 0.18s ease; }
   .news-tile:hover .news-tile-foot i { transform: translateX(3px); }
 
-  /* Title bar: global `.ts-page-head` in app-shell.css?v=20261127-soft-scenes */
+  /* Title bar: global `.ts-page-head` in app-shell.css?v=20261127-loading-animation */
   .news-panel-title { margin: 0; }
   .news-panel-meta {
     font-family: var(--secs);
@@ -267,7 +267,7 @@
   /* The refresh + gear buttons used to carry a bespoke `.news-tool-btn`
    * recipe (purple/pink gradient + accent border + accent text); that
    * look has since been promoted to the global `.btn-secondary` in
-   * app-shell.css?v=20261127-soft-scenes so every page picks it up. We keep a per-page size
+   * app-shell.css?v=20261127-loading-animation so every page picks it up. We keep a per-page size
    * override (40×40 to match the header buttons) since the global rule
    * leaves sizing context-specific. */
   .news-panel-tools .btn-secondary {
@@ -281,7 +281,7 @@
   }
 </style>
 <link rel="stylesheet" href="/static/mobile.css?v=20261127-brand-size">
-<link rel="stylesheet" href="/static/design-system.css?v=20261127-folder-arrow">
+<link rel="stylesheet" href="/static/design-system.css?v=20261127-retry-button">
 <link rel="stylesheet" href="/static/ui-polish.css?v=20261127-compact-results">
 </head>
 <body class="ts-has-sidebar">
@@ -319,7 +319,7 @@
           <i class="ts-page-title__icon ts-nav-icon ts-nav-icon--news" aria-hidden="true"></i>
           <span class="ts-page-title__text">News Feed</span>
         </div>
-        <div class="news-panel-meta" id="newsPanelMeta">Loading…</div>
+        <div class="news-panel-meta" id="newsPanelMeta"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>
       </div>
       <div class="ts-page-head__center" aria-hidden="true"></div>
       <div class="ts-page-head__right news-panel-tools">
@@ -473,7 +473,7 @@
         `<div class="news-tile" style="pointer-events:none">
           <div class="news-tile-hero"><img src="${NEWS_MISSING_IMG}" alt="" style="opacity:0.45" loading="lazy"></div>
           <div class="news-tile-body">
-            <div class="news-tile-title" style="opacity:0.4">Loading…</div>
+            <div class="news-tile-title" style="opacity:0.4"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>
           </div>
         </div>`
       ).join('');

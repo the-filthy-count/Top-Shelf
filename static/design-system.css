@@ -569,3 +569,46 @@ html[data-theme] body .qi-crumb:is(.is-active, [aria-current], :hover) {
 }
 html[data-theme] body span.qi-crumb[aria-current] { cursor: default; }
 }
+
+@layer canonical-controls {
+/* Watchlist filters use matching standalone controls on a clear toolbar. */
+html[data-theme] body :is(.watch-tools, .watch-list-filters, .watch-status-toggle) {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+html[data-theme] body .watch-status-toggle { gap: 6px !important; overflow: visible; }
+html[data-theme] body .watch-list-filters .watch-status-toggle label span,
+html[data-theme] body .watch-list-filters button {
+  height: var(--control-height) !important;
+  min-height: var(--control-height) !important;
+  box-sizing: border-box;
+  background: var(--control-surface) !important;
+  border: 1px solid var(--control-border) !important;
+  border-radius: var(--control-radius) !important;
+  box-shadow: inset 0 1px 0 #ffffff06 !important;
+}
+html[data-theme] body .watch-list-filters .watch-status-toggle input:checked + span,
+html[data-theme] body .watch-list-filters button[aria-pressed="true"] {
+  background: var(--control-hover) !important;
+  border-color: var(--accent) !important;
+  box-shadow: inset 0 -2px 0 var(--accent) !important;
+}
+}
+
+@layer canonical-controls {
+html[data-theme] body #queueList .queue-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: var(--control-height) !important;
+  min-height: var(--control-height) !important;
+  width: auto !important;
+  min-width: 96px;
+  padding: 8px 14px !important;
+  margin-top: 10px;
+  border: 1px solid var(--control-border) !important;
+  border-radius: var(--control-radius) !important;
+}
+}

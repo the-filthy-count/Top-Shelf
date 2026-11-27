@@ -25,7 +25,10 @@
       document.body.append(dialog);
     }
     dialog.querySelector('h2').textContent = title;
-    body.replaceChildren(node('p', 'Loading…', 'queue-details-note'));
+    const loading = node('span', '', 'loader loader--message');
+    loading.setAttribute('role', 'status');
+    loading.setAttribute('aria-label', 'Loading file history');
+    body.replaceChildren(loading);
     if (!dialog.open) dialog.showModal();
     return token;
   }

@@ -279,7 +279,7 @@
     document.getElementById('posterRoleTitle').textContent =
       'Manage posters — ' + displayFolderName(titleLabel);
     const candBox = document.getElementById('posterRoleCandidates');
-    candBox.innerHTML = '<div class="empty-tile" style="padding:20px">Loading linked images…</div>';
+    candBox.innerHTML = '<div class="empty-tile" style="padding:20px"><span class="loader loader--message" role="status" aria-label="Loading linked images…"></span></div>';
     _setPosterRolePreview('primary',  null);
     _setPosterRolePreview('secondary', null);
     _setPosterRolePreview('headshot', null);
