@@ -9,14 +9,14 @@
 <link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
 <link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
 <script src="/static/theme-init.js?v=20260614c"></script>
-<link rel="stylesheet" href="/static/app-shell.css?v=20261127-no-decor-art">
+<link rel="stylesheet" href="/static/app-shell.css?v=20261127-soft-photo-effects">
 <script src="/static/ts-utils.js?v=20261127-stash-button"></script>
 <script src="/static/lib-entity-actions.js?v=20261103-library-recovery"></script>
 <script src="/static/popup-loader.js?v=20261126-local-stash"></script>
 <link rel="stylesheet" href="/static/ts-help.css?v=20260930-desktop-scale">
 <style>
   :root {
-    /* Colour palette lives in /static/app-shell.css?v=20261127-no-decor-art (themeable via html[data-theme=...]) */
+    /* Colour palette lives in /static/app-shell.css?v=20261127-soft-photo-effects (themeable via html[data-theme=...]) */
     --counter-value-size: clamp(56px, calc(6.5 * var(--ts-unit-vw, 1vw)), 78px);
     --counter-label-size: var(--text-small);
   }
@@ -55,7 +55,7 @@
     backdrop-filter: blur(16px) !important;
     -webkit-backdrop-filter: blur(16px) !important;
   }
-  /* Title typography: global `.ts-page-title` in app-shell.css?v=20261127-no-decor-art (24px + 36px icon). */
+  /* Title typography: global `.ts-page-title` in app-shell.css?v=20261127-soft-photo-effects (24px + 36px icon). */
   body .app .health-page-head .health-scope-seg {
     border: 1px solid rgba(var(--brand-purple-rgb), 0.35);
     border-radius: 8px;
@@ -450,8 +450,8 @@
     -webkit-overflow-scrolling: touch;
   }
   /* Scrollbar inherits the global accent-themed style from
-   * app-shell.css?v=20261127-no-decor-art — earlier 4px / --muted override fought the theme. */
-  /* Issue rows — chrome mirrors .ts-row in app-shell.css?v=20261127-no-decor-art (file-tree look).
+   * app-shell.css?v=20261127-soft-photo-effects — earlier 4px / --muted override fought the theme. */
+  /* Issue rows — chrome mirrors .ts-row in app-shell.css?v=20261127-soft-photo-effects (file-tree look).
    * No negative margin: parent panel uses overflow:hidden which clips the
    * left edge of row content (was eating the leading character of titles). */
   .issue-list { margin: 0; }
@@ -1589,7 +1589,7 @@
     .stats-bar { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   }
   @media (max-width: 760px) {
-    /* font-size handled by global app-shell.css?v=20261127-no-decor-art typography scale */
+    /* font-size handled by global app-shell.css?v=20261127-soft-photo-effects typography scale */
     .stats-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .health-page-head .ts-page-head__row {
       grid-template-columns: 1fr;
@@ -1663,7 +1663,7 @@
      embedded history table hides its chatty columns so tap-to-expand
      via the phash popup is the main interaction mode. */
   @media (max-width: 640px) {
-    /* font-size handled by global app-shell.css?v=20261127-no-decor-art typography scale */
+    /* font-size handled by global app-shell.css?v=20261127-soft-photo-effects typography scale */
     .stat-card { min-height: 76px !important; padding: 8px !important; }
     .stat-card .stat-label { font-size: var(--text-small) !important; letter-spacing: 0.04em; }
     /* Filter chip rows (performer/studio/movies/history) wrap. */
@@ -1739,7 +1739,7 @@
   }
   .history-lib-filter-btn:hover { border-color: var(--muted); color: var(--text); }
   .history-lib-filter-btn.active { border-color: var(--accent); color: var(--accent); }
-  /* Filing-history rows — file-tree chrome (see .ts-row in app-shell.css?v=20261127-no-decor-art
+  /* Filing-history rows — file-tree chrome (see .ts-row in app-shell.css?v=20261127-soft-photo-effects
    * No negative margin: parent panel uses overflow:hidden which clips the
    * left edge of cell content. */
   .history-lib-body {
@@ -2048,12 +2048,12 @@
   .mov-match-result-id { font-size: var(--text-small); color: var(--dim); font-family: var(--mono); }
   .mov-match-error { color: var(--red); font-size: var(--text-small); padding: 6px 2px; }
   /* No width/height override on .ts-flag-jp — the shared hinomaru token
-   * in app-shell.css?v=20261127-no-decor-art is a CSS-drawn round flag (circle + inner red dot
+   * in app-shell.css?v=20261127-soft-photo-effects is a CSS-drawn round flag (circle + inner red dot
    * via ::after). Forcing a non-square box stretches it into an oval. */
   .emb-row-kind-ico i { font-size: 13px; }
 
   /* Tabular row system (Vices / Performers / Studios / Movies) — chrome
-   * mirrors .ts-row in app-shell.css?v=20261127-no-decor-art (file-tree look). Backgrounds live
+   * mirrors .ts-row in app-shell.css?v=20261127-soft-photo-effects (file-tree look). Backgrounds live
    * on <td> because <tr> background is unreliable across nested wraps.
    * No negative inline margin: the panel has `overflow:hidden`, so any
    * negative margin clips the first column's left-padding content (the

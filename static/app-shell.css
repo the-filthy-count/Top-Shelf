@@ -1984,8 +1984,8 @@ body::after {
 }
 
 /* ── /library performer headshots — old-photo (frameless polaroid) ──
- * Settings ported verbatim from the user's reference snippet:
- *   filter: blur(0.05em) saturate(0.7) contrast(1.5) brightness(1.2)
+ * Old-photo treatment at half the original strength:
+ *   filter: blur(0.025em) saturate(0.85) contrast(1.25) brightness(1.1)
  *   overlay stack (top → bottom):
  *     1. radial vignette  — radial-gradient(ellipse, #0000, #0007)
  *     2. warm yellow wash — linear-gradient(0deg, #9725, #9725)
@@ -2002,7 +2002,7 @@ body::after {
 .fav-grid--perf:not(.fav-grid--movie) .fav-cell .duo-img,
 .dl-bar-headshot img,
 .pp-gallery-tile img {
-  filter: blur(0.05em) saturate(0.7) contrast(1.5) brightness(1.2) !important;
+  filter: blur(0.025em) saturate(0.85) contrast(1.25) brightness(1.1) !important;
   animation: none !important;
 }
 .fav-grid--perf:not(.fav-grid--movie) .fav-cell .fav-perf-ph::after,
@@ -2034,7 +2034,7 @@ body::after {
   background-blend-mode: soft-light, normal, normal, normal !important;
   mix-blend-mode: normal !important;
   animation: none !important;
-  opacity: 1 !important;
+  opacity: 0.5 !important;
 }
 /* (Old paper-on-hover overrides for scenes / spotlight /
  *  library-perf cells deleted — rest is now clean by default,
