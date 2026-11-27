@@ -1407,7 +1407,7 @@
         ${logo}
         <i class="fa-solid fa-magnifying-glass" style="font-size:9px;opacity:0.7"></i>
       </button>`;
-    }).join('') + `<ts-local-stash kind="performer" ${rowId ? `row-id="${ESC(rowId)}"` : ''} tpdb="${ESC(id.tpdb_id || '')}" stashdb="${ESC(id.stash_id || '')}" fansdb="${ESC(id.fansdb_id || '')}"></ts-local-stash>`;
+    }).join('');
   }
 
   //: Compute age from a YYYY-MM-DD birthdate string. Returns null if
@@ -1533,6 +1533,7 @@
       ${flag}
       ${ageHtml}
       ${nameIcons}
+      <ts-local-stash kind="performer" ${lib.row_id ? `row-id="${ESC(lib.row_id)}"` : ''} tpdb="${ESC(id.tpdb_id || '')}" stashdb="${ESC(id.stash_id || '')}" fansdb="${ESC(id.fansdb_id || '')}"></ts-local-stash>
       ${countHtml}`;
     const actionsEl = nameEl.querySelector('.pp-lib-entity-actions');
     if (actionsEl) {

@@ -492,6 +492,7 @@ def _manual_action_rehydrate() -> int:
                     db.manual_job_delete(job_id)
                 except Exception as exc:
                     db.manual_job_mark_failed(job_id, str(exc))
+                    db.notification_add('error', 'Filing failed: ' + (row.get('label') or 'File') + ' — ' + str(exc), ttl_seconds=86400)
                     raise
                 finally:
                     with _manual_rehydrate_lock:
@@ -20629,6 +20630,23 @@ async def api_queue_thumb(filename: str, i: int, v: int = 0):
     )
 
 
+def _manual_scene_field_errors(scene: dict) -> dict:
+    errors = {}
+    if not str(scene.get('title') or '').strip():
+        errors['title'] = 'Title is required'
+    studio = scene.get('studio') or {}
+    if not str((studio.get('name') if isinstance(studio, dict) else studio) or '').strip():
+        errors['studio'] = 'Studio is required'
+    date = str(scene.get('release_date') or scene.get('date') or '').strip()
+    try:
+        if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', date):
+            raise ValueError()
+        datetime.strptime(date, '%Y-%m-%d')
+    except ValueError:
+        errors['date'] = 'A valid YYYY-MM-DD release date is required'
+    return errors
+
+
 @app.post("/api/file/manual")
 async def file_manual(payload: dict, background_tasks: BackgroundTasks):
     """
@@ -20640,6 +20658,10 @@ async def file_manual(payload: dict, background_tasks: BackgroundTasks):
 
     if not filename or not scene:
         return JSONResponse({"error": "filename and scene are required"}, status_code=400)
+
+    errors = _manual_scene_field_errors(scene)
+    if errors:
+        return JSONResponse({"error": "; ".join(errors.values()), "fields": errors}, status_code=400)
 
     if payload.get("file_id"):
         from app.core.manual_identity import resolve_payload
@@ -35276,6 +35298,10 @@ async def file_manual_metadata(payload: dict, background_tasks: BackgroundTasks)
 
     if not all([filename, title, studio, date]):
         return JSONResponse({"error": "filename, title, studio and date are required"}, status_code=400)
+
+    errors = _manual_scene_field_errors({'title': title, 'studio': {'name': studio}, 'release_date': date})
+    if errors:
+        return JSONResponse({"error": "; ".join(errors.values()), "fields": errors}, status_code=400)
 
     if payload.get("file_id"):
         from app.core.manual_identity import resolve_payload

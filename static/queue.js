@@ -5840,9 +5840,37 @@
   //: submitManual is in flight doesn't queue a second request (which
   //: would then stomp the first's button-state restore on completion).
   let _mSubmitInFlight = false;
+  function _validateManualFields() {
+    const fields = [['srchTitle', 'Title'], ['srchStudio', 'Studio'], ['srchDate', 'Date']];
+    const errors = [];
+    for (const [id, label] of fields) {
+      const input = document.getElementById(id);
+      const value = input.value.trim();
+      let invalid = !value;
+      if (id === 'srchDate' && value) {
+        const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+        const date = match ? new Date(value + 'T00:00:00Z') : null;
+        invalid = !date || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value;
+      }
+      input.classList.toggle('q-field-invalid', invalid);
+      input.setAttribute('aria-invalid', String(invalid));
+      input.oninput = () => {
+        input.classList.remove('q-field-invalid');
+        input.removeAttribute('aria-invalid');
+      };
+      if (invalid) errors.push({input, label});
+    }
+    if (!errors.length) return true;
+    _qDetailsStatus('Check ' + errors.map(e => e.label.toLowerCase()).join(', ') + ' before submitting', true);
+    errors[0].input.scrollIntoView({block:'center', behavior:'smooth'});
+    errors[0].input.focus();
+    return false;
+  }
+
   async function submitManual() {
     if (_mSubmitInFlight) return;
     if (!_qManualFile) { window.toast('No file selected for filing'); return; }
+    if (!_validateManualFields()) return;
     if (_qSearchRecord && !await saveQueueSearchDetails()) return;
     const btn = document.getElementById('qSearchManualFileBtn');
     //: Always use the canonical idle HTML as the restore target so a

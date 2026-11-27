@@ -19,7 +19,7 @@
      ships a self-referencing import cycle that throws on load. -->
 <script src="/static/theme-init.js?v=20260614c"></script>
 <link rel="stylesheet" href="/static/app-shell.css?v=20261126-job-locks">
-<script src="/static/ts-utils.js?v=20261126-local-stash"></script>
+<script src="/static/ts-utils.js?v=20261127-stash-button"></script>
 <script src="/static/lib-entity-actions.js?v=20261103-library-recovery"></script>
 <script src="/static/popup-loader.js?v=20261126-local-stash"></script>
 <style>
@@ -3615,6 +3615,7 @@
 
 
   .queue-section:has(#queueChanges:not([hidden])) :is(#queueList,#queuePager) { display:none !important; }
+  #qSearchOverlay .q-field-invalid { border-color: #ef4444 !important; box-shadow: 0 0 0 2px #ef444455 !important; }
   .q-details-bar { display: flex; align-items: end; gap: 14px; margin-top: 12px; }
   .q-search-date-scene { display: grid; grid-template-columns: minmax(0, 1fr) minmax(100px, 120px); gap: 12px; align-items: end; min-width: 0; }
   .q-search-date-scene .field-row { min-width: 0; }
@@ -4327,7 +4328,7 @@
 <link rel="stylesheet" href="/static/queue-history.css?v=20261103">
 <script defer src="/static/queue-history.js?v=20261103"></script>
 <script defer src="/static/queue-changes.js?v=1"></script>
-<script defer src="/static/queue.js?v=20261126-import-editor"></script>
+<script defer src="/static/queue.js?v=20261127-submit-validation"></script>
 
 <!-- Queue duplicates modal — same phash grouping / keeper rules as Library Health. -->
 <style>

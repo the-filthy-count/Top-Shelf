@@ -3420,7 +3420,7 @@ if (!customElements.get('ts-local-stash')) {
           link.href = target.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
           link.title = 'Open in your Stash'; link.setAttribute('aria-label', link.title);
           const logo = document.createElement('img');
-          logo.src = '/static/logos/yourstash.webp'; logo.alt = 'Your Stash'; logo.className = 'pp-src-logo';
+          logo.src = '/static/logos/stashapp.webp'; logo.alt = 'Your Stash'; logo.className = 'pp-src-logo';
           link.appendChild(logo); this.replaceChildren(link); this.hidden = false;
           return;
         }
