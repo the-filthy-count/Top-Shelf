@@ -6712,24 +6712,6 @@ button.pp-name-group:hover .pp-name-group-count {
 .pp-gallery.is-loading .pp-gallery-spinner {
   display: block;
 }
-/* Silhouette painted behind the polaroid deck. Always visible at
- * 50% opacity, centred, scaled to the full width of the gallery
- * tile. Polaroid tiles use z-index 1–50 so z-index 0 keeps the
- * silhouette behind every polaroid. */
-.pp-gallery-bg-silhouette {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 100%;
-  height: auto;
-  max-height: 100%;
-  object-fit: contain;
-  opacity: 0.5;
-  pointer-events: none;
-  user-select: none;
-  z-index: 0;
-}
 /* Polaroid frame — sizes to its inner image. No fixed aspect-ratio,
  * no width/height; the <img>'s natural dimensions (capped via max-*)
  * drive the frame so portraits read as tall polaroids and landscapes
@@ -13059,7 +13041,6 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
   background: transparent; box-shadow: none; color: var(--text); overflow: hidden;
 }
 .pp-polaroid-dialog::backdrop { background: rgba(0, 0, 0, 0.08); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
-.pp-polaroid-dialog .pp-gallery-bg-silhouette { display: none; }
 .pp-polaroid-dialog .pp-gallery-tile img {
   filter: saturate(1.025) contrast(1.01);
   width: min(72vw, calc(72dvh * var(--photo-ratio, .67)));
@@ -13133,22 +13114,12 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
   mask-image: linear-gradient(to left, #000, transparent);
 }
 
-/* Filmography decoration stays behind the list, anchored to the panel floor. */
+/* Contain the filmography and search panes within their panel. */
 .pp-films-tab[data-pp-films-pane="filmography"],
 .pp-films-tab[data-pp-films-pane="prowlarr"] {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-}
-.pp-filmography-silhouette {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: auto;
-  opacity: .25;
-  pointer-events: none;
-  z-index: -1;
 }
 .pp-skel-gallery { position: static; }
 

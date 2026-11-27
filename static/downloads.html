@@ -12,13 +12,13 @@
      <wa-*> elements, and the bundled localize.js / chunk module
      ships a self-referencing import cycle that throws on load. -->
 <script src="/static/theme-init.js?v=20260614c"></script>
-<link rel="stylesheet" href="/static/app-shell.css?v=20261126-job-locks">
+<link rel="stylesheet" href="/static/app-shell.css?v=20261127-no-decor-art">
 <link rel="stylesheet" href="/static/downloads.css?v=20260930-desktop-scale">
 <script src="/static/ts-utils.js?v=20261127-stash-button"></script>
 <script src="/static/lib-entity-actions.js?v=20261103-library-recovery"></script>
 <script src="/static/popup-loader.js?v=20261126-local-stash"></script>
 <style>
-  /* Font tokens (--mono / --acid / --secs) live in /static/app-shell.css?v=20261012-bio-layout */
+  /* Font tokens (--mono / --acid / --secs) live in /static/app-shell.css?v=20261127-no-decor-art */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html { height: 100%; }
   body {
@@ -190,50 +190,7 @@
       0 0 24px rgba(var(--brand-purple-rgb), 0.18);
     transform: translateY(-1px);
   }
-  /* Decorative silhouette pinned to the bottom-right corner —
-   * half the tile's height, touching the bottom edge, 25% opacity
-   * so it reads as faint atmosphere rather than chrome. Sits above
-   * the sheen pseudo (z-index 0) but below tile content. */
-  /* Watermark silhouette — inside `.prowlarr-search-panel`, centred on
-   * the 2/3 horizontal mark, bottom-aligned. Content stacks above it. */
-  .dl-bg-decor {
-    position: absolute;
-    left: 66.67%;
-    top: 22%;
-    bottom: 0;
-    transform: translateX(-50%);
-    width: min(calc(42 * var(--ts-unit-vw, 1vw)), 520px);
-    pointer-events: none;
-    z-index: 0;
-    display: none;
-  }
-  .dl-bg-decor img {
-    width: auto;
-    height: 100%;
-    max-height: none;
-    margin: 0 auto;
-    object-fit: contain;
-    object-position: bottom center;
-    opacity: 0.1;
-    display: block;
-  }
 
-  .dl-bar .dl-tile-silhouette {
-    /* Explicit pixel dimensions — earlier `aspect-ratio + height: %`
-     * sizing relied on the parent having a definite height, but
-     * `.dl-bar` only declares `min-height`, so the percentage
-     * resolved to 0 and the element rendered with zero size. Hard
-     * px values guarantee a paintable box. */
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    width: 130px;
-    height: 230px;
-    background: url('/static/img/silhouette8.webp') right bottom / contain no-repeat;
-    opacity: 0.50;
-    pointer-events: none;
-    z-index: 1;
-  }
   /* Liquid sheen highlight — a soft, irregular bright glaze along
    * the upper-left arc that suggests light catching wet glass. No
    * scanlines or hard texture; only the curve. */
@@ -990,7 +947,7 @@
    * downloads-panel header. The visual treatment (brand-purple
    * gradient face, accent-pink border, accent-pink icon, accent-fill
    * hover) is inherited from the global `.btn-secondary` recipe in
-   * app-shell.css?v=20261012-bio-layout — we used to repaint them with a solid purple
+   * app-shell.css?v=20261127-no-decor-art — we used to repaint them with a solid purple
    * background here, which left them looking pre-refresh next to the
    * rest of the now-accent-themed buttons on the page. */
   .downloads-page-head .toolbar .btn-secondary {
@@ -1208,7 +1165,7 @@
   }
   #magpieAdd {padding:0 18px;min-width:0;box-sizing:border-box;}
   #magpieForm {display:grid;grid-template-columns:minmax(140px,2fr) minmax(90px,1fr) minmax(120px,1.5fr) 96px;gap:16px;align-items:center;margin:16px 0;}
-  #magpieForm .field-input, #magpieForm #magpieSubmit {height:48px;min-height:48px;max-height:48px;box-sizing:border-box;margin:0;}
+  #magpieForm .field-input, #magpieForm #magpieSubmit {height:var(--control-height);min-height:var(--control-height);max-height:var(--control-height);box-sizing:border-box;margin:0;}
   #magpieForm #magpieSubmit {width:96px;min-width:96px;padding:0 12px;justify-content:center;position:relative;isolation:isolate;overflow:hidden;}
   #magpieSubmit::before {content:"";position:absolute;inset:2px;background:url('/static/logos/magpielogo.webp?v=da0f16737fcc') center/contain no-repeat;opacity:.45;pointer-events:none;z-index:-1;}
   #magpieSubmit {text-shadow:0 1px 3px #000,0 0 5px #000;}
@@ -1335,8 +1292,8 @@
   #rows .dl-tile-chip-wide {background:rgba(0,0,0,.10);color:var(--dim);}
 
 </style>
-<link rel="stylesheet" href="/static/mobile.css?v=20261127-control-heights">
-<link rel="stylesheet" href="/static/design-system.css?v=20261127-page-conformity">
+<link rel="stylesheet" href="/static/mobile.css?v=20261127-brand-size">
+<link rel="stylesheet" href="/static/design-system.css?v=20261127-library-toolbar">
 <link rel="stylesheet" href="/static/ui-polish.css?v=20261127-polish">
 </head>
 <body class="ts-has-sidebar">
@@ -1359,9 +1316,6 @@
   </header>
 
   <div class="panel prowlarr-search-panel">
-    <div class="dl-bg-decor" aria-hidden="true" data-dl-decor>
-      <img src="/static/img/silhouette8.webp" alt="" loading="lazy">
-    </div>
     <div class="ts-page-head downloads-page-head">
       <div class="ts-page-head__row">
         <div class="ts-page-head__left">

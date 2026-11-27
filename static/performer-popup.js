@@ -1904,7 +1904,6 @@
         </div>
         <div class="pp-films-panel-body">
           <div class="pp-films-tab pp-films-tab--prowlarr" data-pp-films-pane="prowlarr" role="tabpanel" hidden>
-            <img class="pp-filmography-silhouette" src="/static/img/${data.cat_gay ? 'silhouette7.webp' : 'silhouette6.webp'}" alt="" aria-hidden="true">
             <div class="ts-prowlarr-embed pp-films-prowlarr-embed">
               <div class="pp-release-tools pp-release-tools--compact">
                 <button type="button" class="pp-release-toggle" data-release-toggle title="Filter releases" aria-label="Filter releases" aria-expanded="false"><i class="fa-solid fa-filter" aria-hidden="true"></i></button>
@@ -1920,7 +1919,6 @@
             </div>
           </div>
           <div class="pp-films-tab pp-films-tab--iafd is-active" data-pp-films-pane="filmography" role="tabpanel">
-            <img class="pp-filmography-silhouette" src="/static/img/${data.cat_gay ? 'silhouette7.webp' : 'silhouette6.webp'}" alt="" aria-hidden="true">
             <div class="pp-films-iafd-inner"></div>
           </div>
         </div>
@@ -2503,7 +2501,6 @@
       /primary|secondary/i.test(i.kind || '') ||
       /primary|secondary/i.test(i.url || '');
     const imgs = allImgs.filter(i => !isPosterRole(i));
-    const sil = data.cat_gay ? 'silhouette7.webp' : 'silhouette6.webp';
     if (!imgs.length) {
       el.innerHTML = '<div class="pp-empty">No photos available</div>';
       return;
@@ -2535,15 +2532,13 @@
       return;
     }
     // Show up to 6 polaroids stacked. Top one is interactive; the rest
-    // are decorative until shuffled forward. The silhouette sits BEHIND
-    // the deck (always visible, 50% opacity, centred, full-width).
+    // are decorative until shuffled forward.
     // Container starts in `is-loading` so polaroid tiles stay hidden
     // (CSS sets opacity: 0). The flag is cleared once all six images
     // have decoded — see waitForDeckLoad() below.
     const STACK_DEPTH = Math.min(6, imgs.length);
     el.innerHTML = `
       <div class="pp-gallery is-loading" data-stack-size="${STACK_DEPTH}" data-total="${imgs.length}">
-        <img class="pp-gallery-bg-silhouette" src="/static/img/${sil}" alt="" aria-hidden="true" loading="lazy">
         <div class="pp-gallery-spinner" aria-hidden="true"><span class="loader loader--tile"></span></div>
         <span class="pp-gallery-counter"><span class="pp-gallery-cur">1</span> / ${imgs.length}</span>
         <button type="button" class="pp-gallery-nav pp-gallery-prev" title="Previous photo" aria-label="Previous photo">

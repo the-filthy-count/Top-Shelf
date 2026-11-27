@@ -178,34 +178,8 @@
 
     var pieCanvas = document.getElementById('libDiskPieDetail');
     if (!pieCanvas) return;
-    // Re-centres the silhouette image inside the doughnut hole on every
-    // render. The legend lives on the right, so Chart.js shifts the
-    // chart area leftward — a CSS-only `top:50%; left:50%` would land
-    // off-axis. We read `chart.chartArea` and reposition the <img>
-    // relative to the canvas-host element (the silhouette's parent).
-    var _silhouettePlugin = {
-      id: 'silhouetteCenter',
-      afterLayout: function (chart) {
-        try {
-          var host = chart.canvas && chart.canvas.parentElement && chart.canvas.parentElement.parentElement;
-          if (!host) return;
-          var sil = host.querySelector('.lib-disk-pie-silhouette');
-          if (!sil) return;
-          var area = chart.chartArea;
-          if (!area) return;
-          var canvasRect = chart.canvas.getBoundingClientRect();
-          var hostRect = host.getBoundingClientRect();
-          var cx = canvasRect.left - hostRect.left + (area.left + area.right) / 2;
-          var cy = canvasRect.top - hostRect.top + (area.top + area.bottom) / 2;
-          sil.style.left = cx + 'px';
-          sil.style.top = cy + 'px';
-          sil.style.transform = 'translate(-50%, -50%)';
-        } catch (e) { /* ignore — silhouette stays at last position */ }
-      },
-    };
     _pieChart = new Chart(pieCanvas, {
       type: 'doughnut',
-      plugins: [_silhouettePlugin],
       data: {
         labels: pieLabels,
         datasets: [{
@@ -487,7 +461,7 @@
         '<div class="lib-disk-charts">' +
         '<div class="lib-disk-chart-wrap lib-disk-chart-wrap--pie">' +
         '<h3 class="lib-disk-chart-title">By root</h3>' +
-        '<div class="lib-disk-canvas-h lib-disk-canvas-h--pie"><div class="lib-disk-canvas-bleed"><canvas id="libDiskPieDetail" aria-label="Disk by library root"></canvas></div><img class="lib-disk-pie-silhouette" src="/static/img/silhouette2.webp" alt="" aria-hidden="true" loading="lazy"></div>' +
+        '<div class="lib-disk-canvas-h lib-disk-canvas-h--pie"><div class="lib-disk-canvas-bleed"><canvas id="libDiskPieDetail" aria-label="Disk by library root"></canvas></div></div>' +
         '</div>' +
         '<div class="lib-disk-chart-wrap">' +
         '<h3 class="lib-disk-chart-title">Largest folders<span class="lib-disk-hint">Studios, stars, and movie folders (top 10 among included roots)</span></h3>' +

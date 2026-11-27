@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
 <link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
 <script src="/static/theme-init.js?v=20260614c"></script>
-<link rel="stylesheet" href="/static/app-shell.css?v=20261126-job-locks">
+<link rel="stylesheet" href="/static/app-shell.css?v=20261127-no-decor-art">
 <!-- Poster-role picker + candidate/preview panes + crop modal all
      use styles that live in library.css. Without this, opening the
      "Manage images" modal on /performer/{id} rendered raw full-size
@@ -73,8 +73,8 @@
     font-weight: 600;
   }
 </style>
-<link rel="stylesheet" href="/static/mobile.css?v=20261127-control-heights">
-<link rel="stylesheet" href="/static/design-system.css?v=20261127-page-conformity">
+<link rel="stylesheet" href="/static/mobile.css?v=20261127-brand-size">
+<link rel="stylesheet" href="/static/design-system.css?v=20261127-library-toolbar">
 <link rel="stylesheet" href="/static/ui-polish.css?v=20261127-polish">
 </head>
 <body class="ts-has-sidebar ts-entity-page">
@@ -367,7 +367,7 @@
     const openModals = Array.from(document.querySelectorAll('.modal-overlay.open'));
     if (!openModals.length) return false;
     // Highest z-index wins as "topmost". modal-overlay ladder is
-    // declared in app-shell.css?v=20261012-bio-layout :8021+; posterRoleModal sits above the
+    // declared in app-shell.css?v=20261127-no-decor-art :8021+; posterRoleModal sits above the
     // performer popup, so it'll be picked when both are open.
     openModals.sort(function (a, b) {
       return (parseInt(getComputedStyle(b).zIndex, 10) || 0)

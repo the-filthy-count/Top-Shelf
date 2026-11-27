@@ -327,6 +327,7 @@ html[data-theme] body .ts-seg-multi__item:has(input:checked) .ts-seg-multi__face
    Layered important declarations also beat per-page important glass rules. */
 html[data-theme] body .stat-card,
 html[data-theme] body .stat-card:is(:hover, :focus-within, .is-active-tab, .is-selected) {
+  background: var(--control-surface) !important;
   border: 0 !important;
   box-shadow: none !important;
 }
@@ -475,5 +476,29 @@ html[data-theme] body .watch-form :is(input, button.watch-form-icon) { height: v
 }
 @media (max-width: 650px) {
   html[data-theme] body .watch-form { grid-template-columns: 1fr var(--control-height) var(--control-height); }
+}
+}
+
+@layer canonical-controls {
+/* Captions are separate from the artwork: round all four artwork corners. */
+html body :is(.rss-tile-inner, .fav-cell .fav-perf-ph, .fav-cell .fav-studio-ph,
+  .scene-card .img-load, .movie-card .img-load, .queue-file-tile .qi-crt-screen) {
+  border-radius: 10px !important;
+  overflow: hidden !important;
+}
+}
+
+@layer canonical-controls {
+/* Library toolbar fields and actions share one measured outer height. */
+html[data-theme] body :is(.fav-sticky-toolbar, .fav-filter-sheet-body) :is(input:not([type="hidden"]), select, .fav-filter-ibtn) {
+  height: var(--control-height) !important;
+  min-height: var(--control-height) !important;
+  max-height: var(--control-height) !important;
+  box-sizing: border-box;
+  margin-block: 0 !important;
+}
+html[data-theme] body .fav-filter-ibtn {
+  width: var(--control-height) !important;
+  border-radius: var(--control-radius) !important;
 }
 }
