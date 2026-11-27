@@ -12,13 +12,13 @@
      <wa-*> elements, and the bundled localize.js / chunk module
      ships a self-referencing import cycle that throws on load. -->
 <script src="/static/theme-init.js?v=20260614c"></script>
-<link rel="stylesheet" href="/static/app-shell.css?v=20261127-vice-icon">
+<link rel="stylesheet" href="/static/app-shell.css?v=20261127-soft-scenes">
 <link rel="stylesheet" href="/static/index.css?v=20260930-desktop-scale">
 <script src="/static/ts-utils.js?v=20261127-stash-button"></script>
 <script src="/static/lib-entity-actions.js?v=20261103-library-recovery"></script>
 <script src="/static/popup-loader.js?v=20261126-local-stash"></script>
 <style>
-  /* Font tokens (--mono / --acid / --secs) live in /static/app-shell.css?v=20261127-vice-icon */
+  /* Font tokens (--mono / --acid / --secs) live in /static/app-shell.css?v=20261127-soft-scenes */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html { height: 100%; }
   body {
@@ -107,7 +107,7 @@
 
   /* Prowlarr list results */
   
-  /* Prowlarr search results — chrome mirrors .ts-row in app-shell.css?v=20261127-vice-icon */
+  /* Prowlarr search results — chrome mirrors .ts-row in app-shell.css?v=20261127-soft-scenes */
   
   
   
@@ -308,7 +308,7 @@
   /* Studio logo overlay — performer tiles only. Top-centre of the poster,
    * sitting above the duotone tints so it's never tinted. Transparent
    * background with a dark drop-shadow for legibility. The base
-   * `img[src$="/logos/..."]` chip rule from app-shell.css?v=20261127-vice-icon doesn't apply
+   * `img[src$="/logos/..."]` chip rule from app-shell.css?v=20261127-soft-scenes doesn't apply
    * here (this src is /api/studio-logo?q=…), so the logo renders clean. */
   .rss-tile-studio-logo {
     position: absolute;
@@ -1187,7 +1187,7 @@
   }
   .queue-section .q-panel-title { font-family: var(--acid); font-size: var(--text-section); font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
   .queue-section .q-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-  /* Scrollbar inherits global accent-themed style from app-shell.css?v=20261127-vice-icon */
+  /* Scrollbar inherits global accent-themed style from app-shell.css?v=20261127-soft-scenes */
   .queue-section .q-panel-body { padding: 0; }
 
   /* ── Wanted panel — split into two columns ─────────────────────────
@@ -1235,7 +1235,7 @@
     gap: 8px;
   }
   /* When the column body wears `.ts-row-list`, the rows render as flat
-   * dividers (handled by ts-row chrome in app-shell.css?v=20261127-vice-icon instead of
+   * dividers (handled by ts-row chrome in app-shell.css?v=20261127-soft-scenes instead of
    * spaced cards. Drop the inter-row gap and the global ts-row-list
    * `0 -18px` bleed (we sit inside a narrow column, not a panel-body). */
   .queue-section .wanted-list-col-body.ts-row-list {
@@ -1244,7 +1244,7 @@
     padding: 0;
   }
   /* Wanted row — horizontal: thumb (left) + text (middle) + actions (right).
-   * Inherits the unified `.ts-row` chrome from app-shell.css?v=20261127-vice-icon (flat
+   * Inherits the unified `.ts-row` chrome from app-shell.css?v=20261127-soft-scenes (flat
    * top-divider, faint hover background, no individual card border /
    * radius / shadow / gradient). Layout-only overrides here: the row
    * needs `position: relative` for the absolutely-positioned thumb
@@ -1303,7 +1303,7 @@
     margin: 0;
   }
   /* Scenes: keep the /scenes CRT bezel + phosphor stack from
-   * app-shell.css?v=20261127-vice-icon (`.scene-card .img-load::before/::after`) so
+   * app-shell.css?v=20261127-soft-scenes (`.scene-card .img-load::before/::after`) so
    * the wanted thumb reads as a TV playing the scene. Only kill
    * the outer halo box-shadow that would bleed past the rounded
    * corners. */
@@ -1329,7 +1329,7 @@
   /* ── Scene wanted thumb (inherits /scenes scene-card treatment) ──
    * The wrapper carries `.scene-card` and the inner image is wrapped
    * in `.img-load > img.scene-thumb`, so every VHS effect applied to
-   * `.scene-card .img-load*` in app-shell.css?v=20261127-vice-icon (CRT halo, inner
+   * `.scene-card .img-load*` in app-shell.css?v=20261127-soft-scenes (CRT halo, inner
    * vignette, chromatic aberration, scanlines, hover reset) lands
    * here automatically. Only the bits that need to be defined on
    * /downloads are positioning + layout: */
@@ -1354,7 +1354,7 @@
    * (380×214); the poster scales to fit horizontally and crops top
    * + bottom via `object-fit: cover` so the thumb stays a uniform
    * landscape shape across all wanted rows. The .movie-card class
-   * brings paper-grain halftone from app-shell.css?v=20261127-vice-icon */
+   * brings paper-grain halftone from app-shell.css?v=20261127-soft-scenes */
   .queue-section .wanted-thumb--movie .img-load,
   .queue-section .wanted-thumb--movie .wt-mov-poster {
     position: absolute;
@@ -1378,7 +1378,7 @@
   /* Wanted-row movie thumbs are tiny next to the full /scenes poster
    * tiles, so the decorative VHS sticker that .movie-card normally
    * pastes on every poster (`.movie-card .img-load::before` in
-   * app-shell.css?v=20261127-vice-icon ends up cluttering a thumbnail that just needs to
+   * app-shell.css?v=20261127-soft-scenes ends up cluttering a thumbnail that just needs to
    * read as "this is the movie." Suppress it on the wanted list. The
    * bottom-heavy gradient overlay is also disabled for movie thumbs
    * (kept for scene thumbs where thumbs are landscape and the overlay
