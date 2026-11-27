@@ -20917,20 +20917,17 @@ def _home_downloaded_scenes_by_kind(limit: int = 80) -> dict[str, list[dict]]:
                 "image_url": f"/api/vice-logo?name={quote(name, safe='')}",
             }
     seen = set()
-    def recent_batches():
-        for offset in range(0, 2000, 100):
-            with db.get_conn() as conn:
-                batch = [dict(row) for row in conn.execute(
-                    "SELECT * FROM processed_files WHERE status = 'filed' "
-                    "AND destination IS NOT NULL AND trim(destination) != '' "
-                    "AND NOT EXISTS (SELECT 1 FROM library_files lf "
-                    "WHERE lf.destination = processed_files.destination AND lf.is_removed = 1) "
-                    "ORDER BY processed_at DESC, id DESC LIMIT 100 OFFSET ?", (offset,)
-                ).fetchall()]
-            yield from batch
-            if len(batch) < 100:
-                break
-    for row in recent_batches():
+    # Read this bounded history window once. OFFSET batches repeated the
+    # same sort/query up to twenty times when one category had no imports.
+    with db.get_conn() as conn:
+        recent = [dict(row) for row in conn.execute(
+            "SELECT * FROM processed_files WHERE status = 'filed' "
+            "AND destination IS NOT NULL AND trim(destination) != '' "
+            "AND NOT EXISTS (SELECT 1 FROM library_files lf "
+            "WHERE lf.destination = processed_files.destination AND lf.is_removed = 1) "
+            "ORDER BY processed_at DESC, id DESC LIMIT 2000"
+        ).fetchall()]
+    for row in recent:
         if all(len(result[key]) >= limit for key in ("all", "star", "studio", "vice")):
             break
         video = Path(row["destination"])
@@ -21066,7 +21063,7 @@ def _home_latest_movies(limit: int = 10) -> list[dict]:
             (int(limit),),
         )
         rows = [dict(r) for r in cur.fetchall()]
-    return [_favourites_row_api(r) for r in rows]
+    return [_favourites_row_api(r, allow_folder_lookup=False) for r in rows]
 
 
 def _home_favourites_only(limit: int, kind_in: tuple[str, ...]) -> list[dict]:
@@ -21084,7 +21081,7 @@ def _home_favourites_only(limit: int, kind_in: tuple[str, ...]) -> list[dict]:
             (*kind_in, int(limit)),
         )
         rows = [dict(r) for r in cur.fetchall()]
-    return [_favourites_row_api(r) for r in rows]
+    return [_favourites_row_api(r, allow_folder_lookup=False) for r in rows]
 
 
 def _movie_nfo_cast_names(folder_path: str) -> list[str]:
@@ -21179,7 +21176,7 @@ def _home_movies_favourites(limit: int, kind: str, perf_names: set[str], studio_
                 matched.append(r)
         if len(matched) >= limit:
             break
-    return [_favourites_row_api(r) for r in matched[:limit]]
+    return [_favourites_row_api(r, allow_folder_lookup=False) for r in matched[:limit]]
 
 
 def _home_latest_movies(limit: int = 10) -> list[dict]:
@@ -21197,7 +21194,7 @@ def _home_latest_movies(limit: int = 10) -> list[dict]:
             (int(limit),),
         )
         rows = [dict(r) for r in cur.fetchall()]
-    return [_favourites_row_api(r) for r in rows]
+    return [_favourites_row_api(r, allow_folder_lookup=False) for r in rows]
 
 
 def _home_latest_jav(limit: int = 10) -> list[dict]:
@@ -21215,7 +21212,7 @@ def _home_latest_jav(limit: int = 10) -> list[dict]:
             (int(limit),),
         )
         rows = [dict(r) for r in cur.fetchall()]
-    return [_favourites_row_api(r) for r in rows]
+    return [_favourites_row_api(r, allow_folder_lookup=False) for r in rows]
 
 
 def _discovery_recency_bonus(value, today) -> float:
@@ -21739,7 +21736,7 @@ def _home_latest_performers(limit: int = 10) -> list[dict]:
             (int(limit),),
         )
         rows = [dict(r) for r in cur.fetchall()]
-    return [_favourites_row_api(r) for r in rows]
+    return [_favourites_row_api(r, allow_folder_lookup=False) for r in rows]
 
 
 def _home_background_refresh() -> None:
@@ -21808,20 +21805,45 @@ def _home_background_refresh() -> None:
 
 
 @app.get("/api/home/data")
-async def api_home_data(refresh: int = 0):
+async def api_home_data(refresh: int = 0, section: str = ""):
     """Home page payload: recent scenes + latest stars.
 
-    Returns cached data immediately; kicks a background refresh so the
-    next call lands warm. Pass ``refresh=1`` to force-clear the cache
-    and pull fresh from source DBs before returning (used by the manual
-    Refresh button)."""
-    if refresh:
+    A section parameter loads one independent row; omit it for the legacy
+    combined payload. Local rows come from saved library data. Discovery
+    reads cached feeds and starts an upstream refresh in the background.
+    Pass refresh=1 to clear those feed caches before scheduling the refresh."""
+    if refresh and section in ("", "discovered"):
         try:
             with _content_cache_lock:
                 _feed_cache.clear()
             db.feed_display_pools_clear_kind("scenes")
         except Exception:
             pass
+    if section:
+        # Independent section requests prevent slow movie/NFO lookups or a
+        # failed discovery pool from blanking every row on Home.
+        if section == "performers":
+            rows = await run_in_threadpool(_home_latest_performers, 30)
+            favourites = await run_in_threadpool(_home_favourites_only, 30, ("performer",))
+            return {"performers": rows, "performers_favs": favourites}
+        if section in ("movies", "jav"):
+            loader = _home_latest_movies if section == "movies" else _home_latest_jav
+            rows = await run_in_threadpool(loader, 30)
+            perf_names, studio_names = await run_in_threadpool(_home_favourite_name_sets)
+            favourites = await run_in_threadpool(
+                _home_movies_favourites, 30, "movie" if section == "movies" else "jav", perf_names, studio_names,
+            )
+            return {section: rows, section + "_favs": favourites}
+        if section == "discovered":
+            rows = await run_in_threadpool(_home_discovered_performers, 30)
+            _home_background_refresh()
+            return {"discovered": rows, "refreshing": _HOME_LAST_REFRESH["in_flight"], "updated_at": _HOME_LAST_REFRESH["ts"]}
+        if section == "scenes":
+            buckets = await run_in_threadpool(_home_downloaded_scenes_by_kind, 80)
+            perf_names, studio_names = await run_in_threadpool(_home_favourite_name_sets)
+            buckets["favourite"] = _home_scenes_favourite_filter(buckets.get("all", []), perf_names, studio_names)
+            return {"scenes": buckets.get("all", [])[:40], "scenes_by_kind": buckets, "scenes_favs": buckets["favourite"][:40]}
+        raise HTTPException(status_code=400, detail="Unknown home section")
     # Fetch generously so the home-page grids fill their visible row(s)
     # on wide screens too (the client slices to whatever fits per row).
     # Per-kind buckets each capped at 80 so every filter mode
