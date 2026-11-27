@@ -13002,20 +13002,20 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
 @media (min-width: 701px) {
   .performer-popup-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(200px, 16%);
-    grid-template-rows: minmax(220px, 1fr) minmax(90px, .55fr) minmax(220px, .85fr);
+    grid-template-rows: minmax(180px, .85fr) minmax(90px, .3fr) minmax(280px, 1.35fr);
     grid-template-areas: "bio films posters" "gallery films posters" "carousel carousel posters";
   }
   .pp-cell-carousel .pp-scenes-grid {
-    grid-template-columns: repeat(var(--pp-scene-columns, 5), clamp(160px, 15vw, 260px));
-    grid-template-rows: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--pp-scene-columns, 5), minmax(160px, 1fr));
+    grid-template-rows: repeat(2, min-content);
     grid-auto-flow: row;
     justify-content: safe center;
     overflow-x: auto;
-    overflow-y: hidden;
-    align-content: stretch;
+    overflow-y: auto;
+    align-content: start;
   }
   .pp-cell-carousel .scene-card { min-height: 0; }
-  .pp-cell-carousel .scene-card .img-load { max-height: calc(100% - 38px); }
+  .pp-cell-carousel .scene-card .img-load { max-height: none; }
 }
 .performer-popup-cell.pp-cell-gallery { overflow: hidden !important; }
 .pp-photo-thumbs {
