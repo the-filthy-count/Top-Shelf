@@ -6,7 +6,7 @@
   --control-radius: 12px;
   --control-height: 40px;
   --control-surface: var(--ts-sidebar-bg);
-  --control-border: #65686a;
+  --control-border: rgba(128, 132, 136, 0.28);
   --control-hover: linear-gradient(to bottom, rgba(var(--bg-rgb), 0.98), rgba(var(--bg-rgb), 0.82));
   --control-primary: var(--control-hover);
   --control-danger: color-mix(in srgb, var(--red) 14%, var(--raised));
@@ -23,7 +23,7 @@ html[data-theme] body :is(button, a.btn, a.btn-primary, a.btn-secondary, a.btn-i
   color: var(--button-ink, #f4f4f4) !important;
   border: 1px solid var(--button-border, var(--control-border)) !important;
   border-radius: var(--control-radius) !important;
-  box-shadow: inset 0 1px 0 #ffffff09 !important;
+  box-shadow: inset 0 1px 0 #ffffff06 !important;
   text-shadow: none !important;
   font-size: var(--text-body) !important;
   line-height: 1.25;
@@ -328,7 +328,7 @@ html[data-theme] body .stat-card,
 html[data-theme] body .stat-card:is(:hover, :focus-within, .is-active-tab, .is-selected) {
   background: var(--control-surface) !important;
   border: 1px solid var(--control-border) !important;
-  box-shadow: inset 0 1px 0 #ffffff09 !important;
+  box-shadow: inset 0 1px 0 #ffffff06 !important;
 }
 }
 
@@ -518,8 +518,19 @@ html[data-theme] body .home-search__input-wrap {
   background: var(--control-surface) !important;
   border: 1px solid var(--control-border) !important;
   border-radius: var(--control-radius) !important;
-  box-shadow: inset 0 1px 0 #ffffff09 !important;
+  box-shadow: inset 0 1px 0 #ffffff06 !important;
   height: var(--control-height);
   box-sizing: border-box;
+}
+}
+
+@layer canonical-controls {
+/* Standalone library filters share the quiet edge of neighbouring actions. */
+html[data-theme] body .fav-filter-ibtn:not(.is-on):not([aria-pressed="true"]) {
+  border: 1px solid var(--control-border) !important;
+  box-shadow: inset 0 1px 0 #ffffff06 !important;
+}
+html[data-theme] body .fav-filter-ibtn:hover {
+  border-color: var(--accent) !important;
 }
 }
