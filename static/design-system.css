@@ -489,7 +489,7 @@ html body :is(.rss-tile-inner, .fav-cell .fav-perf-ph, .fav-cell .fav-studio-ph,
 
 @layer canonical-controls {
 /* Library toolbar fields and actions share one measured outer height. */
-html[data-theme] body :is(.fav-sticky-toolbar, .fav-filter-sheet-body) :is(input:not([type="hidden"]), select, .fav-filter-ibtn) {
+html[data-theme] body :is(.fav-sticky-toolbar, .fav-filter-sheet-body) :is(input:not([type="hidden"]), select, .fav-filter-ibtn, .fav-alpha-trigger) {
   height: var(--control-height) !important;
   min-height: var(--control-height) !important;
   max-height: var(--control-height) !important;

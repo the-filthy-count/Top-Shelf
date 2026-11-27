@@ -4669,7 +4669,7 @@ header .header-right .btn-secondary wa-icon {
 .ts-icon-movies  { -webkit-mask-image: url('/static/icons/movies.svg');  mask-image: url('/static/icons/movies.svg');  background-color: #2563eb; }
 .ts-icon-scenes  { -webkit-mask-image: url('/static/icons/scenes.svg');  mask-image: url('/static/icons/scenes.svg');  background-color: #a78bfa; }
 .ts-icon-studios { -webkit-mask-image: url('/static/icons/studio.svg');  mask-image: url('/static/icons/studio.svg');  background-color: #38bdf8; }
-.ts-icon-vices   { -webkit-mask-image: url('/static/icons/vices.svg');   mask-image: url('/static/icons/vices.svg');   background-color: #ff6b1a; }
+.ts-icon-vices   { -webkit-mask-image: url('/static/icons/vices.svg?v=20261127-updated');   mask-image: url('/static/icons/vices.svg?v=20261127-updated');   background-color: #ff6b1a; }
 /* Inside a ts-seg button the icon rule above sets
  * `font-size: 32px !important` on every `> i`. Re-zero it for the
  * jav icon so the mask box stays at its natural 32 × 32 and
