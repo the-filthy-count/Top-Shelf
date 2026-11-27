@@ -5,10 +5,10 @@
 :root {
   --control-radius: 12px;
   --control-height: 40px;
-  --control-surface: #494b4d;
+  --control-surface: var(--ts-sidebar-bg);
   --control-border: #65686a;
-  --control-hover: #575b5d;
-  --control-primary: #505859;
+  --control-hover: linear-gradient(to bottom, rgba(var(--bg-rgb), 0.98), rgba(var(--bg-rgb), 0.82));
+  --control-primary: var(--control-hover);
   --control-danger: color-mix(in srgb, var(--red) 14%, var(--raised));
 }
 html[data-theme] body :is(button, a.btn, a.btn-primary, a.btn-secondary, a.btn-icon, a.pp-profile-pill):not(:where(
@@ -323,13 +323,12 @@ html[data-theme] body .ts-seg-multi__item:has(input:checked) .ts-seg-multi__face
 }
 
 @layer canonical-controls {
-/* Counter surfaces must not inherit the theme's glass border or inset frame.
-   Layered important declarations also beat per-page important glass rules. */
+/* Counters share the buttons' grey surface, thin edge and subtle highlight. */
 html[data-theme] body .stat-card,
 html[data-theme] body .stat-card:is(:hover, :focus-within, .is-active-tab, .is-selected) {
   background: var(--control-surface) !important;
-  border: 0 !important;
-  box-shadow: none !important;
+  border: 1px solid var(--control-border) !important;
+  box-shadow: inset 0 1px 0 #ffffff09 !important;
 }
 }
 
@@ -500,5 +499,27 @@ html[data-theme] body :is(.fav-sticky-toolbar, .fav-filter-sheet-body) :is(input
 html[data-theme] body .fav-filter-ibtn {
   width: var(--control-height) !important;
   border-radius: var(--control-radius) !important;
+}
+}
+
+@layer canonical-controls {
+html[data-theme] body .downloads-toolbar > :is(select, button) {
+  height: var(--control-height) !important;
+  min-height: var(--control-height) !important;
+  max-height: var(--control-height) !important;
+  box-sizing: border-box;
+  margin-block: 0 !important;
+}
+}
+
+@layer canonical-controls {
+/* Search Library uses the shared surface on its outer wrapper only. */
+html[data-theme] body .home-search__input-wrap {
+  background: var(--control-surface) !important;
+  border: 1px solid var(--control-border) !important;
+  border-radius: var(--control-radius) !important;
+  box-shadow: inset 0 1px 0 #ffffff09 !important;
+  height: var(--control-height);
+  box-sizing: border-box;
 }
 }
