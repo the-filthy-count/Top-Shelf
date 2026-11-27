@@ -1593,14 +1593,14 @@
   function _renderQueueBreadcrumb() {
     if (_queueActiveKind !== 'scenes') return '';
     if (!_queueTreeModeActive() && !(_queueCurrentFolder && _queueCurrentFolder.startsWith('@studio:'))) return '';
-    const crumbs = [`<button type="button" class="qi-crumb${_queueCurrentFolder ? '' : ' is-active'}" onclick="queueBreadcrumbGoto('')"><i class="fa-solid fa-house"></i> Root</button>`];
+    const crumbs = [`<button type="button" class="qi-crumb${_queueCurrentFolder ? '' : ' is-active'}" onclick="queueBreadcrumbGoto('')"><i class="fa-solid fa-folder-tree" aria-hidden="true"></i> All files</button>`];
     if (_queueCurrentFolder && _queueCurrentFolder.startsWith('@studio:')) {
       // Virtual studio tile — one hop, name shown as the studio label
       // without the internal `@studio:` prefix leaking into the UI.
       const studio = _queueCurrentFolder.substring('@studio:'.length);
-      crumbs.push('<span class="qi-crumb-sep">/</span>');
-      crumbs.push(`<button type="button" class="qi-crumb is-active" title="Alias-guessed studio group"><i class="fa-solid fa-wand-magic-sparkles" style="margin-right:4px"></i>${esc(studio)}</button>`);
-      return `<div class="qi-breadcrumb">${crumbs.join('')}</div>`;
+      crumbs.push('<span class="qi-crumb-sep" aria-hidden="true">›</span>');
+      crumbs.push(`<span class="qi-crumb is-active" aria-current="location" title="Studio group"><i class="fa-solid fa-film" aria-hidden="true"></i>${esc(studio)}</span>`);
+      return `<nav class="qi-breadcrumb" aria-label="Queue folders"><span class="qi-crumb-label">Folder</span>${crumbs.join('')}</nav>`;
     }
     const segs = _queueCurrentFolder ? _queueCurrentFolder.split('/') : [];
     let acc = '';
@@ -1608,8 +1608,10 @@
       acc = acc ? acc + '/' + segs[i] : segs[i];
       const last = i === segs.length - 1;
       const safe = acc.replace(/'/g, "\\'");
-      crumbs.push('<span class="qi-crumb-sep">/</span>');
-      crumbs.push(`<button type="button" class="qi-crumb${last ? ' is-active' : ''}" onclick="queueBreadcrumbGoto('${safe}')">${esc(segs[i])}</button>`);
+      crumbs.push('<span class="qi-crumb-sep" aria-hidden="true">›</span>');
+      crumbs.push(last
+        ? `<span class="qi-crumb is-active" aria-current="location"><i class="fa-solid fa-folder-open" aria-hidden="true"></i>${esc(segs[i])}</span>`
+        : `<button type="button" class="qi-crumb" onclick="queueBreadcrumbGoto('${safe}')"><i class="fa-solid fa-folder" aria-hidden="true"></i>${esc(segs[i])}</button>`);
     }
     // Root has no folder to leave, and no folder rows would still be
     // useful to browse — render the crumb bar so the tree is
@@ -1617,7 +1619,7 @@
     // into (either we're already inside one, or the root has subfolders).
     const hasFolders = _queueFilteredIndexes.some(item => item && item.kind === 'folder');
     if (!segs.length && !hasFolders) return '';
-    return `<div class="qi-breadcrumb">${crumbs.join('')}</div>`;
+    return `<nav class="qi-breadcrumb" aria-label="Queue folders"><span class="qi-crumb-label">Folder</span>${crumbs.join('')}</nav>`;
   }
 
   function _queueColumnCount() {
