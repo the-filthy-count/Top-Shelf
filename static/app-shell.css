@@ -12998,13 +12998,16 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
 .ts-phash-results > div { padding: 5px 0; }
 .ts-phash-results small { display: block; color: var(--dim); }
 
-/* Performer workspace: biography and downloads above a two-row scene shelf. */
+/* Scene shelf hugs its content at the bottom; upper panels share spare height. */
 @media (min-width: 701px) {
   .performer-popup-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(200px, 16%);
-    grid-template-rows: minmax(180px, .85fr) minmax(90px, .3fr) minmax(280px, 1.35fr);
+    grid-template-rows: minmax(180px, .85fr) minmax(90px, .55fr) auto;
     grid-template-areas: "bio films posters" "gallery films posters" "carousel carousel posters";
   }
+  .pp-cell-carousel { max-height: 60dvh; }
+  .pp-cell-carousel > .pp-scroll-wrap,
+  .pp-cell-carousel .pp-scenes-grid { flex: 0 1 auto; }
   .pp-cell-carousel .pp-scenes-grid {
     grid-template-columns: repeat(var(--pp-scene-columns, 5), minmax(160px, 1fr));
     grid-template-rows: repeat(2, min-content);
