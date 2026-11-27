@@ -548,6 +548,7 @@ html[data-theme] body .fav-filter-ibtn:hover {
 
 @layer canonical-controls {
 html[data-theme] body .qi-breadcrumb { gap: 10px; }
+html[data-theme] body .qi-crumb-sep { font-size: 2em; line-height: 1; }
 html[data-theme] body .qi-crumb-label { color: var(--dim); font-size: var(--text-small); margin-right: 4px; }
 html[data-theme] body .qi-crumb {
   display: inline-flex; align-items: center; justify-content: center;

@@ -4859,17 +4859,18 @@
     return `<div class="qs-candidate" data-index="${idx}"${rowOnClick} style="display:flex;gap:14px;align-items:center;padding:12px;border-radius:10px;border:1px solid rgba(var(--brand-accent-rgb),0.45);background:linear-gradient(160deg, rgba(var(--brand-accent-rgb),0.10) 0%, rgba(0,0,0,0.18) 100%);${rowCursor}min-width:0">
         ${thumb}
         <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:4px">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            ${sourceTile}
-            <span style="font-size:var(--text-small);color:var(--dim);flex-shrink:0">${esc(m.date||'')}</span>
-          </div>
+
           <div style="font-size:var(--text-body);color:var(--text);font-weight:500;line-height:1.35">${esc(m.title || '')}</div>
           <div style="font-size:var(--text-small);color:var(--dim)">${esc(m.studio||'')}${m.performers ? ' · ' + esc(m.performers) : ''}</div>
           ${matchEvidence(window._qSearchResults[idx])}
-          ${perfPile}
+
         </div>
+        <div class="qs-result-meta">
+            ${sourceTile}
+            <span style="font-size:var(--text-small);color:var(--dim);flex-shrink:0">${esc(m.date||'')}</span>
+          </div>
+        <div class="qs-result-identity">${perfPile}${storedBadge}</div>
         <div class="qs-use">${useBtn}</div>
-        ${storedBadge}
       </div>`;
   }
   function toggleQSearchSource(btn) {
@@ -5048,18 +5049,19 @@
         return `<div class="qs-candidate" data-index="${idx}"${rowOnClick} style="display:flex;gap:14px;align-items:center;padding:12px;border-radius:10px;border:1px solid rgba(var(--brand-purple-rgb),0.16);background:linear-gradient(160deg, rgba(var(--brand-purple-rgb),0.06) 0%, rgba(0,0,0,0.18) 100%);transition:border-color 0.15s, transform 0.15s;${rowCursor}min-width:0" onmouseover="this.style.borderColor='rgba(var(--brand-accent-rgb), 0.45)'" onmouseout="this.style.borderColor='rgba(var(--brand-purple-rgb),0.16)'">
           ${thumb}
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:4px">
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+
+            <div style="font-size:var(--text-body);color:var(--text);font-weight:500;line-height:1.35">${_qsHighlight(row.title, qsHighlight)}</div>
+            <div style="font-size:var(--text-small);color:var(--dim)">${esc(row.studio||'')}${row.performers ? ' · ' + _qsPerformerCsvHtml(row.performers, qsHighlight) : ''}</div>
+            ${matchEvidence(window._qSearchResults[idx])}
+
+          </div>
+          <div class="qs-result-meta">
               ${sourceTile}
               <span style="font-size:var(--text-small);color:var(--dim);flex-shrink:0">${esc(row.date||'')}</span>
               ${metaLine}
             </div>
-            <div style="font-size:var(--text-body);color:var(--text);font-weight:500;line-height:1.35">${_qsHighlight(row.title, qsHighlight)}</div>
-            <div style="font-size:var(--text-small);color:var(--dim)">${esc(row.studio||'')}${row.performers ? ' · ' + _qsPerformerCsvHtml(row.performers, qsHighlight) : ''}</div>
-            ${matchEvidence(window._qSearchResults[idx])}
-          ${perfPile}
-          </div>
+          <div class="qs-result-identity">${perfPile}${_qsPhashIndicator(row)}</div>
           <div class="qs-use">${useBtn}</div>
-          ${_qsPhashIndicator(row)}
         </div>`;
       }).join('');
       resultsEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">${rowsHtml}</div>`;
