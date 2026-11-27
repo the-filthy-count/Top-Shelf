@@ -83,8 +83,8 @@
     button { font-size: var(--text-body); padding: 13px; }
   }
 </style>
-<link rel="stylesheet" href="/static/mobile.css?v=20260930-desktop-scale">
-<link rel="stylesheet" href="/static/design-system.css?v=20261127-grey-buttons">
+<link rel="stylesheet" href="/static/mobile.css?v=20261127-control-heights">
+<link rel="stylesheet" href="/static/design-system.css?v=20261127-page-conformity">
 <link rel="stylesheet" href="/static/ui-polish.css?v=20261127-polish">
 </head>
 <body>
@@ -98,7 +98,7 @@
     <input type="password" id="pw" autofocus onkeydown="if(event.key==='Enter')login()">
   </div>
   <div class="error" id="err"></div>
-  <button id="btn" onclick="login()">Enter</button>
+  <button class="btn-primary" id="btn" onclick="login()">Enter</button>
 </div>
 <script>
   async function login() {

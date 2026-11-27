@@ -218,7 +218,6 @@
     --text-section: 14px;
     --text-title: 20px;
     --ts-sidebar-width: 180px;
-    --control-height: 28px;
   }
   body.ts-has-sidebar > .app { padding: 12px 14px !important; }
   .ts-sidebar__item { min-height: 34px; padding: 7px 12px; gap: 10px; }
