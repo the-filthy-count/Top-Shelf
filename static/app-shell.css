@@ -13089,17 +13089,9 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
 
 .pp-film-owned { color: #4ade80; flex-shrink: 0; }
 
-/* Two soft headshot layers, kept behind the biography content. */
+/* One right-aligned backdrop, fading from 0% to 25% opacity. */
 .performer-popup-cell.pp-cell-bio::before {
-  background-image: var(--ts-cell-fanart, none);
-  background-size: 100% auto;
-  background-position: center;
-  background-repeat: no-repeat;
-  filter: blur(12px);
-  transform: none;
-  opacity: .25;
-  -webkit-mask-image: linear-gradient(to right, #000, transparent);
-  mask-image: linear-gradient(to right, #000, transparent);
+  content: none;
 }
 .performer-popup-cell.pp-cell-bio::after {
   background-image: var(--ts-cell-fanart, none);
@@ -13113,8 +13105,8 @@ html body .discover-info-scene-card--performer .pp-scene-action--source:hover {
   filter: blur(12px);
   transform: none;
   opacity: .25;
-  -webkit-mask-image: linear-gradient(to left, #000, transparent);
-  mask-image: linear-gradient(to left, #000, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 100%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 100%);
 }
 
 /* Contain the filmography and search panes within their panel. */
