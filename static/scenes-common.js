@@ -1281,7 +1281,7 @@
       grid.className = 'scene-grid';
       if (force || !grid.querySelector('.scene-card')) grid.innerHTML = sceneGridSkeleton();
       try {
-        const response = await fetch('/api/discover/tpdb-tags/feed' + (force ? '?refresh=true' : ''));
+        const response = await fetch('/api/discover/tpdb-tags/feed' + (force ? '?refresh=true' : ''), {signal: AbortSignal.timeout(60000)});
         if (!response.ok) throw new Error('Tag feed failed');
         const data = await response.json();
         if (_scenesFeedMode !== 'tpdb_tags' || tagRequest !== _tpdbTagFeedRequest) return;
@@ -1353,7 +1353,7 @@
         // movies endpoint's `refresh=1` param so the user can wipe
         // the 1-hour page-1 cache when TPDB ordering changes (e.g.
         // after we flipped from `created_at desc` to `date desc`).
-        const r = await fetch('/api/movies/tpdb/latest?page=1' + (force ? '&refresh=1' : ''));
+        const r = await fetch('/api/movies/tpdb/latest?page=1' + (force ? '&refresh=1' : ''), {signal: AbortSignal.timeout(60000)});
         const d = await r.json();
         const movies = d.results || [];
         if (!movies.length) {
@@ -1404,7 +1404,7 @@
       // local feedCache freshness check and the server's 1h _feed_cache so the
       // request hits the source DBs fresh.
       if (force) url += '&refresh=1';
-      const r = await fetch(url);
+      const r = await fetch(url, {signal: AbortSignal.timeout(60000)});
       const d = await r.json();
       if (_scenesFeedMode === 'tags') {
         tsSetPageTitleText(title, _scenesFeedTitleForMode('tags'), 'scenes');

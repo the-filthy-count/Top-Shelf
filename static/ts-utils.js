@@ -55,7 +55,7 @@
     scope.requests.get(key)?.abort();
     const controller = new AbortController();
     scope.requests.set(key, controller);
-    const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(60000), ...(options.signal ? [options.signal] : [])]);
     const release = () => {
       if (scope.requests.get(key) === controller) scope.requests.delete(key);
     };

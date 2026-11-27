@@ -49,29 +49,34 @@
     if (event.key === 'Escape') openGeneration++;
   }, true);
   function loadError(error) {
+    window.dispatchEvent(new CustomEvent('ts-popup-load-error', {detail: {message: error.message || 'Could not open this record.'}}));
     if (typeof window.toast === 'function') window.toast('Could not open this record. Please try again.', {kind: 'error'});
   }
 
   function loadScript(src) {
     if (scriptPromises[src]) return scriptPromises[src];
     scriptPromises[src] = new Promise(function (resolve, reject) {
-      var existing = document.querySelector('script[data-ts-popup="' + src + '"]');
-      if (existing) {
-        // Script tag already in DOM from a previous (now-orphaned) call
-        // path. Listen for its load event; if it already fired, the
-        // attribute below will be set.
-        if (existing.dataset.tsPopupLoaded === '1') { resolve(); return; }
-        existing.addEventListener('load', function () { resolve(); }, { once: true });
-        existing.addEventListener('error', function () { existing.remove(); delete scriptPromises[src]; reject(new Error('Failed to load ' + src)); }, { once: true });
-        return;
+      var s = document.querySelector('script[data-ts-popup="' + src + '"]');
+      if (s && s.dataset.tsPopupLoaded === '1') { resolve(); return; }
+      var fresh = !s;
+      if (!s) {
+        s = document.createElement('script');
+        s.src = src;
+        s.async = false;
+        s.setAttribute('data-ts-popup', src);
       }
-      var s = document.createElement('script');
-      s.src = src;
-      s.async = false;
-      s.setAttribute('data-ts-popup', src);
-      s.onload = function () { s.dataset.tsPopupLoaded = '1'; resolve(); };
-      s.onerror = function () { s.remove(); delete scriptPromises[src]; reject(new Error('Failed to load ' + src)); };
-      document.head.appendChild(s);
+      var timer = setTimeout(function () { fail(new Error('Viewer download timed out. Please retry.')); }, 30000);
+      function clean() {
+        clearTimeout(timer);
+        s.removeEventListener('load', loaded);
+        s.removeEventListener('error', failed);
+      }
+      function loaded() { clean(); s.dataset.tsPopupLoaded = '1'; resolve(); }
+      function fail(error) { clean(); s.remove(); delete scriptPromises[src]; reject(error); }
+      function failed() { fail(new Error('Failed to load the viewer. Please retry.')); }
+      s.addEventListener('load', loaded, {once: true});
+      s.addEventListener('error', failed, {once: true});
+      if (fresh) document.head.appendChild(s);
     });
     return scriptPromises[src];
   }

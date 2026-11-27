@@ -3350,35 +3350,6 @@ header .header-right .ts-nav-icon {
 .ts-nav-icon--list      { background-color: #f59e0b; }  /* queue amber */
 .ts-nav-icon--library   { background-color: #c084fc; }  /* library purple */
 .ts-nav-icon--index     { background-color: #ec4899; }  /* releases pink */
-/* Sidebar override — inactive icons stay neutral so the row reads as
- * "another item until selected". Active/hover repaint still fires from
- * the rules at the bottom of this file (higher specificity + !important).
- * Covers both `.ts-nav-icon--*` and the mask-based `.ts-icon-*` variants
- * (movies / studios / scenes / jav / stars) — the sidebar copies its
- * icon markup from each page's top-nav strip, where either family may
- * appear, so both need resetting. */
-.ts-sidebar__item .ts-nav-icon--stars,
-.ts-sidebar__item .ts-nav-icon--jav,
-.ts-sidebar__item .ts-nav-icon--movies,
-.ts-sidebar__item .ts-nav-icon--studios,
-.ts-sidebar__item .ts-nav-icon--scenes,
-.ts-sidebar__item .ts-nav-icon--news,
-.ts-sidebar__item .ts-nav-icon--downloads,
-.ts-sidebar__item .ts-nav-icon--health,
-.ts-sidebar__item .ts-nav-icon--settings,
-.ts-sidebar__item .ts-nav-icon--queue,
-.ts-sidebar__item .ts-nav-icon--list,
-.ts-sidebar__item .ts-nav-icon--library,
-.ts-sidebar__item .ts-nav-icon--index,
-.ts-sidebar__item .ts-icon-jav,
-.ts-sidebar__item .ts-icon-stars,
-.ts-sidebar__item .ts-icon-movies,
-.ts-sidebar__item .ts-icon-studios,
-.ts-sidebar__item .ts-icon-scenes,
-.ts-sidebar__item .ts-icon-vices {
-  background-color: currentColor;
-  filter: none;
-}
 /* Vices — FontAwesome fire glyph gets its branded orange globally
  * so it matches the other icons' branded treatment. Sidebar keeps
  * its neutral-until-active logic via the override on `.ts-sidebar__item`. */
@@ -11985,6 +11956,28 @@ body.ts-has-sidebar {
 .ts-sidebar__item:hover    .ts-nav-icon--index   { background-color: #ec4899 !important; }
 .ts-sidebar__item.is-active .ts-icon-vices,
 .ts-sidebar__item:hover    .ts-icon-vices        { background-color: #ff6b1a !important; }
+/* Sidebar icons retain their section colours at rest. */
+.ts-sidebar__item .ts-nav-icon--stars { background-color: #facc15 !important; }
+.ts-sidebar__item .ts-nav-icon--jav { background-color: #bc002d !important; }
+.ts-sidebar__item .ts-nav-icon--movies,
+.ts-sidebar__item .ts-icon-movies { background-color: #2563eb !important; }
+.ts-sidebar__item .ts-nav-icon--studios,
+.ts-sidebar__item .ts-icon-studios { background-color: #38bdf8 !important; }
+.ts-sidebar__item .ts-nav-icon--scenes,
+.ts-sidebar__item .ts-icon-scenes { background-color: #a78bfa !important; }
+.ts-sidebar__item .ts-icon-jav { background-color: #bc002d !important; }
+.ts-sidebar__item .ts-icon-stars { background-color: #facc15 !important; }
+.ts-sidebar__item .ts-nav-icon--news { background-color: #22d3ee !important; }
+.ts-sidebar__item .ts-nav-icon--downloads { background-color: #22c55e !important; }
+.ts-sidebar__item .ts-nav-icon--health { background-color: #10b981 !important; }
+.ts-sidebar__item .ts-nav-icon--settings { background-color: #94a3b8 !important; }
+.ts-sidebar__item .ts-nav-icon--queue,
+.ts-sidebar__item .ts-nav-icon--list { background-color: #f59e0b !important; }
+.ts-sidebar__item .ts-nav-icon--library { background-color: #c084fc !important; }
+.ts-sidebar__item .ts-nav-icon--index { background-color: #ec4899 !important; }
+.ts-sidebar__item .ts-icon-vices { background-color: #ff6b1a !important; }
+.ts-sidebar__item i.fa-fire { color: #ff6b1a !important; }
+.ts-sidebar__item i.fa-chart-simple { color: #a78bfa; }
 /* Icon-rail collapse bumps the touch target — scale the SVG mask to
  * match so the glyph fills the larger footprint cleanly. */
 @media (max-width: 1100px) and (min-width: 901px) {

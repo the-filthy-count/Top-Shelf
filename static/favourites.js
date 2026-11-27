@@ -3358,7 +3358,7 @@
     const generation = ++_fullLoadGeneration;
     const revision = _libraryRevision;
     try {
-      const r = await fetch('/api/favourites', { credentials: 'same-origin', cache: 'no-store' });
+      const r = await fetch('/api/favourites', { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(60000) });
       const d = await r.json();
       if (generation !== _fullLoadGeneration) return;
       if (revision !== _libraryRevision) return load();

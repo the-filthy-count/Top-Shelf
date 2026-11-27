@@ -22,13 +22,13 @@ class PageLoadingTests(unittest.TestCase):
             with self.subTest(route=name):
                 self.assertIsInstance(route, ast.FunctionDef)
 
-    def test_home_skips_disk_for_full_buckets_and_fetches_batches(self):
+    def test_home_skips_disk_and_reads_history_once(self):
         rows = [dict(id=i, destination=f'/library/{"star" if i%2 else "studio"}/{i}.mp4', performers='Person' if i%2 else '', processed_at=str(300-i)) for i in range(300)]
         conn = Mock()
         context = Mock()
         context.__enter__ = Mock(return_value=conn)
         context.__exit__ = Mock(return_value=False)
-        conn.execute.side_effect = lambda sql, args: Mock(fetchall=lambda: rows[args[0]:args[0]+100])
+        conn.execute.side_effect = lambda sql: Mock(fetchall=lambda: rows)
         db = Mock()
         db.get_conn.return_value = context
         db.favourite_list.return_value = []
@@ -40,7 +40,8 @@ class PageLoadingTests(unittest.TestCase):
         self.assertEqual(len(result['star']), 2)
         self.assertEqual(len(result['studio']), 2)
         exists.assert_not_called()
-        self.assertTrue(all('LIMIT 100 OFFSET ?' in call.args[0] for call in conn.execute.call_args_list))
+        conn.execute.assert_called_once()
+        self.assertIn('LIMIT 2000', conn.execute.call_args.args[0])
 
     def test_derived_cache_restores_full_on_success_and_failure(self):
         conn = sqlite3.connect(':memory:')

@@ -9,10 +9,10 @@
 <link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
 <link rel="stylesheet" href="/static/fonts/font-awesome/css/all.min.css?v=20260530">
 <script src="/static/theme-init.js?v=20260614c"></script>
-<link rel="stylesheet" href="/static/app-shell.css?v=20261127-bio-backdrop">
-<script src="/static/ts-utils.js?v=20261127-stash-button"></script>
+<link rel="stylesheet" href="/static/app-shell.css?v=20261127-sidebar-colours">
+<script src="/static/ts-utils.js?v=20261127-load-recovery"></script>
 <script src="/static/lib-entity-actions.js?v=20261127-loading-animation"></script>
-<script src="/static/popup-loader.js?v=20261126-local-stash"></script>
+<script src="/static/popup-loader.js?v=20261127-load-recovery"></script>
 <style>
   /* Universal reset + body baseline — news.html was previously
    * relying on browser defaults (8px body margin) which pushed every
@@ -486,7 +486,7 @@
         ? _refreshLibraryTokens()
         : null;
       const url = force ? '/api/news/feed?refresh=true' : '/api/news/feed';
-      const r = await fetch(url, { credentials: 'same-origin' });
+      const r = await fetch(url, { credentials: 'same-origin', signal: AbortSignal.timeout(60000) });
       const d = await r.json();
       if (libPromise) await libPromise;
       const items = (d && d.results) || [];

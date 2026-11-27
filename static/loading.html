@@ -7,7 +7,7 @@
 <title>Top-Shelf — Loading</title>
 <link rel="stylesheet" href="/static/fonts/dm-mono/dm-mono.css">
 <script src="/static/theme-init.js?v=20260614c"></script>
-<link rel="stylesheet" href="/static/app-shell.css?v=20261127-bio-backdrop">
+<link rel="stylesheet" href="/static/app-shell.css?v=20261127-sidebar-colours">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; }
@@ -489,7 +489,7 @@
       return;
     }
     try {
-      const r = await fetch('/api/startup/status', { cache: 'no-store' });
+      const r = await fetch('/api/startup/status', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const d = await r.json();
       _statusFailStreak = 0;

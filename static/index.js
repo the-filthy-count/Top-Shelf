@@ -539,7 +539,7 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
 
     const libPromise = _refreshLibraryStudios();
     try {
-      const r = await fetch('/api/downloads/rss-feed' + (refreshRequested ? '?refresh=true' : ''), { credentials: 'same-origin' });
+      const r = await fetch('/api/downloads/rss-feed' + (refreshRequested ? '?refresh=true' : ''), { credentials: 'same-origin', signal: AbortSignal.timeout(60000) });
       const d = await r.json();
       if (fetchGen !== _dlRssFetchGen) return;
       _dlProwlarrResults = d.results || [];
@@ -578,7 +578,7 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
     let sceneCat = 'Top-Shelf';
     let movieCat = '';
     try {
-      const r = await fetch('/api/settings', { credentials: 'same-origin' });
+      const r = await fetch('/api/settings', { credentials: 'same-origin', signal: AbortSignal.timeout(60000) });
       const d = await r.json();
       const s = (d && d.settings) || {};
       sceneCat = (s.prowlarr_category || 'Top-Shelf').trim() || 'Top-Shelf';
@@ -606,7 +606,7 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
       const _params = new URLSearchParams();
       _params.append('q', q);
       if (/\s/.test(q)) _params.append('q', q.replace(/\s+/g, '.'));
-      const r = await fetch('/api/prowlarr/search?' + _params.toString(), { credentials: 'same-origin' });
+      const r = await fetch('/api/prowlarr/search?' + _params.toString(), { credentials: 'same-origin', signal: AbortSignal.timeout(60000) });
       const d = await r.json();
       if (window.tsOfferSearchContinuation) window.tsOfferSearchContinuation(d, r.url);
       if (d.error) {
@@ -943,7 +943,7 @@ const DL_SEARCH_MODE_KEY = 'ts_downloads_search_mode';
       sceneListEl.innerHTML = '<div class="empty"><span class="loader loader--message" role="status" aria-label="Loading…"></span></div>';
       movieListEl.innerHTML = '';
       try {
-        const r = await fetch('/api/wanted' + (force ? '?reconcile=1&refresh=1' : ''));
+        const r = await fetch('/api/wanted' + (force ? '?reconcile=1&refresh=1' : ''), {signal: AbortSignal.timeout(60000)});
         const d = await r.json();
         items = (d && d.items) || [];
         _dlWantedCache = { items, ts: Date.now() };
