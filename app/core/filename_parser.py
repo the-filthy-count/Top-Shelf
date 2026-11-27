@@ -12,6 +12,7 @@ def cache_signature(settings):
     import json
     import database as db
     inputs = {
+        'filing_tag_rules': 1,
         'settings': {key: settings.get(key, '') for key in (
             'filename_patterns', 'filename_strip_words',
             'site_abbreviations', 'site_rename_map')},
@@ -158,16 +159,48 @@ def parse_filename(filename, settings, *, library_indexes=None, studio_logos=Non
     from app.core.matching import _split_query_from_library, _clean_filename_for_search
     from app.core.scene_relevance import split_title_words
     path = Path(filename)
-    tag = re.match(r"^\[([^\]]+)\]\s*", path.name)
-    folder_tag = bool(tag and tag.group(1).casefold() == path.parent.name.casefold())
-    clean_input = str(path.with_name(path.name[tag.end():])) if folder_tag else filename
+    import database as db
+    if library_indexes is None:
+        library_indexes = db._build_library_match_indexes()
+    normalize = lambda value: ''.join(c for c in str(value).casefold() if c.isalnum())
+    # Only leading, recognised labels are filing metadata; bracketed title
+    # content and release labels elsewhere must remain untouched.
+    known_tags = {normalize(path.parent.name)}
+    known_tags.update(normalize(name) for row in library_indexes[0] for name in row[:2])
+    known_tags.update(normalize(''.join(row[0])) for row in library_indexes[1])
+    known_tags.update(normalize(row[1]) for row in library_indexes[1])
+    known_tags.discard('')
+    clean_name = path.name
+    folder_tag = False
+    removed_tags = []
+    while tag := re.match(r"^\[([^\]]+)\]\s*", clean_name):
+        if normalize(tag.group(1)) not in known_tags:
+            break
+        remainder = clean_name[tag.end():].lstrip(' -_–—')
+        if not Path(remainder).stem or remainder == path.suffix:
+            break
+        removed_tags.append(normalize(tag.group(1)))
+        clean_name = remainder
+        folder_tag = True
+    clean_input = str(path.with_name(clean_name)) if folder_tag else filename
     # Apply user-configured noise stripping to both search paths.
     for word in settings.get('filename_strip_words', '').split(','):
         if word.strip():
             clean_input = re.sub(re.escape(word.strip()), '', clean_input, flags=re.IGNORECASE)
     parsed = _parse_filename_parts(clean_input, settings)
-    full, library_title, _, studio, cast = (_split_query_from_library(clean_input) if library_indexes is None and studio_logos is None
-        else _split_query_from_library(clean_input, library_indexes=library_indexes, studio_logos=studio_logos))
+    # Keep the original tags as identity clues, but not as title/query text.
+    _, _, _, tag_studio, tag_cast = _split_query_from_library(
+        filename, library_indexes=library_indexes, studio_logos=studio_logos) if folder_tag else ('', '', '', '', [])
+    full, library_title, _, studio, cast = _split_query_from_library(
+        clean_input, library_indexes=library_indexes, studio_logos=studio_logos)
+    studio = studio or tag_studio
+    cast = list(dict.fromkeys([*cast, *tag_cast]))
+    if not studio:
+        studios = {row[1] for row in library_indexes[0]
+                   if normalize(row[0]) in removed_tags or normalize(row[1]) in removed_tags}
+        studios = {name for name in studios if normalize(name) not in {normalize(p) for p in cast}}
+        if len(studios) == 1:
+            studio = studios.pop()
     structured = bool(parsed['site'] or parsed['performers']) and not folder_tag
     title = parsed['title'] if structured else library_title
     studio = studio or (parsed['site'] if structured else '')
