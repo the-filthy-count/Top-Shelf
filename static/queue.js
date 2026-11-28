@@ -791,7 +791,7 @@
       }
       statusTip = _ndBits.join(' · ');
     } else if (f.prev_status === 'error') {
-      statusTip = f.error || 'Previous run errored';
+      statusTip = _queueReadableError(f.error) || 'Previous run errored';
     } else {
       statusTip = statusKey;
     }
@@ -895,7 +895,7 @@
     //: it into the empty space between the title and the headshots;
     //: `max-width:0;flex:1 1 auto` stops a long message from forcing
     //: the title to ellipsise — truncates on the error itself instead.
-    const errorText = ((f.prev_status === 'error' || f.status === 'error') && f.error) ? String(f.error).trim() : '';
+    const errorText = ((f.prev_status === 'error' || f.status === 'error') && f.error) ? _queueReadableError(f.error) : '';
     const errorLabel = /\bffmpeg\b/i.test(errorText) ? 'video error' : errorText;
     const errorChip = errorText
       ? `<span class="qi-error-chip" title="${esc(errorText)}"><i class="fa-solid fa-triangle-exclamation"></i><span class="qi-error-chip-msg">${esc(errorLabel)}</span></span>`
@@ -1005,7 +1005,7 @@
       if (_ndStudio) _ndBits.push('Studio "' + _ndStudio + '" has no path mapped');
       statusTip = _ndBits.join(' · ');
     } else if (f.prev_status === 'error') {
-      statusTip = f.error || 'Previous run errored';
+      statusTip = _queueReadableError(f.error) || 'Previous run errored';
     } else {
       statusTip = statusKey;
     }
@@ -3006,11 +3006,23 @@
     });
   }
   // Decorative copy stays outside the foreground crop and its fade.
+  function _queueReadableError(value) {
+    const text = String(value || '').trim();
+    const html = text.search(/<!doctype\s+html|<html\b/i);
+    if (html < 0) return text;
+    const prefix = text.slice(0, html).replace(/[:\s]+$/, '');
+    return prefix + (/cloudflare/i.test(text) ? ': blocked by Cloudflare; retry later.' : ': source returned an error page; retry later.');
+  }
   function _syncQueueHeadshotBackdrop(slot) {
     const cell = slot.matches('.qi-headshots') ? slot.parentElement : slot;
     if (!cell || cell.closest('.queue-file-tile')) return;
     const source = cell.querySelector('.qi-headshot');
-    const sourceUrl = source ? source.getAttribute('src') : '/static/img/missing.webp';
+    const sourceUrl = source && source.getAttribute('src');
+    if (!sourceUrl) {
+      const old = cell.querySelector('.qi-headshot-backdrop');
+      if (old) { _backdropResize.unobserve(old); old.remove(); }
+      return;
+    }
     let backdrop = cell.querySelector('.qi-headshot-backdrop');
     if (!backdrop) {
       backdrop = document.createElement('span');
@@ -6406,7 +6418,13 @@
   // popup, plus editable Title / Date / Additional performers fields.
   // Directory name (auto-classified server-side as studio or performer)
   // is the routing anchor — no source-DB lookup runs.
+  let _bulkFolderStripObserver = null;
   let _bulkFolderState = { folder: '', name: '', rows: [], tokens: [] };
+
+  function _bulkFolderRecordedDate(file) {
+    const value = String(file?.parsed?.file_mtime || '');
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
+  }
 
   async function openBulkFolderSort(folderPath, folderName) {
     const modal = document.getElementById('bulkFolderModal');
@@ -6463,7 +6481,7 @@
       const guessTitle = base.replace(/\.[^.\\/]+$/, '');
       const safeIdx = 'bf_' + i;
       const stripSlots = Array.from({length: 5}, () =>
-        '<div class="qfs-thumb"><div class="qfs-thumb-empty"><i class="ts-icon-scenes" aria-hidden="true"></i></div></div>'
+        '<div class="qfs-thumb"><div class="qfs-thumb-empty"><span class="loader loader--btn loader--muted" role="status" aria-label="Loading frames"></span></div></div>'
       ).join('');
       return `<div class="bulk-folder-row is-selected" data-row-idx="${i}" data-filename="${esc(fn)}">
         <div class="bulk-folder-check"><input type="checkbox" checked onchange="bulkFolderToggleRow(${i}, this.checked)"></div>
@@ -6475,7 +6493,7 @@
           <div class="field-row"><label class="field-label">Title *</label><input class="field-input" data-field="title" data-idx="${i}" type="text" value="${esc(guessTitle)}" placeholder="Scene title"></div>
           <div class="field-row-split">
             <div class="field-row"><label class="field-label">Additional performers</label><input class="field-input" data-field="performers" data-idx="${i}" type="text" placeholder="Name, Name" autocomplete="off" spellcheck="false"></div>
-            <div class="field-row"><label class="field-label">Date *</label><input class="field-input" data-field="date" data-idx="${i}" type="text" placeholder="YYYY-MM-DD"></div>
+            <div class="field-row"><label class="field-label">Date *</label><input class="field-input" data-field="date" data-idx="${i}" type="text" value="${esc(_bulkFolderRecordedDate(f))}" placeholder="YYYY-MM-DD"></div>
           </div>
           <div class="bulk-folder-row-status" id="${safeIdx}_status"></div>
         </div>
@@ -6540,25 +6558,37 @@
   }
 
   async function _bulkFolderPopulateAsync(items) {
+    const state = _bulkFolderState;
+    // Only visible/nearby strips need frames. Date reads must not gate them.
+    _bulkFolderStripObserver = new IntersectionObserver(entries => {
+      if (state !== _bulkFolderState) return;
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        _bulkFolderStripObserver.unobserve(entry.target);
+        const idx = Number(entry.target.dataset.strip);
+        if (items[idx]?.filename) _bulkFolderLoadFilmstrip(idx, items[idx].filename);
+      }
+    }, {root: document.getElementById('bulkFolderList').closest('.modal-body'), rootMargin: '200px'});
+    document.querySelectorAll('.bulk-folder-modal .bulk-folder-strip[data-strip]').forEach(el => _bulkFolderStripObserver.observe(el));
     const CONCURRENCY = 4;
     let cursor = 0;
     const worker = async () => {
-      while (cursor < items.length) {
+      while (state === _bulkFolderState && cursor < items.length) {
         const idx = cursor++;
         const f = items[idx];
         if (!f || !f.filename) continue;
-        // Date first — cheap, non-blocking.
+        // The master queue already carries the captured file date.
+        // Only legacy/unanalysed entries need a fallback request.
+        if (_bulkFolderRecordedDate(f)) continue;
         try {
           const r = await window.tsModalFetch('bulkFolderModal', '/api/queue/file-mtime?filename=' + encodeURIComponent(f.filename), { credentials: 'same-origin' });
           if (r.ok) {
             const d = await r.json();
+            if (state !== _bulkFolderState) return;
             const dateInput = document.querySelector(`.bulk-folder-modal input[data-field="date"][data-idx="${idx}"]`);
             if (dateInput && !dateInput.value) dateInput.value = d.date || '';
           }
         } catch(_) {}
-        // Filmstrip — poll the same endpoint the standalone popup
-        // uses so cached frames come back instantly.
-        _bulkFolderLoadFilmstrip(idx, f.filename);
       }
     };
     const workers = Array.from({length: Math.min(CONCURRENCY, items.length)}, () => worker());
@@ -6566,6 +6596,8 @@
   }
 
   function _bulkFolderTeardownPolls() {
+    _bulkFolderStripObserver?.disconnect();
+    _bulkFolderStripObserver = null;
     // Cancel any in-flight filmstrip polls so reopening on a different
     // folder doesn't race an old tokens list into the DOM.
     _bulkFolderState.tokens = (_bulkFolderState.tokens || []).map(() => 0);

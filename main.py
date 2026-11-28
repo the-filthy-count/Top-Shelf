@@ -3216,7 +3216,12 @@ def query_stashbox(phash_hex, endpoint, api_key, query, fingerprint_var):
                 raise RuntimeError(f"HTTP {resp.status_code}: {err_msgs}")
         except ValueError:
             pass
-        raise RuntimeError(f"HTTP {resp.status_code}: {(resp.text or '')[:500]}")
+        body = (resp.text or "").lower()
+        if "cloudflare" in body and resp.status_code in (403, 503):
+            raise RuntimeError(f"HTTP {resp.status_code}: blocked by Cloudflare; retry later")
+        if "<html" in body or "<!doctype html" in body:
+            raise RuntimeError(f"HTTP {resp.status_code}: source returned an error page; retry later")
+        raise RuntimeError(f"HTTP {resp.status_code}: source request failed")
     data = resp.json()
     if "errors" in data:
         raise RuntimeError(f"Stash-box error: {data['errors']}")
@@ -31522,7 +31527,7 @@ async def api_studio_logo_batch(payload: dict = Body(...)):
 
 
 @app.get("/api/studio-logos/image/{token}")
-async def api_studio_logo_asset(token: str):
+def api_studio_logo_asset(token: str):
     with _studio_logo_assets_lock:
         path = _studio_logo_assets.get(token)
     if path is None or not path.is_file():
@@ -32070,7 +32075,7 @@ async def api_favourites_studio_poster(row_id: int):
 
 
 @app.get("/api/favourites/folder-logo")
-async def api_favourites_folder_logo(row_id: int):
+def api_favourites_folder_logo(row_id: int):
     """Read-only: studio folder art (logo.png, clearlogo.png, poster.jpg, folder.jpg)."""
     row = db.favourite_get(row_id)
     if not row or row.get("kind") != "studio":
@@ -34536,7 +34541,7 @@ _HEADSHOTS_BY_NAME_TTL = 300.0
 
 
 @app.get("/api/performers/headshots-by-name")
-async def api_performers_headshots_by_name(names: str):
+def api_performers_headshots_by_name(names: str):
     """Return library headshot data for one or more comma-separated performer names."""
     name_list = [n.strip() for n in (names or "").split(",") if n.strip()]
     if not name_list:
@@ -34579,7 +34584,7 @@ _GENDERS_BY_NAME_TTL = 300.0
 
 
 @app.get("/api/performers/genders-by-name")
-async def api_performers_genders_by_name(names: str):
+def api_performers_genders_by_name(names: str):
     """Map a list of performer names to their genders.
 
     Used by the front-end to inject gender badges next to performer
@@ -35374,10 +35379,17 @@ async def file_manual_metadata(payload: dict, background_tasks: BackgroundTasks)
 
 
 @app.get("/api/queue/file-mtime")
-async def queue_file_mtime(filename: str):
+def queue_file_mtime(filename: str):
     """Return the mtime of a source-dir file as YYYY-MM-DD so the Vice
     modal can prepopulate its date field with the video's creation date.
     Falls back to today's date if the file isn't found."""
+    cached = db.get_parsed_meta(filename) or {}
+    recorded = str(cached.get("file_mtime") or "")
+    try:
+        if recorded and datetime.strptime(recorded, "%Y-%m-%d").strftime("%Y-%m-%d") == recorded:
+            return {"date": recorded}
+    except ValueError:
+        pass
     settings = db.get_settings()
     source_dir = Path(settings.get("source_dir", ""))
     p = _resolve_queue_file_path(filename, settings) or (source_dir / filename)
@@ -35507,7 +35519,7 @@ def _classify_folder_as_studio_or_performer(folder_name: str) -> str:
 
 
 @app.get("/api/library/favourite/lookup")
-async def library_favourite_lookup(name: str):
+def library_favourite_lookup(name: str):
     """Return the ``kind`` (``studio`` / ``performer``) of the
     favourites row matching ``name`` (case-insensitive folder_name).
     Used by the bulk manual-sort modal to show the user how a folder
