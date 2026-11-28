@@ -33751,7 +33751,7 @@ async def api_favourites_folder_image(row_id: int, name: str):
 
 
 @app.get("/api/performers/poster-roles")
-def api_performers_poster_roles(row_id: int):
+def api_performers_poster_roles(row_id: int, part: str = "all"):
     """Return URLs for the currently-saved primary + secondary posters of a
     performer row, plus the scraped candidate list from linked DB profiles.
     Used by the /library performer "manage posters" modal.
@@ -33763,6 +33763,10 @@ def api_performers_poster_roles(row_id: int):
     row = db.favourite_get(row_id)
     if not row or row.get("kind") != "performer":
         return JSONResponse({"error": "Not a performer row"}, status_code=404)
+    if part not in ("all", "saved", "candidates"):
+        return JSONResponse({"error": "Invalid poster section"}, status_code=400)
+    if part == "candidates":
+        return {"candidates": _favourites_matched_link_image_items(row) or []}
     md = _metadata_dir_for("performer", row_id)
     def _role_url(role: str) -> str | None:
         # Hand off to `_perf_poster_resolve` so we find both `.webp`
@@ -33777,7 +33781,7 @@ def api_performers_poster_roles(row_id: int):
             return (f"/api/performers/poster-role-image?row_id={row_id}"
                     f"&role={role}&v={int(p.stat().st_mtime)}")
         return None
-    candidates = _favourites_matched_link_image_items(row) or []
+    candidates = (_favourites_matched_link_image_items(row) or []) if part == "all" else []
     # Prepend the local library poster.jpg if present. The image URL is a
     # local API path that serves the file straight off disk — the frontend
     # opens it as <img> and it round-trips back through set-poster-role
@@ -33815,7 +33819,7 @@ def api_performers_poster_roles(row_id: int):
 
 
 @app.get("/api/performers/poster-role-image")
-async def api_performers_poster_role_image(row_id: int, role: str, v: int = 0):
+def api_performers_poster_role_image(row_id: int, role: str, v: int = 0):
     """Serve the current primary or secondary poster as a plain image for the
     modal preview. `role` is 'primary' or 'secondary'; `v` is a cache-bust
     mtime token from the poster-roles endpoint."""

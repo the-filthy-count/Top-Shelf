@@ -274,7 +274,7 @@
     _posterRoleItems = [];
     _posterRoleSelectedUrl = null;
     _posterRoleTempUrls = [];
-    const titleLabel = await resolvePosterPickerTitle(rowId, opts, controller.signal);
+    const titleLabel = opts.title || window._favGetPerformerFolderName?.(rowId) || 'Star';
     if (_posterLoadController !== controller) return;
     document.getElementById('posterRoleTitle').textContent =
       'Manage posters — ' + displayFolderName(titleLabel);
@@ -294,30 +294,45 @@
     if (urlBtn) urlBtn.classList.remove('is-active');
     document.getElementById('posterRoleModal').style.display = '';
     document.getElementById('posterRoleModal').classList.add('open');
-    const timeout = setTimeout(() => controller.abort(), 45000);
-    try {
-      const r = await fetch(
-        '/api/performers/poster-roles?row_id=' + encodeURIComponent(rowId),
-        { credentials: 'same-origin', signal: controller.signal },
-      );
-      const d = await r.json();
-      if (_posterLoadController !== controller) return;
-      if (!r.ok) {
-        candBox.innerHTML = `<div class="empty-tile" style="padding:20px;color:var(--red)">${esc(d.error || 'Load failed')}</div>`;
-        return;
-      }
-      _setPosterRolePreview('primary',   d.primary_url);
-      _setPosterRolePreview('secondary', d.secondary_url);
-      _setPosterRolePreview('headshot',  d.headshot_url);
-      _posterRoleItems = d.candidates || [];
+    let localItems = [], remoteItems = [];
+    const paintCandidates = () => {
+      _posterRoleItems = [...localItems, ...remoteItems];
       _renderPosterRoleCandidates();
-    } catch (e) {
-      if (_posterLoadController !== controller) return;
-      const message = e.name === 'AbortError' ? 'Loading linked images timed out. Close and reopen to retry.' : e.message;
-      candBox.innerHTML = `<div class="empty-tile" role="alert" style="padding:20px;color:var(--red)">${esc(message)}</div>`;
-    } finally {
-      clearTimeout(timeout);
-    }
+    };
+    const loadPart = async (part) => {
+      try {
+        const r = await fetch('/api/performers/poster-roles?row_id=' + encodeURIComponent(rowId) + '&part=' + part,
+          {credentials: 'same-origin', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(45000)])});
+        const d = await r.json();
+        if (_posterLoadController !== controller) return;
+        if (!r.ok) throw new Error(d.error || 'Load failed');
+        if (part === 'saved') {
+          _setPosterRolePreview('primary', d.primary_url);
+          _setPosterRolePreview('secondary', d.secondary_url);
+          _setPosterRolePreview('headshot', d.headshot_url);
+          if (d.name) document.getElementById('posterRoleTitle').textContent = 'Manage posters — ' + displayFolderName(d.name);
+          localItems = d.candidates || [];
+        } else remoteItems = d.candidates || [];
+        if (part === 'candidates' || localItems.length) paintCandidates();
+      } catch (error) {
+        if (_posterLoadController !== controller || controller.signal.aborted) return;
+        const message = error.name === 'TimeoutError' ? 'Image request timed out.' : error.message;
+        const alert = document.createElement('div');
+        alert.className = 'empty-tile'; alert.setAttribute('role', 'alert');
+        alert.textContent = (part === 'saved' ? 'Saved images: ' : 'Linked images: ') + message + ' ';
+        const retry = document.createElement('button');
+        retry.type = 'button'; retry.className = 'btn-secondary'; retry.textContent = 'Retry';
+        retry.onclick = () => { alert.remove(); loadPart(part); };
+        alert.appendChild(retry);
+        // Keep errors separate from the candidate grid so a later success
+        // in the other request cannot erase the failure or its retry button.
+        candBox.parentElement.appendChild(alert);
+        alert.dataset.posterLoadError = '1';
+        if (part === 'candidates') paintCandidates();
+      }
+    };
+    document.querySelectorAll('[data-poster-load-error]').forEach(el => el.remove());
+    await Promise.all([loadPart('saved'), loadPart('candidates')]);
   }
 
   function closePosterRolePicker() {

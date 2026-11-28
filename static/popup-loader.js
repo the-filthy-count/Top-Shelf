@@ -31,7 +31,7 @@
     'performer-popup': '/static/performer-popup.js?v=20261126-local-stash',
     'studio-popup':    '/static/studio-popup.js?v=20261126-local-stash',
     'link-modals':     '/static/link-modals.js?v=20261122-coomer-search',
-    'poster-roles':    '/static/poster-role-picker.js?v=' + V,
+    'poster-roles':    '/static/poster-role-picker.js?v=20261128-poster-loading',
   };
 
   /** Cache promises by URL so a second caller awaits the first load's
